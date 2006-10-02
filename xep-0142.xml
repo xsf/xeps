@@ -1,0 +1,1205 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM '../jep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+<jep>
+    <header>
+        <title>Workgroup Queues</title>
+        <abstract>This document defines an XMPP protocol extension that enables a user to communicate with a representative of an organization, department, or workgroup.</abstract>
+        &LEGALNOTICE;
+        <number>0142</number>
+        <status>Experimental</status>
+        <type>Standards Track</type>
+        <jig>Standards JIG</jig>
+        <dependencies>
+          <spec>XMPP Core</spec>
+          <spec>JEP-0030</spec>
+          <spec>JEP-0045</spec>
+        </dependencies>
+        <supersedes>None</supersedes>
+        <supersededby>None</supersededby>
+        <shortname>Not yet assigned</shortname>
+        <author>
+            <firstname>Matt</firstname>
+            <surname>Tucker</surname>
+            <email>matt@jivesoftware.com</email>
+            <jid>jivematt@jabber.org</jid>
+        </author>
+        <revision>
+            <version>0.3</version>
+            <date>2005-05-09</date>
+            <initials>psa</initials>
+            <remark><p>Editorial revision; defined XML schema.</p></remark>
+        </revision>
+        <revision>
+            <version>0.2</version>
+            <date>2005-02-28</date>
+            <initials>mt/is</initials>
+            <remark><p>General re-organization, refined agent status protocol, removed queue-notification element from join request replies, user status pushes now use a message instead of IQ.</p></remark>
+        </revision>
+        <revision>
+            <version>0.1</version>
+            <date>2004-08-10</date>
+            <initials>mt/is</initials>
+            <remark><p>Initial version.</p></remark>
+        </revision>
+    </header>
+    <section1 topic='Introduction' anchor='intro'>
+        <section2 topic='Overview' anchor='intro-over'>
+            <p>The protocol defined herein enables users to contact a representative of an organization or workgroup without knowing the address of a particular member of that organization or workgroup. This functionality is similar to an 'email alias' with the addition of queuing pending communication requests and quality of service negotiation to accommodate the real-time nature of IM/chat. Although this protocol is generic enough to handle many use cases, specific features have been added that make it particularly suitable for customer support environments.</p>
+        </section2>
+        <section2 topic='Motivation' anchor='intro-motive'>
+            <p>This protocol addresses the need of starting a private XMPP conversation with a qualified member of a workgroup. In a standard XMPP exchange of messages, users either connect directly to another user for a one on one conversation, or connect to a chat room for a conversation between many people. The current protocols do not allow users to initiate a private conversation with any person playing a particular role in an organization or workgroup.</p>
+            <p>For example, a customer has a question and needs to talk to a support representative.  The conversation is private and therefore cannot be conducted in a well-known chat room.  Using the workgroup protocol, the user requests a chat with support@workgroup.example.com.  The chat request is put into a queue and the server routes the chat request to individual support representatives in the support@workgroup.example.com workgroup. The support representative can accept or reject the chat request. Once the request is accepted, the conversation takes place through standard XMPP messaging protocols.</p>
+        </section2>
+        <section2 topic='Concepts' anchor='intro-concepts'>
+            <p>The namespace governing this protocol is "http://jabber.org/protocol/workgroup". This namespace relies on the &IQ; element for execution, and uses the &PRESENCE; element for announcing status updates.</p>
+            <p>This protocol depends on &jep0030; for reporting and announcing available workgroup services. However, support for service discovery is entirely optional and workgroup services may be made known through other means (e.g. web pages or word of mouth .</p>
+            <p>The end result of a workgroup interaction is to negotiate and route a user and workgroup member (a.k.a. agent) to an appropriate chat room for a chat conversation using the multi-user chat (MUC) protocol. However, multi-user chat essentially 'takes over' when the workgroup protocol successfully completes so there is no overlap between the two protocols. It is RECOMMENDED that groupchat implementations support basic groupchat (a.k.a. Groupchat 1.0) for maximum client compatibility.</p>
+        </section2>
+        <section2 topic='Prerequisites' anchor='intro-prereq'>
+            <p>There are no requirements for supporting the workgroup protocol beyond &xmppcore; and &jep0045;. Support for &jep0004; is optional if users need to submit additional data before joining (see User Join section of this document).</p>
+        </section2>
+    </section1>
+    <section1 topic='Roles and Responsibilities' anchor='roleresp'>
+        <p>This protocol has clearly defined roles and responsibilities for its participants.</p>
+        <section2 topic='Roles' anchor='roles'>
+            <p>The workgroup protocol involves three distinct participants that fill the following roles:</p>
+            <ul>
+                <li><strong>User</strong> - The user requests a private conversation with a member of a workgroup.</li>
+                <li><strong>Service</strong> - The workgroup service receives and sends messages using the workgroup address. The workgroup address represents a general contact address which allows users to find workgroup members to talk to without the need to know any particular workgroup member's individual address. The workgroup service manages the interactions between users and agents.</li>
+                <li><strong>Agent</strong> - The agent is a member of the workgroup and can carry out conversations with users on behalf of their workgroup organization or company.</li>
+            </ul>
+            <p>In the examples shown throughout this document, the user address &lt;user@example.net/home&gt;, the service address is &lt;support@workgroup.example.com&gt;, and the agent addresses are &lt;alice@example.com/work&gt; and &lt;bob@example.com/work&gt;.</p>
+            <p>Note: A service MAY contain several queues to help organize, route and handle incoming user chat requests. Implementations supporting multiple queues in a workgroup will respond differently to requests, and send different status information for each queue. Workgroup queues are identified by a unique resource name: e.g.  support@workgroup.example.com/platinum-plan or support@workgroup.example.com/xmpp-products.  Implementations should gracefully handle services with only one queue (using support@workgroup.example.com) or multiple queues. Users should only be aware of one workgroup (users should never see workgroup queue resource names).</p>
+        </section2>
+        <section2 topic='Responsibilities' anchor='responsibilities'>
+            <p>Each participant is responsible for certain behaviors in the workgroup protocol.</p>
+            <p>Users should:</p>
+            <ul>
+                <li>Know the status of the workgroup queue before requesting a conversation.  This information allows users to see if the workgroup is available, and how long a wait they may have before a chat is initiated.</li>
+                <li>Know the status of their request while in the request queue.</li>
+                <li>Be able to cancel a chat request at any time.</li>
+            </ul>
+            <p>Workgroup agents should:</p>
+            <ul>
+                <li>Know the status of the workgroup queue(s).</li>
+                <li>Be able to accept or reject chat requests.</li>
+                <li>Indicate their availability for handling workgroup chats.</li>
+            </ul>
+            <p>The workgroup service:</p>
+            <ul>
+                <li>Controls the workgroup request queue(s).</li>
+                <li>Manages the updating of queue status information.</li>
+                <li>Determines how users are queued and how queue requests are routed to workgroup
+                members. The queue routing algorithm is beyond the scope of this document and left to
+                implementers (simple round-robin, priority based, rules based, etc).</li>
+                <li>Maintains its presence, indicating the availability of the workgroup service.</li>
+            </ul>
+        </section2>
+    </section1>
+    <section1 topic='User Protocol' anchor='user'>
+        <p>The workgroup protocol consists of several XMPP packet exchanges that occur during the
+        lifetime of the protocol. These packet exchanges change the state of the relationship
+        between user, agent and service.</p>
+
+        <section2 topic='User States' anchor='proto-states'>
+            <p>Users join the workgroup queue to wait for a chat with an agent. Once they have joined the queue, they may receive zero or more status updates from the workgroup service informing them of their status in the queue. Users have the option to cancel their chat request at any time.</p>
+            <p>When an agent is ready to chat with the user, the user MUST be sent a standard XMPP groupchat invitation to a chat room. Receipt of the invitation indicates that the user is no longer in the queue and that they should join the chat room using the standard XMPP groupchat protocol in order to converse with an agent. Groupchat is used because it offers several advantages in workgroup conversations including:</p>
+            <ul>
+                <li>Allowing more than one agent to join the conversation (useful for bringing in experts to join the conversation).</li>
+                <li>Allowing managers to monitor conversations for quality of service.</li>
+                <li>Creating a simple way of determining what is in a 'conversation' for logging and gathering other statistical information about the conversation.</li>
+                <li>Allowing a convenient mechanism for bringing 'chatbot' services into the conversation (e.g. answering FAQs).</li>
+            </ul>
+            <p>The user's states and packet exchanges that cause state transitions are shown below:</p>
+            <code><![CDATA[
+              +-------+
+              | Start |<------+
+              +-------+       |
+                  |           |
+                  | Join      |
+                  v           |
+             +---------+      |
+      +----->| Queued  |      |
+      |      +---------+      |
+      | Status |  |  | Depart |
+      +--------+  |  +--------+
+                  |
+                  | Invite
+                  v
+            +-----------+
+            | Chat room |
+            +-----------+
+            ]]></code>
+        </section2>
+        <section2 topic='User Packet Exchanges' anchor='proto-user'>
+            <p>Packets are exchanged between the user and service to trigger state changes in the user. These packet exchanges are described next.</p>
+            <section3 topic='User Join Protocol' anchor='proto-user-join'>
+                <p>This section describes the packet exchange allowing users to join a workgroup service queue. This protocol MUST be supported by compliant implementations.</p>
+                <example caption='Transactions'><![CDATA[
+User                          Service
+  |        Join Request          |
+  |----------------------------->|
+  |                              |
+  |        Join Response         |
+  |<-----------------------------|
+  |                              |
+                ]]></example>
+                <p>The user sends a join request to the workgroup service in order to join the workgroup queue.
+                The workgroup service may either accept or reject the request. A user session (e.g. user@example.net/home)
+                may have only one active join request. Subsequent, simultaneous joins MUST result in an error.</p>
+
+                <p>Some workgroups require that the user submit certain information before the user is allowed to join.
+                In these cases, the workgroup MUST reject the initial join request with a &e406; error. The user should then
+                use the Data Forms protocol within iq-join-queue to obtain a form, and submit it to join
+                the queue.</p>
+                <example caption='Request Element'><![CDATA[
+U: <iq to='support@workgroup.example.com' from='user@example.net/home' id='id1' type='set'>
+U:   <join-queue xmlns='http://jabber.org/protocol/workgroup'>
+U:     <queue-notifications/>
+U:   </join-queue>
+U: </iq>
+                ]]></example>
+                <p>The request may contain application-specific meta-data to help the service determine queuing of the user or Data Forms data when submitting form information (definition of such data is out of scope for this document). In addition, the &lt;join-queue&gt; element MAY contain a standard &lt;queue-notifications/&gt; element, which indicates that the user would like to receive user status updates about their state in the queue.</p>
+                <p>A successful join results in a success response:</p>
+                <example caption='Response Element'><![CDATA[
+S: <iq to='user@example.net/home' from='support@workgroup.example.com' id='id1' type='result'/>
+                ]]></example>
+                <p>If the user indicated interest in their queue status information, the supported status updates MUST be sent by the server. Compliant implementations do not have to support any status update types. Status updates requested by the user and supported by the server MUST be pushed to the user by the service until the user departs or is invited to a chat room.</p>
+                <section4 topic='Error Conditions' anchor='proto-user-join-errors'>
+                    <table caption='Join-Queue Error Conditions'>
+                        <tr>
+                            <th>Condition</th>
+                            <th>Description</th>
+                        </tr>
+                        <tr>
+                            <td>&e401;</td>
+                            <td>The user is not authorized to join the queue. A determination of who has permission to join a queue is left to implementations.</td>
+                        </tr>
+                        <tr>
+                            <td>&e404;</td>
+                            <td>The address the user requests a chat with does not exist or is not a workgroup.  Compliant workgroup service implementations MUST NOT return this error if the requested address is a valid workgroup.</td>
+                        </tr>
+                        <tr>
+                            <td>&e406;</td>
+                            <td>The user must submit valid form data before joining the queue. Note that this error is sent when the user tries to join, or if the user submits form data that is not filled out correctly.</td>
+                        </tr>
+                        <tr>
+                            <td>&e409;</td>
+                            <td>The user has already joined the queue.</td>
+                        </tr>
+                        <tr>
+                            <td>&e503;</td>
+                            <td>The workgroup is valid but not accepting new join-queue requests.</td>
+                        </tr>
+                    </table>
+                </section4>
+                <section4 topic='Example' anchor='proto-user-join-example'>
+                    <p>The following protocol flows show an example of a user successfully joining a workgroup queue for support@workgroup.example.com.</p>
+                    <example caption='Successful Join'><![CDATA[
+U: <iq type='set'
+U:     from='user@example.net/home'
+U:       to='support@workgroup.example.com'
+U:       id='id1'>
+U:   <join-queue xmlns='http://jabber.org/protocol/workgroup'>
+U:     <queue-notifications/>
+U:   </join-queue>
+U: </iq>
+S: <iq type='result'
+S:     from='support@workgroup.example.com'
+S:     to='user@example.net/home'
+S:     id='id1'/>
+                    ]]></example>
+                    <p>The following XML is another example where meta-data is sent by the user to assist the workgroup server in queuing and routing (naturally, the custom namespace that qualifies the &lt;crm/&gt; element in this example would be defined outside the context of this specification).</p>
+                    <example caption='Join With Meta-Data'><![CDATA[
+U: <iq type='set'
+U:     from='user@example.net/home'
+U:       to='support@workgroup.example.com'
+U:       id='id2'>
+U:   <join-queue xmlns='http://jabber.org/protocol/workgroup'>
+U:     <crm xmlns='http://www.example.com/xmpp/workgroup'>
+U:       <customer-id>the24th498onth</customer-id>
+U:       <referrer>
+U:         http://www.example.com/portal/
+U:       </referrer>
+U:       <product>Widget 1.0</product>
+U:     </crm>
+U:     <queue-notifications/>
+U:   </join-queue>
+U: </iq>
+S: <iq type='result'
+S:     from='support@workgroup.example.com'
+S:       to='user@example.net/home'
+S:       id='id2'/>
+                    ]]></example>
+                    <p>Finally an example of a required form submission before a user is allowed to the workgroup queue for support@workgroup.example.com. The data form in this example is trivial; please see <cite>JEP-0004</cite> for a complete data form example. The example begins as normal, but the workgroup returns a &e406; error.</p>
+                    <example caption='Join With Form'><![CDATA[
+U: <iq type='set'
+U:     from='user@example.net/home'
+U:       to='support@workgroup.example.com'
+U:       id='id1'>
+U:   <join-queue xmlns='http://jabber.org/protocol/workgroup'>
+U:     <queue-notifications/>
+U:   </join-queue>
+U: </iq>
+S: <iq type='error'
+S:     from='support@workgroup.example.com'
+S:       to='user@example.net/home'
+S:       id='id1'>
+S:   <error code='406' type='modify'>
+S:     <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+S:   </error>
+S: </iq>
+                    ]]></example>
+                    <p>The &e406; error indicates that a data form is required. The user requests the required data form from the workgroup.</p>
+                    <example caption='Join With Form (2)'><![CDATA[
+U: <iq type='get'
+U:     from='user@example.net/home'
+U:       to='support@workgroup.example.com'
+U:       id='id2'>
+U:   <join-queue xmlns='http://jabber.org/protocol/workgroup'/>
+U: </iq>
+S: <iq type='result'
+S:     from='support@workgroup.example.com'
+S:       to='user@example.net/home'
+S:       id='id2'>
+S:   <join-queue xmlns='http://jabber.org/protocol/workgroup'>
+S:     <x xmlns='jabber:iq:data' type='form'>
+S:       <title>Support.com Chat Customer Information</title>
+S:       <instructions>Welcome to example.com! Please provide us with
+S:         some information about yourself so we can serve you better.
+S:       </instructions>
+S:       <field type='text-single' label='First Name' var='first' />
+S:       <field type='text-single' label='Last Name' var='last' />
+S:       <field type='list-single' label='Contract Type'
+var='contract_type'>
+S:         <value>0</value>
+S:         <option label='None'><value>0</value></option>
+S:         <option label='Bronze'><value>1</value></option>
+S:         <option label='Silver'><value>2</value></option>
+S:         <option label='Gold'><value>3</value></option>
+S:       </field>
+S:     </x>
+S:   </join-queue>
+S: </iq>
+                    ]]></example>
+                    <p>After presenting the form to the user and gathering the form data, the user submits the form data to the workgroup and the workgroup accepts it. The user is now in the queue.</p>
+                    <example caption='Join With Form (3)'><![CDATA[
+U: <iq type='set'
+U:     from='user@example.net/home'
+U:       to='support@workgroup.example.com'
+U:       id='id3'>
+U:   <join-queue xmlns='http://jabber.org/protocol/workgroup'>
+U:     <queue-notifications/>
+U:     <x xmlns='jabber:iq:data' type='submit'>
+U:       <field var='first'><value>John</value></field>
+U:       <field var='last'><value>Doe</value></field>
+U:       <field var='contract_type'><value>2</value></field>
+U:     </x>
+U:   </join-queue>
+U: </iq>
+S: <iq type='result'
+S:     from='support@workgroup.example.com'
+S:       to='user@example.net/home'
+S:       id='id3' />
+                    ]]></example>
+                </section4>
+            </section3>
+            <section3 topic='User Depart Protocol' anchor='proto-user-depart'>
+                <p>This section describes the packet exchange allowing users to depart a workgroup service queue, or for a workgroup service to remove a user from the workgroup queue. This protocol MUST be supported by compliant implementations.</p>
+                <p>The user no longer wishes to be in the queue and issues a depart queue command.</p>
+                <example caption='Transactions'><![CDATA[
+Requester                     Service
+  |        Depart Request        |
+  |----------------------------->|
+  |        Depart Response       |
+  |<-----------------------------|
+  |                              |
+                ]]></example>
+                <p>The service notifies the user that they have been removed from the workgroup queue.</p>
+                <example caption='Transactions (2)'><![CDATA[
+User                          Service
+  |        Depart Message        |
+  |<-----------------------------|
+  |                              |
+                ]]></example>
+                <example caption='Depart Request'><![CDATA[
+U: <iq from='user@example.net/home' to='support@workgroup.example.com' id='id1' type='set'>
+U:   <depart-queue xmlns='http://jabber.org/protocol/workgroup'/>
+U: </iq>
+                ]]></example>
+                <p>In the typical case, the sender is the user departing the queue. However, it is possible for other users (system administrators for example) to request that another user be removed from the queue. In this case, the jid of the user who is departing is included in the depart request:</p>
+                <example caption='Depart Request With JID'><![CDATA[
+U: <iq from='admin-jid' to='support@workgroup.example.com' id='id1' type='set'>
+U:   <depart-queue xmlns='http://jabber.org/protocol/workgroup'>
+U:     <jid>user@example.net/home</jid>
+U:   </depart-queue>
+U: </iq>
+                ]]></example>
+                <p>It is expected that implementations will determine who is allowed to remove other users from the queue based on an implementation specific permissions model.  These administrator depart requests may result in &e401; errors (see error section). A user removing their own queue entry MUST NOT receive unauthorized errors (the workgroup service MUST NOT prevent a user from departing the queue).</p>
+                <p>The sender of the depart request receives a successful result packet:</p>
+                <example caption='Depart Request'><![CDATA[
+S: <iq from='support@workgroup.example.com' to=user@example.net/home' id='id1' type='result'/>
+                ]]></example>
+                <p>And the user who is departing receives a depart message (the user may not have been the sender of the request):</p>
+                <example caption='Depart Message'><![CDATA[
+S: <message from='support@workgroup.example.com' to='user@example.net/home'>
+S:    <depart-queue xmlns='http://jabber.org/protocol/workgroup'/>
+S: </message>
+                ]]></example>
+                <p>The user will not be in the queue after a response is received unless the error response code is &e401;.</p>
+                <section4 topic='Error Conditions' anchor='proto-user-depart-errors'>
+                    <table caption='Depart-Queue Error Conditions'>
+                        <tr>
+                            <th>Condition</th>
+                            <th>Description</th>
+                        </tr>
+                        <tr>
+                            <td>&e401;</td>
+                            <td>The sender did not have permission to remove the user from the queue.  This error code MUST NOT be used when a user is removing their queue entry.</td>
+                        </tr>
+                        <tr>
+                            <td>&e404;</td>
+                            <td>The user was not in the queue.</td>
+                        </tr>
+                    </table>
+                </section4>
+                <section4 topic='Example' anchor='proto-user-depart-example'>
+                    <p>A user leaves the workgroup queue support@workgroup.example.com.</p>
+                    <example caption='User Departs'><![CDATA[
+U: <iq from='user@example.net/home'
+U:       to='support@workgroup.example.com'
+U:       id='id1'
+U:     type='set'>
+U:   <depart-queue xmlns='http://jabber.org/protocol/workgroup'/>
+U: </iq>
+S: <iq from='support@workgoup.example.com'
+S:     to='user@example.net/home'
+S:     id='id1'
+S:     type='result'/>
+S: <message from='support@workgroup.example.com' to='user@example.net/home'>
+S:    <depart-queue xmlns='http://jabber.org/protocol/workgroup'/>
+S: </message>
+                    ]]></example>
+                    <p>An administrator removes a user from the workgroup queue support@workgroup.example.com.
+                    Notice that the depart-queue message is sent to the user that has left the queue.</p>
+                    <example caption='Administrator Removes User'><![CDATA[
+U: <iq from='admin@example.com/work'
+U:       to='support@workgroup.example.com'
+U:       id='id1'
+U:     type='set'>
+U:   <depart-queue xmlns='http://jabber.org/protocol/workgroup'>
+U:     <jid>user@example.net/home</jid>
+U:   </depart-queue>
+U: </iq>
+S: <iq from='support@workgroup.example.com'
+S:     to='admin@example.com/work'
+S:     id='id1'
+S:     type='result'/>
+S: <message from='support@workgroupexample.com' to='user@example.net/home'>
+S:    <depart-queue xmlns='http://jabber.org/protocol/workgroup'/>
+S: </message>
+                    ]]></example>
+                </section4>
+            </section3>
+            <section3 topic='User Status Update Protocol' anchor='proto-user-status'>
+                <p>This section describes the packet exchange for updating users on their queue status.  This protocol MAY
+                be supported by compliant implementations.</p>
+                <example caption='Transactions'><![CDATA[
+User                          Service
+  |      User Status Push        |
+  |<-----------------------------|
+  |                              |
+  |     User Status Request      |
+  |----------------------------->|
+  |     User Status Response     |
+  |<-----------------------------|
+  |                              |
+                ]]></example>
+                <p>The workgroup service pushes updates to the user as their queue status changes. Furthermore, the user may request their queue status at any time.</p>
+                <section4 topic='User Status Updates' anchor='proto-user-status-updates'>
+                    <p>User status updates are contained in a &lt;queue-status/&gt; element that updates the user on their queue position and estimated time. The position contained in a &lt;position&gt; sub-element is a non-negative integer indicating the number of queue entries that must be routed to an agent before the user is routed to an agent. A position of 0 (zero) indicates the user is currently being routed. Clients may use this information to display the current queue position to the user.</p>
+                    <p>The queue time status is contained in a &lt;time/&gt; sub-element that updates the user with the estimated time until they will be routed to an agent. The time is a non-negative integer indicating the estimated number of seconds remaining before being routed. Services should send this update at regular intervals. We recommend every 15 seconds, but the best solution will depend on application dependent factors and the service may decide to send updates at any interval or never (relying on the client to request the information). User clients should assume the estimated time counts down at a rate of one per second between status updates. Clients may use this information to display the running estimated time to the user.</p>
+                    <p>A server 'push' occurs asynchronously to client:</p>
+                    <example caption='User Status Push'><![CDATA[
+S: <message to='user@example.net/home' from='support@workgroup.example.com'>
+S:   <queue-status xmlns='http://jabber.org/protocol/workgroup'>
+S:     <position>4</position>
+S:     <time>60</time>
+S:   </queue-status>
+S: </message>
+                    ]]></example>
+                    <p>Alternately the client may poll their position:</p>
+                    <example caption='User Status Poll'><![CDATA[
+U: <iq to='support@workgroup.example.com' from='user@example.net/home' id='id1' type='get'>
+U:   <queue-status xmlns='http://jabber.org/protocol/workgroup'/>
+U: </iq>
+S: <iq to='user@example.net/home' from='support@workgroup.example.com' id='id1' type='result'>
+S:   <queue-status xmlns='http://jabber.org/protocol/workgroup'>
+S:     <position>4</position>
+S:     <time>60</time>
+S:   </queue-status>
+S: </iq>
+                    ]]></example>
+                </section4>
+                <section4 topic='Error Conditions' anchor='proto-user-status-errors'>
+                    <table caption='Queue-Status Error Conditions'>
+                        <tr>
+                            <th>Condition</th>
+                            <th>Description</th>
+                        </tr>
+                        <tr>
+                            <td>&e401;</td>
+                            <td>Sent by the server to the user in response to a status query only if
+                            the user is not a member of the queue.</td>
+                        </tr>
+                        <tr>
+                            <td>&e501;</td>
+                            <td>Sent only if status updates are not implemented in either the client or server.</td>
+                        </tr>
+                    </table>
+                </section4>
+            </section3>
+            <section3 topic='User Invite Protocol' anchor='proto-user-invite'>
+                <p>This section describes the packet exchange for inviting a queued user to a chat room for conversation with an agent. This protocol MUST be supported by compliant implementations.</p>
+                <example caption='Transactions'><![CDATA[
+User                          Service
+  |          User Invite         |
+  |<-----------------------------|
+  |                              |
+                ]]></example>
+                <p>The server sends an invitation to the user to begin their conversation with an agent, structured according to the format defined in <cite>JEP-0045</cite>. The 'from' attribute of the &lt;invite/&gt; element MUST be set to the JID of the workgroup. The invitation indicates that the user is no longer in the workgroup queue. The user MUST NOT receive any more user queue status updates once they receive an invitation.</p>
+                <section4 topic='Error Conditions' anchor='proto-user-invite-errors'>
+                    <p>There are no defined error conditions for user invitations.</p>
+                </section4>
+                <section4 topic='Example' anchor='proto-user-invite-example'>
+                    <p>An invitation from the server on behalf of the support@example.net workgroup:</p>
+                    <example caption='An Invitation'><![CDATA[
+S: <message
+S:     from='roomname@chatserver.example.com'
+S:     to='user@example.net/home'>
+S:   <x xmlns='http://jabber.org/protocol/muc#user'>
+S:     <invite from='support@workgroup.example.com'>
+S:       <reason>
+S:        You have been invited to chat with a support@workgroup.example.com 
+          agent.
+S:       </reason>
+S:     </invite>
+S:   </x>
+S: </message>
+                    ]]></example>
+                </section4>
+            </section3>
+        </section2>
+    </section1>
+    <section1 topic='Agent Protocol' anchor='agent'>
+        <section2 topic='Agent States' anchor='proto-agent-states'>
+            <p>Agents join a workgroup to indicate they are capable of handling conversations with users.  Agent membership in the workgroup is expected to be a long term, persistent relationship similar to roster membership. For example, a customer support agent may join the support@workgroup.example.com workgroup when they begin working at example.com and will only depart when they leave that position.  The wide variety of relationships, processes and permissions associated with joining and leaving workgroups lies outside the scope of this document.</p>
+            <p>Once an agent has joined a workgroup they will receive workgroup status updates to inform them of the status of other members of the workgroup.  Agents are responsible for updating the workgroup service with their presence so the service can intelligently route chat requests to the 'best' agent.  Workgroup agent presence uses standard XMPP presence packets with optional meta-data to help routing of chat requests to agents. Some meta-data will be standard and defined later in this document. It is expected that other deployment specific meta-data will also be needed to make routing decisions.</p>
+            <p>The general agent workgroup state diagram is shown below:</p>
+            <code><![CDATA[
+            +-----------+
+      +---->| Workgroup |<-----+
+      |     +-----------+      |
+      |        |     |Agent    |
+      | Status |     |Presence |
+      +--------+     +---------+
+            ]]></code>
+            <p>Once an agent has joined a workgroup and is available, the agent will receive offers to chat with users by the workgroup service. Chat offers will be made to the agent and the agent has the opportunity to accept or reject each offer. The workgroup service may also revoke an offer. For example, a service may revoke chat offers if the offer is not responded to within a certain period of time to ensure fast responses to user chat requests.</p>
+            <p>Once an offer has been accepted, the agent must wait for a standard groupchat invitation from the workgroup service. The workgroup service may revoke the offer at this stage of the protocol as well. This enables workgroup services to send offers to several agents in parallel, and choose the 'best' agent that accepts. A diagram showing the agent workgroup sub-states and transitions is shown below:</p>
+            <code><![CDATA[
+              +-------+
+              | Start |<---------+
+              +-------+          |
+                  |              |
+                  | Offer        |
+                  v              |
+            +---------------+    |
+            | Offer Pending |    |
+            +---------------+    |
+                 |  |  | Revoke  |
+                 |  |  +-------->|
+                 |  | Reject     |
+          Accept |  +----------->|
+                 v               |
+            +--------------+     |
+            | Chat Pending |     |
+            +--------------+     |
+                 |   | Revoke    |
+          Invite |   +-----------+
+                 V
+              +-----------+
+              | Chat room |
+              +-----------+
+            ]]></code>
+        </section2>
+        <section2 topic='Agent Packet Exchanges' anchor='proto-agent'>
+            <p>Packets are exchanged between the agent and service to trigger state changes in the agent client.  These packet exchanges are described next.</p>
+            <section3 topic='Agent Presence Protocol' anchor='proto-agent-presence'>
+                <p>This section describes the packet exchange allowing agents to update a workgroup with their current presence. This protocol MUST be supported by compliant implementations.</p>
+                <example caption='Transactions'><![CDATA[
+Agent                         Service
+  |       Presence Update        |
+  |----------------------------->|
+  |                              |
+                ]]></example>
+                <p>The agent must inform the workgroup of its presence by sending it a directed (not broadcast) presence update packet.  Agent presence updates use standard XMPP presence with optional meta-data. However, there must always be an agent-status workgroup sub-element in the presence packet to indicate that the presence update relates to agent workgroup presence. Agent workgroup presence is designed to allow a separation between the agent's normal XMPP presence (server-managed via rosters) and their presence with the workgroup.</p>
+                <example caption='Presence Update'><![CDATA[
+U: <presence from='alice@example.com/work' to='support@workgroup.example.com'>
+U:   <agent-status xmlns='http://jabber.org/protocol/workgroup'>
+U:     <max-chats>count</max-chats>
+U:   </agent-status>
+U: </presence>
+                ]]></example>
+                <p>Agent presence updates use standard XMPP presence packets and should contain the normal sub elements as needed (e.g. &SHOW;, &STATUS;, etc) and can be of type='unavailable' to indicate the agent is not available for workgroup routing or for receiving workgroup agent updates. The standard XMPP show states have specific meaning within the context of the workgroup protocol:</p>
+                <ul>
+                    <li>chat - Indicates the agent is available to chat (is idle and ready to handle more conversations).</li>
+                    <li>away - The agent is busy (possibly with other chats). The agent may still be able to handle other chats but an offer rejection is likely.</li>
+                    <li>xa - The agent is physically away from their terminal and should not have a chat routed to them.</li>
+                    <li>dnd - The agent is busy and should not be disturbed. However, special case, or extreme urgency chats may still be offered to the agent although offer rejection or offer timeouts are highly likely.</li>
+                </ul>
+                <p>Agents MAY also embed meta-data to help the workgroup service route chat requests, using the &lt;max-chats&gt; element, which specifies the maximum number of chats the agent can handle. If a presence is sent to the workgroup that does not contain the max-chats value, the "default setting" will be assumed.  The value of the default setting for an agent is up to an implementation.  <note>The max-chats value sent from agent to workgroup service is a 'hint' or recommended value.  The workgroup service is not obliged to accept this value. The actual max-chats value for the agent will be sent to the agent via the next Agent Status Update. This allows administrators to constrain agent behavior in order to enforce company policy, quality assurance, etc.</note></p>
+                <section4 topic='Error Conditions' anchor='proto-agent-presence-errors'>
+                    <p>There are no defined error conditions for presence updates.</p>
+                </section4>
+                <section4 topic='Example' anchor='proto-agent-presence-example'>
+                    <p>An agent (alice) becomes available to the workgroup support@workgroup.example.com.</p>
+                    <example caption='Agent Becomes Available'><![CDATA[
+U: <presence from='alice@example.com/work'
+U:             to='support@workgroup.example.com'>
+U:   <show>chat</show>
+U:   <agent-status xmlns='http://jabber.org/protocol/workgroup'>
+U:     <max-chats>3</max-chats>
+U:   </agent-status>
+U: </presence>
+                    ]]></example>
+                </section4>
+            </section3>
+            <section3 topic='Workgroup Status Update Protocol' anchor='proto-workgroup-status'>
+                <p>This section describes the packet exchange used to update agents on the status of the workgroup. This protocol MAY be supported by compliant implementations.</p>
+                <p>After an agent announces their presence to the workgroup, they will begin receiving presence updates from the workgroup. All fields are optional:</p>
+                <example caption='Notify-Agent Status Type'><![CDATA[
+S: <presence to='alice@example.com/work' from='support@workgroup.example.com'>
+S:   <notify-agents xmlns='http://jabber.org/protocol/workgroup'>
+S:     <available>count</available>
+S:     <current-chats>count</current-chats>
+S:     <max-chats>count</max-chats>
+S:   </notify-agents>
+S: </presence>
+                ]]></example>
+
+                <p>The defined sub-elements of &lt;notify-agents&gt; are:</p>
+                <ul>
+                    <li>&lt;available&gt; - The total number of agents available in the workgroup.</li>
+                    <li>&lt;current-chats&gt; - The current total number of chats being handled by agents in the workgroup.</li>
+                    <li>&lt;max-chats&gt; - The maximum number of simultaneous conversations that can be handled by agents in the workgroup.</li>
+                </ul>
+                <section4 topic='Error Conditions' anchor='proto-workgroup-status-errors'>
+                    <p>There are no defined error conditions for notify workgroup updates.</p>
+                </section4>
+                <section4 topic='Example' anchor='proto-workgroup-status-example'>
+                    <p>An agent (alice) receives an update from workgroup support@workgroup.example.com.</p>
+                    <example caption='Agent Recives Update'><![CDATA[
+S: <presence to='alice@example.com/work' from='support@wokgroup.example.com'>
+S:   <notify-agents xmlns='http://jabber.org/protocol/workgroup'>
+S:     <available>2</available>
+S:     <current-chats>2</current-chats>
+S:     <max-chats>7</max-chats>
+S:   </notify-agents>
+S: </presence>
+                  ]]></example>
+                </section4>
+            </section3>
+            <section3 topic='Queue Status Update Protocol' anchor='proto-queue-status'>
+                <p>This section describes the packet exchange used to update agents on the status of the workgroup queue. This protocol MAY be supported by compliant implementations.</p>
+                <p>After an agent announces their presence to the workgroup, they will begin receiving presence updates from the workgroup with an overview and details on the queue status.</p>
+                <p>The &lt;notify-queue/&gt; element updates the agent with a summary of the status of the workgroup queue. All fields are optional:</p>
+                <example caption='Notify-Queue Status Type'><![CDATA[
+S: <presence to='alice@example.com/work' from='support@workgroup.example.com'>
+S:   <notify-queue xmlns='http://jabber.org/protocol/workgroup'>
+S:     <count>count</count>
+S:     <oldest>YYYY-MM-DDTHH:mm:ss</oldest>
+S:     <time>average-time-to-chat</time>
+S:     <status>open</status>
+S:   </notify-queue>
+S: </presence>
+                ]]></example>
+                <p>The defined sub-elements of &lt;notify-queue&gt; are:</p>
+                <ul>
+                    <li>&lt;count&gt; - The total number of users in the workgroup queue.</li>
+                    <li>&lt;oldest&gt; - The date and time when the oldest member of the queue joined (MUST conform to the DateTime profile defined in &jep0082;).</li>
+                    <li>&lt;time&gt; - The average time in seconds that a user is in the queue before they are routed to an agent for handling.</li>
+                    <li>&lt;status&gt; - The status of the queue. Queues may be active (requests are being routed and handled by agents) but not accepting new requests for handling. Typical reasons for this state include the queue is shutting down but finishing processing users in the queue, or because the queue has too many requests and should not accept more request until the existing requests are handled. The status field MUST contain one of the following values:
+                        <ul>
+                            <li>open - the queue is active and accepting new chat requests</li>
+                            <li>active - the queue is active but NOT accepting new chat requests</li>
+                            <li>closed - the queue is NOT active and NOT accepting new chat requests</li>
+                        </ul>
+                    </li>
+                </ul>
+
+                <p>The &lt;notify-queue-details/&gt; element updates the agent with details of the workgroup queue. All fields are optional:</p>
+                <example caption='Notify-Queue-Details Status Type'><![CDATA[
+S: <presence to='alice@example.com/work' from='support@workgroup.example.com'>
+S:   <notify-queue-details xmlns='http://jabber.org/protocol/workgroup'>
+S:     <user jid='user@example.net/home'>
+S:       <position>pos</position>
+S:       <time>estimated-time</time>
+S:       <join-time>YYYY-MM-DDTHH:mm:SS</join-time>
+S:     </user>
+S:   </notify-queue-details>
+S: </presence>
+                ]]></example>
+                <p>An update may contain one or more &lt;user&gt; entries (one per user in the queue).  The defined sub-elements of &lt;user&gt; are:</p>
+                <ul>
+                    <li>&lt;position&gt; - The user's zero-based position in the queue.</li>
+                    <li>&lt;time&gt; - Estimated time in seconds remaining before the user is routed to an agent.</li>
+                    <li>&lt;join-time&gt; - The datetime when the user joined the queue (MUST conform to the DateTime profile defined in <cite>JEP-0082</cite>).</li>
+                </ul>
+                <section4 topic='Error Conditions' anchor='proto-queue-status-errors'>
+                    <p>There are no defined error conditions for workgroup queue status updates.</p>
+                </section4>
+                <section4 topic='Example' anchor='proto-queue-status-example'>
+                    <p>An agent receives an update from workgroup support@workgroup.example.com.</p>
+                    <example caption='Agent Receives Updates'><![CDATA[
+S: <presence to='alice@example.com/work' from='support@workgroup.example.com'>
+S:   <notify-queue xmlns='http://jabber.org/protocol/workgroup'>
+S:     <count>1</count>
+S:     <oldest>20050208T10:00:00</oldest>
+S:     <time>30</time>
+S:     <status>open</status>
+S:   </notify-queue>
+S: </presence>
+S: <presence to='alice@example.com/work' from='support@workgroup.example.com'>
+S:   <notify-queue-details xmlns='http://jabber.org/protocol/workgroup'>
+S:     <user jid='user@example.net/home'>
+S:       <position>1</position>
+S:       <time>5</time>
+S:       <join-time>20050208T10:00:00</join-time>
+S:     </user>
+S:   </notify-queue-details>
+S: </presence>
+                    ]]></example>
+                </section4>
+            </section3>
+            <section3 topic='Agent Status Update Protocol' anchor='proto-agent-status'>
+                <p>This section describes the packet exchange used to update agents on the status of other agents in the workgroup. This protocol MAY be supported by compliant implementations.</p>
+                <example caption='Transactions'><![CDATA[
+Agent                         Service
+  |    Request Agent Status      |
+  |----------------------------->|
+  |         Agent List           |
+  |<-----------------------------|
+  |                              |
+  |     Agent Presence Pushes    |
+  |<-----------------------------|
+                ]]></example>
+                <p>The workgroup service pushes presence updates to the agent as the presence of other agents changes. This will only occur after an agent has requested to receive other agents' information. The server will continue to send presence updates until the agent sends an unavailable presence to the server. This protocol is similar to the standard XMPP roster workflow.</p>
+                <p>To receive presence updates for other agents in the workgroup, the agent sends an agent info request to the workgroup:</p>
+                <example caption='Request Element'><![CDATA[
+U: <iq to='support@workgroup.example.com' from='alice@example.com/work' 
+U:     id='id1' type='get'>
+U:   <agent-status-request xmlns='http://jabber.org/protocol/workgroup'/>
+U: </iq>
+               ]]></example>
+                <p>The workgroup will then reply with a list of all agents in the workgroup (excluding the agent making the request):</p>
+                <example caption='Response Element'><![CDATA[
+S: <iq to='alice@example.com/work' from='support@workgroup.example.com' 
+S:     id='id1' type='result'>
+S:   <agent-status-request xmlns='http://jabber.org/protocol/workgroup'>
+S:     <agent jid='bob@example.com' />
+S:   </agent-status-request>
+S: </iq>
+              ]]></example>
+                <p>The server will then push presence packets for other agents as their presence changes. All fields in the &lt;agent-status&gt; child stanza are optional, but an &lt;agent-status&gt; child stanza must be present:</p>
+                <example caption='Agent Status Update'><![CDATA[
+S: <presence to='alice@example.com/work' from='bob@example.com/work'>
+S:   <agent-status xmlns='http://jabber.org/protocol/workgroup'>
+S:       <current-chats>2</current-chats>
+S:       <max-chats>4</max-chats>
+S:   </agent-status>
+S: </presence>
+                ]]></example>
+                <p>The defined sub-elements of &lt;agent-status&gt; are:</p>
+                <ul>
+                    <li>&lt;current-chats&gt; - The number of conversations currently being handled by the agent.</li>
+                    <li>&lt;max-chats&gt; - The maximum number of simultaneous conversations the agent can handle.</li>
+                </ul>
+                <section4 topic='Error Conditions' anchor='proto-agent-status-errors'>
+                    <p>There are no defined error conditions for agent status updates.</p>
+                </section4>
+            </section3>
+            <section3 topic='Agent Offer Protocol' anchor='proto-agent-offer'>
+                <p>This section describes the packet exchange involved in a service offering a chat to an agent. This protocol MUST be supported by compliant implementations.</p>
+                <example caption='Transactions'><![CDATA[
+Agent                         Service
+  |         Offer Request        |
+  |<-----------------------------|
+  |         Offer Response       |
+  |----------------------------->|
+  |                              |
+                ]]></example>
+                <p>The agent is offered a chat with a user. A successful offer results in the agent owning the offer, but does not mean it has accepted the chat.  Accepting an offer is handled by the Agent Accept protocol. The separation between offer and acceptance is made so that agents may receive offers while engaged in other activities (busy with other chats) and accept them at a later time.</p>
+                <example caption='Offer Request'><![CDATA[
+S: <iq from='support@workgroup.example.com' to='alice@example.com/work' id='id1' type='set'>
+S:   <offer xmlns='http://jabber.org/protocol/workgroup' jid='user@example.net/home'>
+S:     <timeout>seconds</timeout>
+S:   </offer>
+S: </iq>
+                ]]></example>
+                <p>Application specific meta-data will normally be added as a sub-element of &lt;offer&gt; to help agents decide whether to accept or not (formats for which are out of scope for this document). An optional &lt;timeout&gt; sub-element may be included indicating the amount of time the offer stands before the service will revoke it.</p>
+                <example caption='Offer Response'><![CDATA[
+A: <iq from='alice@example.com/work' to='support@workgroup.example.com' id='id1' type='result'/>
+                ]]></example>
+                <p>The agent may respond only with a successful result.</p>
+                <section4 topic='Error Conditions' anchor='proto-agent-offer-errors'>
+                    <p>There are no defined error conditions for an offer response.</p>
+                </section4>
+                <section4 topic='Example' anchor='proto-agent-offer-example'>
+                    <p>An agent is offered a chat with a user. The offer will be revoked in 30 seconds.</p> <example caption='Agent is Offered a Chat'><![CDATA[
+S: <iq to='alice@example.com/work'
+S:     from='support@workgroup.example.com'
+S:     id='id1'
+S:     type='set'>
+S:   <offer xmlns='http://jabber.org/protocol/workgroup' jid='user@example.net/home'>
+S:     <timeout>30</timeout>
+S:   </offer>
+S: </iq>
+A: <iq to='support@workgroup.example.com'
+A:     from='alice@example.com/work'
+A:     id='id1'
+A:     type='result'/>
+                    ]]></example>
+                    <p>The following is a more typical offer containing meta-data about the user.  The offer will be revoked in 30 seconds.</p>
+                    <example caption='Offer Including Meta-Data'><![CDATA[
+S: <iq to='alice@example.com/work'
+S:     from='support@workgroup.example.com'
+S:     id='id2'
+S:     type='set'>
+S:   <offer xmlns='http://jabber.org/protocol/workgroup' jid='user@example.net/home'>
+S:     <timeout>30</timeout>
+S:     <crm xmlns='http://www.example.com/xmpp/workgroup'>
+S:       <user-id>423498ae84f</user-id>
+S:       <product>Widget 1.0</product>
+S:     </crm>
+S:   </offer>
+S: </iq>
+A: <iq to='support@workgroup.example.com'
+A:     from='alice@example.com/work'
+A:     id='id2'
+A:     type='result'/>
+                    ]]></example>
+                </section4>
+            </section3>
+            <section3 topic='Agent Offer Accept/Reject Protocol' anchor='proto-agent-acceptreject'>
+                <p>This section describes the packet exchange involved in an agent rejecting an offering a chat to a user. This protocol MUST be supported by compliant implementations.</p>
+                <example caption='Transactions'><![CDATA[
+Agent                         Service
+  |  Offer Accept/Reject Request |
+  |----------------------------->|
+  | Offer Accept/Reject Response |
+  |<-----------------------------|
+  |                              |
+                ]]></example>
+                <p>The agent accepts or rejects an offer to chat with a user.</p>
+                <example caption='Offer Accept Request'><![CDATA[
+A: <iq to='support@workgroup.example.com' from='alice@example.com/work' id='id1' type='set'>
+A:   <offer-accept jid='user@example.net/home' xmlns='http://jabber.org/protocol/workgroup' />
+A: </iq>
+                ]]></example>
+                <example caption='Offer Reject Request'><![CDATA[
+A: <iq to='support@workgroup.example.com' from='alice@example.com/work' id='id1' type='set'>
+A:   <offer-reject jid='user@example.net/home' xmlns='http://jabber.org/protocol/workgroup'/>
+A: </iq>
+                ]]></example>
+                <example caption='Offer Response'><![CDATA[
+S: <iq to='alice@example.com/work' from='support@workgroup.example.com' id='id1' type='result'/>
+                ]]></example>
+                <p>The service may respond only with a successful result.</p>
+                <section4 topic='Error Conditions' anchor='proto-agent-acceptreject-errors'>
+                    <p>There are no defined error conditions for an accept/reject offer response.</p>
+                </section4>
+                <section4 topic='Example' anchor='proto-agent-acceptreject-example'>
+                    <example caption='Agent Accepts Chat'><![CDATA[
+A: <iq from='alice@example.com/work'
+A:       to='support@workgroup.example.com'
+A:       id='id3'
+A:     type='set'>
+A:   <offer-accept jid='user@example.net/home' xmlns='http://jabber.org/protocol/workgroup'/>
+A: </iq>
+S: <iq from='support@workgroup.example.com'
+S:     to='alice@example.com/work'
+S:     id='id3'
+S:     type='result'/>
+                    ]]></example>
+                </section4>
+            </section3>
+            <section3 topic='Agent Offer Revoke Protocol' anchor='proto-agent-revoke'>
+                <p>This section describes the packet exchange involved in a service revoking an offer to an agent to chat to a user. This protocol MUST be supported by compliant implementations.</p>
+                <example caption='Transactions'><![CDATA[
+Agent                         Service
+  |     Offer Revoke Request     |
+  |<-----------------------------|
+  |    Offer Revoke Response     |
+  |----------------------------->|
+  |                              |
+                ]]></example>
+                <p>The service revokes an earlier offer to chat to a user. Offer revocations typically occur when the original offer times out, or a better agent was found to handle the chat. Note that offer revocations may occur anytime after an offer has been made, and before an invitation is sent (see agent state diagram). In other words, even though an agent has accepted an offer to chat, the agent may still receive an offer revocation (e.g. a better agent was found to handle the chat).</p>
+                <example caption='Offer Revoke Request'><![CDATA[
+S: <iq from='support@workgroup.example.com' to='alice@example.com/work' id='id1' type='set'>
+S:   <offer-revoke jid='user@example.net/home' xmlns='http://jabber.org/protocol/workgroup'>
+S:     <reason>
+S:       [natural-language text]
+S:     </reason>
+S:   </offer-revoke>
+S: </iq>
+                ]]></example>
+                <p>The reason element may optionally contain free form text explaining the reason the offer was revoked.</p>
+                <example caption='Offer Response'><![CDATA[
+A: <iq from='alice@example.com/work' to='support@workgroup.example.com' id='id1' type='result'/>
+                ]]></example>
+                <p>The agent may respond only with a successful result.</p>
+                <section4 topic='Error Conditions' anchor='proto-agent-revoke-errors'>
+                    <p>There are no defined error conditions for an offer response.</p>
+                </section4>
+                <section4 topic='Example' anchor='proto-agent-revoke-example'>
+                    <example caption='Offer Revoked Due to Timeout'><![CDATA[
+S: <iq to='alice@example.com/work'
+S:     from='support@workgroup.example.com'
+S:     id='id4'
+S:     type='set'>
+S:   <offer-revoke xmlns='http://jabber.org/protocol/workgroup' jid='user@example.net/home'>
+S:       <reason>
+S:         Offer timed out
+S:       </reason>
+S:   </offer-revoke>
+S: </iq>
+A: <iq to='support@workgroup.example.com'
+A:     from='alice@example.com/work'
+A:       id='id4'
+A:     type='result'/>
+                    ]]></example>
+                </section4>
+            </section3>
+            <section3 topic='Agent Invite Protocol' anchor='proto-agent-invite'>
+                <p>This section describes the packet exchange inviting an agent to a chat room for conversation with a user. This protocol MUST be supported by compliant implementations.</p>
+                <example caption='Transactions'><![CDATA[
+Agent                         Service
+  |         Agent Invite         |
+  |<-----------------------------|
+  |                              |
+                ]]></example>
+                <p>The server sends an invitation to the agent to begin their conversation with the user, structured according to the format defined in <cite>JEP-0045</cite>. The 'from' attribute of the &lt;invite/&gt; element MUST be set to the JID of the workgroup.</p>
+                <p>In order to match invitations to offers, all invitations SHOULD include meta-data in the &lt;offer/&gt; element, with the JID of the user specified via the 'jid' attribute. The typical meta-data fragment would appear as:</p>
+                <example caption='Invitation Meta-Data'><![CDATA[
+<offer xmlns='http://jabber.org/protocol/workgroup' jid='user@example.net/home'>
+                ]]></example>
+                <section4 topic='Error Conditions' anchor='proto-user-invite-errors'>
+                    <p>There are no defined error conditions for agent invitations.</p>
+                </section4>
+                <section4 topic='Example' anchor='proto-user-invite-example'>
+                    <p>An invitation from the server on behalf of the support@example.net workgroup:</p>
+                    <example caption='An Invitation'><![CDATA[
+S: <message
+S:     from='roomname@chatserver.example.com'
+S:     to='alice@example.com/work'>
+S:   <x xmlns='http://jabber.org/protocol/muc#user'>
+S:     <invite from='support@workgroup.example.com'>
+S:       <reason>
+S:       Please join the chat room to start your chat with user@example.net.
+S:       </reason>
+S:     </invite>
+S:   </x>
+S:   <offer xmlns='http://jabber.org/protocol/workgroup' jid='user@example.net/home'/>
+S: </message>
+                    ]]></example>
+                </section4>
+            </section3>
+        </section2>
+    </section1>
+    <section1 topic='Service Discovery' anchor='disco'>
+        <p>Service Discovery support is optional for Workgroup compliant implementations.  Workgroup services that do support Service Discovery MUST:</p>
+        <ul>
+            <li>Use the &lt;identity&gt; category='collaboration'.</li>
+            <li>Use the &lt;identity&gt; type='workgroup'.</li>
+            <li>Use the &lt;feature&gt; var='http://jabber.org/protocol/workgroup'.</li>
+        </ul>
+        <p>An example of discovery browsing is included. Notice how probing starts at the server (example.com) revealing the workgroup service by it's JID (workgroup.example.com) and a simple, human friendly name ("Example.com Live Assistant").  It is only during the discovery probing of the service that it is identified as a workgroup using the &lt;identity&gt; and &lt;feature&gt; tags. Finally individual workgroups (support and sales) can be discovered on the Workgroup service. When individual workgroups are probed, the &lt;identity&gt; and &lt;feature&gt; tags are again presented to identify them as workgroups along with (optional) associated meta-data.</p>
+        <example caption='Workgroup Service Discovery'><![CDATA[
+U: <iq to='example.com' from='user@example.net/home' id='id1' type='get'>
+U:     <query xmlns='http://jabber.org/protocol/disco#items'/>
+U: </iq>
+S: <iq from='example.com' to='user@example.net/home' id='id1' type='result'>
+S:    <query xmlns='http://jabber.org/protocol/disco#items'>
+S:        <item jid='workgroup.example.com' name='Example.com Live Assistant'/>
+S:    </query>
+S: </iq>
+
+U: <iq to='workgroup.example.com' from='user@example.net/home' id='id2' type='get'>
+U:    <query xmlns='http://jabber.org/protocol/disco#info'/>
+U: </iq>
+S: <iq from='workgroup.example.com' to='user@example.net/home' id='i2' type='result'>
+S:    <query xmlns='http://jabber.org/protocol/disco#info'>
+S:        <identity category='collaboration' name='Live Assistant' type='workgroup'/>
+S:        <feature var='http://jabber.org/protocol/workgroup'/>
+S:        <feature var='http://jabber.org/protocol/disco#info'/>
+S:    </query>
+S: </iq>
+
+U: <iq to='workgroup.example.com' from='user@example.net/home' id='id3' type='get'>
+U:     <query xmlns='http://jabber.org/protocol/disco#items'/>
+U: </iq>
+S: <iq from='workgroup.example.com' to='user@example.net/home' id='id3' type='result'>
+S:     <query xmlns='http://jabber.org/protocol/disco#items'>
+S:         <item jid='support@workgroup.example.com' name='Example.com Support Live Assistant'/>
+S:         <item jid='sales@workgroup.example.com' name='Example.com Sales Live Assistant'/>
+S:     </query>
+S: </iq>
+
+U: <iq to='support@workgroup.example.com' from='user@example.net/home' id='id4' type="get'>
+U:     <query xmlns='http://jabber.org/protocol/disco#info'/>
+U: </iq>
+S: <iq from='support@workgroup.example.com' to='user@example.net/home' id='id4' type='result'>
+S:     <query xmlns='http://jabber.org/protocol/disco#info'>
+S:         <identity category='collaboration' name='demo' type='workgroup'/>
+S:         <feature var='http://jabber.org/protocol/disco#info'/>
+S:         <x xmlns='jabber:x:data' type='result'>
+S:             <field var='FORM_TYPE' type='hidden'>
+S:                 <value>http://jabber.org/protocol/workgroup#workgroupinfo</value>
+S:             </field>
+S:             <field var='workgroup#description' label='Description'>
+S:                 <value>Example.com Support Workgroup</value>
+S:             </field>
+S:             <field var='workgroup#online' label='Status'>
+S:                 <value>ready</value>
+S:             </field>
+S:         </x>
+S:     </query>
+S: </iq>
+        ]]></example>
+    </section1>
+    <section1 topic='Implementation Notes' anchor='impl'>
+        <ul>
+            <li>A workgroup is a normal XMPP messaging node and MUST maintain its own presence.  It is recommended that a workgroup be able to respond to arbitrary chat messages sent to it (preferably by responding with instructions on how to join the queue).  Other users may subscribe to the workgroup service's presence using standard XMPP presence-subscribe and presence-unsubscribe protocols. The workgroup service's presence can be used to determine the workgroup's status without joining the workgroup as a user or agent. For example, a website server-side component can subscribe to the workgroup presence and indicate on web pages whether a workgroup is available to offer live chat to website visitors.</li>
+            <li>If workgroup goes offline, all queued users SHOULD be notified using the appropriate workgroup presence, status, and depart protocols.</li>
+            <li>An implementation MAY support anonymous login by users, which makes it easier to deploy such a system on a website.</li>
+            <li>Generally, client authors only need to implement the "user" portion of this document so that clients can contact workgroups. Implementing the "agent" portion of the document is generally left to specialized clients for agents.</li>
+            <li>Coordination of groupchat and workgroup services is beyond the scope of this document.  It is RECOMMENDED that implementations use or create standard mechanisms to allow workgroups and groupchat services to interact.</li>
+        </ul>
+    </section1>
+    <section1 topic='Security Considerations' anchor='security'>
+        <p>Implementations may wish to restrict who is allowed to join workgroups as users and agents. Details concerning the implementation of this feature is outside the scope of this document.</p>
+    </section1>
+    <section1 topic='IANA Considerations' anchor='iana'>
+        <p>This document requires no interaction with &IANA;.</p>
+    </section1>
+    <section1 topic='Jabber Registrar Considerations' anchor='registrar'>
+        <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+        <p>The &REGISTRAR; shall include 'http://jabber.org/protocol/workgroup' in its registry of protocol namespaces.</p>
+        </section2>
+        <section2 topic='Service Discovery Category/Type' anchor='registrar-discotype'>
+            <p>The Jabber Registrar shall add a Service Discovvery type of "workgroup" to the existing "collaboration" category. The registry submission is as follows:</p>
+            <code><![CDATA[
+<category>
+  <name>collaboriation</name>
+  <type>
+    <name>workgroup</name>
+    <desc>A workgroup component.</desc>
+    <doc>JEP-0142</doc>
+  </type>
+</category>
+            ]]></code>
+        </section2>
+    </section1>
+    <section1 topic='XML Schema' anchor='schema'>
+      <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='http://jabber.org/protocol/workgroup'
+    xmlns='http://jabber.org/protocol/workgroup'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The allowable root elements for the namespace defined
+      herein are:
+        - agent-status
+        - agent-status-request
+        - depart-queue
+        - join-queue
+        - notify-agents
+        - notify-queue
+        - notify-queue-details
+        - offer
+        - offer-accept
+        - offer-reject
+        - offer-revoke
+        - queue-status
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:import 
+      namespace='jabber:x:data'
+      schemaLocation='http://jabber.org/protocol/x-data/x-data.xsd'/>
+
+  <xs:element name='agent-status'>
+    <xs:complexType>
+      <xs:choice minOccurs='0' maxOccurs='unbounded'>
+        <xs:element name='current-chats' type='xs:positiveInteger'/>
+        <xs:element name='max-chats' type='xs:positiveInteger'/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='agent-status-request'>
+    <xs:complexType>
+      <xs:sequence minOccurs='0' maxOccurs='unbounded'>
+        <xs:element ref='agent'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='depart-queue'>
+    <xs:complexType>
+      <xs:choice minOccurs='0' maxOccurs='unbounded'>
+        <xs:element name='jid' type='xs:string'/>
+        <xs:any namespace='##other' processContents='lax'/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='join-queue'>
+    <xs:complexType>
+      <xs:choice xmlns:xdata='jabber:x:data' minOccurs='0' maxOccurs='unbounded'>
+        <xs:element name='queue-notifications' type='empty'/>
+        <xs:element ref='xdata:x'/>
+        <xs:any namespace='##other' processContents='lax'/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='notify-agents'>
+    <xs:complexType>
+      <xs:choice minOccurs='0' maxOccurs='unbounded'>
+        <xs:element name='available' type='xs:positiveInteger'/>
+        <xs:element name='current-chats' type='xs:positiveInteger'/>
+        <xs:element name='max-chats' type='xs:positiveInteger'/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='notify-queue'>
+    <xs:complexType>
+      <xs:choice minOccurs='0' maxOccurs='unbounded'>
+        <xs:element name='count' type='xs:positiveInteger'/>
+        <xs:element name='oldest' type='xs:dateTime'/>
+        <xs:element name='time' type='xs:positiveInteger'/>
+        <xs:element name='status'>
+          <xs:simpleType>
+            <xs:restriction base='xs:NCName'>
+              <xs:enumeration value='moderator'/>
+              <xs:enumeration value='none'/>
+              <xs:enumeration value='participant'/>
+              <xs:enumeration value='visitor'/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='notify-queue-details'>
+    <xs:complexType>
+      <xs:sequence minOccurs='0' maxOccurs='unbounded'>
+        <xs:element ref='user'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='offer'>
+    <xs:complexType>
+      <xs:choice minOccurs='0' maxOccurs='unbounded'>
+        <xs:element name='timeout' type='xs:positiveInteger'/>
+        <xs:any namespace='##other' processContents='lax'/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='offer-accept'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='jid' use='required' type='xs:string'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='offer-reject'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='jid' use='required' type='xs:string'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='offer-revoke'>
+    <xs:complexType>
+      <xs:sequence minOccurs='0'>
+        <xs:element name='reason' type='xs:string'/>
+      </xs:sequence>
+      <xs:attribute name='jid' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='queue-status'>
+    <xs:complexType>
+      <xs:choice minOccurs='0' maxOccurs='unbounded'>
+        <xs:element name='position' type='xs:positiveInteger'/>
+        <xs:element name='time' type='xs:positiveInteger'/>
+        <xs:any namespace='##other' processContents='lax'/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='user'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='position' type='xs:positiveInteger'/>
+        <xs:element name='time' type='xs:positiveInteger'/>
+        <xs:element name='join-time' type='xs:dateTime'/>
+      </xs:sequence>
+      <xs:attribute name='jid' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='agent'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='jid' use='required' type='xs:string'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+      ]]></code>
+    </section1>
+    <section1 topic='Acknowledgements' anchor='acknowledgements'>
+      <p>The author would like to thank Iain Shigeoka for his work on the first version of this document, and Derek DeMoro and Gaston Dombiak for their comments.</p>
+    </section1>
+</jep>

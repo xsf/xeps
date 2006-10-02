@@ -1,0 +1,1226 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM '../jep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+<jep>
+<header>
+  <title>Message Archiving</title>
+  <abstract>This document defines mechanisms and preferences for the archiving and retrieval of XMPP messages.</abstract>
+  &LEGALNOTICE;
+  <number>0136</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <jig>Standards JIG</jig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>JEP-0030</spec>
+    <spec>JEP-0059</spec>
+    <spec>JEP-0060</spec>
+    <spec>JEP-0155</spec>
+    <spec>JEP-0163</spec>
+    <spec>W3C XML Encryption</spec>
+    <spec>W3C XML Signature</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>archive</shortname>
+  &ianpaterson;
+  <author>
+    <firstname>Jon</firstname>
+    <surname>Perlow</surname>
+    <email>jonp@google.com</email>
+    <jid>jonp@google.com</jid>
+  </author>
+  &stpeter;
+  &infiniti;
+  <revision>
+    <version>0.9</version>
+    <date>2006-10-02</date>
+    <initials>ip</initials>
+    <remark><p>Added method child elements and expire attribute to pref element</p></remark>
+  </revision>
+  <revision>
+    <version>0.8</version>
+    <date>2006-09-29</date>
+    <initials>ip</initials>
+    <remark><p>Server generates encryption secrets for auto-archiving; specified use of W3C XML Encryption standard; enabled replacement of keys encrypted with an obsolete public key; enabled removal of open collections</p></remark>
+  </revision>
+  <revision>
+    <version>0.7</version>
+    <date>2006-09-08</date>
+    <initials>ip</initials>
+    <remark><p>Added preferences, results set management and notes; reinstated encryption and replication; simplified auto-archiving and off-the-record (with JEP-0155); many minor changes</p></remark>
+  </revision>
+  <revision>
+    <version>0.6</version>
+    <date>2006-08-18</date>
+    <initials>jp/psa</initials>
+    <remark><p>Added unset value for save attribute and added service attribute on default element; added source attribute on record element; specified that services should (not must) support save mode for particular contacts.</p></remark>
+  </revision>
+  <revision>
+    <version>0.5</version>
+    <date>2006-05-03</date>
+    <initials>psa/jp/jk</initials>
+    <remark><p>Integrated text from server-side archiving proposal; added partial support to collection retrieval; harmonized XML formats and namespaces; defined Jabber Registrar considerations and XML schema.</p></remark>
+  </revision>
+  <revision>
+    <version>0.4</version>
+    <date>2005-12-21</date>
+    <initials>ip</initials>
+    <remark><p>Added Replication and Searching section, partial attribute; minor improvements</p></remark>
+  </revision>
+  <revision>
+    <version>0.3</version>
+    <date>2005-10-21</date>
+    <initials>ip</initials>
+    <remark><p>Added more examples to Removing Collections</p></remark>
+  </revision>
+  <revision>
+    <version>0.2</version>
+    <date>2005-04-18</date>
+    <initials>ip</initials>
+    <remark><p>Complete rewrite.</p></remark>
+  </revision>
+  <revision>
+    <version>0.1</version>
+    <date>2004-06-04</date>
+    <initials>jk</initials>
+    <remark><p>Initial version.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Many XMPP clients implement some form of client-side message archiving. However, it is not always convenient or even possible to archive messages locally, e.g., because it is easier to keep all archives in one universally accessable place (not scattered around on multiple computers or devices) or because the client operates in a web browser or resides on a mobile device that does not have sufficient local storage for message archiving. In addition, server-side archiving makes it possible to offer new services such as integration of IM and email. Therefore it is beneficial to define methods for server-side archiving of XMPP messages.</p>
+  <p>There are two main approaches to this problem:</p>
+  <ol start='1'>
+    <li>Enable the client to send individual messages or entire conversations to the server for archiving (optionally after encryption); we call this manual archiving.</li>
+    <li>Enable the server (at the client's request) to archive messages as they pass through the server; we call this automated archiving.</li>
+  </ol>
+  <p>So that client and server developers can refer to one specification, both approaches are defined in this document. In addition, this document defines common methods for retrieving and managing archived messages.</p>
+    <p>Complying with <strong>XMPP Core</strong>, the server MUST respond to all &IQ; element of type 'get' or 'set'. However, most successful responses have been omitted from this document in the interest of conciseness.</p>
+</section1>
+<section1 topic='Determining Server Support' anchor='disco'>
+  <p>A client discovers whether its server supports this protocol using &jep0030;.</p>
+  <example caption='Client Service Discovery request'>
+    <![CDATA[
+<iq type='get' to='montague.net'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+  <p>For each feature defined herein, if the server supports that feature it MUST return a &lt;feature/&gt; element with the 'var' attribute set to 'http://jabber.org/protocol/archive#name', where "name" is "auto" for the <link url='#auto'>Automated Archiving</link> feature, "encrypt" for the <em>server-side</em> encryption feature (see <link url='#auto'>Automated Archiving</link>), "manage" for the <link url='#manage'>Archive Management</link> feature, "manual" for the <link url='#manual'>Manual Archiving</link> feature, or "pref" for the <link url='#pref'>Archiving Preferences</link> feature.</p>
+  <example caption='Server Service Discovery response'>
+    <![CDATA[
+<iq type='result'
+    from='montague.net'
+    to='romeo@montague.net/orchard'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+    ...
+    <feature var='http://jabber.org/protocol/archive#auto'/>
+    <feature var='http://jabber.org/protocol/archive#encrypt'/>
+    <feature var='http://jabber.org/protocol/archive#manage'/>
+    <feature var='http://jabber.org/protocol/archive#manual'/>
+    <feature var='http://jabber.org/protocol/archive#pref'/>
+    ...
+  </query>
+</iq>
+]]></example>
+</section1>
+<section1 topic='Archiving Preferences' anchor='pref'>
+  <section2 topic='Introducton' anchor='pref-reqs'>
+    <p>Not all users want to archive messages. A client SHOULD save its user's default archiving preference (or "Save Mode") to its own server (i.e., specify whether by default all conversations should be archived or not). In addition, a client MAY save different preferences for particular contacts.</p>
+    <p>Some users may also prefer that the messages they exchange with contacts are "<link url='#otr'>Off The Record</link>" (OTR). A client SHOULD save its user's default and contact-specific OTR preferences (or "OTR Modes") to its own server.</p>
+    <p>Whichever archiving method a client uses (e.g., local file archiving, or automatic or manual archiving to a server), it SHOULD adhere to its user's archiving preferences. However, a client MAY maintain a set of preferences in a local file which takes precedence over the preferences stored on the server for both local archiving and manual archiving.</p>
+    <p>This section addresses the following use cases:</p>
+    <ol start='1'>
+      <li>A client determines its user's current default Save Mode and OTR Mode, and the Modes for particular contacts.</li>
+      <li>A client sets the default Save Mode and OTR Mode.</li>
+      <li>A client sets the Save Mode and OTR Mode for a particular contact.</li>
+    </ol>
+  </section2>
+  <section2 topic='Determining Preferences' anchor='pref-determine'>
+    <p>In order to determine its user's current Save Mode(s) and OTR Mode(s), a client sends an empty &lt;pref/&gt; element to its server:</p>
+    <example caption='Client Requests Archiving Preferences'><![CDATA[
+<iq type='get' id='pref1' from='juliet@capulet.com/chamber'>
+  <pref xmlns='http://jabber.org/protocol/archive'/>
+</iq>
+    ]]></example>
+    <p>The server responds with the default Save Mode and OTR Mode (a single &lt;default/&gt; element) and any specific Save Modes and OTR Modes for individual contacts (zero or more &lt;item/&gt; elements).</p>
+    <p>Each &lt;default/&gt; or &lt;item/&gt; element in the response MUST include a 'save' attribute, whose value MAY be 'false' (the client MUST save no messages), 'body' (the client SHOULD save only &lt;body/&gt; elements) or 'all' (the client SHOULD save the full XML content of each &lt;message/&gt; element).</p>
+    <p>Note: Support for the 'all' value is optional and, to conserve bandwidth and storage space, it is RECOMMENDED that client implementations do not specify the 'all' value.</p>
+    <p>Note: When archiving <em>locally</em> a client MAY save the full XML content of each &lt;message/&gt; element even if the Save Mode is 'body'.</p>
+    <p>Each &lt;default/&gt; or &lt;item/&gt; element in the response whose 'save' attribute is not set to 'false' is RECOMMENDED to also include an 'expire' attribute which indicates how many seconds after messages are archived that the server SHOULD delete them.</p>
+    <p>Each &lt;default/&gt; or &lt;item/&gt; element in the response MUST include an 'otr' attribute, whose value MAY be 'deny' (if <link url='#otr'>Off The Record</link> is <em>required</em> by the contact the client MUST send no messages), 'allow' (the client MAY save messages unless the contact requests OTR), 'try' (the client MUST try to negotiate OTR with the contact) or 'require' (the client MUST send no messages unless the contact explicitly agrees to OTR).</p>
+    <p>Note: If the OTR Mode is 'require' then the Save Mode MUST be 'false'.</p>
+    <p>The server MUST also include &lt;method/&gt; elements that reflect the user's preferences for each of the possible archiving methods. There MUST be at least three such elements for local file archiving (type "local"), automatic archiving by the user's server (type "auto"), and manual archiving to a server (type "manual"). The 'use' attribute of each &lt;method/&gt; element MUST be set to "prefer", "allow" or "never" - indicating which archiving methods the user's clients SHOULD, MAY (if it does not support any preferred method) or MUST NOT use.</p>
+    <p>The server MUST also include an &lt;auto/&gt; element reflecting the current <link url='#auto'>Automated Archiving</link> settings for <em>this stream</em>.</p>
+    <example caption='Server Returns Preferences'><![CDATA[
+<iq type='result' id='pref1' to='juliet@capulet.com/chamber'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <default save='body' otr='allow' expire='31536000'/>
+    <item jid='romeo@montague.net' save='false' otr='require'/>
+    <item jid='benvolio@montague.net' save='all' expire='630720000' otr='deny'/>
+    <method type='auto' use='never'/>
+    <method type='local' use='allow'/>
+    <method type='manual' use='prefer'/>
+    <auto save='false'/>
+  </pref>
+</iq>
+    ]]></example>
+    <p>If the user has never set the default Modes, the 'save' and 'otr' attributes SHOULD specify the server's default settings, and the 'unset' attribute SHOULD be set to "true". Note: The 'unset' attribute defaults to "false".</p>
+    <example caption='Server Returns Service Default Preferences'><![CDATA[
+<iq type='result' id='pref1' to='juliet@capulet.com/chamber'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <default save='false' otr='allow' unset='true'/>
+    <method type='auto' use='allow'/>
+    <method type='local' use='allow'/>
+    <method type='manual' use='allow'/>
+    <auto save='false'/>
+  </pref>
+</iq>
+    ]]></example>
+    <p>Once it has received a request for archiving preferences from the client, the server MUST send any subsequent changes to any of the user's archiving preferences to the client until the stream is closed (see below). Note: changes to the &lt;auto/&gt; element MUST NOT be replicated in this way.</p>
+  </section2>
+  <section2 topic='Setting Default Modes' anchor='pref-default'>
+    <p>A client may set the default Modes:</p>
+    <example caption='Client Sets Default Modes'><![CDATA[
+<iq type='set' id='pref2' from='juliet@capulet.com/chamber'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <default save='false' otr='try'/>
+  </pref>
+</iq>
+    ]]></example>
+    <p>If the server can process the request, it acknowledges the change:</p>
+    <example caption='Server Acknowledges Change'><![CDATA[
+<iq type='result' id='pref2' to='juliet@capulet.com/chamber'/>
+    ]]></example>
+    <p>The server then MUST inform all of the user's connected resources that have previously requested the user's archiving preferences:</p>
+    <example caption='Server Pushes New Modes'><![CDATA[
+<iq type='set' id='push1' to='juliet@capulet.com/chamber'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <default save='false' otr='try'/>
+  </pref>
+</iq>
+
+<iq type='set' id='push2' to='juliet@capulet.com/pda'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <default save='false' otr='try'/>
+  </pref>
+</iq>
+    ]]></example>
+    <p>The server MAY be configured to return a &lt;feature-not-implemented/&gt; error in the following cases:</p>
+    <ul>
+      <li><p>If it does not allow the saving of full message stanza content, and the client set the value of the 'save' attribute to "all", and any of the user's connected resources have <link url='#auto'>Automated Archiving</link> enabled.</p></li>
+      <li><p>If administrator policies require that at least the &lt;body/&gt; (or the full content) of every message is logged automatically, and the client sets the value of the 'save' attribute to "false" (or "body").</p></li>
+    </ul>
+  </section2>
+  <section2 topic='Setting Modes for a Contact' anchor='pref-jid'>
+    <p>A client may use a similar protocol to set the Modes for a particular contact or domain of contacts (bare JID, full JID or domain). Note: It is STRONGLY RECOMMENDED for the value of the 'jid' attribute to be a bare JID (&BAREJID;).</p>
+    <example caption='Client Sets Modes for a Contact'><![CDATA[
+<iq type='set' id='pref3' from='juliet@capulet.com/chamber'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <item jid='romeo@montague.net' save='body' expire='604800' otr='allow'/>
+  </pref>
+</iq>
+    ]]></example>
+    <example caption='Server Acknowleges Change'><![CDATA[
+<iq type='result' id='pref3' to='juliet@capulet.com/chamber'/>
+    ]]></example>
+    <example caption='Server Pushes New Modes'><![CDATA[
+<iq type='set' id='push3' to='juliet@capulet.com/chamber'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <item jid='romeo@montague.net' save='body' expire='604800' otr='allow'/>
+  </pref>
+</iq>
+
+<iq type='set' id='push4' to='juliet@capulet.com/pda'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <item jid='romeo@montague.net' save='body' expire='604800' otr='allow'/>
+  </pref>
+</iq>
+    ]]></example>
+    <p>The same error cases apply as when <link url='#auto'>Setting Default Modes</link>.</p>
+  </section2>
+  <section2 topic='Setting Archiving Method Preferences' anchor='pref-jid'>
+    <example caption='Client Sets Method Preferences'><![CDATA[
+<iq type='set' id='pref4' from='juliet@capulet.com/chamber'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <method type='auto' use='allow'/>
+    <method type='local' use='never'/>
+    <method type='manual' use='prefer'/>
+  </pref>
+</iq>
+    ]]></example>
+    <example caption='Server Acknowleges Change'><![CDATA[
+<iq type='result' id='pref4' to='juliet@capulet.com/chamber'/>
+    ]]></example>
+    <example caption='Server Pushes New Method Preferences'><![CDATA[
+<iq type='set' id='push5' to='juliet@capulet.com/chamber'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <method type='auto' use='allow'/>
+    <method type='local' use='never'/>
+    <method type='manual' use='prefer'/>
+  </pref>
+</iq>
+
+<iq type='set' id='push6' to='juliet@capulet.com/pda'>
+  <pref xmlns='http://jabber.org/protocol/archive'>
+    <method type='auto' use='allow'/>
+    <method type='local' use='never'/>
+    <method type='manual' use='prefer'/>
+  </pref>
+</iq>
+    ]]></example>
+  </section2>
+</section1>
+<section1 topic='Off The Record' anchor='otr'>
+  <p>A user will sometimes exchange messages with contacts who prefer that their conversations are not archived by either party. Any client that archives messages SHOULD support &jep0155; and its 'otr' field both to give other contacts the opportunity to indicate this preference, and to negotiate an "Off The Record" (OTR) policy that complies with its user's own <link url='#pref'>Archiving Preferences</link>.</p>
+  <p>A client MUST NOT agree to enable OTR unless it has confirmed that its server will allow it to switch off <link url='#auto'>Automated Archiving</link>.</p>
+  <p>If a Chat Session Negotiation agreed to enable OTR then the clients MUST NOT allow messages sent in <em>either</em> direction to be archived in any way (including <link url='#manual'>Manual Archiving</link> and <link url='#auto'>Automated Archiving</link>). <note>If a client (or user) acts in bad faith then its contacts cannot prevent it archiving conversations.</note></p>
+  <p>Note: If a contact does not include an 'otr' field in its initial Chat Session Negotiation request, and a user's Archiving Preferences indicate that OTR is <em>required</em>, then the client MUST refuse the request. It MAY then send its own Chat Session Negotiation request with an 'otr' field.</p>
+  <p>If a Chat Session Negotiation agreed to enable OTR then both clients MUST ensure that the Chat Session Negotiation messages themselves are not archived. For example, if <link url='#auto'>Automated Archiving</link> was enabled when the client received the initial Chat Session Negotiation request, then the client MUST immediately ask its server to delete its copy of the request (see <link url='#manage-remove'>Removing a Collection</link> for a description of how to remove the messages currently being recorded by the server).</p>
+  <p>If a user's OTR preference for a contact changes during a Chat Session that has been negotiated with the contact, and if the new preference would affect the value of the 'otr' field that was previously negotiated, then the client MUST immediately terminate the Chat Session and try to negotiate a new one according to the user's new OTR preference.</p>
+</section1>
+<section1 topic='Manual Archiving' anchor='manual'>
+  <section2 topic='Introduction' anchor='manual-intro'>
+    <p>While automated archiving is easy for the client and server to implement, there are many contexts in which manual archiving is required. For examples, when:</p>
+    <ul>
+      <li>Messages are encrypted using evanscent keys, as in &jep0116;</li>
+      <li>A client's own server does not support automated archiving but it (or another server) does support manual archiving</li>
+      <li>A server does not support encryption of auto-archived collections</li>
+      <li>A client wants to maintain a unified archive for messages that were transmitted both in and out-of-band (e.g. SMS or email)</li>
+      <li>A client wants to append private notes to a conversation</li>
+    </ul>
+    <p>Therefore, often a client will want to send or receive a sequence of messages, optionally add private notes to the sequence, optionally encrypt the sequence, and then ask the server to store it. Such messages and notes SHOULD be stored on the server in the form of a "collection".</p>
+  </section2>
+  <section2 topic='Collections' anchor='manual-collection'>
+    <p>A "collection" is a set of messages to/from the same user that are received near each other in time or as part of the same conversation thread. A collection is intended to mimic the natural flow of human conversations, which in instant messaging (IM) systems tend to occur in bursts (e.g., a five-minute conversation one day, followed by a ten-minute conversation the next).</p>
+    <p>The client uniquely specifies a collection using a pair of attributes:</p>
+    <ul>
+      <li>'with' (the full JID with which the messages were exchanged)</li>
+      <li>'start' (the UTC start time of the conversation thread, which MUST be UTC and adhere to the DateTime format specified in &jep0082;)</li>
+    </ul>
+    <p>A friendly name for the collection MAY be specified with a 'subject' attribute. Note the <link url='#security-subject'>Security Considerations</link> regarding the subject attribute.</p>
+    <p>Each collection MAY contain &lt;note/&gt;, &lt;to/&gt; or &lt;from/&gt; elements (or &lt;EncryptedData/&gt; and &lt;EncryptedKey/&gt; elements - see <link url='#crypt'>Encryption</link>).</p>
+    <p>The text of each individual private note MUST be encapsulated in a &lt;note/&gt; element. The absolute time the note was created SHOULD be specified with a 'utc' attribute (which MUST be UTC and adhere to the DateTime format specified in <cite>Jabber Date and Time Profiles</cite>).</p>
+    <p>The content of each individual message MUST be encapsulated in a &lt;to/&gt; or &lt;from/&gt; element. The time in whole seconds of the message relative to the previous message in the collection (or, for the first message, relative to the start of the collection) SHOULD be specified with a 'secs' attribute. Note: When deciding whether to round up or down to a number of whole seconds, entities MUST ensure that the sum of the 'secs' attribute and the 'secs' attributes of the preceeding messages will accurately reflect the absolute time of the message. (e.g., if a sequence of messages occur at exactly 0.51-second intervals then the 'secs' attributes should generally alternate between '0' or '1'.)</p>
+    <p>The content of each &lt;to/&gt; or &lt;from/&gt; element SHOULD include a &BODY; element. Note: Other elements MAY be included, but they are NOT RECOMMENDED. To conserve bandwidth and storage space <note>Stream compression typically does not mitigate bandwidth and storage issues since collections SHOULD be encrypted, and since clients running in constrained runtime environments typically cannot take advantage of stream compression (no binary data, only XML, may be transfered).</note>, elements qualified by the 'http://jabber.org/protocol/xhtml-im' namespace SHOULD NOT be included. &THREAD; elements and elements qualified by the 'jabber:x:delay', 'jabber:x:event' and 'http://jabber.org/protocol/chatstates' namespaces MUST NOT be included. The server MAY be configured to return a &lt;feature-not-implemented/&gt; error if any &lt;to/&gt; or &lt;from/&gt; element contains anything other than a single &BODY; element.</p>
+  </section2>
+  <section2 topic='Uploading Messages to a Collection' anchor='manual-upload'>
+    <p>The collection of messages and notes to be uploaded are encapsulated in the &lt;store/&gt; element.</p>
+    <example caption='Storing messages in a collection'><![CDATA[
+<iq type='set' to='montague.net' id='up1'>
+  <store xmlns='http://jabber.org/protocol/archive'
+         with='juliet@capulet.com/chamber'
+         start='1469-07-21T02:56:15Z'
+         subject='She speaks!'>
+    <from secs='0'><body>Art thou not Romeo, and a Montague?</body></from>
+    <to secs='11'><body>Neither, fair saint, if either thee dislike.</body></to>
+    <from secs='14'><body>How cam'st thou hither, tell me, and wherefore?</body></from>
+    <note utc='1469-07-21T03:04:35Z'>I think she might fancy me.</note>
+  </store>
+</iq>
+    ]]></example>
+    <p>If the collection does not exist then the server MUST create a new collection. If the collection already exists then the server MUST append the messages to the existing collection.</p>
+    <p>Note: Clients MUST take care to append each sequence of messages to the collection before the sequence becomes so large that uploading it may violate common rate limiting restrictions (in Jabber systems, often called "karma").</p>
+    <example caption='Successful reply'><![CDATA[
+<iq type='result' to='romeo@montague.net/orchard' id='up1'/>
+    ]]></example>
+    <p>If the server cannot service a store request because the collection is too large then it MUST return a &notacceptable; error:</p>
+    <example caption='Unsuccessful reply'><![CDATA[
+<iq type='error' to='romeo@montague.net/orchard'>
+  <error code='406' type='modify'>
+    <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Offline Messages' anchor='impl-muc'>
+    <p>The client MAY specify an absolute time for any message by providing a longer 'utc' attribute (which MUST be UTC and adhere to the DateTime format specified in <cite>Jabber Date and Time Profiles</cite>) instead of a 'secs' attribute. The absolute time MAY be before the start time of the collection:</p>
+    <example caption='Storing offline messages in a collection'><![CDATA[
+<iq type='set' to='montague.net' id='up2'>
+  <store xmlns='http://jabber.org/protocol/archive'
+         with='juliet@capulet.com/chamber'
+         start='1469-07-21T02:56:15Z'
+         subject='She speaks!'>
+    <from utc='1469-07-21T00:32:29Z'><body>Art thou not Romeo, and a Montague?</body></from>
+    <to secs='11'><body>Neither, fair saint, if either thee dislike.</body></to>
+    <from secs='14'><body>How cam'st thou hither, tell me, and wherefore?</body></from>
+  </store>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Groupchat Messages' anchor='impl-muc'>
+    <p>A client MAY archive messages that it receives from &jep0045; rooms. The 'with' attribute MUST be the bare JID of the room. The client MUST include a 'name' attribute for each &lt;from/&gt; element to specify the room nickname of the message sender:</p>
+    <example caption='Storing groupchat messages in a collection'><![CDATA[
+<iq type='set' to='montague.net' id='up3'>
+  <store xmlns='http://jabber.org/protocol/archive'
+         with='balcony@house.capulet.com'
+         start='1469-07-21T03:16:37Z'>
+    <from secs='0' name='benvolio'><body>She will indite him to some supper.</body></from>
+    <from secs='5' name='mercutio'><body>A bawd, a bawd, a bawd! So ho!</body></from>
+    <from secs='11' name='romeo'><body>What hast thou found?</body></from>
+  </store>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Changing the Subject of a Collection' anchor='crypt'>
+    <p>If the client specifies a new value for the 'subject' attribute of any existing collection then the server MUST update the existing value. Note: The client cannot specify new values for the 'with' or 'start' attributes. The only way to change these values is to delete the collection (see <link url='#manage-remove'>Removing a Collection</link>) and then create a new one.</p>
+    <example caption='Changing the subject of a collection without appending messages'><![CDATA[
+<iq type='set' to='montague.net' id='subject1'>
+  <store xmlns='http://jabber.org/protocol/archive'
+         with='juliet@capulet.com/chamber'
+         start='1469-07-21T02:56:15Z'
+         subject='She speaks twice!'/>
+</iq>
+    ]]></example>
+  </section2>
+</section1>
+<section1 topic='Encryption' anchor='crypt'>
+  <p>The examples above are not encrypted for clarity. However, clients SHOULD encrypt manually-archived collections (although early implementations of this protocol MAY prefer to defer encryption and decryption to later versions). Servers MUST support the manual-archiving of encrypted collections.</p>
+  <p>Before uploading a sequence of messages to a collection, the client SHOULD select a symmetric data encryption algorithm, generate a suitable random encryption key, give the key a unique (for the user) name, encrypt the symmetric key with one of the user's public keys, and wrap the result inside one or more &lt;EncryptedKey/&gt; elements, as specified in &w3xmlenc;.</p>
+  <p>To ensure that all its user's clients will be able to decrypt the collection, the client SHOULD create one &lt;EncryptedKey/&gt; element for each of its user's public keys that are being published using &jep0189;. However, the client MUST NOT create an &lt;EncryptedKey/&gt; element for any public key until it has confirmed that it belongs to the user. Note: The fact that a public key is being published using <cite>Public Key Publishing</cite> is <em>not</em> sufficient proof of ownership, since the user's server may have been compromised at some stage. The method of confirmation is beyond the scope of this document.</p>
+  <p>The client SHOULD use the symmetric key to encrypt the joined sequence of &lt;to/&gt;, &lt;from/&gt; and &lt;note/&gt; elements, base64 encode the resulting sequence of bytes, and wrap it inside an &lt;EncryptedData/&gt; element, as described in <cite>XML Encryption</cite>.</p>
+  <p>Clients may add one or more &lt;EncryptedData/&gt; or &lt;EncryptedKey/&gt; elements to a collection using exactly the same method as for &lt;to/&gt;, &lt;from/&gt; and &lt;note/&gt; elements (see <link url='#manual-upload'>Uploading Messages to a Collection</link>). One collection may contain &lt;EncryptedData/&gt; elements encrypted with different symmetric keys.</p>
+  <p>When appending &lt;EncryptedData/&gt; elements to a collection, the client MAY reuse a symmetric KEY that has already been uploaded to the collection. In this case the client SHOULD NOT resend &lt;EncryptedKey/&gt; elements.</p>
+  <p>Note: A collection that contains &lt;EncryptedData/&gt; or &lt;EncryptedKey/&gt; elements MUST NOT contain &lt;to/&gt; or &lt;from/&gt; or &lt;note/&gt; elements.</p>
+  <example caption='Storing encrypted messages and keys in a collection'><![CDATA[
+<iq type='set' to='montague.net' id='crypt1'>
+  <store xmlns='http://jabber.org/protocol/archive'
+         with='juliet@capulet.com/chamber'
+         start='1469-07-23T19:22:31Z'
+         subject='She speaks!'>
+    <EncryptedData xmlns='http://www.w3.org/2001/04/xmlenc#'
+                   Type='http://www.w3.org/2001/04/xmlenc#Content'>
+      <EncryptionMethod Algorithm='http://www.w3.org/2001/04/xmlenc#aes128-cbc'/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>dataKey1</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>+OGQ0SR+ysraP6LnD43m77VkIVni5c7yPeIbkFdicZ</CipherValue></CipherData>
+    </EncryptedData>
+    <EncryptedKey xmlns='http://www.w3.org/2001/04/xmlenc#'>
+      <CarriedKeyName>dataKey1</CarriedKeyName>
+      <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>romeoPublicKey1fingerprint</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>E5Qbvfa2gI5lBZMAHryv4g</CipherValue></CipherData>
+    </EncryptedKey>
+    <EncryptedKey xmlns='http://www.w3.org/2001/04/xmlenc#'>
+      <CarriedKeyName>dataKey1</CarriedKeyName>
+      <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>romeoPublicKey2fingerprint</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>E5Qbvfa2gI5lBZMAHryv4g</CipherValue></CipherData>
+    </EncryptedKey>
+  </store>
+</iq>
+  ]]></example>
+  <p>The &lt;CipherData/&gt; child of each &lt;EncryptedData/&gt; element contains the base64-encoded symmetric-encrypted messages. The &lt;EncryptionMethod/&gt; and &lt;KeyInfo/&gt; children specify the symmetric encryption algorithm and the name of the symmetric key used to encrypt the messages.</p>
+  <p>The &lt;CarriedKeyName/&gt; child of each &lt;EncryptedKey/&gt; element contains the name of the symmetric key it contains. The name is referenced by the &lt;KeyName/&gt; child of the &lt;KeyInfo/&gt; child of an &lt;EncryptedData/&gt; element. The &lt;CipherData/&gt; child of each &lt;EncryptedKey/&gt; element contains the base64-encoded public-key-encrypted symmetric key. The &lt;EncryptionMethod/&gt; and &lt;KeyInfo/&gt; children specify the public key encryption algorithm and the name of the public key used to encrypt the symmetric key. The name of the public key MAY refer to the name in the &lt;KeyName/&gt; child of one of the &lt;KeyInfo/&gt; elements that are being published using <cite>Public Key Publishing</cite>.</p>
+</section1>
+<section1 topic='Automated Archiving' anchor='auto'>
+  <section2 topic='Toggling Auto-Archiving' anchor='auto-toggle'>
+    <p>A client MAY enable or disable automatic archiving for messages sent over its stream. Automatic archiving MUST default to disabled for each new stream that is opened, unless administrator policies <em>require</em> that every message is logged automatically (see <link url='#security'>Security Considerations</link>). Once automatic archiving is switched on then the server MUST automatically archive messages only according to the user's general <link url='#pref'>Archiving Preferences</link>.</p>
+    <p>Note: Both parties to an ESession (see &jep0116;) MUST either disable archiving or use an archiving method other than automatic, since ESession decryption keys are short-lived - making it impossible to decrypt automatically archived messages.</p>
+    <example caption='Client enables auto archiving'><![CDATA[
+<iq type='set' id='auto1'>
+  <auto save='true' xmlns='http://jabber.org/protocol/archive'/>
+</iq>
+    ]]></example>
+    <p>If the client switches off all auto-archiving then the server MUST close and store all active collections.</p>
+  </section2>
+  <section2 topic='Enabling Auto-Archiving with Encryption' anchor='auto-crypt'>
+    <p>Servers (and clients) SHOULD support the encryption (and decryption) of automatically-archived collections (although early implementations of this protocol MAY prefer to defer encryption and decryption to later versions).</p>
+    <p>Whenever the client enables auto-archiving it SHOULD set the optional 'encrypt' attribute to 'true'. After receiving such a request, if the server supports encryption (see <link url='#disco'>Determining Server Support</link>), it MUST encrypt all the messages that it archives automatically (including any message collections that are currently being recorded) by following exactly the same proceedure as clients use when manually archiving collections (see <link url='#crypt'>Encryption</link>).</p>
+    <p>The client MAY also specify one or more public keys (in addition to any public keys that the user may be publishing using <cite>Public Key Publishing</cite>). The server MUST use them all to encrypt all the symmetric keys it generates and add these to the collection wrapped in &lt;EncryptedKey/&gt; elements.</p>
+    <example caption='Client enables auto archiving with encryption'><![CDATA[
+<iq type='set' id='auto2'>
+  <auto save='true'
+        encrypt='true'
+        xmlns='http://jabber.org/protocol/archive'>
+    <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+      <KeyValue>
+        <KeyName>romeoPublicKey3fingerprint</KeyName>
+        <RSAKeyValue>
+          <Modulus>xA7SEU+e0yQH5rm9kbCDN9o3aPIo7HbP7tX6WOocLZAtNfyxSZDU16ksL6W
+            jubafOqNEpcwR3RdFsT7bCqnXPBe5ELh5u4VEy19MzxkXRgrMvavzyBpVRgBUwUlV
+            5foK5hhmbktQhyNdy/6LpQRhDUDsTvK+g9Ucj47es9AQJ3U=
+          </Modulus>
+          <Exponent>AQAB</Exponent>
+        </RSAKeyValue>
+      </KeyValue>
+    </KeyInfo>
+  </auto>
+</iq>
+    ]]></example>
+    <p>As soon as the server has finished storing a collection, it MUST securely destroy all copies of the symmetric key it used to encrypt the messages. Note: If the security of the server is compromised, then only the collections being recorded during the attack will be revealed (i.e. only those messages that would have been compromised even if they had not been stored).</p>
+  </section2>
+  <section2 topic='Not-Implemented Responses' anchor='auto-crypt'>
+    <p>The server MUST return a &lt;feature-not-implemented/&gt; error in the following cases:</p>
+    <ul>
+      <li><p>If the client is trying to enable automatic archiving, but the server does not allow the saving of full message stanza content, and the user has specified the 'all' Save Mode in one of its <link url='#pref'>Archiving Preferences</link>.</p></li>
+      <li><p>If administrator policies require that every message is logged automatically, and the client is trying to disable automatic archiving.</p></li>
+      <li><p>If the client is trying to enable encryption, but the server does not support encryption or the user did not specify a public key and is not publishing any keys using <cite>Public Key Publishing</cite>.</p></li>
+    </ul>
+  </section2>
+</section1>
+<section1 topic='Archive Management' anchor='manage'>
+  <p>Manually uploaded and automatically saved collections are managed in the same way. There are three main areas of functionality related to archive management:</p>
+  <ol start='1'>
+    <li>Retrieving a list of collections</li>
+    <li>Retrieving a collection</li>
+    <li>Removing a collection</li>
+  </ol>
+  <p>Requirements and protocol flows for each of these use cases are defined below. The protocols to retrieve a list of collections and an indivdual collection both make extensive use of &jep0059;. Clients and servers SHOULD support all the features defined in that protocol.</p>
+  <section2 topic='Retrieving a List of Collections' anchor='manage-list'>
+    <p>To request a list of collections the client sends a &lt;list/&gt; element. The 'start' and 'end' attributes MAY be specified to indicate a date range (the values of these attributes MUST be UTC and adhere to the DateTime format specified in <cite>Jabber Date and Time Profiles</cite>). The 'with' attribute MAY be specified to limit the list to a single participating full JID, bare JID or domain.</p>
+    <p>If the 'with' attribute is omitted then collections with any JID are returned. If only 'start' is specified then all collections on or after that date should be returned. If only 'end' is specified then all collections prior to that date should be returned.</p>
+    <p>The client SHOULD use <cite>Result Set Management</cite> to limit the number of collections returned by the server in a single stanza, taking care not to request a page of collections that is so big it might exceed karma limits.</p>
+    <example caption='Requesting the first page of a list with same JID'><![CDATA[
+<iq type='get' to='montague.net' id='juliet1'>
+  <list xmlns='http://jabber.org/protocol/archive'
+        with='juliet@capulet.com'>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>30</max>
+    </set>
+  </list>
+</iq>
+    ]]></example>
+    <example caption='Requesting the first page of a list with same JID between two times'><![CDATA[
+<iq type='get' to='montague.net' id='period1'>
+  <list xmlns='http://jabber.org/protocol/archive'
+        with='juliet@capulet.com'
+        start='1469-07-21T02:00:00Z'
+        end='1479-07-21T04:00:00Z'>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>30</max>
+    </set>
+  </list>
+</iq>
+    ]]></example>
+    <example caption='Requesting the first page of a list after a time'><![CDATA[
+<iq type='get' to='montague.net' id='list1'>
+  <list xmlns='http://jabber.org/protocol/archive'
+        start='1469-07-21T02:00:00Z'>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>30</max>
+    </set>
+  </list>
+</iq>
+    ]]></example>
+    <p>The server MUST list the collections (empty &lt;store/&gt; elements including all attributes) in chronological order when responding to any request. If the collection contains &lt;EncryptedData/&gt; or &lt;EncryptedKey/&gt; elements then the 'crypt' attribute of the &lt;store/&gt; element MUST be set to 'true':</p>
+    <example caption='Receiving the first page of a list'><![CDATA[
+<iq type='result' to='romeo@montague.net/orchard' from='montague.net' id='list1'>
+  <list xmlns='http://jabber.org/protocol/archive'>
+    <store with='juliet@capulet.com/chamber'
+           start='1469-07-21T02:56:15Z'
+           subject='She speaks!'
+           crypt='true'/>
+    .
+    [28 more collections]
+    .
+    <store with='balcony@house.capulet.com'
+           start='1469-07-21T03:16:37Z'/>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <first index='0'>1469-07-21T02:56:15Zjuliet@capulet.com</first>
+      <last>1469-07-21T03:16:37Zbalcony@house.capulet.com</last>
+      <count>1372</count>
+    </set>
+  </list>
+</iq>
+    ]]></example>
+    <p>Note: In accordance with <cite>Result Set Management</cite>, the client MUST assume the unique IDs it receives in the &lt;first/&gt; and &lt;last/&gt; elements are opaque. Servers MAY adopt a unique ID format other than the one suggested in the example above.</p>
+    <p>If no collections correspond to the request the server MUST return an empty &lt;list/&gt; element:</p>
+    <example caption='Receiving an empty list'><![CDATA[
+<iq type='result' to='romeo@montague.net/orchard' from='montague.net' id='list1'>
+  <list xmlns='http://jabber.org/protocol/archive'/>
+</iq>
+    ]]></example>
+    <example caption='Requesting the second page of a list'><![CDATA[
+<iq type='get' to='montague.net' id='list2'>
+  <list xmlns='http://jabber.org/protocol/archive'
+        start='1469-07-21T02:00:00Z'>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>30</max>
+      <after>1469-07-21T03:16:37Zbalcony@house.capulet.com</after>
+    </set>
+  </list>
+</iq>
+    ]]></example>
+    <p>Refer to <cite>Result Set Management</cite> to learn more about the various ways that the pages of the list may be accessed.</p>
+  </section2>
+  <section2 topic='Retrieving a Collection' anchor='manage-retrieve'>
+    <p>To request a page of messages from a collection the client sends a &lt;retrieve/&gt; element. The 'with' and 'start' attributes specify the participating full JID and the start time (see <cite>Jabber Date and Time Profiles</cite>). Both attributes MUST be included to uniquely identify a collection:</p>
+    <p>The client SHOULD use <cite>Result Set Management</cite> to limit the number of messages returned by the server in a single stanza, taking care not to request a page of messages that is so big it might exceed karma limits.</p>
+    <example caption='Requesting the first page of a collection'><![CDATA[
+<iq type='get' to='montague.net' id='page1'>
+  <retrieve xmlns='http://jabber.org/protocol/archive'
+            with='juliet@capulet.com/chamber'
+            start='1469-07-21T02:56:15Z'>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>100</max>
+    </set>
+  </retrieve>
+</iq>
+    ]]></example>
+    <example caption='Receiving the first page of a collection'><![CDATA[
+<iq type='result' to='romeo@montague.net/orchard' from='montague.net' id='page1'>
+  <store xmlns='http://jabber.org/protocol/archive'
+         with='juliet@capulet.com/chamber'
+         start='1469-07-21T02:56:15Z'
+         subject='She speaks!'>
+    <from secs='0'><body>Art thou not Romeo, and a Montague?</body></from>
+    <to secs='11'><body>Neither, fair saint, if either thee dislike.</body></to>
+    .
+    [98 more messages]
+    .
+    <from secs='14'><body>How cam'st thou hither, tell me, and wherefore?</body></from>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <first index='0'>0</first>
+      <last>99</last>
+      <count>217</count>
+    </set>
+  </store>
+</iq>
+    ]]></example>
+    <p>Note: In accordance with <cite>Result Set Management</cite>, the client MUST assume the unique IDs it receives in the &lt;first/&gt; and &lt;last/&gt; elements are opaque. Servers MAY adopt a unique ID format other than the one suggested in the example above.</p>
+    <p>If the specified collection does not exist then the server MUST return an &notfound; error:</p>
+    <example caption='Unsuccessful reply'><![CDATA[
+<iq type='error' to='romeo@montague.net/orchard' from='montague.net' id='page1'>
+  <error code='404' type='cancel'>
+    <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>If the requested collection is empty the server MUST return an empty &lt;store/&gt; element:</p>
+    <example caption='Receiving an empty collection'><![CDATA[
+<iq type='result' to='romeo@montague.net/orchard' from='montague.net' id='page1'>
+  <store xmlns='http://jabber.org/protocol/archive'
+         with='juliet@capulet.com/chamber'
+         start='1469-07-21T02:56:15Z'
+         subject='She speaks!'/>
+</iq>
+    ]]></example>
+    <example caption='Requesting the second page of a collection'><![CDATA[
+<iq type='get' to='montague.net' id='page2'>
+  <retrieve xmlns='http://jabber.org/protocol/archive'
+            with='juliet@capulet.com/chamber'
+            start='1469-07-21T02:56:15Z'>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>100</max>
+      <after>99</after>
+    </set>
+  </retrieve>
+</iq>
+    ]]></example>
+    <p>The items in encrypted collections are typically larger - since each &lt;EncryptedData/&gt; element typically contains many messages. So the client SHOULD take even more care not to request a page of &lt;EncryptedData/&gt; elements that is so big it might exceed karma limits.</p>
+    <example caption='Requesting the first page of an encrypted collection with all versions of keys'><![CDATA[
+<iq type='get' to='montague.net' id='page1'>
+  <retrieve xmlns='http://jabber.org/protocol/archive'
+            with='juliet@capulet.com/chamber'
+            start='1469-07-23T19:22:31Z'
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>5</max>
+    </set>
+  </retrieve>
+</iq>
+    ]]></example>
+    <p>In addition to the requested &lt;EncryptedData/&gt; elements, the server MUST return all the &lt;EncryptedKey/&gt; elements that it possesses for the user whose symmetric key name (wrapped in its &lt;CarriedKeyName/&gt; child) is referenced by the &lt;KeyName/&gt; child of the &lt;KeyInfo/&gt; child of any of the &lt;EncryptedData/&gt; elements in the returned page.</p>
+    <example caption='Receiving the first page of an encrypted collection'><![CDATA[
+<iq type='result' to='romeo@montague.net/orchard' from='montague.net' id='page1'>
+  <store xmlns='http://jabber.org/protocol/archive'
+         with='juliet@capulet.com/chamber'
+         start='1469-07-23T19:22:31Z'
+         subject='She speaks!'>
+    <EncryptedData xmlns='http://www.w3.org/2001/04/xmlenc#'
+                   Type='http://www.w3.org/2001/04/xmlenc#Content'>
+      <EncryptionMethod Algorithm='http://www.w3.org/2001/04/xmlenc#aes128-cbc'/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>dataKey1</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>+OGQ0SR+ysraP6LnD43m77VkIVni5c7yPeIbkFdicZ</CipherValue></CipherData>
+    </EncryptedData>
+    .
+    [3 more <EncryptedData/> elements]
+    .
+    <EncryptedData xmlns='http://www.w3.org/2001/04/xmlenc#'
+                   Type='http://www.w3.org/2001/04/xmlenc#Content'>
+      <EncryptionMethod Algorithm='http://www.w3.org/2001/04/xmlenc#aes128-cbc'/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>dataKey2</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>+OGQ0SR+ysraP6LnD43m77VkIVni5c7yPeIbkFdicZ</CipherValue></CipherData>
+    </EncryptedData>
+    <EncryptedKey xmlns='http://www.w3.org/2001/04/xmlenc#'>
+      <CarriedKeyName>dataKey1</CarriedKeyName>
+      <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>romeoPublicKey1fingerprint</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>E5Qbvfa2gI5lBZMAHryv4g</CipherValue></CipherData>
+    </EncryptedKey>
+    <EncryptedKey xmlns='http://www.w3.org/2001/04/xmlenc#'>
+      <CarriedKeyName>dataKey1</CarriedKeyName>
+      <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>romeoPublicKey2fingerprint</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>E5Qbvfa2gI5lBZMAHryv4g</CipherValue></CipherData>
+    </EncryptedKey>
+    <EncryptedKey xmlns='http://www.w3.org/2001/04/xmlenc#'>
+      <CarriedKeyName>dataKey2</CarriedKeyName>
+      <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>romeoPublicKey1fingerprint</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>E5Qbvfa2gI5lBZMAHryv4g</CipherValue></CipherData>
+    </EncryptedKey>
+    <EncryptedKey xmlns='http://www.w3.org/2001/04/xmlenc#'>
+      <CarriedKeyName>dataKey2</CarriedKeyName>
+      <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>romeoPublicKey2fingerprint</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>E5Qbvfa2gI5lBZMAHryv4g</CipherValue></CipherData>
+    </EncryptedKey>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <first index='0'>0</first>
+      <last>4</last>
+      <count>7</count>
+    </set>
+  </store>
+</iq>
+    ]]></example>
+    <p>The client MAY limit the number of &lt;EncryptedKey/&gt; elements that it receives by specifying the name of one or more public keys for which it holds the associated private keys. The name of each public key MUST be wrapped in a &lt;KeyName/&gt; element.</p>
+    <example caption='Requesting the first page of an encrypted collection with specified version of keys'><![CDATA[
+<iq type='get' to='montague.net' id='page1'>
+  <retrieve xmlns='http://jabber.org/protocol/archive'
+            with='juliet@capulet.com/chamber'
+            start='1469-07-23T19:22:31Z'>
+    <KeyName xmlns='http://www.w3.org/2000/09/xmldsig#'>romeoPublicKey1fingerprint</KeyName>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>1</max>
+    </set>
+  </retrieve>
+</iq>
+    ]]></example>
+    <p>If the request includes one or more &lt;KeyName/&gt; elements then the server MUST only return those &lt;EncryptedKey/&gt; elements whose public key name (wrapped in the &lt;KeyName/&gt; child of the &lt;KeyInfo/&gt; child) is specified in the request.</p>
+    <p>Refer to <cite>Result Set Management</cite> to learn more about the various ways that the pages of a collection may be accessed.</p>
+  </section2>
+  <section2 topic='Removing a Collection' anchor='manage-remove'>
+    <p>To request the removal of a single collection the client sends an empty &lt;remove/&gt; element. The 'with' (full JID) and 'start' attributes MUST be included to uniquely identify the collection.</p>
+    <example caption='Removing a single collection'><![CDATA[
+<iq type='set' to='montague.net'>
+  <remove xmlns='http://jabber.org/protocol/archive'
+          with='juliet@capulet.com/chamber'
+          start='1469-07-21T02:56:15Z'/>
+</iq>
+    ]]></example>
+    <p>The client may remove several collections at once. The 'start' and 'end' elements MAY be specified to indicate a date range. The 'with' attribute MAY be a full JID, bare JID or domain.</p>
+    <example caption='Removing all collections with a specified bare JID between two times'><![CDATA[
+<iq type='set' to='montague.net'>
+  <remove xmlns='http://jabber.org/protocol/archive'
+          with='juliet@capulet.com'
+          start='1469-07-21T02:00:00Z'
+          end='1469-07-21T04:00:00Z'/>
+</iq>
+    ]]></example>
+    <p>If the 'with' attribute is omitted then collections with any JID are removed.</p>
+    <p>If the end date is in the future then then all collections after the start date are removed.</p>
+    <example caption='Removing all collections after a date'><![CDATA[
+<iq type='set' to='montague.net'>
+  <remove xmlns='http://jabber.org/protocol/archive'
+          start='1469-07-21T02:00:00Z'
+          end='2038-01-01T00:00:00Z'/>
+</iq>
+    ]]></example>
+    <p>If the start date is before all the collections in the archive then all collections prior to the end date are removed.</p>
+    <example caption='Removing all collections before a date'><![CDATA[
+<iq type='set' to='montague.net'>
+  <remove xmlns='http://jabber.org/protocol/archive'
+          start='0000-01-01T00:00:00Z'
+          end='1469-07-21T04:00:00Z'/>
+</iq>
+    ]]></example>
+    <example caption='Removing all collections'><![CDATA[
+<iq type='set' to='montague.net'>
+  <remove xmlns='http://jabber.org/protocol/archive'/>
+</iq>
+    ]]></example>
+    <p>If the value of the optional 'open' attribute is set to 'true' then only collections that are currently being recorded automatically by the server (see <link url='#auto'>Automated Archiving</link>) are removed.</p>
+    <example caption='Removing a collection being recorded by the server'><![CDATA[
+<iq type='set' to='montague.net'>
+  <remove xmlns='http://jabber.org/protocol/archive'
+          with='juliet@capulet.com/chamber'
+          open='true'/>
+</iq>
+    ]]></example>
+    <example caption='Removing all collections being recorded by the server'><![CDATA[
+<iq type='set' to='montague.net'>
+  <remove xmlns='http://jabber.org/protocol/archive'
+          open='true'/>
+</iq>
+    ]]></example>
+    <p>If the specified collection (or collections) do not exist then the server MUST return an &notfound; error:</p>
+    <example caption='Unsuccessful reply'><![CDATA[
+<iq type='error' to='romeo@montague.net/orchard'>
+  <error code='404' type='cancel'>
+    <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+</section1>
+<section1 topic='Replacing EncryptedKey Elements' anchor='rekey'>
+  <p>If a private key becomes obsolete or compromised then it may be necessary for a client to replace all &lt;EncryptedKey/&gt; elements that contain symmetric keys encrypted with the public key that is associated with the obsolete private key.</p>
+  <p>The client first requests a list of the affected &lt;EncryptedKey/&gt; elements from all collections by sending a &lt;keys/&gt; element to the server:</p>
+  <example caption='Requesting the first page of a list of keys'><![CDATA[
+<iq type='get' to='montague.net' id='pubkey1'>
+  <keys xmlns='http://jabber.org/protocol/archive'>
+    <KeyName xmlns='http://www.w3.org/2000/09/xmldsig#'>romeoPublicKey1fingerprint</KeyName>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>50</max>
+    </set>
+  </keys>
+</iq>
+  ]]></example>
+  <p>The server MUST return only &lt;EncryptedKey/&gt; elements whose symmetric encryption key is encrypted with the obsolete public key specified in the &lt;KeyName/&gt; child of the request:</p>
+  <example caption='Receiving the first page of a list of keys'><![CDATA[
+<iq type='result' to='romeo@montague.net/orchard' from='montague.net' id='pubkey1'>
+  <keys xmlns='http://jabber.org/protocol/archive'>
+    <store with='juliet@capulet.com/chamber'
+           start='1469-07-23T19:22:31Z'>
+      <EncryptedKey xmlns='http://www.w3.org/2001/04/xmlenc#'>
+        <CarriedKeyName>dataKey1</CarriedKeyName>
+        <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>
+        <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+          <KeyName>romeoPublicKey1fingerprint</KeyName>
+        </KeyInfo>
+        <CipherData><CipherValue>E5Qbvfa2gI5lBZMAHryv4g</CipherValue></CipherData>
+      </EncryptedKey>
+      <EncryptedKey xmlns='http://www.w3.org/2001/04/xmlenc#'>
+        <CarriedKeyName>dataKey2</CarriedKeyName>
+        <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>
+        <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+          <KeyName>romeoPublicKey1fingerprint</KeyName>
+        </KeyInfo>
+        <CipherData><CipherValue>E5Qbvfa2gI5lBZMAHryv4g</CipherValue></CipherData>
+      </EncryptedKey>
+    </store>
+    .
+    [49 more sets of collection keys]
+    .
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <first index='0'>1469-07-23T19:22:31Zjuliet@capulet.com</first>
+      <last>1469-08-03T13:24:06Zbalcony@house.capulet.com</last>
+      <count>3810</count>
+    </set>
+  </keys>
+</iq>
+  ]]></example>
+  <p>The client decrypts each symmetric key with the obsolete private key and encrypts it again with the new public key. The client then wraps each symmetric key in an &lt;EncryptedKey/&gt; element and asks the server to store it in its associated collection on the server (see <link url='#crypt'>Encryption</link>):</p>
+  <example caption='Storing encrypted keys in a collection'><![CDATA[
+<iq type='set' to='montague.net' id='crypt1'>
+  <store xmlns='http://jabber.org/protocol/archive'
+         with='juliet@capulet.com/chamber'
+         start='1469-07-23T19:22:31Z'>
+    <EncryptedKey xmlns='http://www.w3.org/2001/04/xmlenc#'>
+      <CarriedKeyName>dataKey1</CarriedKeyName>
+      <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>romeoPublicKey2fingerprint</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>E5Qbvfa2gI5lBZMAHryv4g</CipherValue></CipherData>
+    </EncryptedKey>
+    <EncryptedKey xmlns='http://www.w3.org/2001/04/xmlenc#'>
+      <CarriedKeyName>dataKey2</CarriedKeyName>
+      <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        <KeyName>romeoPublicKey2fingerprint</KeyName>
+      </KeyInfo>
+      <CipherData><CipherValue>E5Qbvfa2gI5lBZMAHryv4g</CipherValue></CipherData>
+    </EncryptedKey>
+  </store>
+</iq>
+.
+[49 more sets of collection keys]
+.
+  ]]></example>
+  <p>Finally, the client asks the server to delete from each collection all &lt;EncryptedKey/&gt; elements whose symmetric encryption key is encrypted with the obsolete public key:</p>
+  <example caption='Requesting the first page of a list of keys'><![CDATA[
+<iq type='get' to='montague.net' id='pubkey1'>
+  <delete xmlns='http://jabber.org/protocol/archive'
+         with='juliet@capulet.com/chamber'
+         start='1469-07-23T19:22:31Z'>
+    <KeyName xmlns='http://www.w3.org/2000/09/xmldsig#'>romeoPublicKey1fingerprint</KeyName>
+  </delete>
+</iq>
+.
+[49 more delete requests]
+.
+  ]]></example>
+</section1>
+<section1 topic='Replication'>
+  <p>This section describes how a client MAY replicate an archive locally. <note>Clients that run in constrained environments may not be able to implement replication if they are prevented from accessing (sufficient) local storage.</note> The existence of a local copy of the archive enables clients to search the content of all messages (including collections saved by another client machine). <note>Since collections SHOULD be stored on the server in a form that it cannot decrypt, server-side searching of the content of messages is beyond the scope of this protocol.</note></p>
+  <p>The client MAY 'synchronize' its local copy of the archive with the 'master' archive on the server at any time. The first step is to request the list of collections that the server has changed (created, modified or removed) in its master archive since the last update to the client's copy of the archive.</p>
+  <p>The client MUST request each page of the list using the <cite>Result Set Management</cite> protocol embeded in a &lt;modified/&gt; element. The content of the &lt;after/&gt; element SHOULD be a UTC time (see <cite>Jabber Date and Time Profiles</cite>) that it has previously received from the server (see below). When synchronizing for the first time, the client MAY choose a suitable time for the first page request (e.g. 1970-01-01T00:00:00Z).</p>
+  <example caption='Requesting a page of modifications'>
+    <![CDATA[
+<iq type='get' to='montague.net' id='sync1'>
+  <modified xmlns='http://jabber.org/protocol/archive'>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>50</max>
+      <after>1469-07-21T01:14:47Z</after>
+    </set>
+  </modified>
+</iq>
+  ]]></example>
+  <p>The server MUST return the changed collections in the chronological order that they were changed (most recent last). If a collection has been modified, created or removed <em>after</em> the time specified by the &lt;after/&gt; element then the server MUST include it in the returned result set page of collections (unless the specified maximum page size would be exceeded). Each &lt;changed/&gt; or &lt;removed/&gt; collection element (for modified/created, or removed collections respectively) in the returned list MUST include only 'with' and 'start' attribues. The server MUST set the content of the &lt;last/&gt; element to the UTC time (see <cite>Jabber Date and Time Profiles</cite>) that the last collection on the page was modified.</p>
+  <example caption='Receiving a page of modifications'><![CDATA[
+<iq type='result' to='romeo@montague.net/orchard' from='montague.net' id='sync1'>
+  <modified xmlns='http://jabber.org/protocol/archive'>
+    <changed with='juliet@capulet.com/chamber'
+           start='1469-07-21T02:56:15Z'/>
+    .
+    [up to 48 more collections]
+    .
+    <removed with='balcony@house.capulet.com'
+             start='1469-07-21T03:16:37Z'/>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <last>1469-07-21T04:22:39Z</last>
+      <count>1372</count>
+    </set>
+  </modified>
+</iq>
+  ]]></example>
+  <p>Note: The server should remember the 'with' and 'start' attribues and the time of removal of all deleted collections. If this 'state' cannot be maintained indefinitely, then unless all the user's clients replicate before the server deletes its memory of a removal then it will not be reflected in all the local copies of the archive.</p>
+  <p>Note: Along with its copy of the archive the client SHOULD store the most recent &lt;last/&gt; time that it received from the server. The next time it synchronizes with the server it SHOULD specify that time when requesting the first result set page (see above).</p>
+  <p>After receiving each result set page the client SHOULD delete from its local archive any collections that have been removed from the master archive. The client should also retrieve from the server the content of each collection that has been modified (see <link url='#retrieve'>Retrieving a Collection</link>) and add it to its local copy of the archive (deleting any older version of the same collection that it may already have).</p>
+</section1>
+<section1 topic='File Format' anchor='fileformat'>
+  <p><em>Note the file format specified in this section is likely to be deprecated once a standards-based format has been published in a separate JEP.</em></p>
+  <p>So that clients can share archived messages, this document specifies a common format for storage on disk (similar to email formats like mbox and Maildir). The file format uses the same XML constructs as the protocol. Each file may contain messages exchanged with a single JID. Any number of items may be stored in an archive file.</p>
+  <example caption='Example file'><![CDATA[
+<?xml version='1.0'?>
+<archive xmlns='http://jabber.org/protocol/archive'
+         with='juliet@capulet.com'>
+  <store start='1469-07-21T02:56:15Z' subject='She speaks!'>
+    <from secs='0'><body>Art thou not Romeo, and a Montague?</body></from>
+    <to secs='11'><body>Neither, fair saint, if either thee dislike.</body></to>
+    <from secs='14'><body>How cam'st thou hither, tell me, and wherefore?</body></from>
+  </store>
+</archive>
+  ]]></example>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <section2 topic='Time Synchronization' anchor='impl-sync'>
+    <p>When creating a new collection, it is RECOMMENDED that the client synchronizes the collection start time that it sends to the server with server time. This is important since the user may subsequently retrieve the stored collection using client machines whose UTC clocks are not synchronized with the client machine that stored the collection. (i.e. Either or both of the clients' UTC clocks may be wrong.) The client can achieve this synchronization with server time by using &jep0090; to estimate the difference between the server and client UTC clocks.</p>
+    <p>When retrieving collections, it is RECOMMENDED that the client adjusts the start times of the collections it receives from server to be synchronized with the clock of the client machine.</p>
+  </section2>
+  <section2 topic='Bandwidth Considerations' anchor='impl-bandwidth'>
+    <p>When uploading messages using manual archiving, a client SHOULD NOT store one message at a time on the server since this increases both bandwidth consumption and the total number of transactions. It is instead RECOMMENDED that clients store messages only when the conversation thread <em>appears</em> to be terminated, e.g. when the user closes the chat window. If the user reopens the window and the thread continues then the client should append the new messages to the collection when the user closes the window again.</p>
+  </section2>
+  <section2 topic='Storage Considerations' anchor='impl-storage'>
+    <p>Server implementations SHOULD give system administrators the option to disable support for both automated and manual archiving, since archived conversations can consume significant storage space.</p>
+  </section2>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <section2 topic='Automatic Archiving Defaulting to On' anchor='security-autoon'>
+    <p>If automatic archiving defaults to enabled then that creates serious privacy issues for users of legacy clients that do not support this protocol, and (more seriously) for those contacts who they unwittingly mislead by agreeing to disable logging (via the 'otr' field defined in JEP-0155).</p>
+  </section2>
+  <section2 topic='Plain Text Subject' anchor='security-encrypt'>
+    <p>Since the subject of each collection will not be encrypted, the client MUST warn its human user (if any) before including 'subject' attributes on encrypted collections.</p>
+  </section2>
+  <section2 topic='Store Headers' anchor='security-store'>
+    <p>The client that originates a message MAY specify a 'false' value for the 'store' header (see &jep0131;). The recipient MUST NOT archive such a message or any of the information it contains.</p>
+    <p>If the sender plans to use 'store' headers it MUST use Service Discovery to determine whether or not the recipient supports them. Note: Since servers are not required to check the content of message stanzas for headers, if the recipient is using automatic archiving then it MUST indicate that it does not support 'store' headers.</p>
+    <p>If the recipient does not support 'store' headers, then the sender MUST confirm with its human user (if any) before sending such a message.</p>
+  </section2>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>No interaction with &IANA; is required as a result of this JEP.</p>
+</section1>
+<section1 topic='Jabber Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>The &REGISTRAR; shall include 'http://jabber.org/protocol/archive' in its registry of protocol namespaces (see &NAMESPACES;):</p>
+  </section2>
+  <section2 topic='Service Discovery Features' anchor='registrar-features'>
+    <p>The Jabber Registrar shall include the following features in its registry of service discovery features (see &DISCOFEATURES;):</p>
+    <ul>
+      <li>http://jabber.org/protocol/archive#auto</li>
+      <li>http://jabber.org/protocol/archive#encrypt</li>
+      <li>http://jabber.org/protocol/archive#manage</li>
+      <li>http://jabber.org/protocol/archive#manual</li>
+      <li>http://jabber.org/protocol/archive#pref</li>
+    </ul>
+  </section2>
+</section1>
+<section1 topic='XML Schemas' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='http://jabber.org/protocol/archive'
+    xmlns='http://jabber.org/protocol/archive'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The allowable root elements for the namespace defined
+      herein are:
+        - archive
+        - auto
+        - delete
+        - keys
+        - list
+        - modified
+        - pref
+        - remove
+        - retrieve
+        - store
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name='archive'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='store' minOccurs='1' maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='with' type='xs:string' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='auto'>
+    <xs:complexType>
+      <xs:sequence>
+        <any processContents='lax' namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='encrypt' type='xs:boolean' use='optional'/>
+      <xs:attribute name='save' type='xs:boolean' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='changed'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='start' type='xs:dateTime' use='required'/>
+          <xs:attribute name='with' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='default'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='expire' type='xs:nonNegativeInteger' use='optional'/>
+          <xs:attribute name='otr' use='required'>
+            <xs:simpleType>
+              <xs:restriction base='xs:NCName'>
+                <xs:enumeration value='allow'/>
+                <xs:enumeration value='deny'/>
+                <xs:enumeration value='require'/>
+                <xs:enumeration value='try'/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+          <xs:attribute name='save' use='required'>
+            <xs:simpleType>
+              <xs:restriction base='xs:NCName'>
+                <xs:enumeration value='all'/>
+                <xs:enumeration value='body'/>
+                <xs:enumeration value='false'/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+          <xs:attribute name='unset' use='optional' type='xs:boolean'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='delete'>
+    <xs:complexType>
+      <xs:sequence>
+        <any processContents='lax' namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='start' type='xs:dateTime' use='required'/>
+      <xs:attribute name='with' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='item'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='expire' type='xs:nonNegativeInteger' use='optional'/>
+          <xs:attribute name='jid' use='required' type='xs:string'/>
+          <xs:attribute name='otr' use='required'>
+            <xs:simpleType>
+              <xs:restriction base='xs:NCName'>
+                <xs:enumeration value='allow'/>
+                <xs:enumeration value='deny'/>
+                <xs:enumeration value='require'/>
+                <xs:enumeration value='try'/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+          <xs:attribute name='save' use='required'>
+            <xs:simpleType>
+              <xs:restriction base='xs:NCName'>
+                <xs:enumeration value='all'/>
+                <xs:enumeration value='body'/>
+                <xs:enumeration value='false'/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='keys'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='store' minOccurs='0' maxOccurs='unbounded'/>
+        <any processContents='lax' namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='list'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='store' minOccurs='0' maxOccurs='unbounded'/>
+        <any processContents='lax' namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='end' type='xs:dateTime' use='optional'/>
+      <xs:attribute name='start' type='xs:dateTime' use='optional'/>
+      <xs:attribute name='with' type='xs:string' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='method'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='type' type='xs:string' use='required'/>
+          <xs:attribute name='use' use='required'>
+            <xs:simpleType>
+              <xs:restriction base='xs:NCName'>
+                <xs:enumeration value='allow'/>
+                <xs:enumeration value='never'/>
+                <xs:enumeration value='prefer'/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='modified'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='changed' minOccurs='0' maxOccurs='unbounded'/>
+        <xs:element ref='removed' minOccurs='0' maxOccurs='unbounded'/>
+        <any processContents='lax' namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='note'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='xs:string'>
+          <xs:attribute name='utc' type='xs:dateTime' use='optional'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='pref'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='auto' minOccurs='0' maxOccurs='1'/>
+        <xs:element ref='default' minOccurs='0' maxOccurs='1'/>
+        <xs:element ref='item' minOccurs='0' maxOccurs='unbounded'/>
+        <xs:element ref='method' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='remove'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='end' type='xs:dateTime' use='optional'/>
+          <xs:attribute name='open' use='optional' type='xs:boolean'/>
+          <xs:attribute name='start' type='xs:dateTime' use='required'/>
+          <xs:attribute name='with' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='removed'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='start' type='xs:dateTime' use='required'/>
+          <xs:attribute name='with' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='retrieve'>
+    <xs:complexType>
+      <xs:sequence>
+        <any processContents='lax' namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='start' type='xs:dateTime' use='required'/>
+      <xs:attribute name='with' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='store'>
+    <xs:complexType>
+      <xs:choice minOccurs='0' maxOccurs='unbounded'>
+        <xs:element name='from' type='messageType'/>
+        <xs:element ref='note'/>
+        <xs:element name='to' type='messageType'/>
+        <any processContents='lax' namespace='##other'/>
+      </xs:choice>
+      <xs:attribute name='crypt' use='optional' type='xs:boolean'/>
+      <xs:attribute name='start' type='xs:dateTime' use='required'/>
+      <xs:attribute name='subject' type='xs:string' use='optional'/>
+      <xs:attribute name='with' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name='messageType'>
+    <xs:sequence>
+      <xs:element name='body' type='xs:string' minOccurs='0' maxOccurs='1'/>
+      <any processContents='lax' namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+    </xs:sequence>
+    <xs:attribute name='secs' type='xs:nonNegativeInteger' use='optional'/>
+    <xs:attribute name='utc' type='xs:dateTime' use='optional'/>
+  </xs:complexType>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+  ]]></code>
+</section1>
+</jep>

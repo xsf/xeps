@@ -1,0 +1,143 @@
+#!/usr/bin/env python
+
+# File: deferred.py
+# Version: 0.2
+# Description: a script for setting a JEP to Deferred
+# Last Modified: 2006-04-24
+# Author: Peter Saint-Andre (stpeter@jabber.org)
+# License: public domain
+# HowTo: ./deferred.py jepnum dbuser dbpw 
+
+# IMPORTS:
+#
+import glob
+import MySQLdb
+import os
+from select import select
+import smtplib
+import socket
+from string import split,strip,join,find
+import sys
+import time
+from xml.dom.minidom import parse,parseString,Document
+
+def getText(nodelist):
+    thisText = ""
+    for node in nodelist:
+        if node.nodeType == node.TEXT_NODE:
+            thisText = thisText + node.data
+    return thisText
+
+# get the seconds in the Unix era
+now = int(time.time())
+
+# READ IN ARGS: 
+#
+# 1. JEP number
+# 2. database user
+# 3. database password
+
+jepnum = sys.argv[1];
+dbuser = sys.argv[2];
+dbpw = sys.argv[3];
+
+jepfile = jepnum + '/jep-' + jepnum + '.xml'
+
+# PARSE JEP HEADERS:
+#
+# - title
+# - abstract
+# - version
+# - date
+# - initials
+# - remark
+
+thejep = parse(jepfile)
+jepNode = (thejep.getElementsByTagName("jep")[0])
+headerNode = (jepNode.getElementsByTagName("header")[0])
+titleNode = (headerNode.getElementsByTagName("title")[0])
+title = getText(titleNode.childNodes)
+abstractNode = (headerNode.getElementsByTagName("abstract")[0])
+abstract = getText(abstractNode.childNodes)
+statusNode = (headerNode.getElementsByTagName("status")[0])
+jepstatus = getText(statusNode.childNodes)
+typeNode = (headerNode.getElementsByTagName("type")[0])
+jeptype = getText(typeNode.childNodes)
+revNode = (headerNode.getElementsByTagName("revision")[0])
+versionNode = (revNode.getElementsByTagName("version")[0])
+version = getText(versionNode.childNodes)
+dateNode = (revNode.getElementsByTagName("date")[0])
+date = getText(dateNode.childNodes)
+initialsNode = (revNode.getElementsByTagName("initials")[0])
+initials = getText(initialsNode.childNodes)
+remarkNode = (revNode.getElementsByTagName("remark")[0])
+remark = getText(remarkNode.childNodes)
+
+# UPDATE DATABASE:
+#
+# number is $jepnum
+# name is $title
+# type is $jeptype
+# status is $jepstatus
+# notes is "Version $version of JEP-$jepnum released $date."
+# version is $version
+# last_modified is $now
+# abstract is $abstract
+# changelog is "$remark ($initials)"
+
+db = MySQLdb.connect("localhost", dbuser, dbpw, "foundation")
+cursor = db.cursor()
+theNotes = "Version " + version + " of JEP-" + jepnum + " released " + date + "; consideration deferred because of inactivity."
+theLog = remark + " (" + initials + ")"
+theStatement = "UPDATE jeps SET name='" + title + "', type='" + jeptype + "', status='Deferred', notes='" + theNotes + "', version='" + str(version) + "', last_modified='" + str(now) + "', abstract='" + abstract + "', changelog='" + theLog + "' WHERE number='" + str(jepnum) + "';"
+cursor.execute(theStatement) 
+result = cursor.fetchall()
+
+# SEND MAIL:
+#
+# From: editor@jabber.org
+# To: standards-jig@jabber.org
+# Subject: DEFERRED: JEP-$jepnum ($title)
+# Body:
+#    JEP-$jepnum ($title) has been Deferred because of inactivity.
+#
+#    Abstract: $abstract
+#
+#    URL: http://www.jabber.org/jeps/jep-$jepnum.html
+#
+#    If and when a new revision of this JEP is published,
+#    its status will be changed back to Experimental.
+#
+
+fromaddr = "editor@jabber.org"
+# for testing...
+# toaddrs = "stpeter@jabber.org"
+# for real...
+toaddrs = "standards-jig@jabber.org"
+
+thesubject = 'DEFERRED: JEP-' + jepnum + " (" + title + ")"
+introline = 'JEP-' + jepnum + ' (' + title + ') has been Deferred because of inactivity.'
+abstractline = 'Abstract: ' + abstract
+urlline = 'URL: http://www.jabber.org/jeps/jep-' + jepnum + '.html'
+endline = 'If and when a new revision of this JEP is published, its status will be changed back to Experimental.'
+
+#msg = "From: %s\r\n" % fromaddr
+msg = "From: JEP Editor <%s>\r\n" % fromaddr
+msg = msg + "To: %s\r\n" % toaddrs
+msg = msg + "Subject: %s\r\n" % thesubject
+msg = msg + introline
+msg = msg + "\r\n\n"
+msg = msg + abstractline
+msg = msg + "\r\n\n"
+msg = msg + urlline
+msg = msg + "\r\n\n"
+msg = msg + endline
+msg = msg + "\r\n"
+
+server = smtplib.SMTP('localhost')
+server.set_debuglevel(1)
+server.sendmail(fromaddr, toaddrs, msg)
+server.quit()
+
+# END
+

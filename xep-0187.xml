@@ -1,0 +1,422 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM '../jep.ent'>
+%ents;
+<!ENTITY esupy "e<span class='super'>y</span>">
+<!ENTITY dsupx "d<span class='super'>x</span>">
+<!ENTITY gsupx "g<span class='super'>x</span>">
+<!ENTITY gsupy "g<span class='super'>y</span>">
+<!ENTITY NsubA "N<span class='sub'>A</span>">
+<!ENTITY NsubB "N<span class='sub'>B</span>">
+<!ENTITY CsubA "C<span class='sub'>A</span>">
+<!ENTITY CsubB "C<span class='sub'>B</span>">
+<!ENTITY MsubA "M<span class='sub'>A</span>">
+<!ENTITY MsubB "M<span class='sub'>B</span>">
+<!ENTITY KMsubA "KM<span class='sub'>A</span>">
+<!ENTITY KMsubB "KM<span class='sub'>B</span>">
+<!ENTITY KCsubA "KC<span class='sub'>A</span>">
+<!ENTITY KCsubB "KC<span class='sub'>B</span>">
+<!ENTITY KSsubA "KS<span class='sub'>A</span>">
+<!ENTITY KSsubB "KS<span class='sub'>B</span>">
+<!ENTITY twosup32 "2<span class='super'>32</span>">
+<!ENTITY twosup2n "2<span class='super'>2n-1</span>">
+<!ENTITY CBeCAx2n1 "&CsubB; = &CsubA; XOR 2<span class='super'>n-1</span>">
+<!ENTITY IDA "ID<span class='sub'>A</span>">
+<!ENTITY IDB "ID<span class='sub'>B</span>">
+<!ENTITY formA "form<span class='sub'>A</span>">
+<!ENTITY formB "form<span class='sub'>B</span>">
+<!ENTITY macA "mac<span class='sub'>A</span>">
+<!ENTITY macB "mac<span class='sub'>B</span>">
+<!ENTITY signA "sign<span class='sub'>A</span>">
+<!ENTITY signB "sign<span class='sub'>B</span>">
+<!ENTITY signsA "signs<span class='sub'>A</span>">
+<!ENTITY signsB "signs<span class='sub'>B</span>">
+<!ENTITY pubKeyA "pubKey<span class='sub'>A</span>">
+<!ENTITY pubKeyB "pubKey<span class='sub'>B</span>">
+<!ENTITY signKeyA "signKey<span class='sub'>A</span>">
+<!ENTITY signKeyB "signKey<span class='sub'>B</span>">
+<!ENTITY pubKeysA "pubKeys<span class='sub'>A</span>">
+<!ENTITY signKeysA "signKeys<span class='sub'>A</span>">
+<!ENTITY x1xZ "x<span class='sub'>1</span>...x<span class='sub'>Z</span>">
+<!ENTITY e1eZ "e<span class='sub'>1</span>...e<span class='sub'>Z</span>">
+]>
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+<jep>
+<header>
+  <title>Offline Encrypted Sessions</title>
+  <abstract>This document specifies an end-to-end encryption protocol for offline XMPP communication sessions.</abstract>
+  &LEGALNOTICE;
+  <number>0187</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <jig>Standards JIG</jig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>RFC 2104</spec>
+    <spec>RFC 2409</spec>
+    <spec>RFC 3526</spec>
+    <spec>RFC 3548</spec>
+    <spec>xml-c14n</spec>
+    <spec>JEP-0004</spec>
+    <spec>JEP-0020</spec>
+    <spec>JEP-0068</spec>
+    <spec>JEP-0079</spec>
+    <spec>JEP-0116</spec>
+    <spec>JEP-0155</spec>
+    <spec>JEP-0163</spec>
+  </dependencies>
+  <supersedes>None</supersedes>
+  <supersededby>None</supersededby>
+  <shortname>offlineesession</shortname>
+  &ianpaterson;
+  <revision>
+    <version>0.2</version>
+    <date>2006-07-19</date>
+    <initials>ip</initials>
+    <remark><p>Removed public key IDs from Offline options; harmonised session termination with the protocol added to JEP-0155; renamed logging field to otr</p></remark>
+  </revision>
+  <revision>
+    <version>0.1</version>
+    <date>2006-07-18</date>
+    <initials>ip</initials>
+    <remark><p>Initial version (extracted from JEP-0116 version 0.9).</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>The convenience of sending stanzas to other entities that are offline ("offline messages") is an important and popular feature of most XMPP implementations (see &jep0160;). Without offline messages delivery would have to wait until both entities managed to be online at the same time. So many urgent messages could not be delivered in time. For example, the sender might want to send an urgent message before jumping on a flight.</p>
+  <p>End-to-end encryption is another desirable feature for any communication technology. Unfortunately it is not possible to make offline encryption quite so secure as online encryption (see <link url='#sec'>Security Considerations</link>). However, offline encryption has a long history and is certainly preferable to having no encryption at all. <note>This protocol does not stop paranoid users avoiding sending offline messages.</note> Unfortunately, for reasons described in &jep0188;, the existing proposals (including &jep0027; and &rfc3923;) have not been widely implemented and deployed. This document describes a different approach to offline end-to-end encryption for use by entities that communicate using XMPP. It builds on the existing online &jep0116; protocol. As a result it offers important advantages over the existing "Object Encryption" proposals:</p>
+  <ul>
+    <li>Perfect Forward Secrecy <note>Long-lived keys are typically used for a few years, whereas Offline ESession decryption keys typically exist for just a few hours. So the Perfect Forward Secrecy feature significantly enhances the security of Offline ESessions.</note></li>
+    <li>Other security features described in <cite>Cryptographic Design of Encrypted Sessions</cite></li>
+    <li>Most of the code can be borrowed from implementations of <cite>Encrypted Sessions</cite></li>
+  </ul>
+  <p>The requirements and the consequent cryptographic design that underpin this protocol are described in <cite>Cryptographic Design of Encrypted Sessions</cite>. The basic concept is that of an encrypted session which acts as a secure tunnel between the online endpoint and the offline endpoint. The offline endpoint completes its part of the tunnel "negotiation" by publishing its preferences before it goes offline. Once the tunnel is established by the online endpoint, the content of each one-to-one XML stanza sent by the online endpoint is encrypted and then transmitted within a "wrapper" stanza.</p>
+</section1>
+
+<section1 topic="Dramatis Personae" anchor='personae'>
+  <p>This JEP introduces two characters to help the reader follow the necessary exchanges:</p>
+  <ol start='1'>
+    <li>"Bob" is the name of the online participant in the offline ESession. Within the scope of this JEP, his fully-qualified JID is: &lt;bob@example.com/laptop&gt;.</li>
+    <li>"Alice" is the name of the offline participant in the offline ESession started by Bob. Within the scope of this JEP, we stipulate that her fully-qualified JID is: &lt;alice@example.org/pda&gt;.</li>
+  </ol>
+  <p>While Bob and Alice are introduced as "end users", they are simply meant to be examples of Jabber entities. Any directly addressable Jabber entity may participate in an offline ESession.</p>
+</section1>
+
+<section1 topic="Offline ESession Negotiation" anchor='init'>
+  <p>The approach to establishing a secure session with an entity that is offline is in essence a special case of 3-message negotiation employed for online ESessions (see <cite>Encrypted Sessions</cite>).</p>
+  <p>Alice MAY publish a set of offline ESession options just before she goes offline. If Bob subscribes to Alice's presence and wishes to establish an online ESession with her, but he finds that she is offline, then if she published her offline ESession options before going offline, he may use the protocol described below to perform the initial Diffie-Hellman key exchange, establish an offline ESession and send encrypted stanzas to her while she is offline. Note: Bob MUST NOT initiate a new ESession with Alice if he already has an ESession established with her.</p>
+  <p>Note: Alice MAY also publish <em>another</em> similar set of relatively long-lived <note>The more often Alice changes her published ESession options, the shorter the Perfect Forward Secrecy window of vulnerability. However, whenever she changes them she divulges her presence to all the entities that are monitoring them.</note> offline ESession options that any entity MAY use for the same purpose.</p>
+
+    <section2 topic="Publishing Offline ESession Options" anchor='init-offline-publish'>
+      <p>In order to publish either set of her offline ESession options Alice MUST create an options data form in exactly the same way as she would create an online ESession request data form (see the ESession Request section in <cite>Encrypted Sessions</cite>) except she MUST omit The 'accept' and 'pk_hash' fields. Note: The list of stanza types she is willing to decrypt MUST NOT include the value 'iq'.</p>
+      <p>Alice MUST append to the content of the form an 'expires' field containing the UTC time (see &jep0082;) that she decides her offline ESession options will expire (see <link url='#sec-expire'>Options Expiry Time</link> Security Considerations).</p>
+      <p>Alice MUST store her value of &NsubA; (her ESession ID), all her values of x (one for each MODP group) and the time she decides her offline ESession options will expire in a secure way, so that she can retrieve them when she comes back online (idealy even if that is using a different client and/or a different machine).</p>
+      <p>If Alice would not be able to decrypt stanzas if she came back online using a different client and/or a different machine then she SHOULD also encapsulate the resource of her client in a 'match_resource' field and append it to her options data form. In this case, the list of stanza types she is willing to decrypt MUST include only 'message'.</p>
+      <p>Alice MUST also append to the content of the form a list of signatures (see <link url='#sign'>Signature Generation</link>) of the <em>content</em> of the data form (excluding the 'signs' field). The list SHOULD include one signature for each of the public signature-verification keys that other entities may use to authenticate her.</p>
+      <p>Alice MUST publish the ESession options data form through her own server using &jep0163;.</p>
+      <p>If the pubkey PEP node does not exist already then Alice MUST create it first. In this case, Alice SHOULD specify the "Presence" access model for the set of options for presence subscribers (or the "Open" model for the set for other entities), unless she wants greater control over access to her identity (see <link url='#sec-identity'>Identity Protection</link> Security Considerations). Alice SHOULD specify that the options will never be pushed to subscribers (even when she publishes new options) - especially if she specifies the "Whitelist" access model.</p>
+  <example caption='Alice Creates PEP Node for ESession Options for Presence Subscribers'><![CDATA[
+<iq from='alice@example.org/pda' type='set' id='create1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <create node='http://jabber.org/protocol/esession#subscription'/>
+    <configure>
+      <x xmlns='jabber:x:data' type='form'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#node_config</value>
+        </field>
+        <field var='pubsub#deliver_notifications'>
+          <option><value>0</value></option>
+        </field>
+        <field var='pubsub#send_last_published_item'>
+          <option><value>never</value></option>
+        </field>
+        <field var='pubsub#access_model'>
+          <option><value>presence</value></option>
+        </field>
+      </x>
+    </configure>
+  </pubsub>
+</iq>
+  ]]></example>
+  <example caption='Alice Creates PEP Node for ESession Options for All Entities'><![CDATA[
+<iq from='alice@example.org/pda' type='set' id='create2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <create node='http://jabber.org/protocol/esession'/>
+    <configure>
+      <x xmlns='jabber:x:data' type='form'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#node_config</value>
+        </field>
+        <field var='pubsub#deliver_notifications'>
+          <option><value>0</value></option>
+        </field>
+        <field var='pubsub#send_last_published_item'>
+          <option><value>never</value></option>
+        </field>
+        <field var='pubsub#access_model'>
+          <option><value>open</value></option>
+        </field>
+      </x>
+    </configure>
+  </pubsub>
+</iq>
+  ]]></example>
+  <p>Once the publishing node has been created, Alice can update her options for subscribers to her presence whenever she goes offline:</p>
+  <example caption='Alice Publishes Her ESession Options for Her Presence Subscribers'><![CDATA[
+<iq from='alice@example.org/pda' type='set' id='pub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='http://jabber.org/protocol/esession#subscription'>
+      <item>
+        <x type='form' xmlns='jabber:x:data'>
+          <field type="hidden" var="FORM_TYPE">
+            <value>http://jabber.org/protocol/chatneg</value>
+          </field>
+          <field type="boolean" var="otr">
+            <value>0</value>
+          </field>
+          <field type="boolean" var="secure">
+            <value>0</value>
+          </field>
+          <field type="list-single" var="modp">
+            <option><value>5</value></option>
+            <option><value>14</value></option>
+            <option><value>2</value></option>
+          </field>
+          <field type="list-single" var="crypt_algs">
+            <option><value>aes256-ctr</value></option>
+            <option><value>twofish256-ctr</value></option>
+            <option><value>aes128-ctr</value></option>
+          </field>
+          <field type="list-single" var="hash_algs">
+            <option><value>whirlpool</value></option>
+            <option><value>sha256</value></option>
+          </field>
+          <field type="list-single" var="sign_algs">
+            <option><value>rsa</value></option>
+            <option><value>dsa</value></option>
+          </field>
+          <field type="list-single" var="compress">
+            <option><value>none</value></option>
+          </field>
+          <field type="list-multi" var="stanzas">
+            <option><value>message</value></option>
+          </field>
+          <field type="list-single" var="ver">
+            <option><value>1.3</value></option>
+            <option><value>1.2</value></option>
+          </field>
+          <field type="text-single" var="rekey_freq">
+            <value>1</value>
+          </field>
+          <field var="expires">
+            <value>2006-06-09T02:56:15Z</value>
+          </field>
+          <field var="my_nonce">
+            <value> ** Base64 encoded ESession ID ** </value>
+          </field>
+          <field var="keys">
+            <value> ** Base64 encoded value of e5 ** </value>
+            <value> ** Base64 encoded value of e14 ** </value>
+            <value> ** Base64 encoded value of e2 ** </value>
+          </field>
+          <field var="match_resource">
+            <value>pda</value>
+          </field>
+          <field var="signs">
+            <value> ** signature of form ** </value>
+            <value> ** signature of form ** </value>
+          </field>
+        </x>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+  ]]></example>
+  <p>At the risk of divulging her presence, Alice MAY also update her options for all entities:</p>
+  <example caption='Alice Publishes Her ESession Options for All Entities'><![CDATA[
+<iq type='set' from='alice@example.org/pda' id='pub2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='http://jabber.org/protocol/esession'>
+      ...
+    </publish>
+  </pubsub>
+</iq>
+  ]]></example>
+    </section2>
+    <section2 topic="Requesting Offline ESession Options" anchor='init-offline-request'>
+      <p>If Bob believes Alice is offline he SHOULD request her ESession options and, if he does not have a local copy of any of her public keys, her long-term public signature-verification keys from her server using <cite>Personal Eventing via Pubsub</cite> (see &jep0189;). <note>There is no need for Bob to discover Alice's support for the Offline ESessions protocol via &jep0030;.</note></p>
+      <p>If Bob is subscribing to Alice's presence he MUST request her ESession Options exclusively for subscribers.</p>
+      <example caption='Bob asks Alice&apos;s Server for her ESession Options (Subscribers)'><![CDATA[
+<iq type='get'
+    from='bob@example.com/laptop'
+    to='alice@example.org'
+    id='es4'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='http://jabber.org/protocol/esession#subscription'/>
+  </pubsub>
+</iq>
+  ]]></example>
+      <p>If Bob is not subscribing to Alice's presence (or if Alice has no ESession options exclusively for subscribers) he MUST use the following request instead.</p>
+      <example caption='Bob asks Alice&apos;s Server for her ESession Options (All Entities)'><![CDATA[
+<iq type='get'
+    from='bob@example.com/laptop'
+    to='alice@example.org'
+    id='es4'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='http://jabber.org/protocol/esession'/>
+  </pubsub>
+</iq>
+  ]]></example>
+      <p>If, after receiving Alice's offline ESession options, Bob is unable to verify any of Alice's signatures of her options data form (see <link url='#sign'>Signature Verification</link>) with any of her public keys already in his possession (or with any of her keys he is able to acquire and trust) then he MUST proceed no further, since he cannot be sure who will be able to decrypt his stanzas.</p>
+      <p>If Bob cannot acquire Alice's ESession options, or he does not support one or more of the options in each Alice's ESession fields, or if the 'expires' field indicates that Alice's options have expired, then he MUST NOT send encrypted stanzas to her while she is offline.</p>
+    </section2>
+
+    <section2 topic="Starting an Offline ESession" anchor='init-offline-start'>
+      <p>Bob MUST now continue as if Alice had requested an online ESession, performing the steps described in three of the sections of <cite>Encrypted Sessions</cite>:</p>
+      <ol start='1'>
+        <li><p><cite>Diffie-Hellman Preparation (Bob)</cite> Note: If the value of e he selected is not valid, Bob SHOULD terminate the ESession <em>without</em> sending an error.</p></li>
+        <li><p><cite>Generating Session Keys</cite></p></li>
+        <li><p><cite>Hiding Identity</cite> Note: Since Bob did not receive a 'pk_hash' field, he MUST assume its value is false. Bob SHOULD NOT include a 'pk_hash' field in &formB; since Alice has already proved her identity.</p></li>
+      </ol>
+      <p>As with 3-message ESession negotiation, Bob should encapsulate the Base64 encoded values of &IDB; and &MsubB; in data form fields ('identity' and 'mac'), and append the new fields to &formB;.</p>
+      <p>Bob MAY also send encrypted content (see the Exchanging Stanzas section of <cite>Encrypted Sessions</cite>) in the same stanza. Note: If he also includes a field named "terminate" set to a value of "1" or "true" within the data form (see the ESession Termination section of <cite>Encrypted Sessions</cite>) then the ESession is terminated immediately. This special case, where a single stanza is encrypted and sent in isolation, is equivalent to object encryption (or object signing if no encryption is specified) and offers several significant advantages over non-session approaches - including perfect forward secrecy.</p>
+      <p>If Alice included a 'match_resource' field in her ESession options, then Bob MUST address all the stanzas he sends within the offline ESession to the specified resource and use the <cite>Advanced Message Processing</cite> protocol to ensure that they are not delivered to any other resource.</p>
+      <p>After sending &formB; to Alice, Bob can assume that the ESession negotiation is complete.</p>
+      <example caption='Bob Establishes an ESession Without Negotiation'><![CDATA[
+<message from='bob@example.com/laptop' to='alice@example.org/pda' type='chat'>
+  <init xmlns='http://jabber.org/protocol/esession#init'>
+    <x type='submit' xmlns='jabber:x:data'>
+      <field var="FORM_TYPE">
+        <value>http://jabber.org/protocol/chatneg</value>
+      </field>
+      <field var="otr"><value>1</value></field>
+      <field var="secure"><value>0</value></field>
+      <field var="modp"><value>5</value></field>
+      <field var="crypt_algs"><value>aes256-ctr</value></field>
+      <field var="hash_algs"><value>sha256</value></field>
+      <field var="sign_algs"><value>rsa</value></field>
+      <field var="compress"><value>none</value></field>
+      <field var="stanzas"><value>message</value></field>
+      <field var="ver"><value>1.3</value></field>
+      <field var="rekey_freq"><value>50</value></field>
+      <field var="my_nonce">
+        <value> ** Base64 encoded ESession ID ** </value>
+      </field>
+      <field var="keys">
+        <value> ** Base64 encoded value of d ** </value>
+      </field>
+      <field var="nonce">
+        <value> ** Base64 encoded ESession ID ** </value>
+      </field>
+      <field var="counter">
+        <value> ** Base64 encoded block counter ** </value>
+      </field>
+      <field var="identity">
+        <value> ** Encrypted identity ** </value>
+      </field>
+      <field var="mac">
+        <value> ** Integrity of identity ** </value>
+      </field>
+    </x>
+  </init>
+  <encrypted xmlns='http://jabber.org/protocol/esession'>
+    <data> ** Base64 encoded m_final ** </data>
+    <mac> ** Base64 encoded a_mac ** </mac>
+  </encrypted>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule action='??????' condition='match-resource' value='exact'/>
+  </amp>
+</message>
+    ]]></example>
+    </section2>
+    <section2 topic="Accepting Offline ESessions" anchor='init-offline-accept'>
+      <p>When Alice comes online she MUST perform the following steps:</p>
+      <ol>
+        <li><p>Ensure she is no longer publishing offline ESession options exclusively for entities that are subscribing to her presence.</p>
+            <example caption='Alice Stops Publishing Her ESession Options'><![CDATA[
+<iq type='set' from='alice@example.org/pda' id='es5'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='http://jabber.org/protocol/esession#subscription'>
+      <item/>
+    </publish>
+  </pubsub>
+</iq>
+  ]]></example>
+        </li>
+        <li><p>Retrieve any values of &NsubA;, x (one for each MODP group for each &NsubA;) and her offline ESession options expiry time that she stored before going offline, and destroy in a secure way any persistently stored copies that correspond to ESession options exclusively for subscribers.</p></li>
+      </ol>
+      <p>If the current time is after her offline ESession options expiry time then she MUST discard all stanzas from offline ESessions without decrypting them. Otherwise, when Alice receives an offline ESession request stanza from Bob then she MUST perform the following steps:</p>
+      <ol>
+        <li><p>Select her value of x that corresponds to the 'nonce' and 'modp' fields she received from Bob. <note>Alice may not be able to find the specified value of x if, for example, she went offline using a different client and/or a different machine without publishing a 'match_resource' field. In this case Alice cannot decrypt the offline ESession!</note></p></li>
+        <li><p>Confirm that she has not already received a key exchange stanza from Bob with the same value of d or &NsubB; ('my_nonce' field) since she published her ESession options (see the Replay Attacks subsection of the Security Considerations section of <cite>Encrypted Sessions</cite>). If the options were for subscribers, that means since she came online.</p></li>
+        <li><p>Alice MUST now continue as if Bob had responded to her online ESession request, performing the steps described in two of the sections of <cite>Encrypted Sessions</cite>:</p>
+        <ul>
+          <li><p><cite>Diffie-Hellman Preparation (Alice)</cite> Note: If she is not prepared to support any of the ESession options specified by Bob, or if the value of d she selected is not valid, then Alice SHOULD terminate the ESession <em>without</em> sending an error.</p></li>
+          <li><p><cite>Verifying Bob's Identity</cite> Note: Since Alice did not send a 'pk_hash' field to Bob, she MUST assume its value is false. If the value of &MsubB; she calculated does not match the one she received, or if she cannot confirm that &pubKeyB; really is Bob's public key, or if she cannot confirm that &signB; is the signature of the HMAC result, then Alice SHOULD terminate the ESession <em>without</em> sending an error.</p></li>
+        </ul></li>
+      </ol>
+    </section2>
+</section1>
+
+
+<section1 topic="Exchanging Stanzas" anchor='exchange'>
+  <p>Alice MUST NOT send encrypted content within an offline ESession started by Bob. If Bob is conducting an offline ESession with Alice when she is online (e.g., if he is not subscribing to her presence), then if Alice wants to send a stanza to Bob, she MUST terminate the offline ESession and start a new online ESession first.</p>
+  <p>For Offline ESessions, Bob SHOULD include a 'Created' SHIM header in the encrypted content. Assuming she trusts Bob, Alice SHOULD trust this header and ignore the unencrypted &jep0091; element inserted by her server.</p>
+  <example caption='Unencrypted Stanza'><![CDATA[
+<message from='bob@example.com/laptop'
+         to='alice@example.org/pda'
+         type='chat'>
+  <body>Hello, Alice!</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule action='error' condition='match-resource' value='exact'/>
+  </amp>
+  <headers xmlns='http://jabber.org/protocol/shim'>
+    <header name='Created'>2005-02-10T03:01:52Z</header>
+  </headers>
+  <active xmlns='http://jabber.org/protocol/chatstates'/>
+</message>
+]]></example>
+  <example caption='XML Content to be Encrypted'><![CDATA[
+<body>Hello, Alice!</body>
+<headers xmlns='http://jabber.org/protocol/shim'>
+  <header name='Created'>2005-02-10T03:01:52Z</header>
+</headers>
+<active xmlns='http://jabber.org/protocol/chatstates'/>
+  ]]></example>
+</section1>
+
+
+<section1 topic='ESession Termination' anchor='terminate'>
+  <p>If Bob notices that Alice comes online during his offline ESession with her then he MUST terminate the ESession immediately. If required he may then negotiate a new (more secure) online ESession.</p>
+  <p>When Alice receives the offline ESession termination stanza from Bob, she SHOULD NOT send a termination stanza back to him.</p>
+</section1>
+
+
+<section1 topic='Security Considerations' anchor='sec'>
+  <p>For more security considerations refer to the Security Considerations section of <cite>Encrypted Sessions</cite></p>
+  <section2 topic='Replay Attacks' anchor='sec-replay'>
+    <p>Since Alice supplies the same set of values of e for all offline ESessions, to prevent complete offline ESessions being replayed to her, she MUST take care to securely store <em>new</em> values (or destroy existing values) of &NsubA; and x for subscribers whenever she goes offline (see <link url='#init-publish'>Publishing ESession Options</link>). Also, when Alice comes online again, she MUST remember all the values of d he receives in offline ESession negotiation stanzas, and reject any offline ESessions that specify a value of d she has already received (see <link url='#init-accept'>Accepting an Offline ESession</link>).</p>
+    <p>Note: If Alice publishes ESession options for non-subscribers, and if she does not update them whenever she comes online then, until she updates the options, she MUST save all the values of d she receives to secure persistent storage (along with the values of &NsubA; and x).</p>
+  </section2>
+  <section2 topic='Options Expiry Time' anchor='sec-expire'>
+    <p>If Alice's offline private Diffie-Hellman keys are compromised before she destroys them, and the attacker also controls communications between Bob and Alice's server, then the attacker could prevent Bob discovering if she comes online, and resend her compromised ESession options to Bob whenever he asks for them. This would allow the attacker to decrypt all messages sent to Alice before her offline ESession options expire. Alice would probably never receive the messages sent to her after she comes back online. If an attack is discovered before the compromised ESession options expire then Alice SHOULD change her long-term signing key. Alice SHOULD mitigate this attack by choosing an expiry time for her ESession options that is not too long after she expects to be online again.</p>
+  </section2>
+  <section2 topic='Identity Protection' anchor='sec-identity'>
+    <p>Alice's Offline ESession options include her signatures. Although the signatures are public information, any entity that possesses one of Alice's corresponding public keys may confirm whether or not she is the entity using the JID. If it is important for Alice to protect her identity (i.e. hide the fact that she is the user of the JID), then she MUST carefully control who has access to her public keys.</p>
+  </section2>
+  <section2 topic='Conclusion' anchor='sec-conclusion'>
+    <p>In addition to the issues above, the Perfect Forward Secrecy window of vulnerability is longer. More seriously, Alice MUST store her private Diffie-Hellman keys, &x1xZ;, to local disk or to a server (perhaps symmetrically encrypted with a password). It is <em>really</em> hard to securely erase something from a disk. Note: Once compromised, her private Diffie-Hellman keys could only be used to decrypt messages sent to her within offline Esessions until her offline ESession options expire. They could not be used to negotiate online ESessions <note>The online ESessions protocol forces both Alice and Bob to produce a signature of both their Diffie-Hellman keys together.</note>, or to send messages that appear to be from Alice. This is a significant benefit when compared to the existing "object encryption" schemes.</p>
+    <p>Alice could decide not to support Offline ESessions since they are less secure than online ESessions. However, if Alice does that then, while she is offline, Bob, or Aunt Tillie, will probably send her completely unprotected messages!</p>
+  </section2>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This JEP requires no interaction with &IANA;. </p>
+</section1>
+
+<section1 topic='Jabber Registrar Considerations' anchor='registrar'>
+  <p>The &REGISTRAR; shall add 'http://jabber.org/protocol/esession#subscription' to its registry of protocol namespaces.</p>
+</section1>
+
+</jep>

@@ -1,0 +1,569 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM '../jep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+<jep>
+<header>
+  <title>Message Receipts</title>
+  <abstract>This document specifies a protocol for XMPP message receipts.</abstract>
+  &LEGALNOTICE;
+  <number>0184</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <jig>Standards JIG</jig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes>
+    <spec>JEP-0022 (in part)</spec>
+  </supersedes>
+  <supersededby/>
+  <shortname>amp-receipts</shortname>
+  &stpeter;
+  &hildjj;
+  <revision>
+    <version>0.2</version>
+    <date>2006-09-21</date>
+    <initials>psa</initials>
+    <remark><p>Added two more scenarios; defined business rule about not sending to bare JIDs; specified security consideration regarding presence leaks.</p></remark>
+  </revision>
+  <revision>
+    <version>0.1</version>
+    <date>2006-04-11</date>
+    <initials>psa</initials>
+    <remark><p>Initial JEP version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2006-04-07</date>
+    <initials>psa</initials>
+    <remark><p>Added text and examples for service discovery; added text and examples for chat session negotiation; added recommendations regarding message processing, retries, etc.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2006-03-27</date>
+    <initials>psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>While &jep0079; provides message acknowledgements at the server level, it does not extend that model all the way to the client. However, sometimes client-level acknowledgements are needed, for example to provide "receipts". This document defines a mechanism for XMPP message receipts.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>This document addresses the following requirements:</p>
+  <ol>
+    <li>Enable a sender to request notification that an XMPP message stanza has been received.</li>
+    <li>Enable a recipient to provide message receipts if desired.</li>
+  </ol>
+  <p>Note: This document explicitly does not define a protocol for "guaranteed delivery", since that term (like "security") means different things to different people. Instead, we define a more focused protocol that addresses the need for message receipts, thus solving one problem that falls under the heading of "guaranteed delivery".</p>
+</section1>
+<section1 topic='Scenarios' anchor='scenarios'>
+  <p>In general there are seven possible scenarios (where "S" stands for sender and "R" stands for recipient):</p>
+  <code caption='Scenario 1: Happy Path'><![CDATA[
+S                                       R
+|                                       |
+| ------------------------------------> |
+|    send message                       |
+|                                       |
+| <------------------------------------ |
+|                      send receipt     |
+|                                       |
+  ]]></code>
+  <p>In Scenario 1, the use case ends successfully with message delivery, receipt delivery, and no retries.</p>
+  <code caption='Scenario 2: Message Not Received'><![CDATA[
+S                                       R
+|                                       |
+| -----------------------------x        |
+|    send message                       |
+|                                       |
+| [trigger timeout]                     |
+|                                       |
+| ------------------------------------> |
+|    re-send message                    |
+|                                       |
+| <------------------------------------ |
+|                      send receipt     |
+|                                       |
+  ]]></code>
+  <p>In Scenario 2, the use case ends successfully with message delivery failure, message retry, and receipt delivery.</p>
+  <code caption='Scenario 3: Receipt Not Received'><![CDATA[
+S                                       R
+|                                       |
+| ------------------------------------> |
+|    send message                       |
+|                                       |
+|      x------------------------------- |
+|                      send receipt     |
+|                                       |
+| [trigger timeout]                     |
+|                                       |
+| ------------------------------------> |
+|    re-send message                    |
+|                                       |
+| <------------------------------------ |
+|                      send receipt     |
+|                                       |
+  ]]></code>
+  <p>In Scenario 3, the use case ends successfully with message delivery, receipt delivery failure, message retry, and receipt delivery.</p>
+  <code caption='Scenario 4: Message Sent, Sender Goes Offline'><![CDATA[
+S                                       R
+|                                       |
+| ------------------------------------> |
+|    send message                       |
+|                                       |
+| ------------------------------------> |
+|    send presence unavailable          |
+|                                       |
+  ]]></code>
+  <p>In Scenario 4, the use case ends unsuccessfully with message delivery and the sender generating presence unavailable (because the sender has gone offline, the recipient has no one to send the receipt to).</p>
+  <code caption='Scenario 5: Message Sent, Sender Goes Offline, Presence Not Received'><![CDATA[
+S                                       R
+|                                       |
+| ------------------------------------> |
+|    send message                       |
+|                                       |
+| -------------------------------x      |
+|    send presence unavailable          |
+|                                       |
+| <------------------------------------ |
+|                      send receipt     |
+|                                       |
+  ]]></code>
+  <p>In Scenario 5, the use case ends unsuccessfully with message delivery and the sender generating presence unavailable; however, the presence unavailable is not delivered, so the recipient sends a receipt, which is not delivered within the sender's timeout period since the sender is now offline.</p>
+  <code caption='Scenario 6: Message Sent, Recipient Goes Offline'><![CDATA[
+S                                       R
+|                                       |
+| ------------------------------------> |
+|    send message                       |
+|                                       |
+| <------------------------------------ |
+|    send presence unavailable          |
+|                                       |
+  ]]></code>
+  <p>In Scenario 6, the use case ends unsuccessfully with message delivery and the recipient generating presence unavailable (because the recipient has gone offline before sending a receipt, the sender cannot be sure that the message has been received).</p>
+  <code caption='Scenario 7: Message Sent, Recipient Goes Offline, Presence Not Received'><![CDATA[
+S                                       R
+|                                       |
+| ------------------------------------> |
+|    send message                       |
+|                                       |
+|   x---------------------------------- |
+|    send presence unavailable          |
+|                                       |
+| [trigger timeout]                     |
+|                                       |
+| ------------------------------------> |
+|    re-send message                    |
+|                                       |
+  ]]></code>
+  <p>In Scenario 7, the use case ends unsuccessfully with message delivery and the recipient generating presence unavailable; however, the presence unavailable is not delivered, so the sender retries sending the message and because the recipient is now offline it cannot send a receipt within the sender's timeout period.</p>
+</section1>
+<section1 topic='Protocol Format' anchor='format'>
+  <p>In order to make it possible for senders to request, and for recipients to generate, message receipts, we define a new <cite>Advanced Message Processing</cite> rule: "receipt". In accordance with <cite>JEP-0079</cite>, we provide the following information about the receipt rule:</p>
+  <ul>
+    <li>The namespace shall be "http://jabber.org/protocol/amp?condition=receipt".</li>
+    <li>The condition applies only to final receipt by the intended recipient; therefore, the per-hop flag does not apply.</li>
+    <li>The only defined value of the receipt rule is "received".</li>
+    <li>This condition is met if a message processing application (client) controlled by the intended recipient has received and processed the message; the term "processed" is understood to include presentation to a human user if appropriate <note>Therefore this specification does not distinguish between delivery and presentation, as was done in &jep0022;.</note> or any other application-specific client-side processing, including generation of an error response if the application determines that the message contents cannot be handled.</li>
+  </ul>
+</section1>
+<section1 topic='Protocol Format' anchor='format'>
+  <p>In order to make it possible for senders to request, and for recipients to generate, message receipts, we define a new <cite>Advanced Message Processing</cite> rule: "receipt". In accordance with <cite>JEP-0079</cite>, we provide the following information about the receipt rule:</p>
+  <ul>
+    <li>The namespace shall be "http://jabber.org/protocol/amp?condition=receipt".</li>
+    <li>The condition applies only to final receipt by the intended recipient; therefore, the per-hop flag does not apply.</li>
+    <li>The only defined value of the receipt rule is "received".</li>
+    <li>This condition is met if a message processing application (client) controlled by the intended recipient has received and processed the message; the term "processed" is understood to include presentation to a human user if appropriate <note>Therefore this specification does not distinguish between delivery and presentation, as was done in &jep0022;.</note> or any other application-specific client-side processing, including generation of an error response if the application determines that the message contents cannot be handled.</li>
+    <li>Although any defined action may be triggered, the only action needed in order to support message receipts is the "notify" action.</li>
+  </ul>
+  <p>The following is an example of a message that includes a request for return receipt.</p>
+  <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+  ]]></example>
+  <p>If the recipient supports Advanced Message Processing and the "receipt" rule, it MUST generate a receipt:</p>
+  <example caption='A message receipt'><![CDATA[
+<message
+    from='kingrichard@royalty.england.lit/throne'
+    id='richard2-4.1.247'
+    to='northumberland@shakespeare.lit/westminster'>
+  <amp xmlns='http://jabber.org/protocol/amp' status='notify'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+  ]]></example>
+</section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <p>The general business rules specified for Advanced Message Processing in <cite>JEP-0079</cite> apply to any rule; in addition, the following business rules apply specifically to the receipt rule:</p>
+  <ol start='1'>
+    <li><p>A sender SHOULD NOT include a request for message receipts when sending a message to the bare JID (&BAREJID;) of the recipient, only when sending to a full JID (&FULLJID;).</p></li>
+    <li><p>A sender SHOULD NOT include a request for message receipts unless it knows (via &jep0030; or &jep0115;) that the intended recipient supports the protocol described herein or unless the use of message receipts is negotiated via &jep0155;.</p></li>
+    <li><p>The sender (i.e., the message generating application controlled by the sender) MUST initiate a timeout upon sending each message, which timeout SHOULD be 30 seconds. If the sender does not receive a message receipt (or failure event) within its timeout period, it MUST re-send the message with an identical value of the XMPP 'id' attribute.</p></li>
+    <li><p>The sender MUST NOT send a large number of retries. How many retries are appropriate depends on how important the message is perceived to be. In any case, a sender SHOULD NOT send more than five retries.</p></li>
+    <li><p>The recipient (i.e., the message processing application controlled by the intended recipient that receives a given message) MUST initiate a timeout upon sending each message receipt, which timeout SHOULD be 60 seconds. If the recipient does not receive a re-sent message within its timeout period, it SHOULD stop waiting for a re-sent message and discard memory of that message ID.</p></li>
+    <li><p>The recipient MUST NOT include a request for message receipts in its acknowledgements. If the sender receives a request for message receipts in an acknowledgement, it MUST NOT acknowledge the acknowledement.</p></li>
+    <li><p>The recipient SHOULD send the message receipt once it has processed the message, which may include presenting it to a human user (e.g., visually or aurally). The receiving application SHOULD NOT require a human user to positively affirm that he or she has read and understood the message before sending the receipt, since this is unnecessarily intrusive in the context of instant messaging.</p></li>
+  </ol>
+  <p>Naturally, the receipt rule can be combined wiith rules specified in <cite>JEP-0079</cite> (e.g., the deliver rule) for more complete reporting.</p>
+</section1>
+<section1 topic='Protocol Flows' anchor='flow'>
+  <p>This document covers one use case: sending messages with return receipt requested, for which succcess is defined as the sender receiving a message receipt. As described above, there are seven possible scenarios. These are described in more detail in the following sections.</p>
+  <section2 topic='Happy Path' anchor='flow-happy'>
+    <p>In the "happy path", the sender sends the message and the recipient returns a receipt within the sender's timeout period.</p>
+    <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <example caption='A message receipt'><![CDATA[
+<message
+    from='kingrichard@royalty.england.lit/throne'
+    id='richard2-4.1.247'
+    to='northumberland@shakespeare.lit/westminster'>
+  <amp xmlns='http://jabber.org/protocol/amp' status='notify'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+  </section2>
+  <section2 topic='Message Not Received' anchor='flow-messagenotreceived'>
+    <p>In this scenario the sender sends the message but it is not received for whatever reason; therefore the sender resends the message after the timeout period expires, the resent message is received, and the recipient returns a receipt within the sender's (second) timeout period.</p>
+    <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <p>The message is not received and the sender does not receive a receipt within the sender's timeout period; therefore the sender resends the message.</p>
+    <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <p>Now the message is received and the recipient returns a receipt.</p>
+    <example caption='A message receipt'><![CDATA[
+<message
+    from='kingrichard@royalty.england.lit/throne'
+    id='richard2-4.1.247'
+    to='northumberland@shakespeare.lit/westminster'>
+  <amp xmlns='http://jabber.org/protocol/amp' status='notify'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+  </section2>
+  <section2 topic='Receipt Not Received' anchor='flow-receiptnotreceived'>
+    <p>In this scenario the sender sends the message and it not received, but the message receipt is not received for whatever reason; therefore the sender resends the message after the timeout period expires, the resent message is received, and the recipient returns a receipt within the sender's (second) timeout period.</p>
+    <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <p>The message is received and the recipient returns a receipt.</p>
+    <example caption='A message receipt'><![CDATA[
+<message
+    from='kingrichard@royalty.england.lit/throne'
+    id='richard2-4.1.247'
+    to='northumberland@shakespeare.lit/westminster'>
+  <amp xmlns='http://jabber.org/protocol/amp' status='notify'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <p>The message receipt is not received by the sender within the sender's timeout period; therefore the sender resends the message.</p>
+    <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <p>The resent message is received and the recipient returns a receipt, which is received by the sender within the sender's (second) timeout period.</p>
+    <example caption='A message receipt'><![CDATA[
+<message
+    from='kingrichard@royalty.england.lit/throne'
+    id='richard2-4.1.247'
+    to='northumberland@shakespeare.lit/westminster'>
+  <amp xmlns='http://jabber.org/protocol/amp' status='notify'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+  </section2>
+  <section2 topic='Sender Goes Offline' anchor='flow-senderoffline'>
+    <p>In this scenario the sender sends the message but immediately goes offline. Therefore the recipient MUST NOT send a receipt.</p>
+    <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <example caption='Sender goes offline'><![CDATA[
+<presence
+    from='northumberland@shakespeare.lit/westminster'
+    to='kingrichard@royalty.england.lit/throne'
+    type='unavailable'/>
+    ]]></example>
+    <p>The use case ends unsuccessfully, since the sender did not receive a receipt.</p>
+  </section2>
+  <section2 topic='Sender Goes Offline, Presence Not Received' anchor='flow-senderofflinenopres'>
+    <p>In this scenario the sender sends the message but immediately goes offline, however the sender's presence unavailable is not delivered to the recipient so the recipient sends a receipt but the sender's timeout is not triggered.</p>
+    <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <example caption='Sender goes offline'><![CDATA[
+<presence
+    from='northumberland@shakespeare.lit/westminster'
+    type='unavailable'/>
+    ]]></example>
+    <p>The recipient does not receive the presence unavailable so sends a message receipt.</p>
+    <example caption='A message receipt'><![CDATA[
+<message
+    from='kingrichard@royalty.england.lit/throne'
+    id='richard2-4.1.247'
+    to='northumberland@shakespeare.lit/westminster'>
+  <amp xmlns='http://jabber.org/protocol/amp' status='notify'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <p>However, the sender does not receive the receipt within its timeout period (since it is now offline), so the use case ends unsuccessfully.</p>
+  </section2>
+  <section2 topic='Recipient Goes Offline' anchor='flow-recipientoffline'>
+    <p>In this scenario the sender sends the message but receives unavailable presence from the recipient before receiving a receipt within the timeout period.</p>
+    <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <example caption='Recipient goes offline'><![CDATA[
+<presence
+    from='kingrichard@royalty.england.lit/throne'
+    to='northumberland@shakespeare.lit/westminster'
+    type='unavailable'/>
+    ]]></example>
+    <p>The use case ends unsuccessfully, since the sender did not receive a receipt.</p>
+  </section2>
+  <section2 topic='Recipient Goes Offline, Presence Not Received' anchor='flow-recipientofflinenopres'>
+    <p>In this scenario the sender sends the message and the recipient sends unavailable presence before sending a receipt, but the presence unavailable is not delivered so the sender retries but does not receive a receipt since the recipient is now offline; after some number of retries the sender gives up and cannot be sure that the message was ever received.</p>
+    <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <example caption='Recipient goes offline'><![CDATA[
+<presence
+    from='kingrichard@royalty.england.lit/throne'
+    type='unavailable'/>
+    ]]></example>
+    <p>The sender does not receive the presence unavailable so sends a retry.</p>
+    <example caption='A message with receipt requested'><![CDATA[
+<message
+    from='northumberland@shakespeare.lit/westminster'
+    id='richard2-4.1.247'
+    to='kingrichard@royalty.england.lit/throne'>
+  <body>My lord, dispatch; read o'er these articles.</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule condition='receipt' action='notify' value='received'/>
+  </amp>
+</message>
+    ]]></example>
+    <p>After sending some number of retries the sender gives up and the use case ends unsuccessfully.</p>
+  </section2>
+</section1>
+<section1 topic='Service Discovery' anchor='disco'>
+  <p>If a sender wishes to request message receipts, it SHOULD first discover whether the intended recipient supports message receipts. Support can be discovered indirectly via <cite>Entity Capabilities</cite> or directly via <cite>Service Discovery</cite>.</p>
+  <p>If an entity supports Advanced Message Processing, it MUST report that by including a service discovery feature of "http://jabber.org/protocol/amp" as described in <cite>JEP-0079</cite>:</p>
+  <example caption="Initial Service Discovery information request"><![CDATA[
+<iq from='northumberland@shakespeare.lit/westminster'
+    to='kingrichard@royalty.england.lit/throne'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+  ]]></example>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq from='kingrichard@royalty.england.lit/throne'
+    to='northumberland@shakespeare.lit/westminster'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='http://jabber.org/protocol/amp'/>
+    ...
+  </query>
+</iq>
+  ]]></example>
+  <p>An entity that supports Advanced Message Processing SHOULD also maintain a service discovery node named "http://jabber.org/protocol/amp", at which it advertises the individual actions and conditions it supports. If an entity supports message receipts, it SHOULD respond to service discovery information requests sent to that node with a reply that includes the 'http://jabber.org/protocol/amp?condition=receipt' condition:</p>
+  <example caption="Request for information about individual actions and conditions"><![CDATA[
+<iq from='northumberland@shakespeare.lit/westminster'
+    to='kingrichard@royalty.england.lit/throne'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+         node='http://jabber.org/protocol/amp'/>
+</iq>
+  ]]></example>
+  <example caption="Response for individual actions and conditions"><![CDATA[
+<iq from='kingrichard@royalty.england.lit/throne'
+    to='northumberland@shakespeare.lit/westminster'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+         node='http://jabber.org/protocol/amp'>
+    ...
+    <feature var='http://jabber.org/protocol/amp?condition=receipt'/>
+    ...
+  </query>
+</iq>
+  ]]></example>
+</section1>
+<section1 topic='Negotiation' anchor='neg'>
+  <p>Two entities MAY negotiate the use of message receipts for a given session using <cite>Chat Session Negotiation</cite>. The parameter to be negotiated is named "http://jabber.org/protocol/amp?condition=receipt". Its use is illustrated in the following examples.</p>
+  <example caption="User requests chat session"><![CDATA[
+<message type='normal'
+         from='northumberland@shakespeare.lit/westminster'
+         to='kingrichard@royalty.england.lit/throne'
+         id='init1'>
+  <thread>ffd7076498744578d10edabfe7f4a866</thread>
+  <feature xmlns='http://jabber.org/protocol/feature-neg'>
+    <x xmlns='jabber:x:data' type='form'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>http://jabber.org/protocol/chatneg</value>
+      </field>
+      <field label='Accept this chat?'
+             type='boolean' 
+             var='accept'>
+        <value>true</value>
+        <required/>
+      </field>
+      <field label='Enable Message Receipts?'
+             type='boolean' 
+             var='http://jabber.org/protocol/amp?condition=receipt'>
+        <value>0</value>
+      </field>
+    </x>
+  </feature>
+</message>
+    ]]></example>
+    <example caption="Contact accepts offer and specifies parameters"><![CDATA[
+<message type='normal'
+         from='kingrichard@royalty.england.lit/throne'
+         to='northumberland@shakespeare.lit/westminster'
+         id='init1'>
+  <thread>ffd7076498744578d10edabfe7f4a866</thread>
+  <feature xmlns='http://jabber.org/protocol/feature-neg'>
+    <x xmlns='jabber:x:data' type='submit'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>http://jabber.org/protocol/chatneg</value>
+      </field>
+      <field var='accept'>
+        <value>true</value>
+      </field>
+      <field var='http://jabber.org/protocol/amp?condition=receipt'>
+        <value>1</value>
+      </field>
+    </x>
+  </feature>
+</message>
+    ]]></example>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>It is possible for a recipient to leak its presence when returning message receipts; therefore, a recipient SHOULD NOT return message receipts to senders who are not otherwise authorized to view its presence.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>No interaction with &IANA; is necessary as a result of this document.</p>
+</section1>
+<section1 topic='Jabber Registrar Considerations' anchor='registrar'>
+  <section2 topic='Rule Conditions Registry' anchor='registrar-conditions'>
+    <p>The &REGISTRAR; maintains a registry of Advanced Message Processing &lt;rule/&gt; conditions (see &AMPCONDITIONS;). The Registrar shall add the following condition to the registry:</p>
+    <code><![CDATA[
+<condition>
+  <name>receipt</name>
+  <ns>http://jabber.org/protocol/amp?condition=receipt</ns>
+  <per-hop>false</per-hop>
+  <value>received</value>
+  <processing>
+    The condition is met if a message processing application (client)
+    controlled by the intended recipient has received and processed
+    the message, including presentation to a human user if appropriate.
+  </processing>
+  <doc>JEP-xxxx</doc>
+</condition>
+    ]]></code>
+  </section2>
+  <section2 topic='Field Standardization' anchor='registrar-formtype'>
+    <p>&jep0068; defines a process for standardizing the fields used within Data Forms qualified by a particular namespace and the Jabber Registrar maintains a registry of such fields (see &FORMTYPES;). The Registrar shall add the following field for use in Chat Session Negotiation forms:</p>
+    <code caption='Registry Submission'><![CDATA[
+<form_type>
+  <name>http://jabber.org/protocol/chatneg</name>
+  <field
+      var='http://jabber.org/protocol/amp?condition=receipt'
+      type='boolean'
+      label='Whether to enable Message Receipts per JEP-0184'/>
+</form_type>
+      ]]></code>
+  </section2>
+</section1>
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>Thanks to Joe Kemp for his input.</p>
+</section1>
+</jep>

@@ -1,0 +1,253 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM '../jep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+<jep>
+<header>
+  <title>Dialback Key Generation and Validation</title>
+  <abstract>This document explains how to generate and validate the keys used in the XMPP server dialback protocol.</abstract>
+  &LEGALNOTICE;
+  <number>0185</number>
+  <status>Experimental</status>
+  <type>Informational</type>
+  <jig>Standards JIG</jig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>N/A</shortname>
+  <author>
+    <firstname>Philipp</firstname>
+    <surname>Hancke</surname>
+    <email>fippo@goodadvice.pages.de</email>
+    <jid>fippo@goodadvice.pages.de</jid>
+  </author>
+  <revision>
+    <version>0.2</version>
+    <initials>ph</initials>
+    <date>2006-05-10</date>
+    <remark>
+      <p>Clarified and corrected roles of originating and receiving servers; updated recommendation and main example to use HMAC-SHA256 for key generation.</p>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.1</version>
+    <date>2006-04-11</date>
+    <initials>psa</initials>
+    <remark><p>Initial JEP version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2006-03-30</date>
+    <initials>ph</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  &BISNOTE;
+  <p><cite>RFC 3920</cite> does not specify how to generate the keys used in the server dialback protocol, and why each of the variables used in key generation is crucial for security. This document is provided for discussion purposes and aims at clarifying the key generation and its validation mechanism and to show common attacks on weak mechanisms. It is not meant to supercede the text in <cite>RFC 3920</cite>.</p>
+</section1>
+<section1 topic='Dialback Explained'>
+  <p>The Originating Server, which generates the dialback key, and the Authoritative Server, which validates the dialback key, may reside on different hosts or be running in separate processes. The method used in key generation and validation should not require interactive communication between Originating Server, Authoritative Server and optionally a third party like a database.</p>
+  <p>The key is generated based on</p>
+  <ul>
+    <li>the (hostname of) Originating Server,</li>
+    <li>the (hostname of) Receiving Server,</li>
+    <li>the Stream ID,</li>
+    <li>and a secret known by the Authoritative Server's network.</li>
+  </ul>
+  <p>The last item, a shared secret known to Originating Server and Authoritative Server, is used in a Keyed-Hash Message Authentication Code (HMAC) to generate and validate the dialback keys. This key must either be set up in a configuration option for each host or process or generated as a random string when starting the server. &nistfips198a; recommends that the length of the key should be at least half of the size of the hash function output.</p>
+  <p>The recommended hash for usage in HMAC is SHA-256 described in &nistfips180-2;, hence the secret's length should be at least 128 bits or 16 characters long.</p>
+  <code>
+key = HEX( HMAC-SHA256( Secret, { Stream ID, 
+           Receiving Server, Originating or Authoritative server } ) ) 
+  </code>
+  <p>To avoid problems of encoding, a hexadecimal representation of the digest algorithm output SHOULD be used.</p>
+</section1>
+<section1 topic='Example Setup'>
+  <table caption='Example data used in this document'>
+    <tr>
+      <td>Originating and Authoritative Server</td>
+      <td>example.com</td>
+    </tr>
+    <tr>
+      <td>Receiving Server</td>
+      <td>example.org</td>
+    </tr>
+    <tr>
+      <td>Secret</td>
+      <td>thesecret</td>
+    </tr>
+    <tr>
+      <td>Stream ID</td>
+      <td>457F9224A0</td>
+    </tr>
+  </table>
+</section1>
+<section1 topic='Key Generation and Validation'>
+  <p>This document closely follows the description of the dialback protocol in RFC 3920, but omits steps that are not important for the generation and validation of the dialback keys. For ease of comparison the numbering of the steps is the same as in section 8.3 of RFC 3920.</p>
+  <p>3. Receiving Server sends a stream header back to the Originating Server, including a unique ID for this interaction:</p>
+  <code><![CDATA[
+<stream:stream
+  xmlns:stream='http://etherx.jabber.org/streams'
+  xmlns='jabber:server'
+  xmlns:db='jabber:server:dialback'
+  to='example.com'
+  from='example.org'
+  id='457F9224A0'>
+    ]]></code>
+  <p>The Originating Server now generates a dialback key to be sent to the Receiving Server:</p>
+  <code>
+key = HMAC-SHA256( secret, { Receiving server, Originating server, Stream ID})
+    = HMAC-SHA256( 'thesecret', { 'example.org', 'example.com', '457F9224A0' })
+    = HMAC-SHA256( 'thesecret', { 'example.orgexample.com457F9224A0' })
+    = 'a85748c59049b700dfa728da3eae5ea93aac1e0fc89713b490e441486653dd8c'
+  </code>
+  <p>4. The Originating Server sends the generated dialback key to the Receiving Server:</p>
+  <code><![CDATA[
+<db:result
+  to='example.org'
+  from='example.com'>
+    a85748c59049b700dfa728da3eae5ea93aac1e0fc89713b490e441486653dd8c
+</db:result>
+    ]]></code>
+  <p>8. The Receiving Server sends the Authoritative Server a request for verification of the key:</p>
+  <code><![CDATA[
+<db:verify
+  to='example.com'
+  from='example.org'
+  id='457F9224A0'>
+    a85748c59049b700dfa728da3eae5ea93aac1e0fc89713b490e441486653dd8c
+</db:verify>
+    ]]></code>
+  <p>The Authoritative Server calculates the valid key for this verify request, using data supplied in the packet and the secret shared with the Originating Server.</p>
+  <code>
+key = HMAC-SHA256( secret, { Receiving Server, Authoritative Server, Stream ID })
+    = HMAC-SHA256( 'thesecret', { 'example.org', 'example.com', '457F9224A0' })
+    = HMAC-SHA256( 'thesecret', { 'example.orgexample.com457F9224A0' })
+    = 'a85748c59049b700dfa728da3eae5ea93aac1e0fc89713b490e441486653dd8c'
+    </code>
+    <p>9. The Authoritative Server compares this value to the key contained in the verification requests and informs the Originating Server of the result, in our example a success:</p>
+  <code><![CDATA[
+<db:verify
+  to='example.org'
+  from='example.com'
+  id='457F9224A0'
+  type='valid'/>
+    ]]></code>
+</section1>
+<section1 topic='Attacks Against Key Generation Methods'>
+  <p>This section contains attack scenarios that illustrate why each of the factors used in key generation is important.</p>
+  <p>An attacker will assume the role of the Originating Server and try to send a dialback key that the Authoritative Server acknowledges as valid. If this is successful, the attacker is allowed to send packets for the hostname of the Authoritative Server.</p>
+  <p>In each subsection, the example hash method, which uses the SHA1 algorithm as described in &rfc3174; for simplicity, ignores one of the variables,</p>
+  <ul>
+    <li>Originating Server,</li>
+    <li>Stream ID,</li>
+    <li>Receiving Server,</li>
+    <li>or Secret,</li>
+  </ul>
+  <p>and it is shown how an attacker might exploit this behavior to get a valid result from the Authoritative Server.</p>
+  <section2 topic='Hostname of Originating Server Not Considered'>
+    <p>This subsection demonstrates what can happen if the key generation method ignores the hostname of the Originating Server, e.g. for the hash function</p>
+    <code>
+key = SHA1({ Secret, Receiving Server, Stream ID })
+    </code>
+    <p>The dialback keys generated for the originating domains 'example.com' and 'example.net' are the same, which might disclose that the secret used to generate the keys for these domains is equal. An attacker cannot exploit this any further.</p>
+    <code><![CDATA[
+<db:verify
+  to='example.com'
+  from='example.org'
+  id='457F9224A0'> 
+    807ccee5541ed9332559513797df75c1dd18ae8e
+</db:verify>
+    ]]></code>
+    <p>This key is generated using:</p>
+    <code>
+SHA1('thesecretexample.org457F9224A0') = 
+	    '807ccee5541ed9332559513797df75c1dd18ae8e'
+    </code>
+  </section2>
+  <section2 topic='Stream ID Not Considered'>
+    <p>This subsection demonstrates a replay attack that is possible if the key generation method ignores the Stream ID, e.g. for the hash function</p>
+    <code>
+key = SHA1({ Secret, Receiving Server, Originating Server })
+    </code>
+    <p>If the attacker is able to obtain a single valid dialback key exchanged between the two domains, this key can be used to validate any stream.</p>
+    <code><![CDATA[
+<db:verify
+  to='example.com'
+  from='example.org'
+  id='457F9224A0'> 
+    14cbd71d0f127be89b7004c2242424918d8fad95
+</db:verify>
+    ]]></code>
+    <p>This key is generated using the empty string instead of the id:</p>
+    <code>
+SHA1('thesecretexample.orgexample.com') = 
+	    '14cbd71d0f127be89b7004c2242424918d8fad95'
+    </code> 
+    <p>This key is also valid for</p>
+    <code><![CDATA[
+<db:verify
+  to='example.com'
+  from='example.org'
+  id='anyidyouwant'>
+    14cbd71d0f127be89b7004c2242424918d8fad95
+</db:verify>
+    ]]></code>
+  </section2>
+  <section2 topic='Hostname of the Receiving Server Not Considered'>
+    <p>This subsection demonstrates against a key generation method that ignores the hostname of the receiving server, e.g. for the hash function</p>
+    <code>
+key = SHA1({ Secret, Originating Server, Stream ID })
+    </code>
+    <p>The attacker can use a dialback key and stream ID we have sent a domain under his control.</p>
+    <code><![CDATA[
+<db:verify
+  to='example.com'
+  from='example.org'
+  id='457F9224A0'> 
+    c04ca426a81b3fa04bd4a9df2e24482372b4b874
+</db:verify>
+    ]]></code>
+    <p>This key is generated using:</p>
+    <code>
+SHA1('thesecretexample.com457F9224A0') = 
+	    'c04ca426a81b3fa04bd4a9df2e24482372b4b874'
+    </code>
+  </section2>
+  <section2 topic='Shared Secret Not Considered'>
+    <p>If the key generation method does not take into account a shared secret in the Authoritative Servers network or if this secret is disclosed and the key generation method is known, an attacker can generate valid dialback keys.</p>
+    <code>
+key = SHA1({ Receiving Server, Originating Server, Stream ID })
+    </code>
+    <p>In both cases the attacker is able to generate an arbitrary number of dialback keys.</p>
+    <code><![CDATA[
+<db:verify
+  to='example.com'
+  from='example.org'
+  id='457F9224A0'> 
+    30e59d3ee62926a29f012822769e58e67571d750
+</db:verify>
+    ]]></code>
+    <p>This key is generated using:</p>
+    <code>
+SHA1('example.orgexample.com457F9224A0') = 
+	    '30e59d3ee62926a29f012822769e58e67571d750'
+    </code>
+  </section2>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>This JEP introduces no security considerations or concerns above and beyond those discussed in <cite>RFC3920</cite>, but describes what might happen if the security considerations are ignored.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This JEP requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='Jabber Registrar Considerations' anchor='registrar'>
+  <p>This JEP requires no interaction with the &REGISTRAR;.</p>
+</section1>
+</jep>

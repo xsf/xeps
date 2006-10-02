@@ -1,0 +1,793 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM "../jep.ent">
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+<jep>
+  <header>
+    <title>Jabber Database Access</title>
+    <abstract>Expose RDBM systems directly to the jabber network</abstract>
+    &LEGALNOTICE;
+    <number>0043</number>
+    <status>Retracted</status>
+    <type>Standards Track</type>
+    <jig>Standards</jig>
+    <author>
+      <firstname>Justin</firstname>
+      <surname>Kirby</surname>
+      <email>justin@openaether.org</email>
+      <jid>zion@openaether.org</jid>
+    </author>
+    <revision>
+      <version>0.2</version>
+      <date>2003-10-20</date>
+      <initials>psa</initials>
+      <remark>At the request of the author, changed status to Retracted; interested parties should refer to &lt;<link url="http://www.openaether.org/projects/jabber_database.html">http://www.openaether.org/projects/jabber_database.html</link>&gt; for further information.</remark>
+    </revision>
+    <revision>
+      <version>0.1</version>
+      <date>2002-08-21</date>
+      <initials>jk</initials>
+      <remark>Initial public release</remark>
+    </revision>
+  </header>
+  <section1 topic='Introduction'>
+    <p>Accessing a RDBMS in a generic fashion is a complex and difficult
+    task. Consequently, this will not be an attempt to XMLize a generic
+    Database API or query language. Instead, it will providing a
+    simple mechanism for a JID to read/write data that it has access to 
+    and specifying a model for those schemas to use in xml.</p>
+  
+    <p>This JEP has two aims.</p>
+
+    <ol>
+      <li>Be able to request the available schemas</li>
+      <li>Perform near SQL-like data manipulation</li>
+    </ol>
+  
+    <p>Although designed for use with an RDBMS this JEP is not
+    restricted to such uses. It may be used with any data storage 
+    system that can be broken down to a simple table, column/row 
+    format. for example comma delimited files.</p>
+  </section1>
+  <section1 topic='Prerequisites'>
+    <p>To understand the following sections of this JEP the reader
+    must be aware of the following.</p>
+
+    <section2 topic='Namespace'>
+      <p>The current namespace of <link>http://openaether.org/projects/jabber_database.html</link> 
+      will be used until this becomes a jep. Once officially accepted as
+      a jep and approved as final by the council, it will become 
+      <link>http://www.jabber.org/jeps/jep-0043.html</link>.</p>
+    </section2>
+    <section2 topic='Elements'>
+      <ul>
+        <li>version - specify the version of the protocol that the client/server supports</li>
+        <li>database - specify the database/catalog has the following attributes:</li>
+        <ul>
+          <li>name - name of the database/catalog</li>
+          <li>sql - embed native SQL queries directly</li>
+        </ul>
+        <ul>
+          <li>table - the element scopes the children into the table. has the following attributes:</li>
+      <ul>
+        <li>name - name of the table</li>
+        <li>permission - what the user can do with the data</li>
+        <li>col - describes the column. has the following attributes</li>
+        <ul>
+          <li>name - name of the column</li>
+          <li>type - SQL99 datatype of the column</li>
+          <li>size - size of the datatype if required</li>
+          <li>op - comparison operator, used only if child of where element</li>
+        </ul>
+        <li>where - scopes col elements into a 'sql-like' where clause</li>
+        <ul>
+          <li>col - see above</li>
+        </ul>
+      </ul>
+      <li>proc - element scopes the children into a procedure has the following attributes:</li>
+      <ul>
+        <li>name - name of the sproc</li>
+        <li>permission - what the user can do with the data</li>
+        <li>col - see above</li>
+        <li>result - indicated return value by running the procedure (restricted to integer)</li>
+      </ul>
+        </ul>
+      </ul>
+    </section2>
+    <section2 topic='Data Types'>
+      <p>There are a limited subset of data types available:</p>
+      <ul>
+        <li>bit - a single 'bit', usually used to represent boolean values</li>
+        <li>tinyint - signed 8bit integer, has a range from   -128  to +127</li>
+        <li>integer - signed 32bit integer, has a range from -2147483648 to +2147483647</li>
+        <li>utinyint - unsigned 8bit integer, has a range from 0 to +255</li>
+        <li>uinteger - usigned 32bit integer, has a range from   0 to +4294967296</li>
+        <li>float - allowed values are -3.402823466E+38 to
+        -1.175494351E-38, 0, and 1.175494351E-38 to 3.402823466E+38 (can NOT be  unsigned)</li>
+        <li>numeric - unlimited size (some databases constrain this though)</li>
+        <li>date - resolution is one day. acceptable ranges vary (TODO: constrain minimal range to something)</li>
+        <li>datetime - a date and time combination (often has range dependencies)</li>
+        <li>timestamp - a datetime used most often to record events</li>
+        <li>time - a time in the format HH:MM:SS (TODO: specify valid range)</li>
+        <li>char - an unsigned byte representing a single character (ASCII)</li>
+        <li>vchar - a variable width char</li>
+        <li>text - an extremely large chunk of text</li>
+        <li>blob - an extremely large chunk of binary data (encode in MIME)</li>
+      </ul>
+    </section2>
+    <section2 topic='Assumed Database Setup'>
+      <p>All SQL/RDBMS units will be scoped in the xml hierarchy:</p>
+
+      <code>
+&lt;database&gt;
+  &lt;table&gt;
+    &lt;col/&gt;
+  &lt;/table&gt;
+&lt;/database&gt;
+      </code>
+
+      <p>All examples will assume the existence of the following rdbms setup. A 
+      database named 'testdb' with tables created with following SQL
+      script:</p>
+  
+      <code>
+        create table tbl_one 
+        ( 
+          a_int int, 
+          a_float float, 
+          a_char  char(10)  
+        )
+        create table tbl_two 
+        ( 
+          a_date datetime, 
+      a_numeric numeric(9,3) 
+        )
+      </code>
+    </section2>
+</section1>      
+<section1 topic='Usage'>
+  <section2 topic='Requesting Schemas'>
+      <example caption='A simple schema request'>
+&lt;iq id="001" to="db.host" type="get"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+&lt;/iq&gt;
+      </example>
+  
+      <p>This is a simple request to discover what tables/procedures
+      exist on the database testdb. And what permissions are available 
+      to the user. All schema requests will respond within the scope that 
+      was asked for. This is to prevent unnecessary data from flooding
+      the network. So the response for the above request would look
+      something like:</p>                                     
+  
+      <example caption='Response to a schema request'>
+&lt;iq id="001" type="result" from="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table  name="tbl_one" permission="both"/&gt;
+      &lt;table  name="tbl_two" permission="read"/&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+      </example>
+  
+      <p>The response is scoped to only the 'children' of the request. 
+      Since the request was for the testdb database, only the tables 
+      within that database were returned in the result. The reason for 
+      the limitation is to prevent excessively large packets from filling 
+      the network from large schemas.</p>
+   
+      <p>The response indicates that the user has both read and write
+      permissions on the table 'tbl_one' and only read permissions on 
+      the table 'tbl_two'. Consequently, the user may only perform get 
+      requests on 'tbl_two'.</p>
+   
+      <example caption='Request detailed table schema'>
+&lt;iq id="002" type="get" to="db.host"&gt; 
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table  name="tbl_one"/&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+      </example>
+   
+      <p>The response would look like:</p>
+
+      <example caption='Response to detailed request'>
+&lt;iq id="002" type="result" from="db.host"&gt;             
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table  name="tbl_one"    permission="both"&gt; 
+     &lt;col name="a_int" type="int"/&gt;
+      &lt;col name="a_float" type="float"/&gt;
+      &lt;col name="a_char" type="char" size="10"/&gt;
+    &lt;/table&gt;
+  &lt;/database&gt;
+&lt;/iq&gt; 
+      </example>
+   
+      <p>The schema response for tbl_one is quite intuitive. Three
+      columns exist, one called a_int of type int (integer), another 
+      a_float of type float and  a third called a_char of type char 
+      with a size of ten characters.</p>
+    
+
+    </section2>
+
+    <section2 topic='Manipulating Data'>
+  
+      <p>Manipulation of data (select, insert, update, delete) will
+      definitely not be elegant or easy. SQL allows for some fairly 
+      complex queries on any fully  functional RDBMS. Consequently, 
+      the data manipulation will be  relatively limited since it is 
+      not a goal to translate SQL into xml.</p>
+    
+      <section3 topic='Selects'>
+        <p>To indicate a select like query, specify an &lt;iq&gt; of
+        type get. The table that the query is to be performed against 
+        must be specified. The columns   that are to be returned in 
+        the result set must be scoped within  the relative   table. 
+        Any attribute on the &lt;col&gt; element besides name will be 
+        ignored.  e.g. it is not required nor recommended to specify 
+        the data types  or the  sizes while performing a get.</p>
+      
+        <example caption='Basic select'>
+&lt;iq id="003" type="get" to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table  name="tbl_one"&gt;
+      &lt;col name="a_int"/&gt;
+      &lt;col name="a_float"/&gt;
+      &lt;col name="a_char"/&gt;
+    &lt;/table&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+
+      SQL Syntax:
+        select a_int, a_float, a_char
+        from tbl_one
+        </example>
+      
+       <p>It is also possible to specify a limit on the number of rows 
+       returned in the result set by specifying a value for the limit 
+       attribute.</p>
+     
+       <example caption='Basic select with limit'>
+&lt;iq id="003" type="get" to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table name="tbl_one"  limit="2"&gt;
+      &lt;col name="a_int"/&gt;
+      &lt;col name="a_float"/&gt;
+      &lt;col name="a_char"/&gt;
+      &lt;/table&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+       </example>
+
+       <p>In this case a limit of two rows will be returned in the result set.</p>
+    
+       <p> The result set which is returned will contain all the rows
+       that met the criteria of the select. There is no schema
+       information beyond the column names included in the result set. 
+       Each 'row' in the result set is scoped within the corresponding 
+       &lt;table&gt; element. This allows for queries on multiple
+       tables to be used in one &lt;iq&gt; packet.</p>
+
+       <example caption='Response to basic select'>
+&lt;iq id="003" type="result" from="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table  name="tbl_one"&gt;
+      &lt;col name="a_int"&gt;1234&lt;/col&gt;
+      &lt;col name="a_float"&gt;123.45&lt;/col&gt;
+      &lt;col name="a_char"&gt;onetwothre&lt;/col&gt;
+    &lt;/table&gt;
+    &lt;table  name="tbl_one"&gt;
+      &lt;col name="a_int"&gt;2345&lt;/col&gt;
+      &lt;col name="a_float"&gt;234.56&lt;/col&gt;
+      &lt;col name="a_char"&gt;twothreefo&lt;/col&gt;
+    &lt;/table&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+       </example>
+     </section3>
+
+     <section3 topic='Constraining Result Sets'>
+       <p>It would be impractical to request the entire contents of the 
+       table every time you needed one row or a subset of the data. You 
+       can constrain the result set by specifying a where clause.</p>
+
+       <example caption='Select with constraints'>
+&lt;iq id="004" type="get" to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table  name="tbl_one"&gt;
+      &lt;col name="a_int"/&gt;
+      &lt;col name="a_float"/&gt;
+      &lt;col name="a_char"/&gt;
+      &lt;where&gt;
+        &lt;col name="a_int" op="eq"&gt;1234&lt;/col&gt;
+        &lt;col name="a_float" op="lt" conj="and"&gt;200.00&lt;/col&gt;
+      &lt;/where&gt;
+    &lt;/table&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+
+         SQL Syntax:
+         select a_int, a_float, a_char from tbl_one
+         where   a_int = 1234 and a_float &lt; 200.00
+       </example>
+      
+       <p>Attributes only used in the &lt;col&gt; element within a 
+       &lt;where&gt; element are the op (for operator) and conj for 
+       (conjunction). The op is used for comparison operators such 
+       as &lt;, &gt;, =, &lt;&gt;, &lt;=, &gt;=
+
+       <ul>
+     <li>eq - equivalent =</li>
+     <li>neq - not-equivalent &lt;&gt;</li>
+     <li>lt - less than &lt;</li>
+     <li>gt - greater than &gt;</li>
+     <li>let - less than or equivalent &lt;=</li>
+     <li>get - greater than or equivalent &gt;=</li>
+     <li>null - IS NULL (the column is null in  the   database  sense of the word)</li>
+       </ul>
+      </p>
+
+      <p>The conjuction attribute is used to combined constraints in the where clause
+
+      <ul>
+        <li>not - to negate a result</li>
+    <li>or - logical OR ||</li>
+    <li>and - logical AND &amp;&amp;</li>
+      </ul>      
+      </p>
+
+      <p><strong>Result</strong></p>
+
+      <example caption='Response to select with constraints'>
+&lt;iq id="003" type="result" to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table  name="tbl_one"&gt;
+      &lt;col name="a_int"&gt;1234&lt;/col&gt;
+      &lt;col name="a_float"&gt;123.45&lt;/col&gt;
+      &lt;col name="a_char"&gt;onetwothre&lt;/col&gt;
+    &lt;/table&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+      </example>
+    </section3>
+
+    <section3 topic='Inserts'>
+      <p>Inserting or altering the stored data in anyway requires
+      setting the type attribute to a value of set. This indicates 
+      that the user wants to perform a 'insert/update'. The
+      differentiating factor between an insert and an update operation 
+      is whether a &lt;where&gt; element is used. If there is no
+&lt;where&gt; element then it must be interpreted as an insert. 
+      If a &lt;where&gt; element does exist, then it must be
+      interpreted as an update.</p>
+
+      <example caption='Inserting data'>
+&lt;iq id="004" type="set" to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table  name="tbl_one"&gt;
+      &lt;col name="a_int"&gt;3456&lt;/col&gt;
+      &lt;col name="a_float"&gt;345.67&lt;/col&gt;
+      &lt;col name="a_char"&gt;threefour&lt;/col&gt;
+    &lt;/table&gt;
+    &lt;table  name="tbl_two"&gt;
+      &lt;col name="a_date"&gt;02/16/2002&lt;/col&gt;
+      &lt;col name="a_numeric"&gt;123456789123.123&lt;/col&gt;
+    &lt;/table&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+
+SQL syntax:
+insert tbl_one (a_int, a_float,a_char)VALUES(3456,   345.67, 'threefour')
+insert tbl_two (a_date, a_numeric) VALUES('02/16/2002', 123456789123.123)
+      </example>
+
+      <p><strong>Result</strong></p>
+
+      <p> If there is no result set for the query, as in an update,
+      insert, delete, then the response must indicate success or 
+      failure within the &lt;table&gt; element scope. An empty
+&lt;table&gt; element indicates success, and a &lt;table&gt; 
+      element containing an &lt;error&gt; element indicates a failure.</p>
+
+      <example caption='Response to data insert'>
+&lt;iq id="004" type="result" from="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table name="tbl_one"/&gt;
+    &lt;table name="tbl_two"&gt;
+      &lt;error code="380"&gt;permission denied on table&lt;/error&gt;
+    &lt;/table&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+      </example>
+      
+      <p> The insert into tbl_one succeeded since the response has an 
+      empty &lt;table&gt; element. However, the insert into tbl_two 
+      failed with a permission denied error. Which is indicated with a 
+      non-empty &lt;table&gt; element.</p>
+    </section3>
+
+    <section3 topic='Updates'>
+
+      <p> As stated previously, if the type attribute has a value of
+      set and a &lt;where&gt; element exists, then it must be interpreted as an update.</p>
+
+      <example caption='Updating'>
+&lt;iq id="005" type="set" to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table  name="tbl_one"&gt;
+      &lt;col name="a_char"&gt;aaaaaaaaaa&lt;/col&gt;
+      &lt;where&gt;
+        &lt;col name=c"a_int"&gt;1234&lt;/col&gt;
+      &lt;/where&gt;
+    &lt;/table&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+
+        SQL Syntax:
+    update tbl_one 
+    set a_char = 'aaaaaaaaaa'
+    where a_int = 1234
+      </example>
+
+      <p><strong>Result</strong></p>
+
+      <p> Again, if there is no result set returned by the query, then
+      success or failure must be indicated.</p>
+
+      <example caption='Response to update'>
+&lt;iq id="005" type="result" to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table name="tbl_one"/&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+      </example>
+    </section3>
+
+    <section3 topic='Deletes'>
+
+    <p> If the type attribute has a value of set and there are no
+    &lt;col&gt; elements scoped within the &lt;table&gt; element, 
+    then the query must be interpreted as a delete.</p>
+
+    <example caption='Simple delete'>
+&lt;iq id="006" type="set"  to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table name="tbl_one"&gt;
+      &lt;where&gt;
+        &lt;col name="a_int" op="eq"&gt;1234&lt;/col&gt;
+      &lt;/where&gt;
+    &lt;/table&gt;
+    &lt;/database&gt;
+&lt;/iq&gt;
+
+      SQL Syntax:
+      delete from tbl_one where a_int = 1234
+    </example>
+
+    <p><strong>Result</strong></p>
+    
+    <p>Again, if a result set is not generated by a query, then
+    success or failure must be indicated by the &lt;table&gt; element</p>
+
+    <example caption='Response to delete'>
+&lt;iq id="006" type="result"    to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table name="tbl_one"/&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+    </example>
+    </section3>
+  </section2>
+  <section2 topic='Procedures'>
+
+  <p> Procedures, or stored procedures <note>Apparently procedures 
+  are not as common in RDBMS as I thought. Postgres and MySQL have 
+  functions, but not procedures. So until I, or someone else, 
+  researches this issue this feature is on hold.</note>  
+, are often handy to make frequently used sql queries execute faster. 
+  These are simply queries stored in a precompiled form and given a 
+  name with a list of parameters. Each RDBMS handles procedures 
+  differently, but the common characteristics are that they are 
+  stored server side and have in/out parameters.</p>
+
+  <p> The &lt;proc&gt; element will be used to indicate a procedure. 
+  It has similar characteristics to the &lt;table&gt; element. The 
+  core differences are that the &lt;col&gt; elements have permissions 
+  and a &lt;result&gt; element can be used to indicate the value 
+  returned by the procedure.</p>
+
+  <p> The permission attribute on a &lt;col&gt; element is used to 
+  indicate whether the parameter is in (read), out (write) or in/out (both). </p>
+  
+  <p> The only result set acceptable from a procedure is that of the 
+  parameters or &lt;col&gt; element. If the procedure produces a
+  result set outside of the parameters this should be ignored.</p>
+
+  </section2>
+  <section2 topic='Errors'>
+
+  <p> The server must be able to let the client know when an error 
+  occurs, instead of just being silent.</p>
+  
+  <table caption='Error Codes'>
+    <tr>
+      <th>Code</th>
+      <th>Message</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td>399</td>
+      <td>Invalid Database Name</td>
+      <td>Returned when the client has requested information from a
+      database which does not exist according to the component.</td>
+    </tr>
+    <tr>
+      <td>398</td>
+      <td>Invalid Table Name</td>
+      <td>Returned when the client has requested information from a 
+      table/procedure which does not exist according to the component.</td>
+    </tr>
+    <tr>
+      <td>397</td>
+      <td>Invalid Column Name</td>
+      <td>Returned when the client has requested information from a 
+      column which does not exist according to the component.</td>
+    </tr>
+    <tr>
+      <td>380</td>
+      <td>Permission Denied on Table</td>
+      <td>Returned when the requested action is not allowed for the 
+      user on the table</td>
+    </tr>
+    <tr>
+      <td>401</td>
+      <td>Access Denied</td>
+      <td>Returned when the user does not have permission to use the 
+      component.</td>
+    </tr>
+  </table>
+
+  <p>If the user requests an action on a table which they do not have 
+  permission to do the following should be returned</p>
+  
+  <example caption='Permission denied error'>
+&lt;iq id="004" type="error" from="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table name="tbl_two"&gt;
+      &lt;error code="380"&gt;permission denied on table&lt;/error&gt;
+    &lt;/table&gt;
+&lt;/database&gt;
+    &lt;/iq&gt;  
+  </example>
+
+  <p>If the user is not allowed to access the component the following should be returned</p>
+
+  <example caption='General access denied'>
+&lt;iq id="004" type="error" from="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;error code="401"&gt;Access Denied&lt;/error&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+  </example>
+
+  </section2>
+  <section2 topic='Optional Features'>
+  <p> There are requirements which can be provided by other jabber 
+  components/namespaces, namely the jabber:iq:browse namespace 
+  in-place of Version Negotiation. Due to the inherent limitations 
+  of the above data retrieval mechanisms more sophisticated querying 
+  techniques might be desired. The &lt;query&gt; element will extend 
+  the functionality </p>
+
+  <section3 topic='Embedded SQL'>
+    <p> The abilities described in the Basics section are just that, 
+    basic. To provide more flexibility and allow for the full power 
+    of SQL without xmlifying everything, a &lt;sql&gt; element may 
+    be implemented to provide this feature.</p>
+    
+    <p> The &lt;sql&gt; element must be scoped within the &lt;database&gt; element.</p>
+
+    <example caption='Embedded sql query'>
+&lt;iq id="007" type="get" to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;sql&gt; select a_int, a_float from tbl_one &lt;/sql&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+    </example>
+
+    <p><strong>Result</strong></p>
+
+    <example caption='Response to embedded query'>
+&lt;iq id="007" type="result" to="db.host"&gt;
+  &lt;database 
+      name="testdb"
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+    &lt;table name="tbl_one" permission="both"&gt;
+      &lt;col name="a_int" type="integer"/&gt;
+      &lt;col name="a_float" type="float"/&gt;
+    &lt;/table&gt;
+    &lt;table name="tbl_one"&gt;
+      &lt;col name="a_int"&gt;1234&lt;/col&gt;
+      &lt;col name="a_float"&gt;123.45&lt;/col&gt;
+    &lt;/table&gt;
+    &lt;table name="tbl_one"&gt;
+      &lt;col name="a_int"&gt;2345&lt;/col&gt;
+      &lt;col name="a_float"&gt;234.56&lt;/col&gt;
+    &lt;/table&gt;
+  &lt;/database&gt;
+&lt;/iq&gt;
+    </example>
+
+    <p> Since SQL is so flexible, the result set schema is not known 
+    until it is returned as a result of the query. Consequently, it 
+    must be sent as the first 'row' of the returned result. Each 
+    following row will be the actual data queried for.</p>
+
+    <p> If multiple tables are used within one SQL statement, then 
+    then name attribute within the &lt;table&gt; element can not be 
+    accurately denoted with a single table name. The best way to deal 
+    with this situation is to simply use a unique identifier within 
+    the scope of the &lt;database&gt; element. This will allow for 
+    multiple &lt;sql&gt; results to be scoped within the same result.</p>
+
+    </section3>  
+    <section3 topic='Version Negotiation'>
+
+    <p>It is expected that this protocol will grow and be extended 
+    to meet various demands. Therefore, version
+    negotiation<note>Version Negotiation is being killed since browsing, feature 
+    negotiation, or disco will be able to perform this function, 
+    however it might be useful as an optional feature for clients 
+    that don't implement these yet, especially considering none 
+    of these have been standardized.</note> will be 
+    incorporated up front.</p>
+    
+    <p>When the connection initiator, client end-user or
+    server/transport, starts a session, it must first send 
+    the version number it expects to use, otherwise, behavior 
+    is undefined.</p>
+
+    <code>
+&lt;iq id="000" type="get" to="db.host"&gt;
+  &lt;database 
+      xmlns="http://openaether.org/projects/jabber_database.html"&gt;
+      &lt;version&gt;0.1&lt;/version&gt;
+    &lt;/database&gt;
+&lt;/iq&gt;
+    </code>
+
+    <p>Three responses are possible from the server.</p>
+    <ol>    
+      <li>It supports that version number and responds with:
+      <p><code>
+&lt;iq id="000" type="result" from="db.host"&gt;
+  &lt;database 
+      xmlns="http://openaether.org/projects/jabber_database.html"&gt;
+    &lt;version&gt;0.1&lt;/version&gt;
+    &lt;/database&gt;
+&lt;/iq&gt;
+      </code>
+      The type of 'result' indicates that the version request was
+      successful and if the client is satisfied with the version number, 
+      may continue with schema requests or whatever.</p></li>
+    
+      <li>It does not support that version number and responds with:
+      <p><code>
+&lt;iq id="000" type="error" from="db.host"&gt;
+  &lt;database 
+      xmlns="http://openaether.org/projects/jabber_database.html"/&gt;
+&lt;/iq&gt;
+      </code>
+      The type of 'error' indicates a failure in conforming to the
+      desired version number. The server may optionally send an
+      alternative option.
+      <code>
+&lt;iq id="000" type="error" from="db.host"&gt;
+  &lt;database 
+      xmlns="http://openaether.org/projects/jabber_database.html"&gt;
+      &lt;version&gt;0.2&lt;/version&gt;
+    &lt;/database&gt;
+&lt;/iq&gt;
+      </code></p></li>
+      <li>If the server has no idea what the client is talking
+      about it should send the appropriate Jabber error code.</li>
+    </ol>
+    </section3>
+  </section2>
+</section1>
+
+<section1 topic='Limitations'>
+  <ol>
+    <li>No joins, roll ups, cubes</li>
+    <li>Views are not differentiated from tables</li>
+    <li>provides basic sql-like functionality only</li>
+    <li>Utilizes <em>lowest common denominator</em> approach</li>
+  </ol>
+</section1>
+
+<section1 topic='Todos'>
+  <ul>
+    <li>define procedures; what they are and how they work</li>
+    <li>determine value of adding administration features</li>
+  </ul>
+</section1>
+
+<section1 topic='Thanks'>
+  <p>Thanks to Russell Davis (ukscone) for fine tuning the layout and wording of this jep. It would probably have been unreadable if it wasn't for him.</p>
+</section1>
+
+<section1 topic='DTD and Schema'>
+  <section2 topic='DTD'>
+    <code>
+&lt;!ELEMENT version (#PCDATA)&gt;
+&lt;!ELEMENT error (#PCDATA)&gt;
+&lt;!ELEMENT sql(#PCDATA)&gt;
+&lt;!ELEMENT database (table | sproc | sql | error)*&gt;
+&lt;!ELEMENT table (col | where | error)*&gt;
+&lt;!ELEMENT where (col+)&gt;
+&lt;!ELEMENT col (#PCDATA)&gt;
+&lt;!ELEMENT proc(col | result | error)*&gt;
+&lt;!ELEMENT result (#PCDATA)&gt;
+&lt;!ATTLIST error code CDATA #IMPLIED&gt;
+&lt;!ATTLIST database name CDATA #IMPLIED&gt;
+&lt;!ATTLIST table 
+name CDATA #IMPLIED 
+    permission (read | write | both) #IMPLIED 
+    limit CDATA #IMPLIED
+&gt;
+&lt;!ATTLIST proc name CDATA #IMPLIED&gt;
+&lt;!ATTLIST col 
+    name CDATA #IMPLIED 
+    size CDATA #IMPLIED 
+    op (eq | neq | lt | gt | let | get | null) #IMPLIED 
+    conj (not | or | and ) #IMPLIED 
+    permission (read | write | both) #IMPLIED 
+    type (bit | tinyint | integer | utinyint | uinteger | 
+          float | numeric | date | datetime | timestamp | 
+          time | char | vchar | text | blob) #IMPLIED 
+&gt;
+    </code>
+  </section2>
+  <section2 topic='Schema'>
+    <p><strong>Anyone care to do this?</strong></p>
+  </section2>
+</section1>
+</jep>

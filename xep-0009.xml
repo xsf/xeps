@@ -1,0 +1,316 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM '../jep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+<jep>
+<header>	
+  <title>Jabber-RPC</title>
+  <abstract>This JEP defines a method for transporting XML-RPC encoded requests and responses over Jabber/XMPP.</abstract>
+  &LEGALNOTICE;
+  <number>0009</number>
+  <status>Final</status>
+  <type>Standards Track</type>
+  <jig>Standards JIG</jig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XML-RPC</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>jabber-rpc</shortname>
+  <schemaloc>
+    <url>http://jabber.org/protocol/jabber-rpc/jabber-rpc.xsd</url>
+  </schemaloc>
+  <author>
+    <firstname>DJ</firstname>
+    <surname>Adams</surname>
+    <email>dj.adams@pobox.com</email>
+    <jid>dj@gnu.mine.nu</jid>
+  </author>
+  <revision>
+    <version>2.1</version>
+    <date>2006-02-09</date>
+    <initials>psa</initials>
+    <remark>Defined error handling, service discovery, security considerations, and Jabber Registrar considerations.</remark>
+  </revision>
+  <revision>
+    <version>2.0</version>
+    <date>2002-12-09</date>
+    <initials>psa</initials>
+    <remark>Per a vote of the Jabber Council, changed status to Final.</remark>
+  </revision>
+  <revision>
+    <version>1.0</version>
+    <date>2001-09-27</date>
+    <initials>psa</initials>
+    <remark>Changed status to Draft</remark>
+  </revision>
+  <revision>
+    <version>0.1</version>
+    <date>2001-09-14</date>
+    <initials>dja</initials>
+    <remark>Initial version</remark>
+  </revision>
+</header>
+<section1 topic='Introduction'>
+  <p>&xmlrpc; is a method of encoding RPC requests and responses in XML. The original specification defines HTTP (see &rfc2068;) as the only valid transport for XML-RPC payloads.</p>
+  <p>Various initiatives exist already to transport XML-RPC payloads over Jabber. These initiatives were independent of each other and used slightly differing methods (e.g. carrying the payload in a <message/> element as opposed to an &IQ; stanza), resulting in potential interoperability problems.</p>
+  <p>A working session during JabberCon 2001 resulted in a <link url="http://www.pipetree.com/jabber/jrpc.html">formalisation</link> of a single method. This JEP describes that method, which is labelled as Jabber-RPC to differentiate it from XML-RPC itself.</p>
+</section1>
+<section1 topic='Jabber-RPC'>
+  <p>The &IQ; stanza is used to transport XML-RPC payloads. XML-RPC requests are transported using an &IQ; stanza of type "set", and XML-RPC responses are transported using an &IQ; stanza of type "result". An &IQ; stanza MUST NOT contain more than one request or response.</p>
+  <p>The &IQ; stanza contains a single &QUERY; sub-element in the jabber:iq:rpc namespace. The direct child of the &QUERY; element will be either a single &lt;methodCall/&gt; element (in the case of a request) or a single &lt;methodResponse/&gt; element (in the case of a response). This child element will contain the XML-RPC payload. Note that the XML declaration that normally appears at the head of an XML-RPC request or response when transported as the payload of an HTTP POST request MUST BE omitted when it is transported via a Jabber &IQ; stanza.</p>
+  <p>The encoding of the Jabber XML stream is UTF-8. It is assumed that the encoding of the XML-RPC payload is also UTF-8.</p>
+  <p>Application-level errors will be indicated within the XML-RPC payload (as is the case with the traditional HTTP-based XML-RPC mechanism). Transport level errors will be indicated in the normal way for &IQ; stanzas -- namely, by an &IQ; stanza of type "error" and the addition of an &lt;error/&gt; tag as a direct child of the &IQ; stanza. There are no specific XML-RPC-related, transport-level errors.</p>
+</section1>
+<section1 topic='Examples'>
+  <example caption='A typical request'><![CDATA[
+<iq type='set' 
+    from='requester@company-b.com/jrpc-client' 
+    to='responder@company-a.com/jrpc-server' 
+    id='rpc1'>
+  <query xmlns='jabber:iq:rpc'>
+    <methodCall>
+      <methodName>examples.getStateName</methodName>
+      <params>
+        <param>
+          <value><i4>6</i4></value>
+        </param>
+      </params>
+    </methodCall>
+  </query>
+</iq>
+  ]]></example>
+  <example caption='A typical response'><![CDATA[
+<iq type='result' 
+    from='responder@company-a.com/jrpc-server' 
+    to='requester@company-b.com/jrpc-client' 
+    id='rpc1'>
+  <query xmlns='jabber:iq:rpc'>
+    <methodResponse>
+      <params>
+        <param>
+          <value><string>Colorado</string></value>
+        </param>
+      </params>
+    </methodResponse>
+  </query>
+</iq>
+  ]]></example>
+  <p>If the requesting entity does not have sufficient permissions to perform remote procedure calls, the responding entity MUST return a &forbidden; error:</p>
+  <example caption='Requesting entity is forbidden to perform remote procedure calls'><![CDATA[
+<iq type='error' 
+    from='responder@company-a.com/jrpc-server' 
+    to='requester@company-b.com/jrpc-client' 
+    id='rpc1'>
+  <query xmlns='jabber:iq:rpc'>
+    <methodCall>
+      <methodName>examples.getStateName</methodName>
+      <params>
+        <param>
+          <value><i4>6</i4></value>
+        </param>
+      </params>
+    </methodCall>
+  </query>
+  <error code='403' type='auth'>
+    <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+  ]]></example>
+</section1>
+<section1 topic='Service Discovery' anchor='disco'>
+  <p>If an entity supports the Jabber-RPC protocol, it SHOULD advertise that fact in response to &jep0030; information ("diso#info") requests by returning an identity of "automation/rpc" and a feature of "jabber:iq:rpc":</p>
+  <example caption='A disco#info query'><![CDATA[
+<iq type='get' 
+    from='requester@company-b.com/jrpc-client' 
+    to='responder@company-a.com/jrpc-server' 
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+  ]]></example>
+  <example caption='A disco#info response'><![CDATA[
+<iq type='result' 
+    to='requester@company-b.com/jrpc-client' 
+    from='responder@company-a.com/jrpc-server' 
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='automation' type='rpc'/>
+    <feature var='jabber:iq:rpc'/>
+  </query>
+</iq>
+  ]]></example>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>An entity that supports Jabber-RPC SHOULD establish a "whitelist" of entities that are allowed to perform remote procedure calls and MUST return a &forbidden; error if entities with insufficient permissions attempt such calls.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This JEP requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic="Jabber Registrar Considerations" anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>The &REGISTRAR; includes 'jabber:iq:rpc' in its registry of protocol namespaces.</p>
+  </section2>
+  <section2 topic='Service Discovery Identity' anchor='registrar-disco'>
+    <p>The Jabber Registrar includes a Service Discovery type of "rpc" within the "automation" category in its registry of service discovery identities.</p>
+  </section2>
+</section1>
+<section1 topic='XML Schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='jabber:iq:rpc'
+    xmlns='jabber:iq:rpc'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      JEP-0009: http://www.jabber.org/jeps/jep-0009.html
+
+      There is no official XML schema for XML-RPC. The main body 
+      of this schema has been borrowed from an unofficial schema 
+      representation contained in the book "Processing XML With 
+      Java" by Elliotte Rusty Harold, as located at:
+
+      http://www.ibiblio.org/xml/books/xmljava/chapters/ch02s05.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name='query'>
+    <xs:complexType>
+      <xs:choice minOccurs='0' maxOccurs='1'>
+        <xs:element ref='methodCall'/>
+        <xs:element ref='methodResponse'/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="methodCall">
+    <xs:complexType>
+      <xs:all>
+        <xs:element name="methodName">
+          <xs:simpleType>
+            <xs:restriction base="ASCIIString">
+              <xs:pattern value="([A-Za-z0-9]|/|\.|:|_)*" />
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:element>
+        <xs:element name="params" minOccurs="0" maxOccurs="1">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="param"  type="ParamType" 
+                           minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+          </xs:complexType>
+         </xs:element>
+      </xs:all>
+    </xs:complexType>  
+  </xs:element>
+
+  <xs:element name="methodResponse">
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name="params">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="param" type="ParamType"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="fault">
+          <!-- What can appear inside a fault is very restricted -->
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="value">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="struct"> 
+                      <xs:complexType> 
+                        <xs:sequence> 
+                          <xs:element name="member" 
+                                       type="MemberType">
+                          </xs:element>
+                          <xs:element name="member" 
+                                       type="MemberType">
+                          </xs:element>
+                        </xs:sequence>
+                      </xs:complexType>
+                    </xs:element>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+         </xs:element>
+      </xs:choice>
+    </xs:complexType>  
+  </xs:element>
+
+  <xs:complexType name="ParamType">
+    <xs:sequence>
+      <xs:element name="value" type="ValueType"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ValueType" mixed="true">
+    <xs:choice>
+      <xs:element name="i4"            type="xs:int"/>
+      <xs:element name="int"           type="xs:int"/>
+      <xs:element name="string"        type="ASCIIString"/>
+      <xs:element name="double"        type="xs:decimal"/>
+      <xs:element name="Base64"        type="xs:base64Binary"/>
+      <xs:element name="boolean"       type="NumericBoolean"/>
+      <xs:element name="dateTime.iso8601" type="xs:dateTime"/>
+      <xs:element name="array"         type="ArrayType"/>
+      <xs:element name="struct"        type="StructType"/>
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="StructType">
+    <xs:sequence>
+      <xs:element name="member" type="MemberType" 
+                   maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="MemberType">
+    <xs:sequence>
+      <xs:element name="name"  type="xs:string" />
+      <xs:element name="value" type="ValueType"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ArrayType">
+    <xs:sequence>
+      <xs:element name="data">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="value"  type="ValueType" 
+                         minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:simpleType name="ASCIIString">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="([ -~]|\n|\r|\t)*" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="NumericBoolean">
+    <xs:restriction base="xs:boolean">
+      <xs:pattern value="0|1" />
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+  ]]></code>
+</section1>
+</jep>

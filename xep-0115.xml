@@ -1,0 +1,295 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM '../jep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+<jep>
+  <header>
+    <title>Entity Capabilities</title>
+    <abstract>This JEP defines a protocol for broadcasting and discovering client, device, or generic entity capabilities in a way that minimizes network impact.</abstract>
+    &LEGALNOTICE;
+    <number>0115</number>
+    <status>Draft</status>
+    <type>Standards Track</type>
+    <jig>Standards JIG</jig>
+    <dependencies>
+      <spec>XMPP Core</spec>
+      <spec>XMPP IM</spec>
+      <spec>JEP-0030</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>caps</shortname>
+    <schemaloc>
+      <url>http://jabber.org/protocol/caps/caps.xsd</url>
+    </schemaloc>
+    &hildjj;
+    &stpeter;
+    <revision>
+      <version>1.1</version>
+      <date>2004-10-29</date>
+      <initials>psa</initials>
+      <remark>Corrected ext attribute to be of type NMTOKENS; clarified that values of the ext attribute may change during a session.</remark>
+    </revision>
+    <revision>
+      <version>1.0</version>
+      <date>2004-08-01</date>
+      <initials>psa</initials>
+      <remark>Per a vote of the Jabber Council, advanced status to Draft.</remark>
+    </revision>
+    <revision>
+      <version>0.7</version>
+      <date>2004-06-29</date>
+      <initials>jjh/psa</initials>
+      <remark>Added several items to the Security Considerations; clarified naming requirements regarding 'node', 'ver', and 'ext' attributes.</remark>
+    </revision>
+    <revision>
+      <version>0.6</version>
+      <date>2004-04-25</date>
+      <initials>psa</initials>
+      <remark>Made a number of editorial adjustments.</remark>
+    </revision>
+    <revision>
+      <version>0.5</version>
+      <date>2004-01-05</date>
+      <initials>psa</initials>
+      <remark>Specified that the protocol can be used whenever presence is used (e.g., by gateways); improved the XML schema; made several editorial adjustments.</remark>
+    </revision>
+    <revision>
+      <version>0.4</version>
+      <date>2003-09-04</date>
+      <initials>jjh</initials>
+      <remark>IQ gets must be to a resource, since they are intended to go to a particular session.</remark>
+    </revision>
+    <revision>
+      <version>0.3</version>
+      <date>2003-09-02</date>
+      <initials>jjh</initials>
+      <remark>Servers MUST strip extras changed to MAY, due to implementer feedback.</remark>
+    </revision>
+    <revision>
+      <version>0.2</version>
+      <date>2003-08-28</date>
+      <initials>jjh</initials>
+      <remark>Add more clarifying assumptions and requirements, make
+        it clear that clients don't have to send capabilities every
+        time if the server is optimizing.</remark>
+    </revision>
+    <revision>
+      <version>0.1</version>
+      <date>2003-08-27</date>
+      <initials>jjh</initials>
+      <remark>Initial version.</remark>
+    </revision>
+  </header>
+  <section1 topic='Introduction' anchor='intro'>
+    <p>It is often desirable for a Jabber/XMPP application (commonly but not necessarily a client) to take different actions depending on the capabilities of another application from which it receives presence information. Examples include:</p>
+    <ul>
+      <li>Showing a different set of icons depending on the capabilities of other clients.</li>
+      <li>Not sending &jep0071; content to plaintext clients such as cell phones.</li> 
+      <li>Allowing the initiation of Voice over IP (VoIP) sessions only to clients that support VoIP.</li>
+      <li>Not showing a "Send a File" button if another user's client does not support &jep0096;.</li>
+    </ul>
+    <p>Recently, some existing Jabber clients have begun sending &jep0092; requests to each entity from which they receive presence.  That solution is impractical on a larger scale, particularly for users or applications with large rosters. This JEP proposes a more robust and scalable solution: namely, a presence-based mechanism for exchanging information about entity capabilities. <note>This proposal is not limited to clients, and could be used by any entity that exchanges presence with another entity, e.g., a gateway. However, this JEP uses the example of clients throughout.</note></p>
+  </section1>
+  <section1 topic='Assumptions' anchor='assumptions'>
+    <p>This JEP makes several assumptions:</p>
+    <ul>
+      <li>The type of client I am using is of interest to the people on my roster.</li>
+      <li>Clients for the people on my roster might want to make user interface decisions based on my capabilities.</li>
+      <li>Different instances of the same client (including version) have the same base capabilities.</li>
+      <li>Some clients will have bundles of functionality that can be enabled and disabled.</li>
+      <li>One instance of a given client may not know about all of the possible bundles of functionality that can be enabled and disabled (for example, plugins written to a client SDK).</li>
+      <li>Members of a community tend to cluster around a small set of clients.  More specifically, multiple people in my roster use the same client, and they upgrade versions relatively slowly (commonly a few times a year, perhaps once a week at most, certainly not once a minute).</li>
+      <li>Some clients are running against servers without server-to-server connectivity enabled, and without access to the Internet via HTTP.</li>
+      <li>Conversations are possible between users who are not on each other's roster.</li>
+      <li>Client capabilities may change over the course of a session, due to features being enabled and disabled.</li>
+    </ul>
+  </section1>
+
+  <section1 topic='Requirements' anchor='reqs'>
+    <p>The protocol defined herein addresses the following requirements:</p>
+    <ol>
+      <li>Clients MUST be able to participate even if they support only &xmppcore;, &xmppim;, and &jep0030;.</li>
+      <li>Clients MUST be able to participate even if they are on networks without connectivity to other XMPP servers, services offering specialized XMPP extensions, or HTTP servers.<note>These first two requirements effectively eliminated &jep0060; as a possible implementation of entity capabilities.</note></li>
+      <li>Clients MUST be able to retrieve information without querying each user.</li>
+      <li>Since presence is normally broadcasted to many users, the byte size of the proposed extension MUST be as small as possible.</li>
+      <li>It MUST be possible to write a &jep0045; implementation that passes the given information along.</li>
+      <li>It MUST be possible to publish a change in capabilities within a single session.</li>
+      <li>Server infrastructure above and beyond that defined in <cite>XMPP Core</cite> and <cite>XMPP IM</cite> MUST NOT be required for this approach to work, although additional server infrastructure MAY be used for optimization purposes.</li>
+    </ol>
+  </section1>
+
+  <section1 topic='Use Cases' anchor='usecases'>
+    <section2 topic='Advertising Capabilities' anchor='advertise'>
+      <p>Each time a conformant client sends presence, it annotates that presence with an element that specifies the client type, the version of that client, and which feature bundles (if any) are currently enabled. Unless the server optimizations shown later are being used, the client MUST send this with every presence change (except for unavailable presence) to enable existing servers to remember the last presence for use in responding to probes. The client MUST send the <strong>'node'</strong> and <strong>'ver'</strong> attributes.</p>
+      <p>In addition, the client MAY send an <strong>'ext'</strong> attribute (short for "extensions") if it has one or more feature bundles to advertise. A feature bundle is any non-standard addition or extension to the core application, such as a client plugin. If more than one feature bundle is advertised, the value of the <strong>'ext'</strong> attribute MUST be a space-separated list of bundle names. 
+         <note>Each extension name MUST be of type NMTOKEN, where multiple extension names are separated by the white space character #x20, resulting in a tokenized attribute type of NMTOKENS (see Section 3.3.1 of &w3xml;).</note>
+       The client MUST NOT send an <strong>'ext'</strong> attribute if there are no interesting non-core features enabled. The names of the feature bundles MUST NOT be used for semantic purposes: they are merely identifiers that will be used in other use cases. If bundles are added or substracted during an entity's session (e.g., a user plugs in a video camera), the entity SHOULD update the value of the 'ext' attribute to reflect the changed capabilities and send a new presence broadcast. If a feature bundle itself changes in any way (e.g., a user installs an updated version of a client plugin), the application MUST change the bundle name and SHOULD send a new presence broadcast.</p>
+      <p>The values of the <strong>'node'</strong>, <strong>'ver'</strong>, and <strong>'ext'</strong> attributes MUST NOT contain the '#' character, since that character is used as a separator in the <link url="#discover">Discovering Capabilities</link> use case.</p>
+
+      <example caption='Annotated presence sent'><![CDATA[
+<presence>
+  <c xmlns='http://jabber.org/protocol/caps'
+     node='http://exodus.jabberstudio.org/caps'
+     ver='0.9'/>
+</presence>
+]]></example>
+      <example caption='Annotated presence sent, with feature extensions'><![CDATA[
+<presence>
+  <c xmlns='http://jabber.org/protocol/caps'
+     node='http://exodus.jabberstudio.org/caps'
+     ver='0.9'
+     ext='jingle ftrans xhtml'/>
+</presence>
+]]></example>
+    </section2>
+
+    <section2 topic="Discovering Capabilities" anchor='discover'>
+      <p>Once someone on my roster knows what client I am using, they need to be able to figure out what features are supported by that client.  The client that received the annotated presence sends a <strong>disco#info</strong> request (as defined in <strong>JEP-0030: Service Discovery</strong>) to <em>exactly</em> one of the users that sent a particular combination of <strong>node</strong> and <strong>ver</strong>. If the requestor has received the same annotation from multiple JIDs, the requestor SHOULD pick a random JID from that list to which the requestor will send the <strong>disco#info</strong> request.</p>
+
+      <p>The <strong>disco#info</strong> request is sent to a JID + node combination that consists of the chosen <strong>&lt;user@host/resource&gt;</strong> JID and a service discovery <strong>node</strong> that is constructed as follows: concatenate (1) the value of the caps <strong>'node'</strong> attribute, (2) the "#" character, and (3) the version number specified in the caps <strong>'ver'</strong> attribute.</p>
+
+      <example caption='Disco#info request for client#version'><![CDATA[
+<iq type='get' to='randomuser1@capulet.com/resource'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+         node='http://exodus.jabberstudio.org/caps#0.9'/>
+</iq>
+]]></example>
+      
+      <p>Subsequent requests MAY be made to determine the info for each extension. These requests MUST be sent to a random <strong>&lt;user@host/resource&gt;</strong> JID that sent a caps annotation that included a particular <strong>node</strong>/<strong>ext</strong> combination. The <strong>disco#info</strong> request shall be sent to a JID + node combination that consists of the chosen JID and a service discovery <strong>node</strong> that is constructed as follows: concatenate (1) the value of the caps <strong>'node'</strong> attribute, (2) the "#" character, and (3) the extension name specified by one of the space-separated names in the caps <strong>'ext'</strong> attribute. The requestor SHOULD try to use different JIDs for each of these requests, as well as for the first request.</p>
+      
+      <example caption='Disco#info requests for client#extension'><![CDATA[
+<iq type='get' to='randomuser2@capulet.com/resource'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+         node='http://exodus.jabberstudio.org/caps#jingle'/>
+</iq>
+
+<iq type='get' to='randomuser3@capulet.com/resource'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+         node='http://exodus.jabberstudio.org/caps#ftrans'/>
+</iq>
+
+<iq type='get' to='randomuser4@capulet.com/resource'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+         node='http://exodus.jabberstudio.org/caps#xhtml'/>
+</iq>
+]]></example>
+
+      <p>All of the responses to the <strong>disco#info</strong> queries SHOULD be cached. If a particular entity cannot store the responses, it SHOULD NOT make the requests. An entity SHOULD NOT make the service discovery requests unless the information is required for some local functionality. An entity MUST NOT ever make a request to another entity that has the same version of the same application as the requesting entity, except for extensions that are not supported by the requestor's installation (e.g., one "Exodus 0.9" client MUST NOT query another "Exodus 0.9" client unless the second client has advertised an extension or plugin that the first client does not have).</p>
+    </section2>
+
+    <section2 topic='Sending Messages to Unsubscribed Entities' anchor='sendmsg'>
+      <p>If an application sends message to an entity from which it has not received presence, it MAY choose to append a capabilities annotation to <em>only</em> the first message sent to that entity within a particular conversation thread or "session". The application MUST NOT append a capabilities annotation to later messages unless its capabilities have changed (e.g., the value of the 'ext' has changed as described above) and MUST NOT send the annotation to entities from which it has received presence. Also, an application MUST NOT send the capabilities annotation to entities which are in a user's roster (or equivalent entity store, as in a gateway) with subscription='both' or subscription='to' (since presence would have been received from these entities if they were online).</p>
+      
+      <example caption='Message including capabilities'><![CDATA[
+<message to='romeo@example.net' 
+         from='juliet@example.com/balcony'>
+  <thread>thread1</thread>
+  <body>Art thou not Romeo, and a Montague?</body>
+  <c xmlns='http://jabber.org/protocol/caps'
+     node='http://exodus.jabberstudio.org/caps'
+     ver='0.9'
+     ext='xhtml'/>
+</message>
+]]></example>
+      
+      <p>If the recipient responds to one of these annotated messages, the first message back in the other direction SHOULD be annotated with capabilities.</p>
+      <example caption='Response message including capabilities'><![CDATA[
+<message from='romeo@example.net/orchard' 
+         to='juliet@example.com/balcony'>
+  <thread>thread1</thread>
+  <body>Neither, fair saint, if either thee dislike.</body>
+  <c xmlns='http://jabber.org/protocol/caps'
+     node='http://exodus.jabberstudio.org/caps'
+     ver='0.9'/>
+</message>
+]]></example>
+      <p>Alternatively, unsubscribed entities MAY send directed presence to each other, for which the same rules apply as listed above for messages.</p>
+    </section2>
+  </section1>
+
+  <section1 topic='Server Optimizations' anchor='optimizations'>
+    <p>A server that is managing an entity's session MAY choose to optimize traffic through the server. In this case, the server MAY strip off redundant capabilities annotations. Because of this, receivers of annotations MUST NOT expect an annotation on every presence packet they receive. If the server wants to perform this traffic optimization, it MUST ensure that the first presence each subscriber receives contains the annotation. The server MUST also ensure that any changes in the annotation (typically in the <strong>'ext'</strong> attribute) are sent to all subscribers.</p>
+
+      <p>A client MAY query the server using <strong>disco#info</strong> to determine if the server supports the <strong>'http://jabber.org/protocol/caps'</strong> feature. If so, the server MUST perform the optimization delineated above, and the client MAY choose to only send the capabilities annotation on the first presence packet, as well as whenever its capabilities change.</p>
+
+      <example caption='Disco#info request for server optimization'><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    to='capulet.com'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+
+<iq from='capulet.com'
+    to='juliet@capulet.com/balcony'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='http://jabber.org/protocol/caps'/>
+    ...
+  </query>
+</iq>
+]]></example>
+  </section1>
+
+  <section1 topic='Implementation Notes' anchor='impl'>
+    <p>If capabilities information has not been received from another entity, an application MUST assume that the other entity does not support capabilities.</p>
+  </section1>
+
+  <section1 topic='Error Codes' anchor='error'>
+    <p>No application-specific error codes are defined by this document. See <strong>JEP-0030: Service Discovery</strong> for a list of potential service discovery error codes.</p>
+  </section1>
+
+  <section1 topic='Security Considerations' anchor='security'>
+    <p>Use of the protocol specified in this JEP might make some client-specific forms of attack slightly easier, since the attacker could more easily determine the type of client being used. However, since most clients respond to <strong>jabber:iq:version</strong> requests without performing access control checks, there is no new vulnerability. Entities that wish to restrict access to capabilities information SHOULD use the privacy lists protocol defined in <strong>XMPP IM</strong> to define appropriate communications blocking (e.g., an entity MAY choose to allow IQ requests only from "trusted" entities, such as those with whom it has a subscription of "both").</p>
+    <p>It is possible (though unlikely) for a bad actor or rogue application to poison other entities by providing incorrect information in response to disco#info requests. To guard against such poisoning, a requesting entity MAY send disco#info requests to multiple entities that match the same <strong>node</strong>/<strong>ver</strong> or <strong>node</strong>/<strong>ext</strong> combination and then compare the results to ensure consistency. The requesting entity SHOULD NOT send the same request to more than five entities and MUST ensure that the entities are truly different by not sending the same request to multiple entities for which the &lt;user@host&gt; portion matches.</p>
+  </section1>
+
+  <section1 topic='IANA Considerations' anchor='iana'>
+    <p>This JEP requires no interaction with &IANA;. </p>
+  </section1>
+  <section1 topic='Jabber Registrar Considerations' anchor='registrar'>
+    <p>Upon advancement of this JEP to a status of Draft, the &REGISTRAR; shall add <strong>'http://jabber.org/protocol/caps'</strong> to its registries of protocol namespaces and service discovery features.</p>
+    <p>If it is useful or interesting, the Registrar may also provide registration of the URIs to be used in the <strong>'node'</strong> attribute, but since these URIs can be scoped according to well-defined existing rules, this is not necessary.</p>
+  </section1>
+  <section1 topic='XML Schema' anchor='schema'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='http://jabber.org/protocol/caps'
+    xmlns='http://jabber.org/protocol/caps'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      JEP-0115: http://www.jabber.org/jeps/jep-0115.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name='c'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='ext' type='xs:NMTOKENS' use='optional'/>
+          <xs:attribute name='node' type='xs:string' use='required'/>
+          <xs:attribute name='ver' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+    ]]></code>
+  </section1>
+</jep>

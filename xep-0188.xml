@@ -1,0 +1,748 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM '../jep.ent'>
+%ents;
+<!ENTITY esupy "e<span class='super'>y</span>">
+<!ENTITY dsupx "d<span class='super'>x</span>">
+<!ENTITY gsupx "g<span class='super'>x</span>">
+<!ENTITY gsupy "g<span class='super'>y</span>">
+<!ENTITY NsubA "N<span class='sub'>A</span>">
+<!ENTITY NsubB "N<span class='sub'>B</span>">
+<!ENTITY CsubA "C<span class='sub'>A</span>">
+<!ENTITY CsubB "C<span class='sub'>B</span>">
+<!ENTITY MsubA "M<span class='sub'>A</span>">
+<!ENTITY MsubB "M<span class='sub'>B</span>">
+<!ENTITY KMsubA "KM<span class='sub'>A</span>">
+<!ENTITY KMsubB "KM<span class='sub'>B</span>">
+<!ENTITY KCsubA "KC<span class='sub'>A</span>">
+<!ENTITY KCsubB "KC<span class='sub'>B</span>">
+<!ENTITY KSsubA "KS<span class='sub'>A</span>">
+<!ENTITY KSsubB "KS<span class='sub'>B</span>">
+<!ENTITY twosup32 "2<span class='super'>32</span>">
+<!ENTITY twosup2n "2<span class='super'>2n-1</span>">
+<!ENTITY CBeCAx2n1 "&CsubB; = &CsubA; XOR 2<span class='super'>n-1</span>">
+<!ENTITY IDA "ID<span class='sub'>A</span>">
+<!ENTITY IDB "ID<span class='sub'>B</span>">
+<!ENTITY formA "form<span class='sub'>A</span>">
+<!ENTITY formB "form<span class='sub'>B</span>">
+<!ENTITY macA "mac<span class='sub'>A</span>">
+<!ENTITY macB "mac<span class='sub'>B</span>">
+<!ENTITY signA "sign<span class='sub'>A</span>">
+<!ENTITY signB "sign<span class='sub'>B</span>">
+<!ENTITY signsA "signs<span class='sub'>A</span>">
+<!ENTITY signsB "signs<span class='sub'>B</span>">
+<!ENTITY pubKeyA "pubKey<span class='sub'>A</span>">
+<!ENTITY pubKeyB "pubKey<span class='sub'>B</span>">
+<!ENTITY signKeyA "signKey<span class='sub'>A</span>">
+<!ENTITY signKeyB "signKey<span class='sub'>B</span>">
+<!ENTITY pubKeysA "pubKeys<span class='sub'>A</span>">
+<!ENTITY signKeysA "signKeys<span class='sub'>A</span>">
+<!ENTITY x1xZ "x<span class='sub'>1</span>...x<span class='sub'>Z</span>">
+<!ENTITY e1eZ "e<span class='sub'>1</span>...e<span class='sub'>Z</span>">
+]>
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+<jep>
+<header>
+  <title>Cryptographic Design of Encrypted Sessions</title>
+  <abstract>This document describes the requirements and cryptographic design that underpin the XMPP protocol extensions Encrypted Sessions and Offline Encrypted Sessions.</abstract>
+  &LEGALNOTICE;
+  <number>0188</number>
+  <status>Experimental</status>
+  <type>Informational</type>
+  <jig>Standards JIG</jig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>RFC 2104</spec>
+  </dependencies>
+  <supersedes>None</supersedes>
+  <supersededby>None</supersededby>
+  <shortname>cryptoesession</shortname>
+  &ianpaterson;
+  <revision>
+    <version>0.2</version>
+    <date>2006-07-19</date>
+    <initials>ip</initials>
+    <remark><p>Removed public key IDs from Offline options</p></remark>
+  </revision>
+  <revision>
+    <version>0.1</version>
+    <date>2006-07-18</date>
+    <initials>ip</initials>
+    <remark><p>Initial version (extracted from JEP-0116 version 0.9).</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p><em>Note: The protocols developed according to the requirements and cryptographic design described in this JEP are documented in &jep0116; and &jep0187;. The information in those JEPs should be sufficient for implementors. This purely informative JEP is primarily for people interested in the design and analysis of those protocols.</em></p>
+  <p>As specified in &rfc3920;, XMPP is an XML streaming protocol that enables the near-real-time exchange of XML fragments between any two (or more) network endpoints. To date, the main application built on top of the core XML streaming layer is instant messaging (IM) and presence, the base extensions for which are specified in &rfc3921;. There are three first-level elements of XML streams (&MESSAGE;, &PRESENCE;, and &IQ;); each of these "XML stanza" types has different semantics, which can complicate the task of defining a generalized approach to end-to-end encryption for XMPP. In addition, XML stanzas can be extended (via properly-namespaced child elements) for a wide variety of functionality.</p>
+  <p>XMPP is a session-oriented communication technology: normally, a client authenticates with a server and maintains a long-lived connection that defines the client's XMPP session. Such stream-level sessions may be secured via channel encryption using Transport Level Security (&rfc2246;), as specified in Section 5 of <cite>RFC 3920</cite>. However, there is no guarantee that all hops will implement or enforce channel encryption (or that intermediate servers are trustworthy), which makes end-to-end encryption desirable.</p>
+  <p>The encrypted stanzas should be understood by an intermediate server only to the extent required to route them. (One complicating factor is that routing information may include not only the stanza's 'to', 'from', 'type, and 'id' attributes, but also &jep0079; extensions.)</p>
+  <p>The session metaphor also applies to communication between endpoints: for instance, in IM applications, most instant messaging exchanges occur in bursts within limited time periods (e.g., two people may send a fairly large number of messages during a five-minute chat and then not exchange messages again for hours or even days). The XML stanzas exchanged during such a session may not be limited to &MESSAGE; stanzas; for instance, the session may be triggered by a change in one of the parties' presence status (e.g., changing from away to available) and the session may involve the exchange of &IQ; stanzas (e.g., to transfer a file as specified in &jep0096;).</p>
+  <p>The foregoing XMPP communications exist in the context of a one-to-one communication session between two entities. However, several forms of XMPP communication exist outside the context of one-to-one communication sessions:</p>
+  <ul>
+    <li>Many-to-many sessions, such as a text conference in a chatroom as specified in &jep0045;.</li>
+    <li>One-to-many "broadcast", such as undirected presence stanzas sent from one user to many contacts (see <cite>RFC 3921</cite>) and data syndication implemented using &jep0060;.</li>
+    <li>One-to-one communications that are stored for later delivery rather than delivered immediately, such as so-called "offline messages".</li>
+  </ul>
+</section1>
+
+<section1 topic='Scope' anchor='scope'>
+  <p>Ideally, any technology for end-to-end encryption in XMPP could be extended to cover all the scenarios above as well as one-to-one communication sessions. However, both many-to-many sessions and one-to-many broadcast are deemed out of scope for this JEP.</p>
+  <p>Offline communications are handled via a simple extension to the protocol for one-to-one sessions between two entities that are online simultaneously (see below).</p>
+</section1>
+
+<section1 topic='The Session Approach' anchor='approach'>
+  <p>Existing approaches to encryption of Internet communications have generally assumed that the "thing" to be encrypted has a stable identity or is best understood as a standalone object (e.g., a file or email message); the term "object encryption" well captures this assumption. Both &jep0027; and &rfc3923; assume that XMPP communications are more like the exchange of email messages than they are like an interactive session -- while <cite>Current Jabber OpenPGP Usage</cite> uses "old-style" PGP object encryption and <cite>RFC 3923</cite> uses "new-style" S/MIME object encryption, both specify the use of object encryption. <!--(Another object encryption technology is &w3xmlsig;, which was rejected as a possible approach to end-to-end encryption for XMPP systems because of its inherent complexity and difficulty of implementation.)--></p>
+  <p>However, because XMPP is a session-oriented communication technology, encryption schemes that are appropriate for other Internet technologies may not be appropriate for XMPP. XMPP, with its in-order delivery of XML stanzas, is able to take advantage of more secure approaches to encryption that are not feasible for less dynamic technologies (like email).</p>
+  <p>The session-oriented nature of XMPP implies that the focus should be on "session encryption" rather than "object encryption". The paradigm for XMPP encryption should be something closer to the widely-deployed Secure Shell technology (see &rfc4301; and &rfc4253;) than to traditional encryption of files and standalone email messages.</p>
+  <p>Therefore, this JEP specifies a method for encrypted sessions ("ESessions") that takes advantage of the inherent possibilities and strengths of session encryption as opposed to object encryption. The conceptual model for this approach was inspired by "off-the-record" (OTR) communication, as implemented in the Gaim encryption plugin and described in &otr;. The basic concept is that of an encrypted session which acts as a secure tunnel between two endpoints. Once the tunnel is established, the content of all one-to-one XML stanzas exchanged between the endpoints will be encrypted and then transmitted within a "wrapper" protocol element.</p>
+  <p>Note: In order to gain a thorough understanding of this JEP, it is recommended that the <cite>Off-the-Record Communication</cite> paper is read first.</p>
+</section1>
+
+<section1 topic="Dramatis Personae" anchor='personae'>
+  <p>This JEP introduces two characters to help the reader follow the necessary exchanges:</p>
+  <ol start='1'>
+    <li>"Alice" is the name of the initiator of the ESession.</li>
+    <li>"Bob" is the name of the other participant in the ESession started by Alice.</li>
+  </ol>
+  <p>While Alice and Bob are introduced as "end users", they are simply meant to be examples of Jabber entities. Any directly addressable Jabber entity may participate in an ESession.</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <section2 topic='Security Requirements' anchor='reqs-sec'>
+    <p>This JEP stipulates the following security requirements for end-to-end encryption of XMPP communications:</p>
+    <ul>
+      <li>Confidentiality</li>
+      <li>Integrity</li>
+      <li>Replay protection</li>
+      <li>Perfect forward secrecy</li>
+      <li>Authentication</li>
+      <li>Identity Protection</li>
+      <li>Repudiability</li>
+      <li>Upgradability</li>
+    </ul>
+    <p>Each of these requirements is explained in greater depth below.</p>
+    <section3 topic='Confidentiality' anchor='reqs-encrypt'>
+      <p>The one-to-one XML stanzas exchanged between two entities MUST NOT be understandable to any other entity that might intercept the communications.</p>
+    </section3>
+    <section3 topic='Integrity' anchor='reqs-integrity'>
+      <p>Alice and Bob MUST be sure that no other entity may change the content of the XML stanzas they exchange, or remove or insert stanzas into the ESession undetected.</p>
+    </section3>
+    <section3 topic='Replay Protection' anchor='reqs-replay'>
+      <p>Alice or Bob MUST be able to identify and reject any communications that are copies of their previous communications resent by another entity.</p>
+    </section3>
+    <section3 topic='Perfect Forward Secrecy' anchor='reqs-forward'>
+      <p>The encrypted communication MUST NOT be revealed even if long-lived keys are compromised in the future (e.g., Steve steals Bob's computer). <note>Long-lived keys are typically used for a few years, whereas Offline ESession keys are destroyed as soon as the stanza is decrypted - they typically exist for just a few hours. So Perfect Forward Secrecy should significantly enhance the security even of Offline ESessions.</note></p>
+    </section3>
+    <section3 topic='Authentication' anchor='reqs-auth'>
+      <p>Each party to a conversation MUST know that the other party is who he says he is (Alice must be able to know that Bob really is Bob, and vice versa). <note>The reliable association between an entity and its public keys is beyond the scope of this JEP.</note></p>
+    </section3>
+    <section3 topic='Identity Protection' anchor='reqs-id-protect'>
+      <p>No other entity should be able to identify Alice or Bob. The JIDs they use to route their stanzas are unavoidably vulnerable to interception. However, the public keys they use SHOULD NOT be revealed to other entities using a passive attack. Bob SHOULD also be able to choose between protecting either his public key or Alice's public key from disclosure through active ("man-in-the-middle") attacks.</p>
+    </section3>
+    <section3 topic='Repudiability' anchor='reqs-repudiate'>
+      <p>Alice and Bob MUST be able to repudiate any stanza that occurs within an ESession. After an ESession has finished, it SHOULD NOT be possible to <em>prove cryptographically</em> that any transcript has not been modified by a third party. <note>Naturally, it is possible that Alice or Bob may retain cleartext versions of the exchanged communications; however, that threat is out of scope for this JEP.</note></p>
+    </section3>
+    <section3 topic='Upgradability' anchor='reqs-upgrade'>
+      <p>The protocol must be upgradable so that, if a vulnerability is discovered, a new version can fix it. Alice MUST tell Bob which versions of the protocol she is prepared to support. Then Bob MUST either choose one or reject the ESession. <note>It is exceptionally difficult to design a truly secure authenticated key-exchange protocol. Weaknesses are often only discovered after years of expert cryptographic analysis. In many cases, only the widespread use of a protocol will motivate experts to undertake exhaustive analyses and recommend enhancements.</note></p>
+    </section3>
+  </section2>
+  <section2 topic='Application Requirements' anchor='reqs-xmpp'>
+    <p>In addition to the foregoing security profile, this JEP also stipulates the following application-specific requirements for encrypted communication in the context of Jabber/XMPP technologies:</p>
+    <ul>
+      <li>Generality</li>
+      <li>Implementability</li>
+      <li>Usability</li>
+      <li>Efficiency</li>
+      <li>Flexibility</li>
+      <li>Interoperability</li>
+      <li>Offline "sessions"</li>
+      <li>Object encryption</li>
+    </ul>
+    <p>Each of these is explained in greater depth below.</p>
+    <section3 topic='Generality' anchor='reqs-generality'>
+      <p>The solution should be generally applicable to the full content of any XML stanza type (&MESSAGE;, &PRESENCE;, &IQ;) sent between two entities. It is deemed acceptable for now if the solution does not apply to many-to-many stanzas (e.g., groupchat messages sent within the context of multi-user chat) or one-to-many stanzas (e.g., presence "broadcasts" and pubsub notifications); end-to-end encryption of such stanzas may require separate solutions or extensions to the one-to-one session solution.</p>
+    </section3>
+    <section3 topic='Implementability' anchor='reqs-implement'>
+      <p>The only good security technology is an implemented security technology. The solution should be one that typical client developers can implement in a relatively straightforward and interoperable fashion.</p>
+    </section3>
+    <section3 topic='Usability' anchor='reqs-usable'>
+      <p>The requirement of usability takes implementability one step further by stipulating that the solution must be one that organizations may deploy and humans may use with 100% transparency (with the ease-of-use of https:). Experience has shown that: solutions requiring a full public key infrastructure do not get widely deployed, and solutions requiring any user action are not widely used. We can do better.</p>
+    </section3>
+    <section3 topic='Efficiency' anchor='reqs-efficient'>
+      <p>Cryptographic operations are highly CPU intensive, particularly public key and Diffie-Hellman operations. Cryptographic data structures can be relatively large especially public keys and certificates. The solution should perform efficiently even when CPU and network bandwidth are constrained. The number of stanzas required for ESession negotiation should be minimized.</p>
+    </section3>
+    <section3 topic='Flexibility' anchor='reqs-flexible'>
+      <p>The solution should be compatible with existing (and future) cryptographic algorithms and identity certification schemes (including X.509 and PGP). The protocol should also be able to evolve to correct the weaknesses that are inevitably discovered once any cryptographic protocol is in widespread use.</p>
+    </section3>
+    <section3 topic='Interoperability' anchor='reqs-usable'>
+      <p>Ideally, it would be possible for an XMPP user to exchange encrypted messages (and, potentially, presence information) with users of non-XMPP messaging systems.</p>
+    </section3>
+    <section3 topic='Offline Sessions' anchor='reqs-offline'>
+      <p>Ideally, it should be possible to encrypt one-to-one communications that are stored for later delivery instead of being delivered immediately, such as so-called "offline messages". However, any vulnerabilities introduced to enable offline communications must not make online communications more vulnerable.</p>
+    </section3>
+    <section3 topic='Object Encryption' anchor='reqs-offline'>
+      <p>For cases where a session is not desired, it should be possible to encrypt, sign and send a single stanza in isolation, so-called "object encryption".</p>
+    </section3>
+  </section2>
+</section1>
+
+<section1 topic='Cryptographic Origins - SIGMA' anchor='foundations'>
+  <section2 topic='Introduction' anchor='foundations-intro'>
+    <p>Authenticated key-exchange is the most challenging part of the design of any secure communication protocol. The ESessions key exchange essentially translates the &sigma;<note>Like <cite>RFC 2409</cite>, this protocol uses <em>variant (ii)</em>, as described in Secion 5.4 of the <cite>SIGMA</cite> paper.</note> key-exchange protocol into the syntax of XMPP. The SIGMA approach to Diffie-Hellman Key Agreement (see &rfc2631;) underpins several standard key-exchange protocols including the Internet Key Exchange (IKE) protocol versions 1 and 2 (see &rfc2409; and &rfc4306;).</p>
+    <p>Note: Although this section provides an overview of SIGMA, it is recommended that the <cite>SIGMA</cite> paper is read first in order to gain a thorough understanding of this JEP.</p>
+    <p>The 3-message SIGMA-I-based key exchange protects the identity of the <em>initiator</em> against active attacks. The 4-message SIGMA-R-based key exchange defends the <em>responder's</em> identity against active attacks. The differences between the two versions of the SIGMA protocol are highlighted in the diagrams below.</p>
+  </section2>
+  <section2 topic='SIGMA Parameter Descriptions' anchor='foundations-parameters'>
+    <table caption='SIGMA Overview Parameters'>
+      <tr>
+        <th>Parameter</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>g</td>
+        <td>Diffie-Hellman generator</td>
+      </tr>
+      <tr>
+        <td>x, y</td>
+        <td>Alice and Bob's private Diffie-Hellman keys</td>
+      </tr>
+      <tr>
+        <td>&gsupx;, &gsupy;</td>
+        <td>Alice and Bob's public Diffie-Hellman keys</td>
+      </tr>
+      <tr>
+        <td>&KSsubA;, &KSsubB;</td>
+        <td>The MAC keys that Alice and Bob use to calculate &macA; and &macB;</td>
+      </tr>
+      <tr>
+        <td>&pubKeyA;, &pubKeyB;</td>
+        <td>The public keys that represent the identity of Alice and Bob, and are used to verify their signatures</td>
+      </tr>
+      <tr>
+        <td>&macA;, &macB;</td>
+        <td>The MAC values that associate the shared secret with the identity of Alice or Bob</td>
+      </tr>
+      <tr>
+        <td>&signKeyA;, &signKeyB;</td>
+        <td>The private keys that Alice and Bob use to sign</td>
+      </tr>
+      <tr>
+        <td>&signA;, &signB;</td>
+        <td>Alice's and Bob's signatures of the shared secret</td>
+      </tr>
+      <tr>
+        <td>&KCsubA;, &KCsubB;</td>
+        <td>The cipher keys that Alice and Bob use to encrypt</td>
+      </tr>
+      <tr>
+        <td>&IDA;, &IDB;</td>
+        <td>The encrypted parameters that identify Alice and Bob to each other</td>
+      </tr>
+    </table>
+    <table caption='Key Exchange Parameters'>
+      <tr>
+        <th>Parameter</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>p</td>
+        <td>Diffie-Hellman prime</td>
+      </tr>
+      <tr>
+        <td>e, d</td>
+        <td>Alice and Bob's public Diffie-Hellman keys (the same as &gsupx;, &gsupy;)</td>
+      </tr>
+      <tr>
+        <td>K</td>
+        <td>Shared secret</td>
+      </tr>
+      <tr>
+        <td>HASH</td>
+        <td>Selected hash algorithm</td>
+      </tr>
+      <tr>
+        <td>&NsubA;, &NsubB;</td>
+        <td>Alice and Bob's session freshness nonces (ESession IDs)</td>
+      </tr>
+      <tr>
+        <td>&CsubA;, &CsubB;</td>
+        <td>Block cipher initial counter value for blocks sent by Alice and Bob</td>
+      </tr>
+      <tr>
+        <td>n</td>
+        <td>Block size of selected cipher algorithm in bits</td>
+      </tr>
+      <tr>
+        <td>&KMsubA;, &KMsubB;</td>
+        <td>The MAC keys that Alice and Bob use to protect the integrity of encrypted data</td>
+      </tr>
+      <tr>
+        <td>&MsubA;, &MsubB;</td>
+        <td>The MAC values that Alice and Bob use to confirm the integrity of encrypted data</td>
+      </tr>
+    </table>
+  </section2>
+
+  <section2 topic='SIGMA-I Overview' anchor='foundations-skeleton-i'>
+    <p>The diagram below demonstrates the barest cryptographic skeleton of the SIGMA-I key exchange protocol. Here Bob allows Alice to protect her identity from active attacks, by allowing her to authenticate him before she communicates her identity. Note: The cipher keys (&KCsubA; and &KCsubB;) are different in each direction, making this exchange slightly more conservative than <cite>SIGMA</cite>.</p>
+    <pre>
+<strong>ALICE</strong>&#160;                                               <strong>BOB</strong>&#160;
+                                            &gsupx;
+                                      ------------&gt;
+
+                                                     &macB; = <em>HMAC</em>(&KSsubB;, {&gsupx;, &gsupy;, &pubKeyB;})
+                                                     &signB; = <em>sign</em>(&signKeyB;, &macB;)
+                                                     &IDB; = <em>cipher</em>(&KCsubB;, {&pubKeyB;, &signB;})
+                                         &gsupy;, <highlight>&IDB;</highlight>&#160;
+                                      &lt;------------
+
+<highlight><em>authenticate</em>(&IDB;)</highlight>&#160;
+&macA; = <em>HMAC</em>(&KSsubA;, {&gsupy;, &gsupx;, &pubKeyA;})
+&signA; = <em>sign</em>(&signKeyA;, &macA;)
+&IDA; = <em>cipher</em>(&KCsubA;, {&pubKeyA;, &signA;})
+                                            &IDA;
+                                      ------------&gt;
+
+                                                     <em>authenticate</em>(&IDA;)
+    </pre>
+  </section2>
+
+  <section2 topic='SIGMA-R Overview' anchor='foundations-skeleton-r'>
+    <p>The logic of the SIGMA-R protocol is similar to the SIGMA-I protocol. The diagram below demonstrates the skeleton of the key exchange. After receiving the first message from Alice, Bob chooses to protect his identity from active attacks by by delaying communicating his identity to Alice until he has authenticated her.</p>
+    <pre>
+<strong>ALICE</strong>&#160;                                               <strong>BOB</strong>&#160;
+                                            &gsupx;
+                                      ------------&gt;
+
+                                                     &macB; = <em>HMAC</em>(&KSsubB;, {&gsupx;, &gsupy;, &pubKeyB;})
+                                                     &signB; = <em>sign</em>(&signKeyB;, &macB;)
+                                                     &IDB; = <em>cipher</em>(&KCsubB;, {&pubKeyB;, &signB;})
+                                            &gsupy;
+                                      &lt;------------
+
+&macA; = <em>HMAC</em>(&KSsubA;, {&gsupy;, &gsupx;, &pubKeyA;})
+&signA; = <em>sign</em>(&signKeyA;, &macA;)
+&IDA; = <em>cipher</em>(&KCsubA;, {&pubKeyA;, &signA;})
+                                           &IDA;
+                                      ------------&gt;
+
+                                                     <em>authenticate</em>(&IDA;)
+                                           <highlight>&IDB;
+                                      &lt;------------
+
+<em>authenticate</em>(&IDB;)</highlight>
+    </pre>
+    <p>Note: In practice, Bob could delay calculating &IDB; until after he has authenticated &IDA;.</p>
+  </section2>
+
+  <section2 topic='SIGMA-I Key Exchange' anchor='foundations-core-i'>
+    <p>The diagram below describes exactly the same SIGMA-I key exchange protocol as the <link url='#foundations-skeleton-i'>SIGMA-I skeleton</link> above. It provides much more detail, without specifying any ESession-specific details. Note: The block cipher function, <em>cipher</em>, uses CTR mode.</p>
+    <pre>
+<strong>ALICE</strong>&#160;                                       <strong>BOB</strong>&#160;
+
+x = <em>random</em>()
+e = &gsupx; mod p
+&NsubA; = <em>random</em>()
+                                 e, &NsubA;
+                             ------------&gt;
+                                             &CsubA; = <em>random</em>()
+                                             y = <em>random</em>()
+                                             d = &gsupy; mod p
+                                             &CBeCAx2n1;&#160;
+                                             <em>assert</em> 1 &lt; e &lt; p-1
+                                             K = HASH(&esupy; mod p)
+                                             &KCsubA; = HASH(0, K)
+                                             &KCsubB; = HASH(1, K)
+                                             &KMsubA; = HASH(2, K)
+                                             &KMsubB; = HASH(3, K)
+                                             &KSsubA; = HASH(4, K)
+                                             &KSsubB; = HASH(5, K)
+                                             &NsubB; = <em>random</em>()
+                                             &macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &CsubA;})
+                                             &signB; = <em>sign</em>(&signKeyB;, &macB;)
+                                             &IDB; = <em>cipher</em>(&KCsubB;, &CsubB;, {&pubKeyB;, &signB;})
+                                             &MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)
+                               d, &CsubA;, &NsubB;
+                             &lt;------------
+                                <highlight>&IDB;, &MsubB;</highlight>&#160;
+&CBeCAx2n1;&#160;
+<em>assert</em> 1 &lt; d &lt; p-1
+K = HASH(&dsupx; mod p)
+&KCsubA; = HASH(0, K)
+&KCsubB; = HASH(1, K)
+&KMsubA; = HASH(2, K)
+&KMsubB; = HASH(3, K)
+&KSsubA; = HASH(4, K)
+&KSsubB; = HASH(5, K)
+<highlight><em>assert</em>&#160;&MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)
+{&pubKeyB;, &signB;} = <em>decipher</em>(&KCsubB;, &CsubB;, &IDB;)
+&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &CsubA;})
+<em>verify</em>(&signB;, &pubKeyB;, &macB;)</highlight>&#160;
+&macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;})
+&signA; = <em>sign</em>(&signKeyA;, &macA;)
+&IDA; = <em>cipher</em>(&KCsubA;, &CsubA;, {&pubKeyA;, &signA;})
+&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)
+                                  &IDA;
+                             ------------&gt;
+                                   &MsubA;&#160;
+                                             <em>assert</em>&#160;&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)
+                                             {&pubKeyA;, &signA;} = <em>decipher</em>(&KCsubA;, &CsubA;, &IDA;)
+                                             &macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;})
+                                             <em>verify</em>(&signA;, &pubKeyA;, &macA;)
+    </pre>
+  </section2>
+
+  <section2 topic='SIGMA-R Key Exchange' anchor='foundations-core-r'>
+    <p>The diagram below describes exactly the same SIGMA-R key exchange protocol as the <link url='#foundations-skeleton-r'>SIGMA-R skeleton</link> above. It provides much more detail, without specifying any ESession-specific details. Note: The block cipher function, <em>cipher</em>, uses CTR mode.</p>
+    <pre>
+<strong>ALICE</strong>&#160;                                       <strong>BOB</strong>&#160;
+
+x = <em>random</em>()
+e = &gsupx; mod p
+&NsubA; = <em>random</em>()
+                                 e, &NsubA;
+                             ------------&gt;
+                                             &CsubA; = <em>random</em>()
+                                             y = <em>random</em>()
+                                             d = &gsupy; mod p
+                                             &CBeCAx2n1;&#160;
+                                             <em>assert</em> 1 &lt; e &lt; p-1
+                                             K = HASH(&esupy; mod p)
+                                             &KCsubA; = HASH(0, K)
+                                             &KCsubB; = HASH(1, K)
+                                             &KMsubA; = HASH(2, K)
+                                             &KMsubB; = HASH(3, K)
+                                             &KSsubA; = HASH(4, K)
+                                             &KSsubB; = HASH(5, K)
+                                             &NsubB; = <em>random</em>()
+                                             &macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &CsubA;})
+                                             &signB; = <em>sign</em>(&signKeyB;, &macB;)
+                                             &IDB; = <em>cipher</em>(&KCsubB;, &CsubB;, {&pubKeyB;, &signB;})
+                                             &MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)
+                               d, &CsubA;, &NsubB;
+                             &lt;------------
+&CBeCAx2n1;&#160;
+<em>assert</em> 1 &lt; d &lt; p-1
+K = HASH(&dsupx; mod p)
+&KCsubA; = HASH(0, K)
+&KCsubB; = HASH(1, K)
+&KMsubA; = HASH(2, K)
+&KMsubB; = HASH(3, K)
+&KSsubA; = HASH(4, K)
+&KSsubB; = HASH(5, K)
+&macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;})
+&signA; = <em>sign</em>(&signKeyA;, &macA;)
+&IDA; = <em>cipher</em>(&KCsubA;, &CsubA;, {&pubKeyA;, &signA;})
+&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)
+                                  &IDA;
+                             ------------&gt;
+                                   &MsubA;&#160;
+                                             <em>assert</em>&#160;&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)
+                                             {&pubKeyA;, &signA;} = <em>decipher</em>(&KCsubA;, &CsubA;, &IDA;)
+                                             &macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;})
+                                             <em>verify</em>(&signA;, &pubKeyA;, &macA;)
+                                  <highlight>&IDB;
+                             &lt;------------
+                                   &MsubB;&#160;
+
+<em>assert</em>&#160;&MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)
+{&pubKeyB;, &signB;} = <em>decipher</em>(&KCsubB;, &CsubB;, &IDB;)
+&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &CsubA;})
+<em>verify</em>(&signB;, &pubKeyB;, &macB;)</highlight>
+    </pre>
+  </section2>
+</section1>
+
+<section1 topic='Cryptographic Design' anchor='design'>
+  <p>This section provides an overview of the full ESession key-exchange protocol from a cryptographic point of view. This protocol is based on the <em>full fledge</em> protocol, as described in Appendix B of the <cite>SIGMA</cite> paper. It also uses <em>variant (ii)</em>, as described in Secion 5.4 of the same paper.</p>
+  <section2 topic='ESession Parameter Descriptions' anchor='design-parameters'>
+    <p>The table below describes the parameters that are not found in the <link url='#foundations-parameters'>Parameter Descriptions</link> tables at the start of the previous section.</p>
+    <table caption='ESession Negotiation Parameters'>
+      <tr>
+        <th>Parameter</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>options</td>
+        <td>Includes a set of possible values for each and every ESession parameter (see the ESession Request sub-section in <cite>Encrypted Sessions</cite>), including sets of possible values for p, g, HASH, CIPHER, SIGN</td>
+      </tr>
+      <tr>
+        <td>chosen</td>
+        <td>Includes a chosen value for each ESession parameter</td>
+      </tr>
+      <tr>
+        <td>CIPHER</td>
+        <td>Selected CTR-mode block cipher algorithm</td>
+      </tr>
+      <tr>
+        <td>DECIPHER</td>
+        <td>Selected CTR-mode block decipher algorithm (corresponds to CIPHER)</td>
+      </tr>
+      <tr>
+        <td>SIGN</td>
+        <td>Selected signature algorithm</td>
+      </tr>
+      <tr>
+        <td>VERIFY</td>
+        <td>The selected signature verification algorithm (corresponds to SIGN)</td>
+      </tr>
+      <tr>
+        <td>&x1xZ;</td>
+        <td>Alice's private Diffie-Hellman keys - each value corresponds to one of Z different DH groups</td>
+      </tr>
+      <tr>
+        <td>&e1eZ;</td>
+        <td>The choice of public Diffie-Hellman keys that Alice offers Bob - each value corresponds to one of Z different DH groups (and a different value of x)</td>
+      </tr>
+      <tr>
+        <td>*&signKeysA;</td>
+        <td>All the private keys that Alice is able to use to create signatures</td>
+      </tr>
+      <tr>
+        <td>*&signsB;</td>
+        <td>The set of signatures of &formB; (one for each of Bob's private keys)</td>
+      </tr>
+      <tr>
+        <td>*&pubKeysA;</td>
+        <td>All of Alice's public keys that Bob has access to</td>
+      </tr>
+    </table>
+    <p>* Offline negotiation only</p>
+  </section2>
+  <section2 topic='Online ESession-I Negotiation' anchor='design-online-i'>
+    <p>Alice uses this protocol when Bob is Online. In addition to the key exchange described in the <link url='#foundations-core-i'>SIGMA-I Key Exchange</link> protocol above, she offers Bob a choice of Diffie-Hellman groups with her corresponding values of e, various algorithms and other parameters.</p>
+    <!--The first two forms below negotiate policy, swap Diffie-Hellman public values and the ancillary data necessary for the exchange and authentication. The second message also authenticates the responder. The third message authenticates the initiator and exchanges the final Diffie-Hellman public value.-->
+    <pre>
+<strong>ALICE</strong>&#160;                                   <strong>BOB</strong>&#160;
+
+<em>for</em> g,p &#8712; options
+    x = <em>random</em>()
+    e = &gsupx; mod p
+&NsubA; = <em>random</em>()
+&formA; = {&e1eZ;, options, &NsubA;}
+                                &formA;
+                             ---------&gt;
+
+                                         chosen = {p,g,HASH,CIPHER,SIGN...} = <em>choose</em>(options)
+                                         e = <em>choose</em>(&e1eZ;, p)
+                                         &CsubA; = <em>random</em>()
+                                         y = <em>random</em>()
+                                         d = &gsupy; mod p
+                                         &CBeCAx2n1;&#160;
+                                         <em>assert</em> 1 &lt; e &lt; p-1
+                                         K = HASH(&esupy; mod p)
+                                         &KCsubA; = HASH(0, K)
+                                         &KCsubB; = HASH(1, K)
+                                         &KMsubA; = HASH(2, K)
+                                         &KMsubB; = HASH(3, K)
+                                         &KSsubA; = HASH(4, K)
+                                         &KSsubB; = HASH(5, K)
+                                         &NsubB; = <em>random</em>()
+                                         &formB; = {&CsubA;, chosen, d, &NsubA;, &NsubB;}
+                                         &macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})
+                                         &signB; = SIGN(&signKeyB;, &macB;)
+                                         &IDB; = CIPHER(&KCsubB;, &CsubB;, {&pubKeyB;, &signB;})
+                                         &MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)
+                                &formB;
+                             &lt;---------
+                               <highlight>&IDB;, &MsubB;</highlight>&#160;
+<em>assert</em> chosen &#8712; options
+x = <em>choose</em>(&x1xZ;, p)
+e = &gsupx; mod p
+&CBeCAx2n1;&#160;
+<em>assert</em> 1 &lt; d &lt; p-1
+K = HASH(&dsupx; mod p)
+&KCsubA; = HASH(0, K)
+&KCsubB; = HASH(1, K)
+&KMsubA; = HASH(2, K)
+&KMsubB; = HASH(3, K)
+&KSsubA; = HASH(4, K)
+&KSsubB; = HASH(5, K)
+<highlight><em>assert</em>&#160;&MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)
+{&pubKeyB;, &signB;} = DECIPHER(&KCsubB;, &CsubB;, &IDB;)
+&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})
+VERIFY(&signB;, &pubKeyB;, &macB;)</highlight>&#160;
+&macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;, &formA;})
+&signA; = SIGN(&signKeyA;, &macA;)
+&IDA; = CIPHER(&KCsubA;, &CsubA;, {&pubKeyA;, &signA;})
+&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)
+                                 &IDA;
+                             ---------&gt;
+                               &NsubB;, &MsubA;&#160;
+                                         <em>assert</em>&#160;&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)
+                                         {&pubKeyA;, &signA;} = DECIPHER(&KCsubA;, &CsubA;, &IDA;)
+                                         &macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;, &formA;})
+                                         VERIFY(&signA;, &pubKeyA;, &macA;)
+    </pre>
+  </section2>
+
+  <section2 topic='Online ESession-R Negotiation' anchor='design-online-r'>
+    <p>This protocol is similar to the <link url='#design-online-i'>Online ESession-I Negotiation</link> above, except that after receiving the first message from Alice, Bob chooses to protect his identity from active attacks (by by delaying communicating his identity to Alice until he has authenticated her).</p>
+    <pre>
+<strong>ALICE</strong>&#160;                                   <strong>BOB</strong>&#160;
+
+<em>for</em> g,p &#8712; options
+    x = <em>random</em>()
+    e = &gsupx; mod p
+&NsubA; = <em>random</em>()
+&formA; = {&e1eZ;, options, &NsubA;}
+                                &formA;
+                             ---------&gt;
+
+                                         chosen = {p,g,HASH,CIPHER,SIGN...} = <em>choose</em>(options)
+                                         e = <em>choose</em>(&e1eZ;, p)
+                                         &CsubA; = <em>random</em>()
+                                         y = <em>random</em>()
+                                         d = &gsupy; mod p
+                                         &CBeCAx2n1;&#160;
+                                         <em>assert</em> 1 &lt; e &lt; p-1
+                                         K = HASH(&esupy; mod p)
+                                         &KCsubA; = HASH(0, K)
+                                         &KCsubB; = HASH(1, K)
+                                         &KMsubA; = HASH(2, K)
+                                         &KMsubB; = HASH(3, K)
+                                         &KSsubA; = HASH(4, K)
+                                         &KSsubB; = HASH(5, K)
+                                         &NsubB; = <em>random</em>()
+                                         &formB; = {&CsubA;, chosen, d, &NsubA;, &NsubB;}
+                                         &macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})
+                                         &signB; = SIGN(&signKeyB;, &macB;)
+                                         &IDB; = CIPHER(&KCsubB;, &CsubB;, {&pubKeyB;, &signB;})
+                                         &MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)
+
+                                &formB;
+                             &lt;---------
+<em>assert</em> chosen &#8712; options
+x = <em>choose</em>(&x1xZ;, p)
+e = &gsupx; mod p
+&CBeCAx2n1;&#160;
+<em>assert</em> 1 &lt; d &lt; p-1
+K = HASH(&dsupx; mod p)
+&KCsubA; = HASH(0, K)
+&KCsubB; = HASH(1, K)
+&KMsubA; = HASH(2, K)
+&KMsubB; = HASH(3, K)
+&KSsubA; = HASH(4, K)
+&KSsubB; = HASH(5, K)
+&macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;, &formA;})
+&signA; = SIGN(&signKeyA;, &macA;)
+&IDA; = CIPHER(&KCsubA;, &CsubA;, {&pubKeyA;, &signA;})
+&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)
+                                 &IDA;
+                             ---------&gt;
+                               &NsubB;, &MsubA;&#160;
+                                        <em>assert</em>&#160;&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)
+                                        {&pubKeyA;, &signA;} = DECIPHER(&KCsubA;, &CsubA;, &IDA;)
+                                        &macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;, &formA;})
+                                        VERIFY(&signA;, &pubKeyA;, &macA;)
+                                 <highlight>&IDB;
+                             &lt;---------
+                               &NsubA;, &MsubB;&#160;
+
+<em>assert</em>&#160;&MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)
+{&pubKeyB;, &signB;} = DECIPHER(&KCsubB;, &CsubB;, &IDB;)
+&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})
+VERIFY(&signB;, &pubKeyB;, &macB;)</highlight>
+    </pre>
+  </section2>
+
+  <section2 topic='Offline ESession Negotiation' anchor='design-offline'>
+    <p>Bob uses this protocol to send stanzas to Alice when she is Offline. Note: Since the full <cite>SIGMA</cite> protocol cannot be used if Alice is offline, her identity is not protected.</p>
+    <p>The diagram is split into three phases. First Alice publishes her ESession options before going offline. Later Bob completes the key exchange (and sends her encrypted stanzas that are not shown below) these are all stored by Alice's server. Finally when Alice comes online again she verifies and calculates the decryption key.</p>
+    <p>The differences between this offline protocol and the <link url='#design-online-i'>Online ESession-I Negotiation</link> protocol above are highlighted in the diagram below.</p>
+    <pre>
+<strong>ALICE</strong>&#160;                   <strong>ALICE'S SERVER</strong>&#160;             <strong>BOB</strong>&#160;
+
+<em>for</em> g,p &#8712; options
+    x = <em>random</em>()
+    e = &gsupx; mod p
+&NsubA; = <em>random</em>()
+<highlight>&formA; = {&e1eZ;, options, &NsubA;}
+&signsA; = <em>multi_sign</em>(&signKeysA;, &formA;)
+<em>store</em>(&NsubA;, &x1xZ;, expireTime)
+                   &formA;
+                 --------&gt;
+                   &signsA;&#160;
+
+                         <em>store</em>(&formA;, &signsA;)
+---------------------------------------------------------------------------------------------------------
+                         <em>retrieve</em>(&formA;, &signsA;)
+
+                                             &formA;
+                                           --------&gt;
+                                             &signsA;&#160;
+
+                                                     <em>verify_one</em>(&signsA;, &pubKeysA;, &formA;)</highlight>
+                                                     chosen = {p,g,HASH,CIPHER,SIGN...} = <em>choose</em>(options)
+                                                     e = <em>choose</em>(&e1eZ;, p)
+                                                     &CsubA; = <em>random</em>()
+                                                     y = <em>random</em>()
+                                                     d = &gsupy; mod p
+                                                     &CBeCAx2n1;&#160;
+                                                     <em>assert</em> 1 &lt; e &lt; p-1
+                                                     K = HASH(&esupy; mod p)
+                                                     &KCsubA; = HASH(0, K)
+                                                     &KCsubB; = HASH(1, K)
+                                                     &KMsubA; = HASH(2, K)
+                                                     &KMsubB; = HASH(3, K)
+                                                     &KSsubA; = HASH(4, K)
+                                                     &KSsubB; = HASH(5, K)
+                                                     &NsubB; = <em>random</em>()
+                                                     &formB; = {&CsubA;, chosen, d, &NsubA;, &NsubB;}
+                                                     &macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})
+                                                     &signB; = SIGN(&signKeyB;, &macB;)
+                                                     &IDB; = CIPHER(&KCsubB;, &CsubB;, {&pubKeyB;, &signB;})
+                                                     &MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)
+
+                                             &formB;
+                                           &lt;--------
+                                            &IDB;, &MsubB;&#160;
+
+                         <highlight><em>store</em>(&formB;,&IDB;,&MsubB;)
+---------------------------------------------------------------------------------------------------------
+                         <em>retrieve</em>(&formB;,&IDB;,&MsubB;)</highlight>&#160;
+                   &formB;
+                 &lt;--------
+                  &IDB;, &MsubB;&#160;
+
+<highlight><em>retrieve</em>(&NsubA;, &x1xZ;, expireTime)</highlight>&#160;
+<em>assert</em> now &lt; expireTime
+<em>assert</em> chosen &#8712; options
+x = <em>choose</em>(&x1xZ;, p)
+e = &gsupx; mod p
+&CBeCAx2n1;&#160;
+<em>assert</em> 1 &lt; d &lt; p-1
+K = HASH(&dsupx; mod p)
+&KCsubA; = HASH(0, K)
+&KCsubB; = HASH(1, K)
+&KMsubA; = HASH(2, K)
+&KMsubB; = HASH(3, K)
+&KSsubA; = HASH(4, K)
+&KSsubB; = HASH(5, K)
+<em>assert</em>&#160;&MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)
+{&pubKeyB;, &signB;} = DECIPHER(&KCsubB;, &CsubB;, &IDB;)
+&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})
+VERIFY(&signB;, &pubKeyB;, &macB;)
+    </pre>
+    <p>Note: &KMsubB; is necessary only to allow Bob to terminate the ESession if he comes online before Alice terminates it. The calculation of &KCsubB; and &KSsubB; is not strictly necessary.</p>
+  </section2>
+</section1>
+
+<section1 topic='Security Considerations' anchor='sec'>
+  <p>The security considerations are described in <cite>Encrypted Sessions</cite> and <cite>Offline Encrypted Sessions</cite>.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This JEP requires no interaction with &IANA;. </p>
+</section1>
+
+<section1 topic='Jabber Registrar Considerations' anchor='registrar'>
+  <p>This JEP requires no interaction with the &REGISTRAR;.</p>
+</section1>
+
+<section1 topic='Acknowledgments' anchor='acknowledgments'>
+  <p>The authors would like to thank Ian Goldberg for the time he spent reviewing this protocol and for his invaluable suggestions and comments.</p>
+</section1>
+
+</jep>

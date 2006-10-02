@@ -1,0 +1,236 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM '../jep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+<jep>
+<header>
+  <title>SPIM-Blocking Control</title>
+  <abstract>This JEP allows clients to control how their servers may block SPIM that is addressed to them. It specifies a default privacy list fall-through action.</abstract>
+  &LEGALNOTICE;
+  <number>0159</number>
+  <status>Deferred</status>
+  <type>Standards Track</type>
+  <jig>Standards JIG</jig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>JEP-0030</spec>
+  </dependencies>
+  <supersedes>None</supersedes>
+  <supersededby>None</supersededby>
+  <shortname>spim-control</shortname>
+  &ianpaterson;
+  <revision>
+    <version>0.1</version>
+    <date>2005-09-14</date>
+    <initials>ip</initials>
+    <remark>Initial JEP version.</remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2005-09-08</date>
+    <initials>ip</initials>
+    <remark>First draft.</remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <section2 topic='Motivation' anchor='intro-motive'>
+    <p>The appearance of large public IM services based on &rfc3920; and &rfc3921; created an urgent need to implement protocols that <em>discourage</em> the sending of large quantities of IM SPAM (SPIM) from XMPP clients (connected to legitimate servers) and XMPP servers (with virtual clients) -- all hosted on networks of 'zombie' machines. SPIM is defined here as any type of unsolicited XMPP stanza sent by a 'robot' and delivered to a human, including messages and subscription requests. SPIM has the potential to disrupt people even more than SPAM, because each message interrupts the receiver (humans typically filter SPAM in batch mode).</p>
+    <p>SPIM blocking is more efficiently performed on the receiving server for several reasons:</p>
+    <ul>
+      <li>The sending server may be controlled by the SPIMer.</li>
+      <li>Client implementations are simplified.</li>
+      <li>Client-to-server bandwidth is saved.</li>
+      <li>Consistency with the stanza blocking protocol specified by <cite>RFC 3921</cite>.</li>
+      <li>The use of interactive SPIM recognition techniques (like &jep0158;) does not leak information about the destination client's presence.</li>
+      <li>If the destination client is not online when the stanza is sent, then all SPIM would need to be stored by the server until the user comes back online to decide if it is SPIM.</li>
+      <li>Furthermore, if the sending client is no longer online when the stanza is received, then it would not be possible for the receiving client to use interactive SPIM recognition techniques.</li>
+    </ul>
+    <p>However, no automated SPIM recognition techniques work perfectly all the time. This document is designed to give users control over the SPIM recognition their servers perform on their behalf.</p>
+  </section2>
+  <section2 topic='Requirements' anchor='intro-requirements'>
+    <p>Clients should be able to:</p>
+    <ul>
+      <li>disable SPIM recognition for senders that have been falsely identified as SPIMers</li>
+      <li>stop SPIM from senders that SPIM recognition is failing to block</li>
+      <li>exempt from SPIM recognition stanzas sent by:
+        <ul>
+          <li>specific users</li>
+          <li>users of specific domains</li>
+          <li>members of specific roster groups</li>
+          <li>presence subscribers</li>
+        </ul>
+      </li>
+      <li>rely on the server to automatically exempt from SPIM recognition stanzas sent by other existing correspondents</li>
+    </ul>
+  </section2>
+  <section2 topic='Approach' anchor='intro-approach'>
+    <p>The stanza blocking protocol defined in <cite>RFC 3921</cite> allows a client to control <em>explicitly</em> which senders its server must block stanzas from. Such explicit blocking is suitable for privacy control, but not for filtering SPIM.</p>
+    <p>This document contradicts an <em>assumption</em> expressed in the standard blocking protocol in order to extend client control to SPIM blocking. More specifically, it simply defines a SPIM recognition privacy-list fall-through action that is different from the 'allow' default assumed in <cite>RFC 3921</cite>. <note>The language used in <cite>RFC 3921</cite> Section 10.2 Rule 7 appears to be deliberately vague (informative rather than normative) in order to permit other default fall-through actions. The protocol defined in this document is therefore (arguably) compatible with <cite>RFC 3921</cite>.</note></p>
+  </section2>
+  <section2 topic='Note on SPIM Recognition' anchor='intro-recognition'>
+    <p>The various SPIM recognition procedures that may be employed by the server are beyond the scope of this document. No single measure can differentiate all SPIM perfectly. It is RECOMMENDED that servers implement a combination of complementary SPIM recognition techniques (and other anti-SPIM techniques <note>Other examples of anti-SPIM policies and protocols include: requiring a user to pass a robot challenge before registering a new account, invite-only and/or out-of-band user account registration, providing a standard protocol for reporting SPIM to both the servers involved, server-to-server connection dialback, karma (client-to-server and server-to-server), legal agreements not to send SPIM during user account registration, and IP blocking.</note>).</p>
+    <p>For example, a server could employ traffic and reputation analysis to filter the majority of SPIM, and use <cite>Robot Challenges</cite> to identify the remainder (feeding what it learns back to the traffic and reputation analysis).</p>
+  </section2>
+</section1>
+
+<section1 topic='Discovery' anchor='disco'>
+  <p>A client MAY confirm that its server supports SPIM-Blocking Control using &jep0030;.</p>
+  <example caption='Initial Service Discovery Information Request'><![CDATA[
+<iq type='get'
+    from='victim@mydomain.com/laptop'
+    to='mydomain.com'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+  ]]></example>
+  <example caption='Server Indicates Support'><![CDATA[
+<iq type='result'
+    from='mydomain.com'
+    to='victim@mydomain.com/laptop'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='im' type='server'/>
+    ...
+    <feature var='http://jabber.org/protocol/spim-control'/>
+    ...
+  </query>
+</iq>
+  ]]></example>
+</section1>
+
+<section1 topic='SPIM Blocking' anchor='usage'>
+  <p>This section specifies <em>server</em> functionality <em>not</em> defined in <cite>RFC 3921</cite>.</p>
+  <section2 topic='Correspondents Lists' anchor='usage-correspondents'>
+    <p>A server that supports this protocol MAY maintain a separate <note>If the server were to maintain a single unified list of the correspondents of all its users, then SPIMers would only need to pass a single SPIM recognition test before being allowed to send SPIM to <em>all</em> the server's users.</note> list of each user's correspondents. Each list contains all the bare JIDs the user has either sent a stanza to or received a stanza from (over the past few weeks or months).</p>
+    <p>Note: When it blocks a stanza, the server MUST NOT add the 'from' attribute of the stanza to the correspondents list.</p>
+    <p>Note: The lists of correspondents have a very different function from rosters. Edits are initiated by the server not the client, allowing the lists to be completely transparent to clients.</p>
+  </section2>
+  <section2 topic='Fall-Through Procedure' anchor='usage-action'>
+    <p>The server SHOULD perform the following procedures whenever it receives a stanza that falls through the active privacy list of the user it is addressed to without being either allowed or denied:</p>
+    <ol>
+      <li>If the server maintains correspondents lists, and if the bare JID in the 'from' attribute of the received stanza is on the addressed user's correspondents list, then the server SHOULD allow the stanza to be delivered to the user.</li>
+      <li>Otherwise, the server SHOULD perform one or more SPIM recognition procedures (not defined in this document).</li>
+      <li>Depending on the result of those procedures, it SHOULD then either allow, deny or delay the delivery of the stanza without informing the sender.</li>
+    </ol>
+  </section2>
+  <section2 topic='Delay Procedure' anchor='usage-action'>
+    <p>When a SPIM recognition procedure delays delivery of a stanza the server SHOULD store it temporarily.</p>
+    <p>While delivery is being delayed:</p>
+    <ul>
+      <li>The server SHOULD allow or deny delivery of the stanza immediately (and without informing the sender) when any subsequent changes to the user's privacy list, correspondents list or roster explicitly either allow or deny the delivery of the stanza. <note>For example, the first time a stanza is delivered the correspondents list will change, typically triggering the immediate delivery of any other delayed stanzas.</note></li>
+      <li>The server MAY allow or deny delivery of the stanza at any time (for reasons not defined in this document).</li>
+    </ul>
+    <p>Once delivery of a stanza has been delayed for an implementation-specific length of time, or an implementation-specific number of stanzas from the same sender (or same sending server) are being delayed, the server SHOULD deny delivery of the stanza without informing the sender.</p>
+    <p>A good example of a delayed SPIM recognition procedure is when servers use the <cite>Robot Challenges</cite> protocol to confirm whether or not a client is a SPIM robot before denying or allowing the delivery of a stanza from a <em>new correspondent</em>. <note>The very occasional inconvenience of responding to a challenge is small and perfectly acceptable -- especially when compared to the countless robot-generated interruptions people might otherwise have to filter every day.</note> <note>If a human user fails such a robot challenge then his client SHOULD give him the option to resend the stanza immediately.</note></p>
+  </section2>
+</section1>
+
+<section1 topic='Configuring Privacy Lists' anchor='usage'>
+  <p>This informative section requires no client or server functionality beyond that defined in <cite>RFC 3921</cite>.</p>
+  <section2 topic='Exempting Trusted Groups from SPIM Blocking' anchor='usage-exempt'>
+    <section3 topic='Users on Roster' anchor='usage-exempt'>
+      <p>The client SHOULD use the 'subscription' type to exclude all JIDs on the user's roster from SPIM blocking (see the items with order 20, 30 and 40 in the example below).</p>
+    </section3>
+    <section3 topic='Transports' anchor='usage-exempt'>
+      <p>At least in the medium term, clients that use non-XMPP protocols cannot be expected to support interactive SPIM recognition techniques (like <cite>Robot Challenges</cite>). So, if its server uses interactive techniques, the client MAY use the 'jid' type to ensure its server does not block stanzas arriving from the transports the user has registered with (see the item with order 50 in the example below).</p>
+    </section3>
+    <section3 topic='Users of Trusted Servers' anchor='usage-exempt'>
+      <p>If a user believes SPIM will not be sent by users of a particular server (e.g. the user's own corporate server), then the client MAY use the 'jid' type to exclude all these users from SPIM blocking (see the item with order 60 in the example below).</p>
+    </section3>
+    <example caption='Exempting Users from SPIM Blocking'><![CDATA[
+<iq type='set' from='victim@mydomain.com/laptop'>
+  <query xmlns='jabber:iq:privacy'>
+    <list name='normal'>
+      ...
+      <item type='subscription'
+            value='both'
+            action='allow'
+            order='20'/>
+      <item type='subscription'
+            value='to'
+            action='allow'
+            order='30'/>
+      <item type='subscription'
+            value='from'
+            action='allow'
+            order='40'/>
+      ...
+      <item type='jid'
+            value='yahoo.transport.org'
+            action='allow'
+            order='50'/>
+      ...
+      <item type='jid'
+            value='mydomain.com'
+            action='allow'
+            order='60'/>
+      ...
+    </list>
+  </query>
+</iq>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Exempting Individual Users from SPIM Blocking' anchor='legacy'>
+    <p>No SPIM recognition techniques are perfect. Senders are sometimes falsely identified as SPIM bots. (For example, when a server sends <cite>Robot Challenges</cite>, but the client does not support that protocol.)</p>
+    <p>In these cases the user MAY ask out-of-band the person he is trying to communicate with to allow communications in one of the following ways:</p>
+    <ul>
+      <li>simply send him a message, so her server adds him to her correspondents list</li>
+      <li>add his JID to her active privacy list with action='allow'</li>
+      <li>add him to her roster (either in a group whose stanzas are allowed in her active privacy list, or with a subscription type that is allowed <note>The subscription type SHOULD never be 'none' because <cite>RFC 3921</cite> specifies that, for the purposes of blocking, all JIDs not on the roster also have the subscription type 'none'.</note>)</li>
+    </ul>
+  </section2>
+
+  <section2 topic='Explicitly Blocking SPIM' anchor='usage-block'>
+    <p>If stanzas from a SPIM robot running on a zombie domain somehow manage to get past the server's SPIM recognition then the client MAY use the 'jid' type to block one or all JIDs from the domain. (<cite>RFC 3921</cite> already enables this functionality.)</p>
+    <example caption='Blocking SPIM from a Specific Domain'><![CDATA[
+<iq type='set' from='victim@mydomain.com/laptop'>
+  <query xmlns='jabber:iq:privacy'>
+    <list name='normal'>
+      ...
+      <item type='jid'
+            value='spimmer.com'
+            action='deny'
+            order='70'/>
+      ...
+    </list>
+  </query>
+</iq>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Completely Disabling SPIM Blocking' anchor='usage-disable'>
+    <p>A client MAY disable server-side SPIM blocking by ensuring the default fall-through action is never applied. It does this simply by including an explicit fall-through item in its active privacy list.</p>
+    <example caption='Client Disables SPIM Blocking'><![CDATA[
+<iq type='set' from='victim@mydomain.com/laptop'>
+  <query xmlns='jabber:iq:privacy'>
+    <list name='normal'>
+      ...
+      <item action='allow' order='999'/>
+    </list>
+  </query>
+</iq>
+    ]]></example>
+    <p>Note: Before a server with existing accounts deploys this protocol, it MAY ensure all users' privacy lists have an explicit fall-through item. As a result, SPIM recognition would be disabled until users choose to switch it on.</p>
+  </section2>
+</section1>
+
+<section1 topic='Security Considerations' anchor='sec'>
+  <p>If a server implements this protocol and its security is compromised, then the attacker may be able to access the list of all previous correspondants for every user. People are unable to delete their own lists and they may not even be aware that they exist. So servers MUST ensure they protect this sensitive information very carefully.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This JEP requires no interaction with &IANA;. </p>
+</section1>
+
+<section1 topic='Jabber Registrar Considerations' anchor='registrar'>
+  <section2 topic='Well-Known Service Discovery Nodes' anchor='registrar-nodes'>
+    <p>Upon approval of this JEP, the <cite>Jabber Registrar</cite> shall register the following well-known Service Discovery node:</p>
+    <ul>
+      <li>http://jabber.org/protocol/spim-control</li>
+    </ul>
+  </section2>
+</section1>
+</jep>

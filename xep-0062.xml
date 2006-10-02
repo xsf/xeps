@@ -1,0 +1,347 @@
+<?xml version='1.0' encoding='UTF-8'?>
+
+<!DOCTYPE jep SYSTEM '../jep.dtd' [
+  <!ENTITY % ents SYSTEM '../jep.ent'>
+%ents;
+]>
+
+<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
+
+<jep>
+<header>
+  <title>Packet Filtering</title>
+  <abstract>A framework for packet filtering rules.</abstract>
+  &LEGALNOTICE;
+  <number>0062</number>
+  <status>Deferred</status>
+  <type>Informational</type>
+  <jig>Standards JIG</jig>
+  <dependencies>XMPP Core, JEP-0030</dependencies>
+  <supersedes>None</supersedes>
+  <supersededby>None</supersededby>
+  <shortname>Not yet assigned</shortname>
+  <author>
+    <firstname>Robert</firstname>
+    <surname>Norris</surname>
+    <email>rob@cataclysm.cx</email>
+    <jid>rob@cataclysm.cx</jid>
+  </author>
+  <revision>
+    <version>0.2</version>
+    <date>2003-09-30</date>
+    <initials>psa</initials>
+    <remark>At the request of the author, changed the status of this JEP to Deferred pending development of an implementation; also changed the type to Informational.</remark> 
+  </revision>
+  <revision>
+    <version>0.1</version>
+    <date>2002-12-05</date>
+    <initials>rn</initials>
+    <remark>Initial version.</remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction'>
+  <p>Traditionally, the &jabberd; server included an internal server module called "mod_filter", which provided a packet filtering facility for users. That service had the following problems:</p>
+
+  <ul>
+    <li>The service and protocol were undocumented, apart from some documentation reverse-engineered from the source code.</li>
+    <li>The processing requirements that the service required made it unusable for large installations.</li>
+    <li>Bugs in the service often caused the Jabber server to crash.</li>
+  </ul>
+
+  <p>The most common use for this service was to provide server-side blacklists. Unforuntately, mod_filter was overpowered even by this relatively simple form of packet filtering (matching the sending JID and dropping the packet if necessary), so this need has been neatly filled by &jep0016;.</p>
+
+  <p>However, packet filtering (as opposed to the subset of JID blacklisting) is still of use, for the following tasks:</p>
+
+  <ul>
+    <li>Setting up automatic responses to messages (e.g., "vacation" messages).</li>
+    <li>Redirecting packets to another JID.</li>
+    <li>Modifying the contents of a packet in-transit (e.g., language translation, adding &lt;x/&gt; data).</li>
+    <li>Force incoming messages to be stored offline (e.g., for low-bandwidth clients).</li>
+  </ul>
+
+  <p>This document proposes a modular, extensible framework for specifying packet filtering rules. This document does not, however, propose any specific filter conditions or actions - that is left to other proposals.</p>
+
+  <p>The framework itself operates in the "http://jabber.org/protocol/filter" namespace.</p>
+
+  <section2 topic='Definitions'>
+    <p>The following definitions are used throughout this document:</p>
+
+    <ul>
+      <li>ruleset - a set of filtering rules.</li>
+      <li>rule - a set of conditions with an associated action.</li>
+      <li>condition - an expression (or set of expressions) that, when applied to a packet, is either true or false.</li>
+      <li>action - a task that may be performed on a packet.</li>
+    </ul>
+  </section2>
+
+</section1>
+
+<section1 topic='Structure'>
+  <p>A single rule is be expressed in XML like so:</p>
+
+  <example caption='XML representation of a rule'><![CDATA[
+<rule description='natural-language description of rule'>
+  <condition>[conditionexpr]</condition>
+  <action>[actionspec]</action>
+</rule>
+]]></example>
+
+  <p>A rule is processed by applying its condition to the packet. If the condition is true, then the action is taken. The "description" attribute is provided so a rule generator can assign a meaningful and user-readable description of a rule.</p>
+
+  <p>A ruleset is be expressed in XML like so:</p>
+ 
+  <example caption='XML representation of a ruleset'><![CDATA[
+<ruleset>
+  <rule description='rule description'>
+    <condition>[conditionexpr]</condition>
+    <action>[actionspec]</action>
+  </rule>
+  <rule description='rule description'>
+    <condition>[conditionexpr]</condition>
+    <action>[actionspec]</action>
+  </rule>
+  <rule description='rule description'>
+    <condition>[conditionexpr]</condition>
+    <action>[actionspec]</action>
+  </rule>
+</ruleset>
+]]></example>
+
+  <p>A ruleset is processed by applying each rule to the packet, one at a time. Processing of the ruleset stops after the first matching rule is found and its action taken, <emphasis>unless</emphasis> the "continue" attribute is found on the matched rule, in which case the remaining rules get processed as though the current rule did not match. If no rules match, packet processing continues as though no rules were specified.</p>
+
+  <p>If the &lt;condition/> element contains no condition expression, then the rule matches all packets.</p>
+
+  <p>A ruleset does not have to contain any rules:</p>
+
+  <example caption='Empty ruleset'><![CDATA[
+<ruleset/>
+]]></example>
+
+  <p>Conditions may be aggregated using AND or OR modifiers, like so:</p>
+
+  <example caption='Aggregated condition'><![CDATA[
+<condition>
+  <and>
+    [conditionexpr1]
+    [conditionexpr2]
+    <or>
+      [conditionexpr3]
+      [conditionexpr4]
+    </or>
+  </and>
+</condition>
+]]></example>
+
+  <p>The above example is equivalent to "conditionexpr1 AND conditionexpr2 AND (conditionexpr3 OR conditionexpr4)".</p>
+
+  <p>No such aggregation exists for actions - only a single action expression may be included within an &lt;action/> element.</p>
+ 
+</section1>
+
+<section1 topic='Filter modules'>
+  <p>A filter module is a document that defines conditions and/or actions that can be use by this framework. Each module should have its own namespace, and should clearly define the effect of each condition and action it defines.</p>
+
+  <p>Consider a hypothetical module that defines conditions that match packets based on their header information. It might use the namespace "http://jabber.org/protocol/filter/header" and might define the following conditions:</p>
+
+  <ul>
+    <li>&lt;to/> - true when the CDATA of this element matches the "to" attribute of the packet.</li>
+    <li>&lt;from/> - true when the CDATA of this element matches the "from" attribute of the packet.</li>
+    <li>&lt;type/> - true when the CDATA of this element matches the "type" attribute of the packet.</li>
+  </ul>
+
+  <p>Equally, consider a hypothetical module that defines actions for redirecting messages. It might use the namespace "http://jabber.org/protocol/filter/redirect" and might define the following conditions:</p>
+
+  <ul>
+    <li>&lt;redirect/> - redirects the packet to the JID specified in the CDATA of this element.</li>
+    <li>&lt;copy/> - sends a copy of the packet to the JID specified in the CDATA of this element, while giving the original packet to the user.</li>
+  </ul>
+
+  <p>These two modules might be combined to produce a ruleset like the following:</p>
+
+  <example caption='Using modules in a ruleset'><![CDATA[
+<ruleset>
+  <rule description='Send messages from my friend to my home account to be dealt with later'>
+    <condition>
+      <from xmlns='http://jabber.org/protocol/filter/header'>friend@theirisp.com</from>
+    </condition>
+    <action>
+      <redirect xmlns='http://jabber.org/protocol/filter/redirect'>me@home.com</redirect>
+    </action>
+  </rule>
+</ruleset>
+]]></example>
+
+  <p>Using modules in this way enables this framework to be easily extended to support new types of filtering, as well as enabling site administrators to select the types of functionallity that are best suited to their site.</p>
+
+</section1>
+
+<section1 topic='Protocol'>
+  <p>It will not always be appropriate for a service to provide a Jabber-based interface to its filter settings (e.g., in the case of an XML router, it will almost always be more appropriate to limit the specification of rules and rulesets to the router configuration). However, this will be appropriate sometimes (e.g., a session manager providing per-user packet filtering). In these cases, the following protocol should be used.
+  </p>
+
+  <section2 topic='Module discovery'>
+    <p>An entity may find out if a service supports filtering, and the modules its supports, by issuing a discovery request to the service:</p>
+
+    <example caption='Module discovery'><![CDATA[
+<iq type='get' to='jabber.org' 'disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]> </example>
+
+    <example caption='Module discovery response'><![CDATA[
+<iq type='result' to='jabber.org' id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='server' type='jabber' name='Jabber server'/>
+    <feature var='http://jabber.org/protocol/filter'/>
+    <feature var='http://jabber.org/protocol/filter/header'/>
+    <feature var='http://jabber.org/protocol/filter/redirect'/>
+    <feature var='...'/>
+  </query>
+</iq>
+]]> </example>
+  </section2>
+
+  <section2 topic='Setting the ruleset'>
+    <p>An entity may set the filter ruleset for an entity (which may be itself) like so:</p>
+
+    <example caption='Setting the ruleset'><![CDATA[
+<iq type='set' to='rob@cataclysm.cx' id='filter1'>
+  <ruleset xmlns='http://jabber.org/protocol/filter'>
+    <rule description='Send messages from my friend to my home account to be dealt with later'>
+      <condition>
+        <from xmlns='http://jabber.org/protocol/filter/header'>friend@theirisp.com</from>
+      </condition>
+      <action>
+        <redirect xmlns='http://jabber.org/protocol/filter/redirect'>me@home.com</redirect>
+      </action>
+    </rule>
+    <rule description='Copy messages from this spammer to our abuse address'>
+      <condition>
+        <from xmlns='http://jabber.org/protocol/filter/header'>spammer@badsite.com</from>
+      </condition>
+      <action>
+        <copy xmlns='http://jabber.org/protocol/filter/redirect'>abuse@company.com</redirect>
+      </action>
+    </rule>
+  </ruleset>
+</iq>
+]]> </example>
+
+    <p>On success, the service returns:</p>
+
+    <example caption='Setting the ruleset result'><![CDATA[
+<iq type='result' from='rob@cataclysm.cx' id='filter1'/>
+]]> </example>
+
+    <p>On error, the server returns the original packet with an appropriate error:</p>
+
+    <example caption='Setting the ruleset failure'><![CDATA[
+<iq type='error' to='rob@cataclysm.cx' id='filter1'>
+  <ruleset xmlns='http://jabber.org/protocol/filter'>
+    <rule description='Send messages from my friend to my home account to be dealt with later'>
+      <condition>
+        <from xmlns='http://jabber.org/protocol/filter/header'>friend@theirisp.com</from>
+      </condition>
+      <action>
+        <redirect xmlns='http://jabber.org/protocol/filter/redirect'>me@home.com</redirect>
+      </action>
+    </rule>
+    <rule description='Copy messages from this spammer to our abuse address'>
+      <condition>
+        <from xmlns='http://jabber.org/protocol/filter/header'>spammer@badsite.com</from>
+      </condition>
+      <action>
+        <copy xmlns='http://jabber.org/protocol/filter/redirect'>abuse@company.com</redirect>
+      </action>
+    </rule>
+  </ruleset>
+  <error code='403'>Forbidden</error>
+</iq>
+]]> </example>
+
+  </section2>
+
+  <section2 topic='Retrieving the ruleset'>
+    <p>An entity may retrieve the filter ruleset for an entity (which may be itself) like so:</p>
+
+    <example caption='Requesting the ruleset'><![CDATA[
+<iq type='get' id='filter2'>
+  <ruleset xmlns='http://jabber.org/protocol/filter'/>
+</iq>
+]]> </example>
+
+    <p>If the requesting entity has permissions to view the ruleset, the server must return the ruleset to the entity:</p>
+
+    <example caption='Retrieving the ruleset result'><![CDATA[
+<iq type='error' to='rob@cataclysm.cx' id='filter2'>
+  <ruleset xmlns='http://jabber.org/protocol/filter'>
+    <rule description='Send messages from my friend to my home account to be dealt with later'>
+      <condition>
+        <from xmlns='http://jabber.org/protocol/filter/header'>friend@theirisp.com</from>
+      </condition>
+      <action>
+        <redirect xmlns='http://jabber.org/protocol/filter/redirect'>me@home.com</redirect>
+      </action>
+    </rule>
+    <rule description='Copy messages from this spammer to our abuse address'>
+      <condition>
+        <from xmlns='http://jabber.org/protocol/filter/header'>spammer@badsite.com</from>
+      </condition>
+      <action>
+        <copy xmlns='http://jabber.org/protocol/filter/redirect'>abuse@company.com</redirect>
+      </action>
+    </rule>
+  </ruleset>
+</iq>
+]]> </example>
+
+    <p>On error, the server returns the original packet with an appropriate error:</p>
+
+    <example caption='Retrieving the ruleset failure'><![CDATA[
+<iq type='error' to='rob@cataclysm.cx' id='filter2'>
+  <ruleset xmlns='http://jabber.org/protocol/filter'/>
+  <error code='403'>Forbidden</error>
+</iq>
+]]> </example>
+
+  </section2>
+
+</section1>
+
+<section1 topic='Error Codes'>
+    <p>Possible errors are:</p>
+
+    <table caption='Errors returned when retrieving the ruleset'>
+      <tr>
+        <th>Code</th><th>Text</th><th>Description</th>
+      </tr>
+      <tr>
+        <td>403</td><td>Forbidden</td><td>The sender does not have permission to modify the ruleset for this entity.</td>
+      </tr>
+      <tr>
+        <td>404</td><td>Not Found</td><td>The entity does not exist.</td>
+      </tr>
+    </table>
+
+</section1>
+
+<section1 topic='Implementation notes'>
+  <p>Ruleset processing should be the first thing that a service does when it receives a packet - even before processing privacy rules per JEP-0016.</p>
+
+  <p>Rules must be processed in the order they are given, and must be returned to a requesting entity in the same order.</p>
+</section1>
+
+<section1 topic='Security Considerations'>
+  <p>There are no security features or concerns related to this proposal.</p>
+</section1>
+
+<section1 topic='IANA Considerations'>
+  <p>This JEP requires no interaction with the IANA.</p>
+</section1>
+
+<section1 topic='JANA Considerations'>
+  <p>No namespaces or parameters need to be registered with JANA as a result of this JEP.</p>
+</section1>
+
+</jep>
