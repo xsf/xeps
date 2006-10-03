@@ -1,236 +1,893 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE jep SYSTEM '../jep.dtd' [
-  <!ENTITY % ents SYSTEM '../jep.ent'>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+<!ENTITY % ents SYSTEM 'xep.ent'>
 %ents;
 ]>
-<?xml-stylesheet type='text/xsl' href='../jep.xsl'?>
-<jep>
-	<header>
-		<title>Server-Based Privacy Rules</title>
-		<abstract>Note: This JEP has been superseded by the XMPP IM Internet-Draft; please refer to that document for the most up-to-date protocol.</abstract>
-                &LEGALNOTICE;
-		<number>0016</number>
-		<status>Retracted</status>
-		<type>Standards Track</type>
-		<jig>Standards JIG</jig>
-		<dependencies>None</dependencies>
-                <supersedes>None</supersedes>
-                <supersededby>XMPP IM</supersededby>
-                <shortname>None</shortname>
-		&pgmillard;
-                <revision>
-                        <version>1.3</version>
-                        <date>2004-07-26</date>
-                        <initials>psa</initials>
-                        <remark>Formally retracted this proposal in favor of XMPP IM.</remark>
-                </revision>
-		<revision>
-			<version>1.2</version>
-			<date>2003-03-12</date>
-			<initials>psa</initials>
-			<remark>Changed status to Deprecated since this protocol is now included in the XMPP IM Internet-Draft.</remark>
-		</revision>
-		<revision>
-			<version>1.1</version>
-			<date>2002-11-17</date>
-			<initials>pgm</initials>
-			<remark>Added remarks about default handling, and where list processing should take place.</remark>
-		</revision>
-		<revision>
-			<version>1.0</version>
-			<date>2002-10-22</date>
-			<initials>psa</initials>
-			<remark>Changed status to Draft.</remark>
-		</revision>
-		<revision>
-			<version>0.4</version>
-			<date>2002-10-03</date>
-			<initials>pgm</initials>
-			<remark>Elaborated on various JID possibilities.</remark>
-		</revision>
-		<revision>
-			<version>0.3</version>
-			<date>2002-07-31</date>
-			<initials>pgm</initials>
-			<remark>Added info describing current session issues</remark>
-		</revision>
-		<revision>
-			<version>0.2</version>
-			<date>2002-07-30</date>
-			<initials>pgm</initials>
-			<remark>Added whitelists, subscription filtering, and multiple list capabilities. Changed block to deny.</remark>
-		</revision>
-		<revision>
-			<version>0.1</version>
-			<date>2002-01-18</date>
-			<initials>pgm</initials>
-			<remark>Initial version.</remark>
-		</revision>
-	</header>
-	<section1 topic="Introduction">
-          <p><em>Note: This JEP has been superseded by &xmppim;; please refer to that document for the most up-to-date protocol!</em></p>
-		<p>Almost all types of Instant Messaging (IM) applications have found it necessary to develop some method for a user to block the receipt of messages and packets from other users (the rationale for such blockage depends on the needs of the individual user). The method for implementing this functionality in the current Jabber system is for each client application to keep its own "blacklist" of the Jabber IDs from which the user does not wish to receive messages. This current implementation has the following drawbacks:</p>
-		<ol>
-			<li>The XML packets are blocked at the client network endpoint. The unwanted packets need to traverse the entire Jabber network before they are blocked from being delivered. However, these packets could be blocked at the server and never delivered "across the wire" to the client, which becomes especially important for clients that have bandwidth restrictions or in situations where bandwidth is expensive.</li>
-			<li>Currently there exists no Jabber standard enabling clients to share their individual blacklists. Thus blacklist entries are not portable across clients and if a user accesses their account with a different client, the user must re-enter the blacklist entries.</li>
-			<li>Most implementations have no way of blocking specific types of packets -- they typically block only message packets.</li>
-		</ol>
-		<p>The solution to these shortfalls is to have a common blacklist which is stored on the Jabber server along with the other information which clients receive from the server (primarily the roster).</p>
-	</section1>
-	<section1 topic="Protocol Details">
-		<p>This document proposes the addition of a new namespace to handle the storage and retrieval of the server-side blacklist and whitelist information. The proposed 'jabber:iq:privacy' namespace would be consistent with the existing jabber:* namespaces and use the &lt;query/&gt; element as a direct child under the main &lt;iq/&gt; element. A client application would use &lt;iq type="get"&gt; to retrieve the lists from the server, and use &lt;iq type="set"&gt; to add or edit items in a specific list. Each list is a combination of multiple items. Each item can be of type allow or deny. For this document, these lists will be called &quot;zebra lists&quot;.</p>
-		<p>Each &lt;query/&gt; element would have one or more &lt;list&gt; elements which would contain the information for an entire zebra list. The &lt;query&gt; element also contains an &lt;active&gt; element and a &lt;default&gt; element. These elements contain the name of the currently active zebra list or the name of the default zebra list. A client application may perform a get request with an empty &lt;active&gt; element and/or and empty &lt;default&gt; which indicates that it only wants to know which list is currently active or the default list. A client application may also specify a default list to be used for offline processing and when no active list is directly specified. To fetch the currently active list and the rules for each list, the client application performs a simple blank get request.</p>
-		<p>The &lt;default&gt; element is used when processing packets and the client is offline, and is used whenver the client connection (session) does not specify a specific list to be active.</p>
-		<p>Each &lt;item&gt; element in the zebra list MAY contain a jid attribute (the Jabber ID, i.e. user@host, of the contact which is to be blocked or allowed), MAY contain a subscription attribute, and MUST contain a type attribute. If no jid attribute is specified, then the rule MUST apply to all jids. The possible values of the type attribute would be either "deny", "allow". To remove items from the list, simply send back the list tag with the various &lt;item&gt; elements missing.</p>
-		<p>If the &lt;item&gt; element contains a subscription attribute, it means that the rule applies to all jids in the current users roster which have matching subscription elements. Note that a subscription of "both" MUST be treated the same as "from" and "to" together. </p>
-		<p>If the &lt;item&gt; element contains no child elements, then all packets would be blocked or allowed. This includes: messages, presence packets, and iq packets. The &lt;item&gt; elements MAY contain the following empty child elements:</p>
-		<ul>
-			<li>The &lt;message/&gt; element (blocks or allows all message packets).</li>
-			<li>The &lt;presence/&gt; element (blocks or allows all presence packets).</li>
-			<li>The &lt;iq/&gt; element (blocks or allows all iq packets).</li>
-		</ul>
-		<p>When a message or other XML packet is blocked according to the entries in the list, the server MUST bounce the packet back to the original sender. The bounced packet MUST be of type="error" and contain a child &lt;error/&gt; element with a code attribute of 405.</p>
-		<p>If a &lt;list&gt; element is sent that contains no child elements, the list of that name is removed. If the active list is not reset during the list removal, and the list removed was the active list, the user is returned back to a default state of allow all packets.</p>
-	</section1>
-	<section1 topic="Implementation Notes and Rules">
-		<p>Setting your active zebra list is effective for the current session only, but the storage of the lists is for the user. During usage, a client application should set the active list before sending available presence or fetching the roster. If a client does not set the active zebra list for the current session, the default rules of allowing all packets would apply to that session.
-		</p>
-		<p>When changing or editing in a specific zebra list, the client application MUST send back all items in the list in the desired order. Server side components that are performing the packet filtering MUST preserve the order of the individual &lt;item&gt; tags and process the rules in that order. All lists MUST have at least one rule that SHOULD specify the default action. The client application MAY send back an &lt;active&gt; element indicating the new currently active list. If no &lt;active&gt; element is sent, the currently active list is used.</p>
-		<p>When a client application wishes to just change the currently active zebra list, they MUST NOT send back all of the lists and their contents. The client application SHOULD send back just the new &lt;active&gt; element. If the named list does not exist, the server MUST send back an error using error code 406 (Not Acceptable).</p>
-		<p>Client applications can NOT set the default or active list, and alter the actual lists in the same packet. If a client connection attempts to modify both things at once, the server implementation must send back a iq-error using error code 406.</p>
-		<p>Implementations of zebra lists MAY choose to allow specific packet types to be checked. If a client attempts to set an item with a specific packet type (message, presence, or iq) and the implementation does not support that feature, the server MUST send back the &lt;iq/&gt; as a type="error" using an error code of 406 (Not Acceptable).</p>
-		<p>Implementation of zebra lists SHOULD NOT "push" new lists and additions to existing clients already connected using the same JID (as you would get jabber:iq:roster pushes). If a client application wants to know the current zebra list information, it SHOULD send a get request.</p>
-		<p>When a jabber ID is specified on a rule and the ID does not conform to user@host, the following rules apply:</p>
-		<ul>
-			<li>JIDs of the form 'domain.com' must apply to all users from that domain (ie, *@domain.com). Note that the asterisk (*) is a legal user character, thus, 'domain.com' is different from '*@domain.com'</li>
-			<li>JIDs of the form 'user@domain.com/resource' apply to that specific resource. Packets from other resources from that user MUST not match the rule.</li>
-			<li>JIDs of the form 'service.domain.com/resource' apply to that specific resource of that service. (As opposed to 'service.domain.com', which matches for '*@service.domain.com'.)</li>
-		</ul>
-		<p>If a packet does not match any rules in the active list, the default action is to allow.</p>
-	</section1>
-	<section1 topic="Retrieving the zebra lists">
-		<p>The following protocol segments illustrate the exchange of packets between the client application and the server in order to retrieve the zebra list information.</p>
-		<example caption="Client Requests the zebra lists"><![CDATA[
-<iq type="get" id="1">
-  <query xmlns="jabber:iq:privacy"/>
-</iq>]]></example>
-		<example caption="Server Replies to the zebra lists request"><![CDATA[
-<iq type="result" id="1">
-  <query xmlns="jabber:iq:privacy">
-    <active name="home"/>
-    <list name="home">
-      <item jid="romeo@jabber.org" type="deny"/>
-      <item jid="juliet@jabber.org" type="deny"/>
-      <item type="allow"/>
-    </list>
-    <list name="work">
-    	<item type="allow" subscription="from"/>
-    	<item type="allow" subscription="to"/>
-    	<item type="deny"/>
-    </list>
-  </query>
-</iq>]]></example>
-	</section1>
-	<section1 topic="Changing the currently active zebra list">
-		<p>The following protocol segments illustrate the exchange of packets used to change the active zebra list.</p>
-		<example caption="Client changes active list"><![CDATA[
-<iq type="set" id="2">
-  <query xmlns="jabber:iq:privacy">
-    <active name="work"/>
-  </query>
-</iq>]]></example>
-		<example caption="Server Replies to the change request">
-&lt;iq type="result" id="2"/&gt;
-    </example>
-	</section1>
-	<section1 topic="Adding or Changing a zebra list">
-		<p>The following protocol segments illustrate the exchange of packets used to add or edit a zebra list.</p>
-		<example caption="Changing a zebra list"><![CDATA[
-<iq type="set" id="3">
-  <query xmlns="jabber:iq:privacy">
-    <list name="home">
-      <item jid="romeo@jabber.org" type="deny"/>
-      <item jid="juliet@jabber.org" type="deny"/>
-      <item jid="mercutio@jabber.org" type="deny"/>
-      <item type="allow"/>
-    </list>
-  </query>
-</iq>]]></example>
-		<example caption="Server Replies to the change request">
-&lt;iq type="result" id="3"/&gt;
-    </example>
-	</section1>
-	<section1 topic="Removing an entire zebra list">
-		<p>The following protocol segments illustrate how a client application would remove a zebra list.</p>
-		<example caption="Client Requests Removal of a zebra list"><![CDATA[
-<iq type="set" id="4">
-  <query xmlns="jabber:iq:privacy">
-    <list name="home"/>
-  </query>
-</iq>]]></example>
-		<example caption="Server replies to remove request">
-&lt;iq type="result" id="4"/&gt;
-    </example>
-	</section1>
-	<section1 topic="Blocked User Sending a Message">
-		<p>The following protocol segments illustrate the exchange of message packets when the sender is blocked by the currently active zebra list.</p>
-		<example caption="Blocked User Sends a Message"><![CDATA[
-<message to="jill@jabber.org" id="msg_1">
-  <body>Hey, I just wanted to chat!</body>
-</message>]]></example>
-		<example caption="Recipient's Server Bounces Message Back to Blocked Sender"><![CDATA[
-<message id="msg_1" type="error">
-  <body>Hey, I just wanted to chat!</body>
-  <error code="405">Not Allowed</error>
-</message>]]></example>
-	</section1>
-	<section1 topic="Protocol DTD">
-		<example caption="jabber:iq:privacy DTD"><![CDATA[<!ELEMENT query (active?, list*)>
-<!ATTLIST query
-	xmlns CDATA #REQUIRED
->
-<!ELEMENT active (#PCDATA)>
-<!ATTLIST active
-	name CDATA #REQUIRED
->
-<!ELEMENT list (item*)>
-<!ATTLIST list
-	name CDATA #REQUIRED
->
-<!ELEMENT item (iq?, message?, presence?)>
-<!ATTLIST item
-	jid CDATA #IMPLIED
-	type (allow | deny) #REQUIRED
-	subscription (from | to) #IMPLIED
->
-<!Element iq (#PCDATA)>
-<!Element message (#PCDATA)>
-<!Element presence (#PCDATA)>
-
-]]></example>
-	</section1>
-	<section1 topic="Future considerations">
-		<p>In the future, it may be desirable at some point to allow clients to filter specific iq namespaces. The protocol could easily handle this capability by doing something like the following:</p>
-		<example caption="Client Requests to Filter a Specific IQ Namespace"><![CDATA[<iq type="set" id="6">
-  <query xmlns="jabber:iq:privacy">
-    <list name="home">
-      <item jid="romeo@jabber.org" type="deny"/>
-      <item jid="juliet@jabber.org" type="deny"/>
-      <item jid="mercutio@jabber.org" type="deny">
-      	<iq>jabber:iq:oob</iq>
-      <item type="allow"/>
-    </list>
-  </query>
-</iq>]]></example>
-		<example caption="Server Replies to Filter Namespace Request">
-&lt;iq type="result" id="6"/&gt;
-    </example>
-        <p>In the future, it may be desirable to have be able to block normal presence/availability packets, while still allowing subscription packets through the zebra list.</p>
-		<p>In the current open source Jabber server, there is a JSM module called mod_filter which has the capability to implement this type of functionality. However, most servers with large user bases have found it impossible to use mod_filter because of the load that it imposes on packet processing. Using normal whitelist/blacklist operations should make the processing much simpler than mod_filter's processing of an unknown set of rules various rules (not just blocking).</p>
-	</section1>
-
-<section1 topic='Author Note' anchor='authornote'>
-  <p>Peter Millard, the author of this specification from version 0.1 through version 0.3, died on April 26, 2006.</p>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Privacy Lists</title>
+  <abstract>The main body of this document has been copied without modification from Section 10 of RFC 3921.</abstract>
+  &LEGALNOTICE;
+  <number>0016</number>
+  <status>Draft</status>
+  <type>Standards Track</type>
+  <jig>Standards JIG</jig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>privacy</shortname>
+  &pgmillard;
+  &stpeter;
+  <revision>
+    <version>1.4</version>
+    <date>2006-10-04</date>
+    <initials>psa</initials>
+    <remark><p>Copied Section 10 of RFC 3921.</p></remark>
+  </revision>
+  <revision>
+    <version>1.3</version>
+    <date>2004-07-26</date>
+    <initials>psa</initials>
+    <remark><p>Formally retracted this proposal in favor of XMPP IM.</p></remark>
+  </revision>
+  <revision>
+    <version>1.2</version>
+    <date>2003-03-12</date>
+    <initials>psa</initials>
+    <remark><p>Changed status to Deprecated since this protocol is now included in the XMPP IM Internet-Draft.</p></remark>
+  </revision>
+  <revision>
+    <version>1.1</version>
+    <date>2002-11-17</date>
+    <initials>pgm</initials>
+    <remark><p>Added remarks about default handling, and where list processing should take place.</p></remark>
+  </revision>
+  <revision>
+    <version>1.0</version>
+    <date>2002-10-22</date>
+    <initials>psa</initials>
+    <remark><p>Changed status to Draft.</p></remark>
+  </revision>
+  <revision>
+    <version>0.4</version>
+    <date>2002-10-03</date>
+    <initials>pgm</initials>
+    <remark><p>Elaborated on various JID possibilities.</p></remark>
+  </revision>
+  <revision>
+    <version>0.3</version>
+    <date>2002-07-31</date>
+    <initials>pgm</initials>
+    <remark><p>Added info describing current session issues</p></remark>
+  </revision>
+  <revision>
+    <version>0.2</version>
+    <date>2002-07-30</date>
+    <initials>pgm</initials>
+    <remark><p>Added whitelists, subscription filtering, and multiple list capabilities. Changed block to deny.</p></remark>
+  </revision>
+  <revision>
+    <version>0.1</version>
+    <date>2002-01-18</date>
+    <initials>pgm</initials>
+    <remark><p>Initial version.</p></remark>
+  </revision>
+</header>
+<section1 topic="Introduction">
+  <p>Almost all types of Instant Messaging (IM) applications have found it necessary to develop some method for a user to block the receipt of messages and packets from other users (the rationale for such blockage depends on the needs of the individual user). This document defines a flexible method for communications blocking.</p>
+  <p><em>The remainder of this document has been copied without modification from Section 10 of &rfc3921;.</em></p>
 </section1>
 
-</jep>
+<section1 topic="Protocol" anchor="protocol">
+  <p>Most instant messaging systems have found it necessary to implement some method for users to block communications from particular other users (this is also required by sections 5.1.5, 5.1.15, 5.3.2, and 5.4.10 of &rfc2779;.  In XMPP this is done by managing one's privacy lists using the 'jabber:iq:privacy' namespace.</p>
+  <p>Server-side privacy lists enable successful completion of the following use cases:</p>
+  <ul>
+    <li>Retrieving one's privacy lists.</li>
+    <li>Adding, removing, and editing one's privacy lists.</li>
+    <li>Setting, changing, or declining active lists.</li>
+    <li>Setting, changing, or declining the default list (i.e., the list that is active by default).</li>
+    <li>Allowing or blocking messages based on JID, group, or subscription type (or globally).</li>
+    <li>Allowing or blocking inbound presence notifications based on JID, group, or subscription type (or globally).</li>
+    <li>Allowing or blocking outbound presence notifications based on JID, group, or subscription type (or globally).</li>
+    <li>Allowing or blocking IQ stanzas based on JID, group, or subscription type (or globally).</li>
+    <li>Allowing or blocking all communications based on JID, group, or subscription type (or globally).</li>
+  </ul>
+  <p>Note: Presence notifications do not include presence subscriptions, only presence information that is broadcasted to entities that are subscribed to a user's presence information.  Thus this includes presence stanzas with no 'type' attribute or of type='unavailable' only.</p>
+  <section2 topic="Syntax and Semantics" anchor="protocol-syntax">
+    <p>A user MAY define one or more privacy lists, which are stored by the user's server.  Each &lt;list/&gt; element contains one or more rules in the form of &lt;item/&gt; elements, and each &lt;item/&gt; element uses attributes to define a privacy rule type, a specific value to which the rule applies, the relevant action, and the place of the item in the processing order.</p>
+    <p>The syntax is as follows:</p>
+    <code><![CDATA[
+<iq>
+  <query xmlns='jabber:iq:privacy'>
+    <list name='foo'>
+      <item
+          type='[jid|group|subscription]'
+          value='bar'
+          action='[allow|deny]'
+          order='unsignedInt'>
+        [<message/>]
+        [<presence-in/>]
+        [<presence-out/>]
+        [<iq/>]
+      </item>
+    </list>
+  </query>
+</iq>
+    ]]></code>
+    <p>If the type is "jid", then the 'value' attribute MUST contain a valid Jabber ID.  JIDs SHOULD be matched in the following order:</p>
+    <ol>
+      <li>&lt;user@domain/resource&gt; (only that resource matches)</li>
+      <li>&lt;user@domain&gt; (any resource matches)</li>
+      <li>&lt;domain/resource&gt; (only that resource matches)</li>
+      <li>&lt;domain&gt; (the domain itself matches, as does any user@domain, domain/resource, or address containing a subdomain)</li>
+    </ol>
+    <p>If the type is "group", then the 'value' attribute SHOULD contain the name of a group in the user's roster.  (If a client attempts to update, create, or delete a list item with a group that is not in the user's roster, the server SHOULD return to the client an &lt;item-not-found/&gt; stanza error.)</p>
+    <p>If the type is "subscription", then the 'value' attribute MUST be one of "both", "to", "from", or "none" as defined <cite>RFC 3921</cite>, where "none" includes entities that are totally unknown to the user and therefore not in the user's roster at all.</p>
+    <p>If no 'type' attribute is included, the rule provides the "fall-through" case.</p>
+    <p>The 'action' attribute MUST be included and its value MUST be either "allow" or "deny".</p>
+    <p>The 'order' attribute MUST be included and its value MUST be a non-negative integer that is unique among all items in the list.  (If a client attempts to create or update a list with non-unique order values, the server MUST return to the client a &lt;bad-request/&gt; stanza error.)</p>
+    <p>The &lt;item/&gt; element MAY contain one or more child elements that enable an entity to specify more granular control over which kinds of stanzas are to be blocked (i.e., rather than blocking all stanzas).  The allowable child elements are:</p>
+    <ul>
+      <li>&lt;message/&gt; -- blocks incoming message stanzas</li>
+      <li>&lt;iq/&gt; -- blocks incoming IQ stanzas</li>
+      <li>&lt;presence-in/&gt; -- blocks incoming presence notifications</li>
+      <li>&lt;presence-out/&gt; -- blocks outgoing presence notifications</li>
+    </ul>
+    <p>Within the 'jabber:iq:privacy' namespace, the &lt;query/&gt; child of an IQ stanza of type "set" MUST NOT include more than one child element (i.e., the stanza MUST contain only one &lt;active/&gt; element, one &lt;default/&gt; element, or one &lt;list/&gt; element); if a sending entity violates this rule, the receiving entity MUST return a &lt;bad-request/&gt; stanza error.</p>
+    <p>When a client adds or updates a privacy list, the &lt;list/&gt; element SHOULD contain at least one &lt;item/&gt; child element; when a client removes a privacy list, the &lt;list/&gt; element MUST NOT contain any &lt;item/&gt; child elements.</p>
+    <p>When a client updates a privacy list, it must include all of the desired items (i.e., not a "delta").</p>
+  </section2>
+  <section2 topic="Business Rules" anchor="protocol-rules">
+    <ol>
+      <li><p>If there is an active list set for a session, it affects only the session(s) for which it is activated, and only for the duration of the session(s); the server MUST apply the active list only and MUST NOT apply the default list (i.e., there is no "layering" of lists).</p></li>
+      <li><p>The default list applies to the user as a whole, and is processed if there is no active list set for the target session/resource to which a stanza is addressed, or if there are no current sessions for the user.</p></li>
+      <li><p>If there is no active list set for a session (or there are no current sessions for the user), and there is no default list, then all stanzas SHOULD BE accepted or appropriately processed by the server on behalf of the user in accordance with the server rules for handling XML stanzas defined in <cite>RFC 3921</cite>.</p></li>
+      <li><p>Privacy lists MUST be the first delivery rule applied by a server, superseding (1) the routing and delivery rules specified in server rules for handling XML stanzas defined in <cite>RFC 3921</cite> and (2) the handling of subscription-related presence stanzas (and corresponding generation of roster pushes) specified in <cite>RFC 3921</cite>.</p></li>
+      <li><p>The order in which privacy list items are processed by the server is important.  List items MUST be processed in ascending order determined by the integer values of the 'order' attribute for each &lt;item/&gt;.</p></li>
+      <li><p>As soon as a stanza is matched against a privacy list rule, the server MUST appropriately handle the stanza in accordance with the rule and cease processing.</p></li>
+      <li><p>If no fall-through item is provided in a list, the fall-through action is assumed to be "allow".</p></li>
+      <li><p>If a user updates the definition for an active list, subsequent processing based on that active list MUST use the updated definition (for all resources to which that active list currently applies).</p></li>
+      <li><p>If a change to the subscription state or roster group of a roster item defined in an active or default list occurs during a user's session, subsequent processing based on that list MUST take into account the changed state or group (for all resources to which that list currently applies).</p></li>
+      <li><p>When the definition for a rule is modified, the server MUST send an IQ stanza of type "set" to all connected resources, containing a &lt;query/&gt; element with only one &lt;list/&gt; child element, where the 'name' attribute is set to the name of the modified privacy list.  These "privacy list pushes" adhere to the same semantics as the "roster pushes" used in roster management, except that only the list name itself (not the full list definition or the "delta") is pushed to the connected resources.  It is up to the receiving resource to determine whether to retrieve the modified list definition, although a connected resource SHOULD do so if the list currently applies to it.</p></li>
+      <li><p>When a resource attempts to remove a list or specify a new default list while that list applies to a connected resource other than the sending resource, the server MUST return a &lt;conflict/&gt; error to the sending resource and MUST NOT make the requested change.</p></li>
+    </ol>
+  </section2>
+  <section2 topic="Retrieving One's Privacy Lists" anchor="protocol-retrieve">
+    <example caption='Client requests names of privacy lists from server'><![CDATA[
+<iq from='romeo@example.net/orchard' type='get' id='getlist1'>
+<query xmlns='jabber:iq:privacy'/>
+</iq>
+    ]]></example>
+    <example caption='Server sends names of privacy lists to client, preceded by active list and default list'><![CDATA[
+<iq type='result' id='getlist1' to='romeo@example.net/orchard'>
+<query xmlns='jabber:iq:privacy'>
+  <active name='private'/>
+  <default name='public'/>
+  <list name='public'/>
+  <list name='private'/>
+  <list name='special'/>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Client requests a privacy list from server'><![CDATA[
+<iq from='romeo@example.net/orchard' type='get' id='getlist2'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='public'/>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Server sends a privacy list to client'><![CDATA[
+<iq type='result' id='getlist2' to='romeo@example.net/orchard'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='public'>
+    <item type='jid'
+          value='tybalt@example.com'
+          action='deny'
+          order='1'/>
+    <item action='allow' order='2'/>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Client requests another privacy list from server'><![CDATA[
+<iq from='romeo@example.net/orchard' type='get' id='getlist3'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='private'/>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Server sends another privacy list to client'><![CDATA[
+<iq type='result' id='getlist3' to='romeo@example.net/orchard'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='private'>
+    <item type='subscription'
+          value='both'
+          action='allow'
+          order='10'/>
+    <item action='deny' order='15'/>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Client requests yet another privacy list from server'><![CDATA[
+<iq from='romeo@example.net/orchard' type='get' id='getlist4'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='special'/>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Server sends yet another privacy list to client'><![CDATA[
+<iq type='result' id='getlist4' to='romeo@example.net/orchard'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='special'>
+    <item type='jid'
+          value='juliet@example.com'
+          action='allow'
+          order='6'/>
+    <item type='jid'
+          value='benvolio@example.org'
+          action='allow'
+          order='7'/>
+    <item type='jid'
+          value='mercutio@example.org'
+          action='allow'
+          order='42'/>
+    <item action='deny' order='666'/>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>In this example, the user has three lists: (1) 'public', which allows communications from everyone except one specific entity (this is the default list); (2) 'private', which allows communications only with contacts who have a bidirectional subscription with the user (this is the active list); and (3) 'special', which allows communications only with three specific entities.</p>
+    <p>If the user attempts to retrieve a list but a list by that name does not exist, the server MUST return an &lt;item-not-found/&gt; stanza error to the user:</p>
+    <example caption='Client attempts to retrieve non-existent list'><![CDATA[
+<iq to='romeo@example.net/orchard' type='error' id='getlist5'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='The Empty Set'/>
+</query>
+<error type='cancel'>
+  <item-not-found
+      xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</error>
+</iq>
+    ]]></example>
+    <p>The user is allowed to retrieve only one list at a time.  If the user attempts to retrieve more than one list in the same request, the server MUST return a &lt;bad request/&gt; stanza error to the user:</p>
+    <example caption='Client attempts to retrieve more than one list'><![CDATA[
+<iq to='romeo@example.net/orchard' type='error' id='getlist6'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='public'/>
+  <list name='private'/>
+  <list name='special'/>
+</query>
+<error type='modify'>
+  <bad-request
+      xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</error>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic="Managing Active Lists" anchor="protocol-active">
+    <p>In order to set or change the active list currently being applied by the server, the user MUST send an IQ stanza of type "set" with a &lt;query/&gt; element qualified by the 'jabber:iq:privacy' namespace that contains an empty &lt;active/&gt; child element possessing a 'name' attribute whose value is set to the desired list name.</p>
+    <example caption='Client requests change of active list'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='active1'>
+<query xmlns='jabber:iq:privacy'>
+  <active name='special'/>
+</query>
+</iq>
+    ]]></example>
+    <p>The server MUST activate and apply the requested list before sending the result back to the client.</p>
+    <example caption='Server acknowledges success of active list change'><![CDATA[
+<iq type='result' id='active1' to='romeo@example.net/orchard'/>
+    ]]></example>
+    <p>If the user attempts to set an active list but a list by that name does not exist, the server MUST return an &lt;item-not-found/&gt; stanza error to the user:</p>
+    <example caption='Client attempts to set a non-existent list as active'><![CDATA[
+<iq to='romeo@example.net/orchard' type='error' id='active2'>
+<query xmlns='jabber:iq:privacy'>
+  <active name='The Empty Set'/>
+</query>
+<error type='cancel'>
+  <item-not-found
+      xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</error>
+</iq>
+    ]]></example>
+    <p>In order to decline the use of any active list, the connected resource MUST send an empty &lt;active/&gt; element with no 'name' attribute.</p>
+    <example caption='Client declines the use of active lists'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='active3'>
+<query xmlns='jabber:iq:privacy'>
+  <active/>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Server acknowledges success of declining any active list'><![CDATA[
+<iq type='result' id='active3' to='romeo@example.net/orchard'/>
+    ]]></example>
+  </section2>
+  <section2 topic="Managing the Default List" anchor="protocol-default">
+    <p>In order to change its default list (which applies to the user as a whole, not only the sending resource), the user MUST send an IQ stanza of type "set" with a &lt;query/&gt; element qualified by the 'jabber:iq:privacy' namespace that contains an empty &lt;default/&gt; child element possessing a 'name' attribute whose value is set to the desired list name.</p>
+    <example caption='User requests change of default list'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='default1'>
+<query xmlns='jabber:iq:privacy'>
+  <default name='special'/>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Server acknowledges success of default list change'><![CDATA[
+<iq type='result' id='default1' to='romeo@example.net/orchard'/>
+    ]]></example>
+    <p>If the user attempts to change which list is the default list but the default list is in use by at least one connected resource other than the sending resource, the server MUST return a &lt;conflict/&gt; stanza error to the sending resource:</p>
+    <example caption='Client attempts to change the default list but that list is in use by another resource'><![CDATA[
+<iq to='romeo@example.net/orchard' type='error' id='default1'>
+<query xmlns='jabber:iq:privacy'>
+  <default name='special'/>
+</query>
+<error type='cancel'>
+  <conflict
+      xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</error>
+</iq>
+    ]]></example>
+    <p>If the user attempts to set a default list but a list by that name does not exist, the server MUST return an &lt;item-not-found/&gt; stanza error to the user:</p>
+    <example caption='Client attempts to set a non-existent list as default'><![CDATA[
+<iq to='romeo@example.net/orchard' type='error' id='default1'>
+<query xmlns='jabber:iq:privacy'>
+  <default name='The Empty Set'/>
+</query>
+<error type='cancel'>
+  <item-not-found
+      xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</error>
+</iq>
+    ]]></example>
+    <p>In order to decline the use of a default list (i.e., to use the domain's stanza routing rules at all times), the user MUST send an empty &lt;default/&gt; element with no 'name' attribute.</p>
+    <example caption='Client declines the use of the default list'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='default2'>
+<query xmlns='jabber:iq:privacy'>
+  <default/>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Server acknowledges success of declining any default list'><![CDATA[
+<iq type='result' id='default2' to='romeo@example.net/orchard'/>
+    ]]></example>
+    <p>If one connected resource attempts to decline the use of a default list for the user as a whole but the default list currently applies to at least one other connected resource, the server MUST return a &lt;conflict/&gt; error to the sending resource:</p>
+    <example caption='Client attempts to decline a default list but that list is in use by another resource'><![CDATA[
+<iq to='romeo@example.net/orchard' type='error' id='default3'>
+<query xmlns='jabber:iq:privacy'>
+  <default/>
+</query>
+<error type='cancel'>
+  <conflict
+      xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</error>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic="Editing a Privacy List" anchor="protocol-edit">
+    <p>In order to edit a privacy list, the user MUST send an IQ stanza of type "set" with a &lt;query/&gt; element qualified by the 'jabber:iq:privacy' namespace that contains one &lt;list/&gt; child element possessing a 'name' attribute whose value is set to the list name the user would like to edit.  The &lt;list/&gt; element MUST contain one or more &lt;item/&gt; elements, which specify the user's desired changes to the list by including all elements in the list (not the "delta").</p>
+    <example caption='Client edits a privacy list'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='edit1'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='public'>
+    <item type='jid'
+          value='tybalt@example.com'
+          action='deny'
+          order='3'/>
+    <item type='jid'
+          value='paris@example.org'
+          action='deny'
+          order='5'/>
+    <item action='allow' order='68'/>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Server acknowledges success of list edit'><![CDATA[
+<iq type='result' id='edit1' to='romeo@example.net/orchard'/>
+    ]]></example>
+    <p>Note: The value of the 'order' attribute for any given item is not fixed.  Thus in the foregoing example if the user would like to add 4 items between the "tybalt@example.com" item and the "paris@example.org" item, the user's client MUST renumber the relevant items before submitting the list to the server.</p>
+    <p>The server MUST now send a "privacy list push" to all connected resources:</p>
+    <example caption='Privacy list push on list edit'><![CDATA[
+<iq to='romeo@example.net/orchard' type='set' id='push1'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='public'/>
+</query>
+</iq>
+
+<iq to='romeo@example.net/home' type='set' id='push2'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='public'/>
+</query>
+</iq>
+    ]]></example>
+    <p>In accordance with the semantics of IQ stanzas defined in &rfc3920;, each connected resource MUST return an IQ result to the server as well:</p>
+    <example caption='Acknowledging receipt of privacy list pushes'><![CDATA[
+<iq from='romeo@example.net/orchard'
+  type='result'
+  id='push1'/>
+
+<iq from='romeo@example.net/home'
+  type='result'
+  id='push2'/>
+    ]]></example>
+  </section2>
+  <section2 topic="Adding a New Privacy List" anchor="protocol-add">
+    <p>The same protocol used to edit an existing list is used to create a new list.  If the list name matches that of an existing list, the request to add a new list will overwrite the old one.  As with list edits, the server MUST also send a "privacy list push" to all connected resources.</p>
+  </section2>
+  <section2 topic="Removing a Privacy List" anchor="protocol-remove">
+    <p>In order to remove a privacy list, the user MUST send an IQ stanza of type "set" with a &lt;query/&gt; element qualified by the 'jabber:iq:privacy' namespace that contains one empty &lt;list/&gt; child element possessing a 'name' attribute whose value is set to the list name the user would like to remove.</p>
+    <example caption='Client removes a privacy list'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='remove1'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='private'/>
+</query>
+</iq>
+    ]]></example>
+    <example caption='Server acknowledges success of list removal'><![CDATA[
+<iq type='result' id='remove1' to='romeo@example.net/orchard'/>
+    ]]></example>
+    <p>If a user attempts to remove a list that is currently being applied to at least one resource other than the sending resource, the server MUST return a &lt;conflict/&gt; stanza error to the user; i.e., the user MUST first set another list to active or default before attempting to remove it.  If the user attempts to remove a list but a list by that name does not exist, the server MUST return an &lt;item-not-found/&gt; stanza error to the user.  If the user attempts to remove more than one list in the same request, the server MUST return a &lt;bad request/&gt; stanza error to the user.</p>
+  </section2>
+  <section2 topic="Blocking Messages" anchor="protocol-message">
+    <p>Server-side privacy lists enable a user to block incoming messages from other entities based on the entity's JID, roster group, or subscription status (or globally).  The following examples illustrate the protocol.  (Note: For the sake of brevity, IQ stanzas of type "result" are not shown in the following examples, nor are "privacy list pushes".)</p>
+    <example caption='User blocks based on JID'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='msg1'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='message-jid-example'>
+    <item type='jid'
+          value='tybalt@example.com'
+          action='deny'
+          order='3'>
+      <message/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive messages from the entity with the specified JID.</p>
+    <example caption='User blocks based on roster group'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='msg2'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='message-group-example'>
+    <item type='group'
+          value='Enemies'
+          action='deny'
+          order='4'>
+      <message/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive messages from any entities in the specified roster group.</p>
+    <example caption='User blocks based on subscription type'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='msg3'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='message-sub-example'>
+    <item type='subscription'
+          value='none'
+          action='deny'
+          order='5'>
+      <message/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive messages from any entities with the specified subscription type.</p>
+    <example caption='User blocks globally'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='msg4'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='message-global-example'>
+    <item action='deny' order='6'>
+      <message/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive messages from any other users.</p>
+  </section2>
+  <section2 topic="Blocking Inbound Presence Notifications" anchor="protocol-presencein">
+    <p>Server-side privacy lists enable a user to block incoming presence notifications from other entities based on the entity's JID, roster group, or subscription status (or globally).  The following examples illustrate the protocol.</p>
+  <p>Note: Presence notifications do not include presence subscriptions, only presence information that is broadcasted to the user because the user is currently subscribed to a contact's presence information.  Thus this includes presence stanzas with no 'type' attribute or of type='unavailable' only.</p>
+    <example caption='User blocks based on JID'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='presin1'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='presin-jid-example'>
+    <item type='jid'
+          value='tybalt@example.com'
+          action='deny'
+          order='7'>
+      <presence-in/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive presence notifications from the entity with the specified JID.</p>
+    <example caption='User blocks based on roster group'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='presin2'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='presin-group-example'>
+    <item type='group'
+          value='Enemies'
+          action='deny'
+          order='8'>
+      <presence-in/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive presence notifications from any entities in the specified roster group.</p>
+    <example caption='User blocks based on subscription type'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='presin3'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='presin-sub-example'>
+    <item type='subscription'
+          value='to'
+          action='deny'
+          order='9'>
+      <presence-in/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive presence notifications from any entities with the specified subscription type.</p>
+    <example caption='User blocks globally'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='presin4'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='presin-global-example'>
+    <item action='deny' order='11'>
+      <presence-in/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive presence notifications from any other users.</p>
+  </section2>
+  <section2 topic="Blocking Outbound Presence Notifications" anchor="protocol-presenceout">
+    <p>Server-side privacy lists enable a user to block outgoing presence notifications to other entities based on the entity's JID, roster group, or subscription status (or globally).  The following examples illustrate the protocol.</p>
+  <p>Note: Presence notifications do not include presence subscriptions, only presence information that is broadcasted to contacts because those contacts are currently subscribed to the user's presence information.  Thus this includes presence stanzas with no 'type' attribute or of type='unavailable' only.</p>
+    <example caption='User blocks based on JID'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='presout1'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='presout-jid-example'>
+    <item type='jid'
+          value='tybalt@example.com'
+          action='deny'
+          order='13'>
+      <presence-out/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not send presence notifications to the entity with the specified JID.</p>
+    <example caption='User blocks based on roster group'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='presout2'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='presout-group-example'>
+    <item type='group'
+          value='Enemies'
+          action='deny'
+          order='15'>
+      <presence-out/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not send presence notifications to any entities in the specified roster group.</p>
+    <example caption='User blocks based on subscription type'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='presout3'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='presout-sub-example'>
+    <item type='subscription'
+          value='from'
+          action='deny'
+          order='17'>
+      <presence-out/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not send presence notifications to any entities with the specified subscription type.</p>
+    <example caption='User blocks globally'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='presout4'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='presout-global-example'>
+    <item action='deny' order='23'>
+      <presence-out/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not send presence notifications to any other users.</p>
+  </section2>
+  <section2 topic="Blocking IQ Stanzas" anchor="protocol-iq">
+    <p>Server-side privacy lists enable a user to block incoming IQ stanzas from other entities based on the entity's JID, roster group, or subscription status (or globally).  The following examples illustrate the protocol.</p>
+    <example caption='User blocks based on JID'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='iq1'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='iq-jid-example'>
+    <item type='jid'
+          value='tybalt@example.com'
+          action='deny'
+          order='29'>
+      <iq/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive IQ stanzas from the entity with the specified JID.</p>
+    <example caption='User blocks based on roster group'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='iq2'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='iq-group-example'>
+    <item type='group'
+          value='Enemies'
+          action='deny'
+          order='31'>
+      <iq/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive IQ stanzas from any entities in the specified roster group.</p>
+    <example caption='User blocks based on subscription type'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='iq3'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='iq-sub-example'>
+    <item type='subscription'
+          value='none'
+          action='deny'
+          order='17'>
+      <iq/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive IQ stanzas from any entities with the specified subscription type.</p>
+    <example caption='User blocks globally'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='iq4'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='iq-global-example'>
+    <item action='deny' order='1'>
+      <iq/>
+    </item>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive IQ stanzas from any other users.</p>
+  </section2>
+  <section2 topic="Blocking All Communication" anchor="protocol-all">
+    <p>Server-side privacy lists enable a user to block all stanzas from and to other entities based on the entity's JID, roster group, or subscription status (or globally).  Note that this includes subscription-related presence stanzas, which are excluded by <link url="protocol-presencein">Blocking Inbound Presence Notifications</link>.  The following examples illustrate the protocol.</p>
+    <example caption='User blocks based on JID'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='all1'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='all-jid-example'>
+    <item type='jid'
+          value='tybalt@example.com'
+          action='deny'
+          order='23'/>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive any communications from, nor send any stanzas to, the entity with the specified JID.</p>
+    <example caption='User blocks based on roster group'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='all2'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='all-group-example'>
+    <item type='group'
+          value='Enemies'
+          action='deny'
+          order='13'/>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive any communications from, nor send any stanzas to, any entities in the specified roster group.</p>
+    <example caption='User blocks based on subscription type'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='all3'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='all-sub-example'>
+    <item type='subscription'
+          value='none'
+          action='deny'
+          order='11'/>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive any communications from, nor send any stanzas to, any entities with the specified subscription type.</p>
+    <example caption='User blocks globally'><![CDATA[
+<iq from='romeo@example.net/orchard' type='set' id='all4'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='all-global-example'>
+    <item action='deny' order='7'/>
+  </list>
+</query>
+</iq>
+    ]]></example>
+    <p>As a result of creating and applying the foregoing list, the user will not receive any communications from, nor send any stanzas to, any other users.</p>
+  </section2>
+  <section2 topic="Blocked Entity Attempts to Communicate with User" anchor="protocol-error">
+    <p>If a blocked entity attempts to send message or presence stanzas to the user, the user's server SHOULD silently drop the stanza and MUST NOT return an error to the sending entity.</p>
+    <p>If a blocked entity attempts to send an IQ stanza of type "get" or "set" to the user, the user's server MUST return to the sending entity a &lt;service-unavailable/&gt; stanza error, since this is the standard error code sent from a client that does not understand the namespace of an IQ get or set.  IQ stanzas of other types SHOULD be silently dropped by the server.</p>
+    <example caption='Blocked entity attempts to send IQ get'><![CDATA[
+<iq type='get'
+  to='romeo@example.net'
+  from='tybalt@example.com/pda'
+  id='probing1'>
+<query xmlns='jabber:iq:version'/>
+</iq>
+    ]]></example>
+    <example caption='Server returns error to blocked entity'><![CDATA[
+<iq type='error'
+  from='romeo@example.net'
+  to='tybalt@example.com/pda'
+  id='probing1'>
+<query xmlns='jabber:iq:version'/>
+<error type='cancel'>
+  <service-unavailable
+      xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</error>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic="Higher-Level Heuristics" anchor="protocol-heuristics">
+    <p>When building a representation of a higher-level privacy heuristic, a client SHOULD use the simplest possible representation.</p>
+    <p>For example, the heuristic "block all communications with any user not in my roster" could be constructed in any of the following ways:</p>
+    <ul>
+      <li>allow communications from all JIDs in my roster (i.e., listing each JID as a separate list item), but block communications with everyone else</li>
+      <li>allow communications from any user who is in one of the groups that make up my roster (i.e., listing each group as a separate list item), but block communications from everyone else</li>
+      <li>allow communications from any user with whom I have a subscription of 'both' or 'to' or 'from' (i.e., listing each subscription value separately), but block communications from everyone else</li>
+      <li>block communications from anyone whose subscription state is 'none'</li>
+    </ul>
+    <p>The final representation is the simplest and SHOULD be used; here is the XML that would be sent in this case:</p>
+    <code><![CDATA[
+<iq type='set' id='heuristic1'>
+<query xmlns='jabber:iq:privacy'>
+  <list name='heuristic-example'>
+    <item type='subscription'
+          value='none'
+          action='deny'
+          order='437'/>
+  </list>
+</query>
+</iq>
+    ]]></code>
+  </section2>
+</section1>
+
+<section1 topic="XML Schema" anchor="schema">
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+  xmlns:xs='http://www.w3.org/2001/XMLSchema'
+  targetNamespace='jabber:iq:privacy'
+  xmlns='jabber:iq:privacy'
+  elementFormDefault='qualified'>
+
+<xs:element name='query'>
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element ref='active'
+                  minOccurs='0'/>
+      <xs:element ref='default'
+                  minOccurs='0'/>
+      <xs:element ref='list'
+                  minOccurs='0'
+                  maxOccurs='unbounded'/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name='active'>
+  <xs:complexType>
+    <xs:simpleContent>
+      <xs:extension base='xs:NMTOKEN'>
+        <xs:attribute name='name'
+                      type='xs:string'
+                      use='optional'/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name='default'>
+  <xs:complexType>
+    <xs:simpleContent>
+      <xs:extension base='xs:NMTOKEN'>
+        <xs:attribute name='name'
+                      type='xs:string'
+                      use='optional'/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name='list'>
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element ref='item'
+                  minOccurs='0'
+                  maxOccurs='unbounded'/>
+    </xs:sequence>
+    <xs:attribute name='name'
+                  type='xs:string'
+                  use='required'/>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name='item'>
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element name='iq'
+                  minOccurs='0'
+                  type='empty'/>
+      <xs:element name='message'
+                  minOccurs='0'
+                  type='empty'/>
+      <xs:element name='presence-in'
+                  minOccurs='0'
+                  type='empty'/>
+      <xs:element name='presence-out'
+                  minOccurs='0'
+                  type='empty'/>
+    </xs:sequence>
+    <xs:attribute name='action' use='required'>
+      <xs:simpleType>
+        <xs:restriction base='xs:NCName'>
+          <xs:enumeration value='allow'/>
+          <xs:enumeration value='deny'/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name='order'
+                  type='xs:unsignedInt'
+                  use='required'/>
+    <xs:attribute name='type' use='optional'>
+      <xs:simpleType>
+        <xs:restriction base='xs:NCName'>
+          <xs:enumeration value='group'/>
+          <xs:enumeration value='jid'/>
+          <xs:enumeration value='subscription'/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name='value'
+                  type='xs:string'
+                  use='optional'/>
+  </xs:complexType>
+</xs:element>
+
+<xs:simpleType name='empty'>
+  <xs:restriction base='xs:string'>
+    <xs:enumeration value=''/>
+  </xs:restriction>
+</xs:simpleType>
+
+</xs:schema>
+  ]]></code>
+</section1>
+
+<section1 topic='Author Note' anchor='authornote'>
+<p>Peter Millard, the author of this specification from version 0.1 through version 0.3, died on April 26, 2006.</p>
+</section1>
+
+</xep>
