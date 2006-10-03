@@ -8,18 +8,18 @@
   <xsl:template match='/'>
     <html>
       <head>
-        <title>JEP-<xsl:value-of select='/jep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/jep/header/title' /></title>
+        <title>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></title>
         <link rel='stylesheet' type='text/css' href='jep.css' />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
         <!-- BEGIN META TAGS FOR DUBLIN CORE -->
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Title</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'><xsl:value-of select='/jep/header/title'/></xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='/xep/header/title'/></xsl:attribute>
         </meta>
-        <xsl:apply-templates select='/jep/header/author' mode='meta'/>
+        <xsl:apply-templates select='/xep/header/author' mode='meta'/>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Description</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'><xsl:value-of select='/jep/header/abstract'/></xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='/xep/header/abstract'/></xsl:attribute>
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Publisher</xsl:text></xsl:attribute>
@@ -27,15 +27,15 @@
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Contributor</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'>JEP Editor</xsl:attribute>
+          <xsl:attribute name='content'>XMPP Extensions Editor</xsl:attribute>
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Date</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'><xsl:value-of select='/jep/header/revision/date'/></xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='/xep/header/revision/date'/></xsl:attribute>
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Type</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'>Jabber Enhancement Proposal</xsl:attribute>
+          <xsl:attribute name='content'>XMPP Extension Protocol</xsl:attribute>
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Format</xsl:text></xsl:attribute>
@@ -43,7 +43,7 @@
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Identifier</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'>JEP-<xsl:value-of select='/jep/header/number'/></xsl:attribute>
+          <xsl:attribute name='content'>XEP-<xsl:value-of select='/xep/header/number'/></xsl:attribute>
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Language</xsl:text></xsl:attribute>
@@ -51,108 +51,108 @@
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Rights</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'><xsl:value-of select='/jep/header/legal'/></xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='/xep/header/legal'/></xsl:attribute>
         </meta>
         <!-- END META TAGS FOR DUBLIN CORE -->
       </head>
       <body>
         <!-- TITLE -->
-        <h1>JEP-<xsl:value-of select='/jep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/jep/header/title' /></h1>
+        <h1>XEP-<xsl:value-of select='/xep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></h1>
         <!-- ABSTRACT -->
-        <p><xsl:value-of select='/jep/header/abstract'/></p>
+        <p><xsl:value-of select='/xep/header/abstract'/></p>
         <!-- NOTICE -->
         <p><hr/></p>
-        <xsl:variable name='thestatus' select='/jep/header/status'/>
-        <xsl:variable name='thetype' select='/jep/header/type'/>
+        <xsl:variable name='thestatus' select='/xep/header/status'/>
+        <xsl:variable name='thetype' select='/xep/header/type'/>
         <xsl:if test='$thestatus = "Active" and $thetype = "Historical"'>
-          <p style='color:green'>NOTICE: This Historical JEP provides canonical documentation of a protocol that is in use within the Jabber/XMPP community. This JEP is not a standards-track specification within the Jabber Software Foundation's standards process; however, it may be converted to standards-track in the future or may be obsoleted by a more modern protocol.</p>
+          <p style='color:green'>NOTICE: This Historical specification provides canonical documentation of a protocol that is in use within the Jabber/XMPP community. This document is not a standards-track specification within the Jabber Software Foundation's standards process; however, it may be converted to standards-track in the future or may be obsoleted by a more modern protocol.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Active" and $thetype = "Humorous"'>
-          <p style='color:green'>NOTICE: This JEP is Humorous. It MAY provide amusement but SHOULD NOT be taken seriously.</p>
+          <p style='color:green'>NOTICE: This document is Humorous. It MAY provide amusement but SHOULD NOT be taken seriously.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Active" and $thetype = "Informational"'>
-          <p style='color:green'>NOTICE: This Informational JEP defines a best practice or protocol profile that has been approved by the Jabber Council and/or the JSF Board of Directors. Implementations are encouraged and the best practice or protocol profile is appropriate for deployment in production systems.</p>
+          <p style='color:green'>NOTICE: This Informational specification defines a best practice or protocol profile that has been approved by the XMPP Council and/or the JSF Board of Directors. Implementations are encouraged and the best practice or protocol profile is appropriate for deployment in production systems.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Active" and $thetype = "Procedural"'>
-          <p style='color:green'>NOTICE: This Procedural JEP defines a process or activity of the Jabber Software Foundation (JSF) that has been approved by the Jabber Council and/or the JSF Board of Directors. The JSF is currently following the process or activity defined herein and will do so until this JEP is deprecated or obsoleted.</p>
+          <p style='color:green'>NOTICE: This Procedural document defines a process or activity of the Jabber Software Foundation (JSF) that has been approved by the XMPP Council and/or the JSF Board of Directors. The JSF is currently following the process or activity defined herein and will do so until this document is deprecated or obsoleted.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Deferred"'>
-          <p style='color:red'>WARNING: Consideration of this JEP has been Deferred by the Jabber Software Foundation. Implementation of the protocol described herein is not recommended.</p>
+          <p style='color:red'>WARNING: Consideration of this document has been Deferred by the Jabber Software Foundation. Implementation of the protocol described herein is not recommended.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Deprecated"'>
-          <p style='color:red'>WARNING: This JEP has been deprecated by the Jabber Software Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been deprecated by the Jabber Software Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Draft"'>
           <p style='color:green'>NOTICE: The protocol defined herein is a Draft Standard of the Jabber Software Foundation. Implementations are encouraged and the protocol is appropriate for deployment in production systems, but some changes to the protocol are possible before it becomes a Final Standard.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Historical"'>
-          <p style='color:red'>NOTICE: This Historical JEP attempts to provide canonical documentation of a protocol that is in use within the Jabber/XMPP community. Publication as a Jabber Enhancement Proposal does not imply approval of this proposal by the Jabber Software Foundation. This JEP is not a standards-track specification within the Jabber Software Foundation's standards process; however, it may be converted to standards-track in the future or may be obsoleted by a more modern protocol.</p>
+          <p style='color:red'>NOTICE: This Historical document attempts to provide canonical documentation of a protocol that is in use within the Jabber/XMPP community. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the Jabber Software Foundation. This document is not a standards-track specification within the Jabber Software Foundation's standards process; however, it may be converted to standards-track in the future or may be obsoleted by a more modern protocol.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Informational"'>
-          <p style='color:red'>WARNING: This Informational JEP is Experimental. Publication as a Jabber Enhancement Proposal does not imply approval of this proposal by the Jabber Software Foundation. Implementation of the best practice or protocol profile described herein is encouraged in exploratory implementations, although production systems should not deploy implementations of this protocol until it advances to a status of Draft.</p>
+          <p style='color:red'>WARNING: This Informational document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the Jabber Software Foundation. Implementation of the best practice or protocol profile described herein is encouraged in exploratory implementations, although production systems should not deploy implementations of this protocol until it advances to a status of Draft.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Procedural"'>
-          <p style='color:red'>NOTICE: This Procedural JEP proposes that the process or activity defined herein shall be followed by the Jabber Software Foundation (JSF). However, this process or activity has not yet been approved by the Jabber Council and/or the JSF Board of Directors and is therefore not currently in force.</p>
+          <p style='color:red'>NOTICE: This Procedural document proposes that the process or activity defined herein shall be followed by the Jabber Software Foundation (JSF). However, this process or activity has not yet been approved by the XMPP Council and/or the JSF Board of Directors and is therefore not currently in force.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Standards Track"'>
-          <p style='color:red'>WARNING: This Standards-Track JEP is Experimental. Publication as a Jabber Enhancement Proposal does not imply approval of this proposal by the Jabber Software Foundation. Implementation of the protocol described herein is encouraged in exploratory implementations, but production systems should not deploy implementations of this protocol until it advances to a status of Draft.</p>
+          <p style='color:red'>WARNING: This Standards-Track document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the Jabber Software Foundation. Implementation of the protocol described herein is encouraged in exploratory implementations, but production systems should not deploy implementations of this protocol until it advances to a status of Draft.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Final"'>
           <p style='color:green'>NOTICE: The protocol defined herein is a Final Standard of the Jabber Software Foundation and may be considered a stable technology for implementation and deployment.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Obsolete"'>
-          <p style='color:red'>WARNING: This JEP has been obsoleted by the Jabber Software Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been obsoleted by the Jabber Software Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Proposed"'>
-          <p style='color:red'>NOTICE: This JEP is currently within Last Call or under consideration by the Jabber Council for advancement to the next stage in the JSF standards process.</p>
+          <p style='color:red'>NOTICE: This document is currently within Last Call or under consideration by the XMPP Council for advancement to the next stage in the JSF standards process.</p>
         </xsl:if>
-        <xsl:if test='$thestatus = "ProtoJEP"'>
-          <p style='color:red'>WARNING: This document has not yet been accepted for consideration or approved in any official manner by the Jabber Software Foundation, and this document must not be referred to as a Jabber Enhancement Proposal (JEP). If this document is accepted as a JEP by the Jabber Council, it will be published at &lt;<a href="http://www.jabber.org/jeps/">http://www.jabber.org/jeps/</a>&gt; and announced on the &lt;standards-jig@jabber.org&gt; mailing list.</p>
+        <xsl:if test='$thestatus = "ProtoXEP"'>
+          <p style='color:red'>WARNING: This document has not yet been accepted for consideration or approved in any official manner by the Jabber Software Foundation, and this document must not be referred to as an XMPP Extension Protocol (XEP). If this document is accepted as a XEP by the XMPP Council, it will be published at &lt;<a href="http://www.xmpp.org/extensions/">http://www.xmpp.org/extensions/</a>&gt; and announced on the &lt;standards-jig@jabber.org&gt; mailing list.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Rejected"'>
-          <p style='color:red'>WARNING: This JEP has been Rejected by the Jabber Council. Implementation of the protocol described herein is not recommended under any circumstances.</p>
+          <p style='color:red'>WARNING: This document has been Rejected by the XMPP Council. Implementation of the protocol described herein is not recommended under any circumstances.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Retracted"'>
-          <p style='color:red'>WARNING: This JEP has been retracted by the author(s). Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been retracted by the author(s). Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
         </xsl:if>
         <p><hr /></p>
-        <!-- JEP INFO -->
-        <h2>JEP Information</h2>
+        <!-- XEP INFO -->
+        <h2>XEP Information</h2>
           <p class='indent'>
             Status: 
             <a>
-              <xsl:attribute name='href'><xsl:text>http://www.jabber.org/jeps/jep-0001.html#states-</xsl:text><xsl:value-of select='/jep/header/status'/></xsl:attribute>
-              <xsl:value-of select='/jep/header/status'/>
+              <xsl:attribute name='href'><xsl:text>http://www.xmpp.org/extensions/xep-0001.html#states-</xsl:text><xsl:value-of select='/xep/header/status'/></xsl:attribute>
+              <xsl:value-of select='/xep/header/status'/>
             </a>
             <br />
             Type:
             <a>
-              <xsl:attribute name='href'><xsl:text>http://www.jabber.org/jeps/jep-0001.html#types-</xsl:text><xsl:value-of select='/jep/header/type'/></xsl:attribute>
-              <xsl:value-of select='/jep/header/type'/>
+              <xsl:attribute name='href'><xsl:text>http://www.xmpp.org/extensions/xep-0001.html#types-</xsl:text><xsl:value-of select='/xep/header/type'/></xsl:attribute>
+              <xsl:value-of select='/xep/header/type'/>
             </a>
             <br />
-            Number: <xsl:value-of select='/jep/header/number'/><br />
-            Version: <xsl:value-of select='/jep/header/revision[position()=1]/version'/><br />
-            Last Updated: <xsl:value-of select='/jep/header/revision[position()=1]/date'/><br />
-            <xsl:variable name='expires.count' select='count(/jep/header/expires)'/>
+            Number: <xsl:value-of select='/xep/header/number'/><br />
+            Version: <xsl:value-of select='/xep/header/revision[position()=1]/version'/><br />
+            Last Updated: <xsl:value-of select='/xep/header/revision[position()=1]/date'/><br />
+            <xsl:variable name='expires.count' select='count(/xep/header/expires)'/>
             <xsl:if test='$expires.count &gt; 0'>
-              Expires: <xsl:value-of select='/jep/header/expires'/><br />
+              Expires: <xsl:value-of select='/xep/header/expires'/><br />
             </xsl:if>
-            JIG: <xsl:value-of select='/jep/header/jig'/><br />
-            <xsl:variable name='ApprovingBody' select='/jep/header/approver'/>
+            JIG: <xsl:value-of select='/xep/header/jig'/><br />
+            <xsl:variable name='ApprovingBody' select='/xep/header/approver'/>
             <xsl:choose>
               <xsl:when test='$ApprovingBody = "Board"'>
                 Approving Body: <a href='http://www.jabber.org/board/'>JSF Board of Directors</a><br />
               </xsl:when>
               <xsl:otherwise>
-                Approving Body: <a href='http://www.jabber.org/council/'>Jabber Council</a><br />
+                Approving Body: <a href='http://www.jabber.org/council/'>XMPP Council</a><br />
               </xsl:otherwise>
             </xsl:choose>
-            <xsl:variable name='dependencies.count' select='count(/jep/header/dependencies/spec)'/>
+            <xsl:variable name='dependencies.count' select='count(/xep/header/dependencies/spec)'/>
             <xsl:choose>
               <xsl:when test='$dependencies.count &gt; 0'>
                 <xsl:text>Dependencies: </xsl:text>
-                <xsl:apply-templates select='/jep/header/dependencies/spec'>
+                <xsl:apply-templates select='/xep/header/dependencies/spec'>
                   <xsl:with-param name='speccount' select='$dependencies.count'/>
                 </xsl:apply-templates>
                 <br />
@@ -161,11 +161,11 @@
                 Dependencies: None<br />
               </xsl:otherwise>
             </xsl:choose>
-            <xsl:variable name='supersedes.count' select='count(/jep/header/supersedes/spec)'/>
+            <xsl:variable name='supersedes.count' select='count(/xep/header/supersedes/spec)'/>
             <xsl:choose>
               <xsl:when test='$supersedes.count &gt; 0'>
                 <xsl:text>Supersedes: </xsl:text>
-                <xsl:apply-templates select='/jep/header/supersedes/spec'>
+                <xsl:apply-templates select='/xep/header/supersedes/spec'>
                   <xsl:with-param name='speccount' select='$supersedes.count'/>
                 </xsl:apply-templates>
                 <br />
@@ -174,11 +174,11 @@
                 Supersedes: None<br />
               </xsl:otherwise>
             </xsl:choose>
-            <xsl:variable name='supersededby.count' select='count(/jep/header/supersededby/spec)'/>
+            <xsl:variable name='supersededby.count' select='count(/xep/header/supersededby/spec)'/>
             <xsl:choose>
               <xsl:when test='$supersededby.count &gt; 0'>
                 <xsl:text>Superseded By: </xsl:text>
-                <xsl:apply-templates select='/jep/header/supersededby/spec'>
+                <xsl:apply-templates select='/xep/header/supersededby/spec'>
                   <xsl:with-param name='speccount' select='$supersededby.count'/>
                 </xsl:apply-templates>
                 <br />
@@ -187,17 +187,17 @@
                 Superseded By: None<br />
               </xsl:otherwise>
             </xsl:choose>
-            Short Name: <xsl:value-of select='/jep/header/shortname'/><br />
-            <xsl:variable name='schema.count' select='count(/jep/header/schemaloc)'/>
+            Short Name: <xsl:value-of select='/xep/header/shortname'/><br />
+            <xsl:variable name='schema.count' select='count(/xep/header/schemaloc)'/>
             <xsl:if test='$schema.count &gt; 0'>
-              <xsl:apply-templates select='/jep/header/schemaloc'/>
+              <xsl:apply-templates select='/xep/header/schemaloc'/>
             </xsl:if>
-            <xsl:variable name='reg.count' select='count(/jep/header/registry)'/>
+            <xsl:variable name='reg.count' select='count(/xep/header/registry)'/>
             <xsl:if test='$reg.count &gt; 0'>
               Registry: 
               <xsl:variable name='registryURL'>
                 <xsl:text>http://www.jabber.org/registrar/</xsl:text>
-                <xsl:value-of select='/jep/header/shortname'/>
+                <xsl:value-of select='/xep/header/shortname'/>
                 <xsl:text>.html</xsl:text>
               </xsl:variable>
               &lt;<a href='{$registryURL}'><xsl:value-of select='$registryURL'/></a>&gt;
@@ -205,25 +205,25 @@
             </xsl:if>
             <xsl:variable name='wikiURL'>
               <xsl:text>http://wiki.jabber.org/index.php/</xsl:text>
-              <xsl:value-of select='/jep/header/title'/>
-              <xsl:text> (JEP-</xsl:text>
-              <xsl:value-of select='/jep/header/number'/>
+              <xsl:value-of select='/xep/header/title'/>
+              <xsl:text> (XEP-</xsl:text>
+              <xsl:value-of select='/xep/header/number'/>
               <xsl:text>)</xsl:text>
             </xsl:variable>
-            <xsl:if test='$thestatus != "ProtoJEP"'>
+            <xsl:if test='$thestatus != "ProtoXEP"'>
               Wiki Page: &lt;<a href='{$wikiURL}'><xsl:value-of select='$wikiURL'/></a>&gt;
             </xsl:if>
           </p>
         <!-- AUTHOR INFO -->
         <h2>Author Information</h2>
         <div class='indent'>
-          <xsl:apply-templates select='/jep/header/author'/>
+          <xsl:apply-templates select='/xep/header/author'/>
         </div>
         <!-- LEGAL NOTICE -->
-        <xsl:apply-templates select='/jep/header/legal'/>
+        <xsl:apply-templates select='/xep/header/legal'/>
         <!-- DISCUSSION VENUE -->
         <h2>Discussion Venue</h2>
-        <xsl:variable name='Approver' select='/jep/header/approver'/>
+        <xsl:variable name='Approver' select='/xep/header/approver'/>
         <xsl:choose>
           <xsl:when test='$Approver = "Board"'>
             <p class='indent'>The preferred venue for discussion of this document is the Standards-JIG discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards-jig">http://mail.jabber.org/mailman/listinfo/standards-jig</a>&gt;.</p>
@@ -231,25 +231,25 @@
           </xsl:when>
           <xsl:otherwise>
             <p class='indent'>The preferred venue for discussion of this document is the Standards-JIG discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards-jig">http://mail.jabber.org/mailman/listinfo/standards-jig</a>&gt;.</p>
-            <xsl:if test='contains(/jep/header/dependencies,"RFC")'>
-              <p class='indent'>Given that this JEP normatively references IETF technologies, discussion on the JSF-IETF list may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/jsf-ietf">http://mail.jabber.org/mailman/listinfo/jsf-ietf</a>&gt; for details).</p>
+            <xsl:if test='contains(/xep/header/dependencies,"RFC")'>
+              <p class='indent'>Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the JSF-IETF list may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/jsf-ietf">http://mail.jabber.org/mailman/listinfo/jsf-ietf</a>&gt; for details).</p>
             </xsl:if>
           </xsl:otherwise>
         </xsl:choose>
         <!-- XMPP NOTICE AND CONFORMANCE TERMS-->
-        <!-- (we don't put these on Procedural JEPs) -->
+        <!-- (we don't put these on Procedural XEPs) -->
         <xsl:if test='$thetype = "Standards Track" or $thetype = "Historical" or $thetype = "Informational"'>
           <h2>Relation to XMPP</h2>
-          <p class='indent'>The Extensible Messaging and Presence Protocol (XMPP) is defined in the XMPP Core (RFC 3920) and XMPP IM (RFC 3921) specifications contributed by the Jabber Software Foundation to the Internet Standards Process, which is managed by the Internet Engineering Task Force in accordance with RFC 2026. Any protocol defined in this JEP has been developed outside the Internet Standards Process and is to be understood as an extension to XMPP rather than as an evolution, development, or modification of XMPP itself.</p>
+          <p class='indent'>The Extensible Messaging and Presence Protocol (XMPP) is defined in the XMPP Core (RFC 3920) and XMPP IM (RFC 3921) specifications contributed by the Jabber Software Foundation to the Internet Standards Process, which is managed by the Internet Engineering Task Force in accordance with RFC 2026. Any protocol defined in this document has been developed outside the Internet Standards Process and is to be understood as an extension to XMPP rather than as an evolution, development, or modification of XMPP itself.</p>
           <h2>Conformance Terms</h2>
           <p class='indent'>The following keywords as used in this document are to be interpreted as described in RFC 2119: "MUST", "SHALL", "REQUIRED"; "MUST NOT", "SHALL NOT"; "SHOULD", "RECOMMENDED"; "SHOULD NOT", "NOT RECOMMENDED"; "MAY", "OPTIONAL".</p>
         </xsl:if>
         <!-- TABLE OF CONTENTS -->
         <p><hr /></p>
         <xsl:call-template name='processTOC' />
-        <!-- JEP CONTENTS -->
+        <!-- XEP CONTENTS -->
         <p><hr /></p>
-        <xsl:apply-templates select='/jep/section1'/>
+        <xsl:apply-templates select='/xep/section1'/>
         <!-- NOTES -->
         <p><hr /></p>
         <a name="notes"></a><h2>Notes</h2>
@@ -260,7 +260,7 @@
         <p><hr /></p>
         <a name="revs"></a><h2>Revision History</h2>
           <div class='indent'>
-            <xsl:apply-templates select='/jep/header/revision'/>
+            <xsl:apply-templates select='/xep/header/revision'/>
           </div>
         <p><hr /></p>
         <p>END</p>
