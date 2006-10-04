@@ -2,7 +2,7 @@
 
 # File: deferred.py
 # Version: 0.2
-# Description: a script for setting a JEP to Deferred
+# Description: a script for setting a XEP to Deferred
 # Last Modified: 2006-04-24
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
@@ -33,7 +33,7 @@ now = int(time.time())
 
 # READ IN ARGS: 
 #
-# 1. JEP number
+# 1. XEP number
 # 2. database user
 # 3. database password
 
@@ -43,7 +43,7 @@ dbpw = sys.argv[3];
 
 jepfile = jepnum + '/jep-' + jepnum + '.xml'
 
-# PARSE JEP HEADERS:
+# PARSE XEP HEADERS:
 #
 # - title
 # - abstract
@@ -79,7 +79,7 @@ remark = getText(remarkNode.childNodes)
 # name is $title
 # type is $jeptype
 # status is $jepstatus
-# notes is "Version $version of JEP-$jepnum released $date."
+# notes is "Version $version of XEP-$jepnum released $date."
 # version is $version
 # last_modified is $now
 # abstract is $abstract
@@ -87,7 +87,7 @@ remark = getText(remarkNode.childNodes)
 
 db = MySQLdb.connect("localhost", dbuser, dbpw, "foundation")
 cursor = db.cursor()
-theNotes = "Version " + version + " of JEP-" + jepnum + " released " + date + "; consideration deferred because of inactivity."
+theNotes = "Version " + version + " of XEP-" + jepnum + " released " + date + "; consideration deferred because of inactivity."
 theLog = remark + " (" + initials + ")"
 theStatement = "UPDATE jeps SET name='" + title + "', type='" + jeptype + "', status='Deferred', notes='" + theNotes + "', version='" + str(version) + "', last_modified='" + str(now) + "', abstract='" + abstract + "', changelog='" + theLog + "' WHERE number='" + str(jepnum) + "';"
 cursor.execute(theStatement) 
@@ -97,15 +97,15 @@ result = cursor.fetchall()
 #
 # From: editor@jabber.org
 # To: standards-jig@jabber.org
-# Subject: DEFERRED: JEP-$jepnum ($title)
+# Subject: DEFERRED: XEP-$jepnum ($title)
 # Body:
-#    JEP-$jepnum ($title) has been Deferred because of inactivity.
+#    XEP-$jepnum ($title) has been Deferred because of inactivity.
 #
 #    Abstract: $abstract
 #
 #    URL: http://www.jabber.org/jeps/jep-$jepnum.html
 #
-#    If and when a new revision of this JEP is published,
+#    If and when a new revision of this XEP is published,
 #    its status will be changed back to Experimental.
 #
 
@@ -115,14 +115,14 @@ fromaddr = "editor@jabber.org"
 # for real...
 toaddrs = "standards-jig@jabber.org"
 
-thesubject = 'DEFERRED: JEP-' + jepnum + " (" + title + ")"
-introline = 'JEP-' + jepnum + ' (' + title + ') has been Deferred because of inactivity.'
+thesubject = 'DEFERRED: XEP-' + jepnum + " (" + title + ")"
+introline = 'XEP-' + jepnum + ' (' + title + ') has been Deferred because of inactivity.'
 abstractline = 'Abstract: ' + abstract
 urlline = 'URL: http://www.jabber.org/jeps/jep-' + jepnum + '.html'
-endline = 'If and when a new revision of this JEP is published, its status will be changed back to Experimental.'
+endline = 'If and when a new revision of this XEP is published, its status will be changed back to Experimental.'
 
 #msg = "From: %s\r\n" % fromaddr
-msg = "From: JEP Editor <%s>\r\n" % fromaddr
+msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr
 msg = msg + "To: %s\r\n" % toaddrs
 msg = msg + "Subject: %s\r\n" % thesubject
 msg = msg + introline

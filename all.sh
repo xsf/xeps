@@ -1,31 +1,20 @@
 #!/bin/sh
-# for each XEP, generates HTML file and IETF reference, then copies XML file
-# also generates HTML for the README and template
-# finally, copies the stylesheet, DTD, and schema
-# usage: ./all.sh
+# for one XEP, generates HTML file and IETF reference, then copies XML file
+# usage: ./gen.sh xxxx 
+# (where xxxx is the 4-digit XEP number)
 
 xeppath=/var/www/stage.xmpp.org/extensions
 
-ls xep-0*.xml > tmp.txt
-sed s/xep-\(.*\).xml/\1/ tmp.txt > nums.txt
-rm tmp.txt
+xsltproc xep.xsl xep-$1.xml > $xeppath/jep-$1.html
+xsltproc ref.xsl xep-$1.xml > $xeppath/refs/reference.JSF.XEP-$1.xml
 
-while read f
-do
-    xsltproc xep.xsl xep-$f.xml > $xeppath/xep-$f.html
-    xsltproc ref.xsl xep-$f.xml > $xeppath/refs/reference.JSF.XEP-$f.xml
-    cp xep-$f.xml $xeppath/
-done < nums.txt
+cp xep-$1.xml $xeppath/
 
-rm nums.txt
-
-xsltproc xep.xsl xep-README.xml > $xeppath/README.html
-xsltproc xep.xsl xep-template.xml > $xeppath/template.html
-
-cp xep.dtd $xeppath/
-cp xep.ent $xeppath/
-cp xep.xsd $xeppath/
-cp xep.xsl $xeppath/
+cp *.dtd $xeppath/
+cp *.ent $xeppath/
+cp *.gif $xeppath/
+cp *.html $xeppath/
+cp *.shtml $xeppath/
+cp *.xsd $xeppath/
 
 # END
-

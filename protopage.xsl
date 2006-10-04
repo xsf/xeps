@@ -9,7 +9,7 @@
     <html>
       <head>
         <title><xsl:value-of select='/jep/header/shortname'/></title>
-        <link rel='stylesheet' type='text/css' href='/jeps/jep.css' />
+        <link rel='stylesheet' type='text/css' href='/xmpp.css' />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
         <link>
           <xsl:attribute name='rel'><xsl:text>alternate</xsl:text></xsl:attribute>
@@ -39,9 +39,9 @@
             <xsl:value-of select='/jep/header/number'/>
             <xsl:text>.html</xsl:text>
           </xsl:attribute>
-          <xsl:text>JEP-</xsl:text><xsl:value-of select='/jep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/jep/header/title' />
+          <xsl:text>XEP-</xsl:text><xsl:value-of select='/jep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/jep/header/title' />
         </a>
-        (part of the <a href="http://www.jabber.org/jeps/">JEP series</a> published by the <a href="http://www.jabber.org/jsf/">Jabber Software Foundation</a>).</p>
+        (part of the <a href="http://www.jabber.org/jeps/">XEP series</a> published by the <a href="http://www.jabber.org/jsf/">Jabber Software Foundation</a>).</p>
 
         <xsl:variable name='schema.count' select='count(/jep/header/schemaloc)'/>
         <xsl:if test='$schema.count &gt; 0'>

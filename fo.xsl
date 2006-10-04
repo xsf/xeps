@@ -27,7 +27,7 @@
       <page-sequence master-reference="jep_sequence">
         <flow flow-name="xsl-region-body" font-family="serif" color="black" font-size="10pt">
           <block space-before="1.5in" text-align="right" font-family="sans-serif" font-size="18pt">
-            JEP-<xsl:value-of select="/jep/header/number"/>
+            XEP-<xsl:value-of select="/jep/header/number"/>
           </block>
           <block text-align="right" font-family="sans-serif" font-size="18pt">
             <xsl:value-of select="/jep/header/title"/>
@@ -105,21 +105,9 @@
         </flow>
       </page-sequence>
       <page-sequence master-reference="std_page" initial-page-number="1">
-        <!--<static-content flow-name="xsl-region-before" margin-top=".5in">
-                    <block margin-left="1in" margin-right="1in" text-align-last="justify" font-size="9pt" font-family="sans-serif" color="silver">
-                        <xsl:value-of select="/jep/header/customer"/>
-                        <leader leader-pattern="space"/>
-                    Requirements Proposal
-                    </block>
-                    <block margin-left="1in" margin-right="1in" padding-bottom="10pt" border-after-color="black" border-after-width=".25pt" border-after-style="solid" text-align-last="justify" font-size="9pt" font-family="sans-serif" color="silver">
-                        <xsl:value-of select="/jep/header/title"/>
-                        <leader leader-pattern="space"/>
-                        <xsl:value-of select="/jep/header/revision[last()]/date"/>
-                    </block>
-                </static-content>-->
         <static-content flow-name="xsl-region-after">
           <block margin-left="1in" margin-right="1in" padding-top="10pt" border-before-color="black" border-before-width=".125pt" border-before-style="solid" text-align-last="justify" font-size="8pt" font-family="sans-serif" color="black">
-                        IJEP-<xsl:value-of select="/jep/header/number"/>:<xsl:text> </xsl:text>
+                        XEP-<xsl:value-of select="/jep/header/number"/>:<xsl:text> </xsl:text>
             <xsl:value-of select="/jep/header/title"/>
             <leader leader-pattern="space"/>
                         Page <page-number/> of <page-number-citation ref-id="lastpage"/>

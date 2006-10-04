@@ -2,7 +2,7 @@
 
 # File: lastcall.py
 # Version: 0.2
-# Description: a script for announcing JEP Last Calls
+# Description: a script for announcing Last Calls
 # Last Modified: 2004-09-29
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
@@ -33,7 +33,7 @@ now = int(time.time())
 
 # READ IN ARGS: 
 #
-# 1. JEP number
+# 1. XEP number
 # 2. end date
 # 3. database user
 # 4. database password
@@ -45,7 +45,7 @@ dbpw = sys.argv[4];
 
 jepfile = jepnum + '/jep-' + jepnum + '.xml'
 
-# PARSE JEP HEADERS:
+# PARSE XEP HEADERS:
 #
 # - title
 # - abstract
@@ -81,7 +81,7 @@ remark = getText(remarkNode.childNodes)
 # name is $title
 # type is $jeptype
 # status is $jepstatus
-# notes is "Version $version of JEP-$jepnum released $date."
+# notes is "Version $version of XEP-$jepnum released $date."
 # version is $version
 # last_modified is $now
 # abstract is $abstract
@@ -89,7 +89,7 @@ remark = getText(remarkNode.childNodes)
 
 db = MySQLdb.connect("localhost", dbuser, dbpw, "foundation")
 cursor = db.cursor()
-theNotes = "Version " + version + " of JEP-" + jepnum + " released " + date + "; Last Call ends " + enddate + "."
+theNotes = "Version " + version + " of XEP-" + jepnum + " released " + date + "; Last Call ends " + enddate + "."
 theLog = remark + " (" + initials + ")"
 theStatement = "UPDATE jeps SET name='" + title + "', type='" + jeptype + "', status='Proposed', notes='" + theNotes + "', version='" + str(version) + "', last_modified='" + str(now) + "', abstract='" + abstract + "', changelog='" + theLog + "' WHERE number='" + str(jepnum) + "';"
 cursor.execute(theStatement) 
@@ -99,10 +99,10 @@ result = cursor.fetchall()
 #
 # From: editor@jabber.org
 # To: standards-jig@jabber.org
-# Subject: LAST CALL: JEP-$jepnum ($title)
+# Subject: LAST CALL: XEP-$jepnum ($title)
 # Body:
 #    This message constitutes notice of a Last Call
-#    for JEP-$jepnum ($title).
+#    for XEP-$jepnum ($title).
 #
 #    Abstract: $abstract
 #
@@ -118,14 +118,14 @@ fromaddr = "editor@jabber.org"
 # for real...
 toaddrs = "standards-jig@jabber.org"
 
-thesubject = 'LAST CALL: JEP-' + jepnum + " (" + title + ")"
-introline = 'This message constitutes notice of a Last Call for JEP-' + jepnum + ' (' + title + ').'
+thesubject = 'LAST CALL: XEP-' + jepnum + " (" + title + ")"
+introline = 'This message constitutes notice of a Last Call for XEP-' + jepnum + ' (' + title + ').'
 abstractline = 'Abstract: ' + abstract
 urlline = 'URL: http://www.jabber.org/jeps/jep-' + jepnum + '.html'
 schedline = 'This Last Call begins today and shall end at the close of business on ' + enddate + '.'
 
 #msg = "From: %s\r\n" % fromaddr
-msg = "From: JEP Editor <%s>\r\n" % fromaddr
+msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr
 msg = msg + "To: %s\r\n" % toaddrs
 msg = msg + "Subject: %s\r\n" % thesubject
 msg = msg + introline

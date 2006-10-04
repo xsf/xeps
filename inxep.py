@@ -2,7 +2,7 @@
 
 # File: protojep.py
 # Version: 0.1
-# Description: a script for announcing proto-JEPs
+# Description: a script for announcing proto-XEPs
 # Last Modified: 2004-09-14
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
@@ -30,13 +30,13 @@ def getText(nodelist):
 
 # READ IN ARGS: 
 #
-# 1. JEP filename (sans extension)
+# 1. XEP filename (sans extension)
 
 jepname = sys.argv[1];
 
 jepfile = 'inbox/' + jepname + '.xml'
 
-# PARSE JEP HEADERS:
+# PARSE XEP HEADERS:
 #
 # - title
 # - abstract
@@ -70,9 +70,9 @@ remark = getText(remarkNode.childNodes)
 #
 # From: editor@jabber.org
 # To: standards-jig@jabber.org
-# Subject: LAST CALL: JEP-$jepnum ($title)
+# Subject: LAST CALL: XEP-$jepnum ($title)
 # Body:
-#    The JEP Editor has received a proposal for a new JEP.
+#    The XMPP Extensions Editor has received a proposal for a new XEP.
 #
 #    Title: $title
 #
@@ -80,8 +80,8 @@ remark = getText(remarkNode.childNodes)
 #
 #    URL: http://www.jabber.org/jeps/inbox/$jepname.html
 #
-#    The Jabber Council will now consider whether to accept
-#    this proposal as a full JEP.
+#    The XMPP Council will now consider whether to accept
+#    this proposal as a full XEP.
 #
 
 fromaddr = "editor@jabber.org"
@@ -90,15 +90,15 @@ fromaddr = "editor@jabber.org"
 # for real...
 toaddrs = "standards-jig@jabber.org"
 
-thesubject = 'proto-JEP: ' + title
-introline = 'The JEP Editor has received a proposal for a new JEP.'
+thesubject = 'proto-XEP: ' + title
+introline = 'The XMPP Extensions Editor has received a proposal for a new XEP.'
 titleline = 'Title: ' + title
 abstractline = 'Abstract: ' + abstract
 urlline = 'URL: http://www.jabber.org/jeps/inbox/' + jepname + '.html'
-actionline = 'The Jabber Council will decide within 7 days (or at its next meeting) whether to accept this proposal as an official JEP.'
+actionline = 'The XMPP Council will decide within 7 days (or at its next meeting) whether to accept this proposal as an official XEP.'
 
 #msg = "From: %s\r\n" % fromaddr
-msg = "From: JEP Editor <%s>\r\n" % fromaddr
+msg = "From: XEP Editor <%s>\r\n" % fromaddr
 msg = msg + "To: %s\r\n" % toaddrs
 msg = msg + "Subject: %s\r\n" % thesubject
 msg = msg + introline
