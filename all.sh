@@ -1,14 +1,24 @@
 #!/bin/sh
-# for one XEP, generates HTML file and IETF reference, then copies XML file
-# usage: ./gen.sh xxxx 
-# (where xxxx is the 4-digit XEP number)
+# for all XEPs, generates HTML files and IETF-style reference, then copies XML file
+# usage: ./all.sh
 
 xeppath=/var/www/stage.xmpp.org/extensions
 
-xsltproc xep.xsl xep-$1.xml > $xeppath/jep-$1.html
-xsltproc ref.xsl xep-$1.xml > $xeppath/refs/reference.JSF.XEP-$1.xml
+ls xep-0*.xml > tmp.txt
+sed s/xep-\(.*\).xml/\1/ tmp.txt > nums.txt
+rm tmp.txt
 
-cp xep-$1.xml $xeppath/
+while read f
+do
+    xsltproc xep.xsl xep-$f.xml > $xeppath/xep-$f.html
+    xsltproc ref.xsl xep-$f.xml > $xeppath/refs/reference.JSF.XEP-$f.xml
+    cp xep-$f.xml $xeppath/
+done < nums.txt
+
+rm nums.txt
+
+xsltproc xep.xsl xep-README.xml > $xeppath/README.html
+xsltproc xep.xsl xep-template.xml > $xeppath/template.html
 
 cp *.dtd $xeppath/
 cp *.ent $xeppath/

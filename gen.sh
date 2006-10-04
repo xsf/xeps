@@ -7,6 +7,7 @@ xeppath=/var/www/stage.xmpp.org/extensions
 
 xsltproc xep.xsl xep-$1.xml > $xeppath/jep-$1.html
 xsltproc ref.xsl xep-$1.xml > $xeppath/refs/reference.JSF.XEP-$1.xml
+
 cp xep-$1.xml $xeppath/
 
 # END
