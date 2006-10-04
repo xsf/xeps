@@ -3,7 +3,7 @@
 # usage: ./gen.sh xxxx 
 # (where xxxx is the 4-digit XEP number)
 
-xeppath=/var/www/stage.xmpp.org/extensions
+xeppath=/var/www/xmpp.org/extensions
 
 xsltproc xep.xsl xep-$1.xml > $xeppath/jep-$1.html
 xsltproc ref.xsl xep-$1.xml > $xeppath/refs/reference.JSF.XEP-$1.xml

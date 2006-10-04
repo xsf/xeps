@@ -2,7 +2,7 @@
 # for all XEPs, generates HTML files and IETF-style reference, then copies XML file
 # usage: ./all.sh
 
-xeppath=/var/www/stage.xmpp.org/extensions
+xeppath=/var/www/xmpp.org/extensions
 
 ls xep-0*.xml > tmp1.txt
 sed s/^xep-// tmp1.txt > tmp2.txt
