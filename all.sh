@@ -4,9 +4,10 @@
 
 xeppath=/var/www/stage.xmpp.org/extensions
 
-ls xep-0*.xml > tmp.txt
-sed s/xep-\(.*\).xml/\1/ tmp.txt > nums.txt
-rm tmp.txt
+ls xep-0*.xml > tmp1.txt
+sed s/^xep-// tmp1.txt > tmp2.txt
+sed s/.xml$// tmp2.txt > nums.txt
+rm tmp*.txt
 
 while read f
 do
