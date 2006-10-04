@@ -138,7 +138,7 @@
             <xsl:if test='$expires.count &gt; 0'>
               Expires: <xsl:value-of select='/xep/header/expires'/><br />
             </xsl:if>
-            JIG: <xsl:value-of select='/xep/header/jig'/><br />
+            Publishing Organization: <a href='http://www.jabber.org/jsf/'>Jabber Software Foundation</a><br />
             <xsl:variable name='ApprovingBody' select='/xep/header/approver'/>
             <xsl:choose>
               <xsl:when test='$ApprovingBody = "Board"'>
