@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
-# File: protojep.py
+# File: inxep.py
 # Version: 0.1
 # Description: a script for announcing proto-XEPs
 # Last Modified: 2004-09-14
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
-# HowTo: ./protojep.py filename
+# HowTo: ./inxep.py filename
 # (note: do not include extension!)
 
 # IMPORTS:
@@ -32,9 +32,9 @@ def getText(nodelist):
 #
 # 1. XEP filename (sans extension)
 
-jepname = sys.argv[1];
+xepname = sys.argv[1];
 
-jepfile = 'inbox/' + jepname + '.xml'
+xepfile = 'inbox/' + xepname + '.xml'
 
 # PARSE XEP HEADERS:
 #
@@ -45,17 +45,17 @@ jepfile = 'inbox/' + jepname + '.xml'
 # - initials
 # - remark
 
-thejep = parse(jepfile)
-jepNode = (thejep.getElementsByTagName("jep")[0])
-headerNode = (jepNode.getElementsByTagName("header")[0])
+thexep = parse(xepfile)
+xepNode = (thexep.getElementsByTagName("xep")[0])
+headerNode = (xepNode.getElementsByTagName("header")[0])
 titleNode = (headerNode.getElementsByTagName("title")[0])
 title = getText(titleNode.childNodes)
 abstractNode = (headerNode.getElementsByTagName("abstract")[0])
 abstract = getText(abstractNode.childNodes)
 statusNode = (headerNode.getElementsByTagName("status")[0])
-jepstatus = getText(statusNode.childNodes)
+xepstatus = getText(statusNode.childNodes)
 typeNode = (headerNode.getElementsByTagName("type")[0])
-jeptype = getText(typeNode.childNodes)
+xeptype = getText(typeNode.childNodes)
 revNode = (headerNode.getElementsByTagName("revision")[0])
 versionNode = (revNode.getElementsByTagName("version")[0])
 version = getText(versionNode.childNodes)
@@ -70,7 +70,7 @@ remark = getText(remarkNode.childNodes)
 #
 # From: editor@jabber.org
 # To: standards-jig@jabber.org
-# Subject: LAST CALL: XEP-$jepnum ($title)
+# Subject: Proposed XMPP Extension: XEP-$xepnum ($title)
 # Body:
 #    The XMPP Extensions Editor has received a proposal for a new XEP.
 #
@@ -78,7 +78,7 @@ remark = getText(remarkNode.childNodes)
 #
 #    Abstract: $abstract
 #
-#    URL: http://www.jabber.org/jeps/inbox/$jepname.html
+#    URL: http://www.xmpp.org/extensions/inbox/$xepname.html
 #
 #    The XMPP Council will now consider whether to accept
 #    this proposal as a full XEP.
@@ -90,11 +90,11 @@ fromaddr = "editor@jabber.org"
 # for real...
 toaddrs = "standards-jig@jabber.org"
 
-thesubject = 'proto-XEP: ' + title
+thesubject = 'Proposed XMPP Extension: ' + title
 introline = 'The XMPP Extensions Editor has received a proposal for a new XEP.'
 titleline = 'Title: ' + title
 abstractline = 'Abstract: ' + abstract
-urlline = 'URL: http://www.jabber.org/jeps/inbox/' + jepname + '.html'
+urlline = 'URL: http://www.xmpp.org/extensions/inbox/' + xepname + '.html'
 actionline = 'The XMPP Council will decide within 7 days (or at its next meeting) whether to accept this proposal as an official XEP.'
 
 #msg = "From: %s\r\n" % fromaddr
