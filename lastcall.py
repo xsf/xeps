@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
 # File: lastcall.py
-# Version: 0.2
+# Version: 0.3
 # Description: a script for announcing Last Calls
-# Last Modified: 2004-09-29
+# Last Modified: 2006-10-11
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
-# HowTo: ./lastcall.py jepnum enddate dbuser dbpw
+# HowTo: ./lastcall.py xepnum enddate dbuser dbpw
 
 # IMPORTS:
 #
@@ -38,12 +38,12 @@ now = int(time.time())
 # 3. database user
 # 4. database password
 
-jepnum = sys.argv[1];
+xepnum = sys.argv[1];
 enddate = sys.argv[2];
 dbuser = sys.argv[3];
 dbpw = sys.argv[4];
 
-jepfile = jepnum + '/jep-' + jepnum + '.xml'
+xepfile = 'xep-' + xepnum + '.xml'
 
 # PARSE XEP HEADERS:
 #
@@ -54,17 +54,17 @@ jepfile = jepnum + '/jep-' + jepnum + '.xml'
 # - initials
 # - remark
 
-thejep = parse(jepfile)
-jepNode = (thejep.getElementsByTagName("jep")[0])
-headerNode = (jepNode.getElementsByTagName("header")[0])
+thexep = parse(xepfile)
+xepNode = (thexep.getElementsByTagName("xep")[0])
+headerNode = (xepNode.getElementsByTagName("header")[0])
 titleNode = (headerNode.getElementsByTagName("title")[0])
 title = getText(titleNode.childNodes)
 abstractNode = (headerNode.getElementsByTagName("abstract")[0])
 abstract = getText(abstractNode.childNodes)
 statusNode = (headerNode.getElementsByTagName("status")[0])
-jepstatus = getText(statusNode.childNodes)
+xepstatus = getText(statusNode.childNodes)
 typeNode = (headerNode.getElementsByTagName("type")[0])
-jeptype = getText(typeNode.childNodes)
+xeptype = getText(typeNode.childNodes)
 revNode = (headerNode.getElementsByTagName("revision")[0])
 versionNode = (revNode.getElementsByTagName("version")[0])
 version = getText(versionNode.childNodes)
@@ -77,11 +77,11 @@ remark = getText(remarkNode.childNodes)
 
 # UPDATE DATABASE:
 #
-# number is $jepnum
+# number is $xepnum
 # name is $title
-# type is $jeptype
-# status is $jepstatus
-# notes is "Version $version of XEP-$jepnum released $date."
+# type is $xeptype
+# status is $xepstatus
+# notes is "Version $version of XEP-$xepnum released $date."
 # version is $version
 # last_modified is $now
 # abstract is $abstract
@@ -89,9 +89,9 @@ remark = getText(remarkNode.childNodes)
 
 db = MySQLdb.connect("localhost", dbuser, dbpw, "foundation")
 cursor = db.cursor()
-theNotes = "Version " + version + " of XEP-" + jepnum + " released " + date + "; Last Call ends " + enddate + "."
+theNotes = "Version " + version + " of XEP-" + xepnum + " released " + date + "; Last Call ends " + enddate + "."
 theLog = remark + " (" + initials + ")"
-theStatement = "UPDATE jeps SET name='" + title + "', type='" + jeptype + "', status='Proposed', notes='" + theNotes + "', version='" + str(version) + "', last_modified='" + str(now) + "', abstract='" + abstract + "', changelog='" + theLog + "' WHERE number='" + str(jepnum) + "';"
+theStatement = "UPDATE jeps SET name='" + title + "', type='" + xeptype + "', status='Proposed', notes='" + theNotes + "', version='" + str(version) + "', last_modified='" + str(now) + "', abstract='" + abstract + "', changelog='" + theLog + "' WHERE number='" + str(xepnum) + "';"
 cursor.execute(theStatement) 
 result = cursor.fetchall()
 
@@ -99,14 +99,14 @@ result = cursor.fetchall()
 #
 # From: editor@jabber.org
 # To: standards-jig@jabber.org
-# Subject: LAST CALL: XEP-$jepnum ($title)
+# Subject: LAST CALL: XEP-$xepnum ($title)
 # Body:
 #    This message constitutes notice of a Last Call
-#    for XEP-$jepnum ($title).
+#    for XEP-$xepnum ($title).
 #
 #    Abstract: $abstract
 #
-#    URL: http://www.jabber.org/jeps/jep-$jepnum.html
+#    URL: http://www.xmpp.org/extensions/xep-$xepnum.html
 #
 #    This Last Call begins now and shall end at the close
 #    of business on $enddate.
@@ -118,10 +118,10 @@ fromaddr = "editor@jabber.org"
 # for real...
 toaddrs = "standards-jig@jabber.org"
 
-thesubject = 'LAST CALL: XEP-' + jepnum + " (" + title + ")"
-introline = 'This message constitutes notice of a Last Call for XEP-' + jepnum + ' (' + title + ').'
+thesubject = 'LAST CALL: XEP-' + xepnum + " (" + title + ")"
+introline = 'This message constitutes notice of a Last Call for XEP-' + xepnum + ' (' + title + ').'
 abstractline = 'Abstract: ' + abstract
-urlline = 'URL: http://www.jabber.org/jeps/jep-' + jepnum + '.html'
+urlline = 'URL: http://www.xmpp.org/extensions/xep-' + xepnum + '.html'
 schedline = 'This Last Call begins today and shall end at the close of business on ' + enddate + '.'
 
 #msg = "From: %s\r\n" % fromaddr
