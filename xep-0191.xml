@@ -10,7 +10,7 @@
   <abstract>This document specifies an XMPP protocol extension for simple communications blocking.</abstract>
   &LEGALNOTICE;
   <number>0191</number>
-  <status>Proposed</status>
+  <status>Experimental</status>
   <type>Standards Track</type>
   <jig>Standards JIG</jig>
   <dependencies>
@@ -22,6 +22,12 @@
   <supersededby>None</supersededby>
   <shortname>blocking</shortname>
   &stpeter;
+  <revision>
+    <version>0.3</version>
+    <date>2006-10-16</date>
+    <initials>psa</initials>
+    <remark><p>Specified relationship to privacy lists, JID matching rules, server handling of outbound presence on block and unblock, handling of directed presence, syntax of block element.</p></remark>
+  </revision>
   <revision>
     <version>0.2</version>
     <date>2006-08-30</date>
@@ -47,15 +53,28 @@
     <remark><p>First draft.</p></remark>
   </revision>
 </header>
-<section1 topic='Introduction' anchor='proto'>
-  <p>&rfc3921; includes an XMPP protocol extension for communications blocking. Unfortunately, because that extension (privacy lists) is quite complex, it has not been widely implemented in servers and has been implemented virtually not at all in clients. This is problematic, since the ability to block communications from selected users is an important feature for an instant messaging system (and is required by &rfc2779;). However, the full power of privacy lists is not needed in order to block communications, so this document proposes a much simpler blocking protocol that meets the requirement specified in <cite>RFC 2779</cite> and can be implemented much more easily in Jabber/XMPP clients and servers.</p>
+<section1 topic='Introduction' anchor='intro'>
+  <p>&rfc3921; includes an XMPP protocol extension for communications blocking, which has since been moved to &xep0016;. Unfortunately, because the privacy lists extension is quite complex, it has not been widely implemented in servers and has been implemented virtually not at all in clients. This is problematic, since the ability to block communications with selected users is an important feature for an instant messaging system (and is required by &rfc2779;). However, the full power of privacy lists is not needed in order to block communications, so this document proposes a much simpler blocking protocol that meets the requirement specified in <cite>RFC 2779</cite> and can be implemented much more easily in Jabber/XMPP clients and servers.</p>
 </section1>
-<section1 topic='Requirements' anchor='proto'>
+<section1 topic='Requirements' anchor='reqs'>
   <p>The requirements for simple communications blocking are straightforward:</p>
   <ol start='1'>
-    <li>A user must be able to block communications from a specific contact.</li>
+    <li>A user must be able to block communications with a specific contact.</li>
     <li>A user should be able to determine which contacts are blocked.</li>
-    <li>A user should be able to unblock communications from a specific contact.</li>
+    <li>A user should be able to unblock communications with a specific contact.</li>
+  </ol>
+</section1>
+<section1 topic='Relationship to Privacy Lists' anchor='privacy'>
+  <p>The simple communications blocking protocol specified herein is intended to be a user-friendly "front end" to a subset of the functionality defined by the privacy lists protocol. If a service deploys both privacy lists and simple communications blocking, both protocols MUST use the same back-end data store.</p>
+  <p>Wherever possible, this document attempts to define a protocol that is fully consistent with <cite>XEP-0016</cite>. If a particular aspect of functionality (e.g., stanza processing or JID matching rules) is not specified herein, the relevant text in <cite>XEP-0016</cite> shall be taken to apply.</p>
+</section1>
+<section1 topic='JID Matching' anchor='matching'>
+  <p>Matching of JIDs as specified in the 'jid' attribute of the &lt;item/&gt; element SHOULD proceed in the following order (this is consistent with <cite>XEP-0016</cite>):</p>
+  <ol>
+    <li>&lt;user@domain/resource&gt; (only that resource matches)</li>
+    <li>&lt;user@domain&gt; (any resource matches)</li>
+    <li>&lt;domain/resource&gt; (only that resource matches)</li>
+    <li>&lt;domain&gt; (the domain itself matches, as does any user@domain, domain/resource, or address containing a subdomain)</li>
   </ol>
 </section1>
 <section1 topic='Use Cases' anchor='usecases'>
@@ -78,7 +97,7 @@
     ]]></example>
   </section2>
   <section2 topic='User Blocks Contact' anchor='block'>
-    <p>In order for a user to block communications from a contact, the user's client shall send an IQ-set with no 'to' address (thus handled by the user's server) containing a &lt;block/&gt; element qualified by the 'http://jabber.org/protocol/blocking' namespace, where the JID to be blocked is encapsulated as the 'jid' attribute of the &lt;item/&gt; child element:</p>
+    <p>In order for a user to block communications with a contact, the user's client shall send an IQ-set with no 'to' address (thus handled by the user's server) containing a &lt;block/&gt; element qualified by the 'http://jabber.org/protocol/blocking' namespace, where the JID to be blocked is encapsulated as the 'jid' attribute of the &lt;item/&gt; child element:</p>
     <example caption='Block command'><![CDATA[
 <iq type='set' id='block1'>
   <block xmlns='http://jabber.org/protocol/blocking'>
@@ -90,15 +109,16 @@
     <example caption='Block command is successful'><![CDATA[
 <iq type='result' id='block1'/>
     ]]></example>
-    <p>(Standard XMPP stanza errors apply; see &xmppcore; and &xep0086;.)</p>
+    <p>If the &lt;block/&gt; element does not contain at least one &lt;item/&gt; child element, the server MUST return a &badrequest; error. Other standard XMPP stanza errors also apply; see &xmppcore; and &xep0086;.</p>
     <p>Note: The &lt;block/&gt; element MAY contain more than one &lt;item/&gt; child.</p>
-    <p>Once the user has blocked communications from the contact, the user's server MUST NOT deliver any XML stanzas from the contact to the user.</p>
-    <p>If the contact attempts to send a stanza to the user (i.e., an inbound stanza from the user's perspective), the user's server shall return an error according to the following rules:</p>
+    <p>When the user blocks communications with the contact, the user's server MUST send unavailable presence information to the contact (but only if the contact is allowed to receive presence notifications from the user in accordance with the rules defined in <cite>RFC 3921</cite>).</p>
+    <p>Once the user has blocked communications with the contact, the user's server MUST NOT deliver any XML stanzas from the contact to the user. The block remains in force until the user subsequently unblocks commmunications with the contact (i.e., the duration of the block is potentially unlimited and applies across sessions).</p>
+    <p>If the contact attempts to send a stanza to the user (i.e., an inbound stanza from the user's perspective), the user's server shall handle the stanza according to the following rules:</p>
     <ul>
-      <li>For presence stanzas, it is NOT RECOMMENDED to return an error.</li>
-      <li>For message stanzas, the server MAY return an error, which SHOULD be &unavailable;.</li>
+      <li>For message stanzas and presence stanzas (including notifications, subscriptions, and probes), the user's server MUST NOT respond and MUST NOT return an error.</li>
       <li>For IQ stanzas, the server MUST return an error, which SHOULD be &unavailable;.</li>
     </ul>
+    <p>If the foregoing suggestions are followed, the user will appear offline to the contact.</p>
     <p>If the user attempts to send an outbound stanza to the contact, the user's server MUST NOT route the stanza to the contact but instead MUST return a &notacceptable; error containing an application-specific error condition of &lt;blocked/&gt; qualified by the 'http://jabber.org/protocol/blocking#errors' namespace:</p>
     <example caption='Error: contact is blocked'><![CDATA[
 <message type='error' from='romeo@montague.net' to='juliet@capulet.com'>
@@ -135,7 +155,7 @@
     <p>A client SHOULD retrieve the block list after authenticating with its server.</p>
   </section2>
   <section2 topic='User Unblocks Contact' anchor='unblock'>
-    <p>In order for a user to unblock communications from a contact, the user's client shall send an IQ-set with no 'to' address (thus handled by the user's server) containing an &lt;unblock/&gt; element qualified by the 'http://jabber.org/protocol/blocking' namespace, where the JID to be unblocked is encapsulated as the 'jid' attribute of the &lt;item/&gt; child element:</p>
+    <p>In order for a user to unblock communications with a contact, the user's client shall send an IQ-set with no 'to' address (thus handled by the user's server) containing an &lt;unblock/&gt; element qualified by the 'http://jabber.org/protocol/blocking' namespace, where the JID to be unblocked is encapsulated as the 'jid' attribute of the &lt;item/&gt; child element:</p>
     <example caption='Unblock contact command'><![CDATA[
 <iq type='set' id='unblock1'>
   <unblock xmlns='http://jabber.org/protocol/blocking'>
@@ -147,10 +167,11 @@
     <example caption='Unblock contact command is successful'><![CDATA[
 <iq type='result' id='unblock1'/>
     ]]></example>
-    <p>Once the user has unblocked communications from the contact, the user's server MUST deliver any XML stanzas from the contact to the user.</p>
+    <p>When the user unblocks communications with the contact, the user's server MUST send the user's current presence information to the contact (but only if the contact is allowed to receive presence notifications from the user in accordance with the rules defined in <cite>RFC 3921</cite>).</p>
+    <p>After the user has unblocked communications with the contact, the user's server MUST deliver any subsequent XML stanzas from the contact to the user.</p>
   </section2>
   <section2 topic='User Unblocks All Contacts' anchor='unblockall'>
-    <p>In order for a user to unblock communications from all contacts, the user's client shall send an IQ-set with no 'to' address (thus handled by the user's server) containing an empty &lt;unblock/&gt; element qualified by the 'http://jabber.org/protocol/blocking' namespace:</p>
+    <p>In order for a user to unblock communications with all contacts, the user's client shall send an IQ-set with no 'to' address (thus handled by the user's server) containing an empty &lt;unblock/&gt; element qualified by the 'http://jabber.org/protocol/blocking' namespace:</p>
     <example caption='Unblock all command'><![CDATA[
 <iq type='set' id='unblock2'>
   <unblock xmlns='http://jabber.org/protocol/blocking'/>
@@ -160,7 +181,7 @@
     <example caption='Unblock all command is successful'><![CDATA[
 <iq type='result' id='unblock2'/>
     ]]></example>
-    <p>Once the user has unblocked communications from all contacts, the user's server MUST deliver any XML stanzas from those contacts to the user.</p>
+    <p>Once the user has unblocked communications with all contacts, the user's server MUST deliver any XML stanzas from those contacts to the user.</p>
   </section2>
 </section1>
 <section1 topic='Implementation Notes' anchor='impl'>
@@ -192,7 +213,7 @@
   <xs:element name='block'>
     <xs:complexType>
       <xs:sequence>
-        <xs:element ref='item' minOccurs='0' maxOccurs='unbounded'/>
+        <xs:element ref='item' minOccurs='1' maxOccurs='unbounded'/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>
