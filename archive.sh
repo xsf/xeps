@@ -4,6 +4,6 @@
 
 xeppath=/var/www/xmpp.org/extensions
 
-cp $xeppath/xep-$1.html $jeppath/attic/xep-$1-$2.html
+cp $xeppath/xep-$1.html $xeppath/attic/xep-$1-$2.html
 
 # end
