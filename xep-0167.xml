@@ -26,9 +26,9 @@
   &seanegan;
   <revision>
     <version>0.6</version>
-    <date>2006-10-30</date>
+    <date>2006-10-31</date>
     <initials>psa/se</initials>
-    <remark><p>Specified how to include SDP parameters and codec-specific parameters; added Speex examples.</p></remark>
+    <remark><p>Specified how to include SDP parameters and codec-specific parameters; clarified negotiation process; added Speex examples.</p></remark>
   </revision>
   <revision>
     <version>0.5</version>
@@ -153,7 +153,74 @@
   <code><![CDATA[
 <parameter name='foo' value='bar'/>
   ]]></code>
-  <p>The parameter names are guaranteed to be unique, since &IANA; maintains a registry of SDP parameters (see &lt;<link url='http://www.iana.org/assignments/sdp-parameters'>http://www.iana.org/assignments/sdp-parameters</link>&gt;).</p>
+  <p>Note: The parameter names are effectively guaranteed to be unique, since &IANA; maintains a registry of SDP parameters (see &lt;<link url='http://www.iana.org/assignments/sdp-parameters'>http://www.iana.org/assignments/sdp-parameters</link>&gt;).</p>
+</section1>
+<section1 topic='Negotiating a Jingle-Audio Session' anchor='negotiating'>
+  <p>Upon receiving a Jingle initiate stanza containing a Jingle Audio content description as defined in this document, a receiver iterates through the list of offered payload types, composing an appropriate Jingle Audio response description according to the following rules:</p>
+  <ul>
+    <li>If the receiver does not support the offered encoding, it MUST NOT include the encoding in its response.</li>
+    <li>If the receiver does support the offered encoding, it SHOULD include the encoding in the response, preserving the offered payload type.</li>
+    <li>If the receiver is unable to support the offered encoding with the offered payload type, it MAY provide an alternate payload type in its response. This typically will happen only when translating from other signalling protocols.</li>
+    <li>The receiver SHOULD preserve the order of the offered encodings, which represents the priority assigned to them by the initator.</li>
+  </ul>
+  <p>If, after applying these rules, the receiver determines it does not support any of the offering encodings, the receiver MUST reject the session by sending a &lt;unsupported-codecs/&gt; error in response to the initiator's "initiate" action. Otherwise, it MUST provisionally accept the session by sending an empty IQ result. If the response content type differs from the one offered, the receiver MUST then propose the change in a "description-modify" action as defined in <cite>XEP-0166</cite>. If the description is identical, the receiver MUST send a "description-accept" action (either explicitly, or implicitly as part of a "session-accept" or "content-accept" action).</p>
+  <p>Following is an example of this negotiation:</p>
+  <example caption="Initiation Example"><![CDATA[
+<iq to='juliet@capulet.com/balcony' from='romeo@montague.net/orchard' id='jingleaudio1' type='set'>
+  <jingle xmlns='http://jabber.org/protocol/jingle'
+          action='session-initiate'
+          initiator='romeo@montague.net/orchard'
+          sid='a73sjjvkla37jfea'>
+    <content name='audio'>
+      <description xmlns='http://jabber.org/protocol/jingle/description/audio'>
+        <payload-type id='96' name='speex' clockrate='16000'/>
+        <payload-type id='0' name='PCMU'/>
+      </description>
+      <transport xmlns='http://jabber.org/protocol/jingle/transport/ice'>
+        ...
+      </transport>
+    </content>
+  </jingle>
+</iq>
+  ]]></example>
+  <p>The receiver now follows the rules provided in this section and determines it can only support PCMU. It provisionally accepts the session:</p>
+  <example caption="Receiver Provisionally Accepts Session"><![CDATA[
+  <iq to='romeo@montague.net/orchard' from='juliet@capulet.com/balcony' id='jingleaudio1' type='result'/>
+  ]]></example>
+  <p>It then offers the new content description in a 'description-modify' action:</p>
+  <example caption="Initiation Example"><![CDATA[
+<iq to='romeo@montague.net/orchard' from='juliet@capulet.com/balcony' id='jingleaudio2' type='set'>
+  <jingle xmlns='http://jabber.org/protocol/jingle'
+          action='description-modify'
+          initiator='romeo@montague.net/orchard'
+          sid='a73sjjvkla37jfea'>
+    <content name='audio'>
+      <description xmlns='http://jabber.org/protocol/jingle/description/audio'>
+        <payload-type id='0' name='PCMU'/>
+      </description>
+    </content>
+  </jingle>
+</iq>
+  ]]></example>
+  <p>The initiator acknowledges the 'description-modify' with an empty IQ result, and sends a 'description-accept' to accept the new Jingle Audio content description.</p>
+  <example caption="Initiator Accepts New Content Description"><![CDATA[
+<iq to='juliet@capulet.com/balcony' from='romeo@montegue.net/orchard' id='jingleaudio2' type='result'/>
+
+<iq to='juliet@capulet.com/balcony' from='romeo@montegue.net/orchard' id='jingleaudio3' type='set'/>
+  <jingle xmlns='http://jabber.org/protocol/jingle'
+   action='description-accept' initiator='romeo@montague.net/orchard' sid='a73sjjvkla37jfea'>
+     <content name='audio'>
+       <description xmlns='http://jabber.org/protocol/jingle/description/audio'>
+         <payload-type id='0' name='PCMU'/>
+       </description>
+     </content>
+  </jingle>
+</iq>
+  ]]></example>
+  <p>Finally, the target acknowledges the 'description-accept'.</p>
+  <example caption="Receiver Provisionally Accepts Session"><![CDATA[
+<iq to='romeo@montague.net/orchard' from='juliet@capulet.com/balcony' id='jingleaudio3' type='result'/>
+  ]]></example>
 </section1>
 <section1 topic='Mapping to Session Description Protocol' anchor='sdp'>
   <p>If the payload type is static (payload-type IDs 0 through 95 inclusive), it MUST be mapped to a media field defined in <cite>RFC 4566: Session Description Protocol</cite> (SDP). The generic format for the media field is as follows:</p>
@@ -315,6 +382,23 @@ a=fmtp:96 vbr=on;cng=on
   </section2>
 </section1>
 
+<section1 topic='Error Handling' anchor='errors'>
+The Jingle Audio-specific error conditions are as follows:
+  <table caption='Other Error Conditions'>
+    <tr>
+      <th>Jingle Condition</th>
+      <th>XMPP Condition</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td>&lt;unsupported-codecs/&gt;</td>
+      <td>&notacceptable;</td>
+      <td>The recipient does not support any of the offered audio encodings.</td>
+    </tr>
+  </table>
+
+</section1>
+
 <section1 topic='Implementation Notes' anchor='impl'>
   <section2 topic='Codecs' anchor='impl-codecs'>
     <p>Support for the Speex codec is RECOMMENDED.</p>
@@ -323,7 +407,7 @@ a=fmtp:96 vbr=on;cng=on
     <p>If it is necessary to send Dual Tone Multi-Frequency (DTMF) tones, it is REQUIRED to use the XML format specified &xep0181;.</p>
   </section2>
   <section2 topic='When to Listen' anchor='impl-listen'>
-    <p>When the session is provisionally accepted, as indicated by the receiver sending an empty IQ result in response to an 'initiate' message, both receiving and sending entities SHOULD start listening for audio as defined by the negotiated transport method. For interoperability with telephony systems, each entity SHOULD play any audio received at this time, before the target sends an 'accept' message.</p>
+    <p>When the Jingle Audio content is accepted, either by a 'content-accept' action or a combination of 'description-accept' and 'transport-accept' actions, both receiving and sending entities SHOULD start listening for audio as defined by the negotiated transport method and audio description. For interoperability with telephony systems, each entity SHOULD both play any audio received and send a ringing tone, at this time, before the receiver sends a 'session-accept' action.</p>
   </section2>
 </section1>
 
@@ -350,6 +434,7 @@ a=fmtp:96 vbr=on;cng=on
     ]]></code>
   </section2>
 </section1>
+
 <section1 topic='XML Schemas' anchor='schema'>
   <section2 topic='Content Description Format' anchor='schema-content'>
     <code><![CDATA[
