@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
 # File: deferred.py
-# Version: 0.2
+# Version: 0.3
 # Description: a script for setting a XEP to Deferred
-# Last Modified: 2006-04-24
+# Last Modified: 2006-11-01
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
-# HowTo: ./deferred.py jepnum dbuser dbpw 
+# HowTo: ./deferred.py xepnum dbuser dbpw 
 
 # IMPORTS:
 #
@@ -37,11 +37,11 @@ now = int(time.time())
 # 2. database user
 # 3. database password
 
-jepnum = sys.argv[1];
+xepnum = sys.argv[1];
 dbuser = sys.argv[2];
 dbpw = sys.argv[3];
 
-jepfile = jepnum + '/jep-' + jepnum + '.xml'
+xepfile = 'xep-' + xepnum + '.xml'
 
 # PARSE XEP HEADERS:
 #
@@ -52,17 +52,17 @@ jepfile = jepnum + '/jep-' + jepnum + '.xml'
 # - initials
 # - remark
 
-thejep = parse(jepfile)
-jepNode = (thejep.getElementsByTagName("jep")[0])
-headerNode = (jepNode.getElementsByTagName("header")[0])
+thexep = parse(xepfile)
+xepNode = (thexep.getElementsByTagName("xep")[0])
+headerNode = (xepNode.getElementsByTagName("header")[0])
 titleNode = (headerNode.getElementsByTagName("title")[0])
 title = getText(titleNode.childNodes)
 abstractNode = (headerNode.getElementsByTagName("abstract")[0])
 abstract = getText(abstractNode.childNodes)
 statusNode = (headerNode.getElementsByTagName("status")[0])
-jepstatus = getText(statusNode.childNodes)
+xepstatus = getText(statusNode.childNodes)
 typeNode = (headerNode.getElementsByTagName("type")[0])
-jeptype = getText(typeNode.childNodes)
+xeptype = getText(typeNode.childNodes)
 revNode = (headerNode.getElementsByTagName("revision")[0])
 versionNode = (revNode.getElementsByTagName("version")[0])
 version = getText(versionNode.childNodes)
@@ -75,11 +75,11 @@ remark = getText(remarkNode.childNodes)
 
 # UPDATE DATABASE:
 #
-# number is $jepnum
+# number is $xepnum
 # name is $title
-# type is $jeptype
-# status is $jepstatus
-# notes is "Version $version of XEP-$jepnum released $date."
+# type is $xeptype
+# status is $xepstatus
+# notes is "Version $version of XEP-$xepnum released $date."
 # version is $version
 # last_modified is $now
 # abstract is $abstract
@@ -87,9 +87,9 @@ remark = getText(remarkNode.childNodes)
 
 db = MySQLdb.connect("localhost", dbuser, dbpw, "foundation")
 cursor = db.cursor()
-theNotes = "Version " + version + " of XEP-" + jepnum + " released " + date + "; consideration deferred because of inactivity."
+theNotes = "Version " + version + " of XEP-" + xepnum + " released " + date + "; consideration deferred because of inactivity."
 theLog = remark + " (" + initials + ")"
-theStatement = "UPDATE jeps SET name='" + title + "', type='" + jeptype + "', status='Deferred', notes='" + theNotes + "', version='" + str(version) + "', last_modified='" + str(now) + "', abstract='" + abstract + "', changelog='" + theLog + "' WHERE number='" + str(jepnum) + "';"
+theStatement = "UPDATE jeps SET name='" + title + "', type='" + xeptype + "', status='Deferred', notes='" + theNotes + "', version='" + str(version) + "', last_modified='" + str(now) + "', abstract='" + abstract + "', changelog='" + theLog + "' WHERE number='" + str(xepnum) + "';"
 cursor.execute(theStatement) 
 result = cursor.fetchall()
 
@@ -97,13 +97,13 @@ result = cursor.fetchall()
 #
 # From: editor@jabber.org
 # To: standards-jig@jabber.org
-# Subject: DEFERRED: XEP-$jepnum ($title)
+# Subject: DEFERRED: XEP-$xepnum ($title)
 # Body:
-#    XEP-$jepnum ($title) has been Deferred because of inactivity.
+#    XEP-$xepnum ($title) has been Deferred because of inactivity.
 #
 #    Abstract: $abstract
 #
-#    URL: http://www.jabber.org/jeps/jep-$jepnum.html
+#    URL: http://www.xmpp.org/extensions/xep-$xepnum.html
 #
 #    If and when a new revision of this XEP is published,
 #    its status will be changed back to Experimental.
@@ -115,10 +115,10 @@ fromaddr = "editor@jabber.org"
 # for real...
 toaddrs = "standards-jig@jabber.org"
 
-thesubject = 'DEFERRED: XEP-' + jepnum + " (" + title + ")"
-introline = 'XEP-' + jepnum + ' (' + title + ') has been Deferred because of inactivity.'
+thesubject = 'DEFERRED: XEP-' + xepnum + " (" + title + ")"
+introline = 'XEP-' + xepnum + ' (' + title + ') has been Deferred because of inactivity.'
 abstractline = 'Abstract: ' + abstract
-urlline = 'URL: http://www.jabber.org/jeps/jep-' + jepnum + '.html'
+urlline = 'URL: http://www.xmpp.org/extensions/xep-' + xepnum + '.html'
 endline = 'If and when a new revision of this XEP is published, its status will be changed back to Experimental.'
 
 #msg = "From: %s\r\n" % fromaddr
