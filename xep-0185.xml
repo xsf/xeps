@@ -27,6 +27,13 @@
     <jid>fippo@goodadvice.pages.de</jid>
   </author>
   <revision>
+    <version>0.3</version>
+    <initials>ph</initials>
+    <date>2006-11-01</date>
+    <remark><p>Recommended hashing the secret to satisfy length requirement; hostnames and Stream ID should be separated by spaces to avoid ambiguity; updated example to match rfc3920bis.</p>
+    </remark>
+  </revision>
+  <revision>
     <version>0.2</version>
     <initials>ph</initials>
     <date>2006-05-10</date>
@@ -48,8 +55,8 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  &BISNOTE;
-  <p><cite>RFC 3920</cite> does not specify how to generate the keys used in the server dialback protocol, and why each of the variables used in key generation is crucial for security. This document is provided for discussion purposes and aims at clarifying the key generation and its validation mechanism and to show common attacks on weak mechanisms. It is not meant to supercede the text in <cite>RFC 3920</cite>.</p>
+  &RFC3920BISNOTE;
+  <p><cite>RFC 3920</cite> does not specify how to generate the keys used in the server dialback protocol, and why each of the variables used in key generation is crucial for security. This document is provided for discussion purposes and aims at clarifying the key generation and its validation mechanism and to show common attacks on weak mechanisms. It is not meant to supersede the text in <cite>RFC 3920</cite>; however, the recommendations in this document have been incorporated into <cite>rfc3920bis</cite>.</p>
 </section1>
 <section1 topic='Dialback Explained'>
   <p>The Originating Server, which generates the dialback key, and the Authoritative Server, which validates the dialback key, may reside on different hosts or be running in separate processes. The method used in key generation and validation should not require interactive communication between Originating Server, Authoritative Server and optionally a third party like a database.</p>
@@ -60,11 +67,12 @@
     <li>the Stream ID,</li>
     <li>and a secret known by the Authoritative Server's network.</li>
   </ul>
-  <p>The last item, a shared secret known to Originating Server and Authoritative Server, is used in a Keyed-Hash Message Authentication Code (HMAC) to generate and validate the dialback keys. This key must either be set up in a configuration option for each host or process or generated as a random string when starting the server. &nistfips198a; recommends that the length of the key should be at least half of the size of the hash function output.</p>
-  <p>The recommended hash for usage in HMAC is SHA-256 described in &nistfips180-2;, hence the secret's length should be at least 128 bits or 16 characters long.</p>
+  <p>The last item, a shared secret known to Originating Server and Authoritative Server, is used in a Keyed-Hash Message Authentication Code (HMAC) to generate and validate the dialback keys. This key must either be set up in a configuration option for each host or process or generated as a random string when starting the server.</p>
+  <p>&nistfips198a; recommends that the length of the key should be at least half of the size of the hash function output. To fulfill this requirement, the secret should be hashed with the hash function prior to usage as key in HMAC.</p>
+  <p>The Stream ID and the involved hostnames should be concatenated with a unicode space character (U+0020) for the delimiter.</p>
   <code>
-key = HEX( HMAC-SHA256( Secret, { Stream ID, 
-           Receiving Server, Originating or Authoritative server } ) ) 
+key = HEX( HMAC-SHA256( SHA256(Secret), { Receiving Server, ' ', 
+		    Originating or Authoritative server, ' ', Stream ID } ) ) 
   </code>
   <p>To avoid problems of encoding, a hexadecimal representation of the digest algorithm output SHOULD be used.</p>
 </section1>
@@ -76,15 +84,15 @@ key = HEX( HMAC-SHA256( Secret, { Stream ID,
     </tr>
     <tr>
       <td>Receiving Server</td>
-      <td>example.org</td>
+      <td>example.net</td>
     </tr>
     <tr>
       <td>Secret</td>
-      <td>thesecret</td>
+      <td>s3cr3tf0rd14lb4ck</td>
     </tr>
     <tr>
       <td>Stream ID</td>
-      <td>457F9224A0</td>
+      <td>D60000229F</td>
     </tr>
   </table>
 </section1>
@@ -97,46 +105,46 @@ key = HEX( HMAC-SHA256( Secret, { Stream ID,
   xmlns='jabber:server'
   xmlns:db='jabber:server:dialback'
   to='example.com'
-  from='example.org'
-  id='457F9224A0'>
+  from='example.net'
+  id='D60000229F'>
     ]]></code>
   <p>The Originating Server now generates a dialback key to be sent to the Receiving Server:</p>
   <code>
-key = HMAC-SHA256( secret, { Receiving server, Originating server, Stream ID})
-    = HMAC-SHA256( 'thesecret', { 'example.org', 'example.com', '457F9224A0' })
-    = HMAC-SHA256( 'thesecret', { 'example.orgexample.com457F9224A0' })
-    = 'a85748c59049b700dfa728da3eae5ea93aac1e0fc89713b490e441486653dd8c'
+key = HMAC-SHA256( SHA256(secret), { Receiving server, ' ', Originating server, ' ', Stream ID})
+    = HMAC-SHA256( SHA256('s3cr3tf0rd14lb4ck'), { 'example.net', ' ', 'example.com', ' ', 'D60000229F' })
+    = HMAC-SHA256( 'a7136eb1f46c9ef18c5e78c36ca257067c69b3d518285f0b18a96c33beae9acc', 'example.net example.com D60000229F')
+    = '008c689ff366b50c63d69a3e2d2c0e0e1f8404b0118eb688a0102c87cb691bdc'
   </code>
   <p>4. The Originating Server sends the generated dialback key to the Receiving Server:</p>
   <code><![CDATA[
 <db:result
-  to='example.org'
+  to='example.net'
   from='example.com'>
-    a85748c59049b700dfa728da3eae5ea93aac1e0fc89713b490e441486653dd8c
+    008c689ff366b50c63d69a3e2d2c0e0e1f8404b0118eb688a0102c87cb691bdc
 </db:result>
     ]]></code>
   <p>8. The Receiving Server sends the Authoritative Server a request for verification of the key:</p>
   <code><![CDATA[
 <db:verify
   to='example.com'
-  from='example.org'
-  id='457F9224A0'>
-    a85748c59049b700dfa728da3eae5ea93aac1e0fc89713b490e441486653dd8c
+  from='example.net'
+  id='D60000229F'>
+    008c689ff366b50c63d69a3e2d2c0e0e1f8404b0118eb688a0102c87cb691bdc
 </db:verify>
     ]]></code>
   <p>The Authoritative Server calculates the valid key for this verify request, using data supplied in the packet and the secret shared with the Originating Server.</p>
   <code>
-key = HMAC-SHA256( secret, { Receiving Server, Authoritative Server, Stream ID })
-    = HMAC-SHA256( 'thesecret', { 'example.org', 'example.com', '457F9224A0' })
-    = HMAC-SHA256( 'thesecret', { 'example.orgexample.com457F9224A0' })
-    = 'a85748c59049b700dfa728da3eae5ea93aac1e0fc89713b490e441486653dd8c'
+key = HMAC-SHA256( secret, { Receiving Server, ' ', Authoritative Server, ' ', Stream ID })
+    = HMAC-SHA256( SHA256('s3cr3tf0rd14lb4ck'), { 'example.net', ' ', 'example.com', ' ', 'D60000229F' })
+    = HMAC-SHA256( 'a7136eb1f46c9ef18c5e78c36ca257067c69b3d518285f0b18a96c33beae9acc', 'example.net example.com D60000229F')
+    = '008c689ff366b50c63d69a3e2d2c0e0e1f8404b0118eb688a0102c87cb691bdc'
     </code>
     <p>9. The Authoritative Server compares this value to the key contained in the verification requests and informs the Originating Server of the result, in our example a success:</p>
   <code><![CDATA[
 <db:verify
-  to='example.org'
+  to='example.net'
   from='example.com'
-  id='457F9224A0'
+  id='D60000229F'
   type='valid'/>
     ]]></code>
 </section1>
@@ -160,15 +168,15 @@ key = SHA1({ Secret, Receiving Server, Stream ID })
     <code><![CDATA[
 <db:verify
   to='example.com'
-  from='example.org'
-  id='457F9224A0'> 
-    807ccee5541ed9332559513797df75c1dd18ae8e
+  from='example.net'
+  id='D60000229F'> 
+    dba68f5de5b1766d55e70109f42842695bdeb6e4
 </db:verify>
     ]]></code>
     <p>This key is generated using:</p>
     <code>
-SHA1('thesecretexample.org457F9224A0') = 
-	    '807ccee5541ed9332559513797df75c1dd18ae8e'
+SHA1('s3cr3tf0rd14lb4ckexample.netD60000229F') = 
+	    'dba68f5de5b1766d55e70109f42842695bdeb6e4'
     </code>
   </section2>
   <section2 topic='Stream ID Not Considered'>
@@ -180,23 +188,23 @@ key = SHA1({ Secret, Receiving Server, Originating Server })
     <code><![CDATA[
 <db:verify
   to='example.com'
-  from='example.org'
-  id='457F9224A0'> 
-    14cbd71d0f127be89b7004c2242424918d8fad95
+  from='example.net'
+  id='D60000229F'> 
+    48337750828778765f5e2abbce14a6c5680f2fff
 </db:verify>
     ]]></code>
     <p>This key is generated using the empty string instead of the id:</p>
     <code>
-SHA1('thesecretexample.orgexample.com') = 
-	    '14cbd71d0f127be89b7004c2242424918d8fad95'
+SHA1('s3cr3tf0rd14lb4ckexample.netexample.com') = 
+	    '48337750828778765f5e2abbce14a6c5680f2fff'
     </code> 
     <p>This key is also valid for</p>
     <code><![CDATA[
 <db:verify
   to='example.com'
-  from='example.org'
+  from='example.net'
   id='anyidyouwant'>
-    14cbd71d0f127be89b7004c2242424918d8fad95
+    48337750828778765f5e2abbce14a6c5680f2fff
 </db:verify>
     ]]></code>
   </section2>
@@ -209,15 +217,15 @@ key = SHA1({ Secret, Originating Server, Stream ID })
     <code><![CDATA[
 <db:verify
   to='example.com'
-  from='example.org'
-  id='457F9224A0'> 
-    c04ca426a81b3fa04bd4a9df2e24482372b4b874
+  from='example.net'
+  id='D60000229F'> 
+    eb6c42adee0ced8782175f98a56e4c00b2503602
 </db:verify>
     ]]></code>
     <p>This key is generated using:</p>
     <code>
-SHA1('thesecretexample.com457F9224A0') = 
-	    'c04ca426a81b3fa04bd4a9df2e24482372b4b874'
+SHA1('s3cr3tf0rd14lb4ckexample.comD60000229F') = 
+	    'eb6c42adee0ced8782175f98a56e4c00b2503602'
     </code>
   </section2>
   <section2 topic='Shared Secret Not Considered'>
@@ -229,15 +237,15 @@ key = SHA1({ Receiving Server, Originating Server, Stream ID })
     <code><![CDATA[
 <db:verify
   to='example.com'
-  from='example.org'
-  id='457F9224A0'> 
-    30e59d3ee62926a29f012822769e58e67571d750
+  from='example.net'
+  id='D60000229F'> 
+    c08b18d349a9c4d6aaca2dc3baa772bb7749e3b8
 </db:verify>
     ]]></code>
     <p>This key is generated using:</p>
     <code>
-SHA1('example.orgexample.com457F9224A0') = 
-	    '30e59d3ee62926a29f012822769e58e67571d750'
+SHA1('example.netexample.comD60000229F') = 
+	    'c08b18d349a9c4d6aaca2dc3baa772bb7749e3b8'
     </code>
   </section2>
 </section1>
@@ -249,5 +257,8 @@ SHA1('example.orgexample.com457F9224A0') =
 </section1>
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
   <p>This document requires no interaction with the &REGISTRAR;.</p>
+</section1>
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>Thanks to Ian Paterson and Matthias Wimmer for their feedback.</p>
 </section1>
 </xep>
