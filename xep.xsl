@@ -709,6 +709,9 @@
   </xsl:template>
 
   <xsl:template match='example'>
+    <a>
+      <xsl:attribute name='name'><xsl:text>example-</xsl:text><xsl:number level='any' count='example'/></xsl:attribute>
+    </a>
     <p class='caption'>Example <xsl:number level='any' count='example'/>.<xsl:text> </xsl:text><xsl:value-of select='@caption'/></p>
     <div class='indent'>
       <pre><xsl:apply-templates/></pre>
