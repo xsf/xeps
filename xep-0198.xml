@@ -1,0 +1,231 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>Stanza Acknowledgements</title>
+    <abstract>This document defines an XMPP protocol extension for stream-level (single-hop) stanza acknowledgement and pinging.</abstract>
+    &LEGALNOTICE;
+    <number>0198</number>
+    <status>Experimental</status>
+    <type>Standards Track</type>
+    <jig>Standards JIG</jig>
+    <dependencies>XMPP Core</dependencies>
+    <supersedes>None</supersedes>
+    <supersededby>None</supersededby>
+    <shortname>ack</shortname>
+    &infiniti;
+    <revision>
+      <version>0.1</version>
+      <date>2006-11-21</date>
+      <initials>psa</initials>
+      <remark><p>Initial published version.</p></remark>
+    </revision>
+    <revision>
+      <version>0.0.3</version>
+      <date>2006-11-08</date>
+      <initials>jk</initials>
+      <remark>New version, using sequence numbers.</remark>
+    </revision>
+    <revision>
+      <version>0.0.2</version>
+      <date>2004-12-11</date>
+      <initials>jk</initials>
+      <remark>Further clarification, allow acking many stanzas at once.</remark>
+    </revision>
+    <revision>
+      <version>0.0.1</version>
+      <date>2004-08-09</date>
+      <initials>jk</initials>
+      <remark>Initial version.</remark>
+    </revision>
+  </header>
+
+  <section1 topic='Introduction' anchor='intro'>
+    <p>&xmppcore; does not specify a way for entities in a stream (single-hop) to acknowledge successful receipt of a stanza.  This specification proposes a mechanism for efficient and flexible acknowledgement of stanzas.  The protocol is intended for use with both Client-to-Server and Server-to-Server streams.</p>
+
+    <p>It is important not to confuse the facilities provided by this specification with those provided by &xep0022;, &xep0079;, and &xep0184;.  The other specifications cover end-to-end and multi-hop acknowledgements, which are useful in special scenarios, but unnecessary and overkill for general use.  In contrast, this specification proposes a protocol intended for widespread, general use.  It is also expected that this protocol will revive interest in AMP, as single-hop acknowledgements are necessary for AMP delivery receipts to function properly.</p>
+
+    <p>There is a lot to be gained by adding this feature to the protocol, such as:</p>
+    <ul>
+      <li>Ability to take alternate action if the peer has not acknowledged receipt of a stanza, such as storing and delivering again later.</li>
+      <li>Servers can send stanzas with the same to/from JID pair on separate server-to-server TCP channels, as long as the sent stanzas have been acknowledged.</li>
+      <li>Clients can determine when they have reached a throughput limitation (such as "karma").</li>
+    </ul>
+
+    <p>In addition, this specification also provides a way to "ping" the peer, useful to determine if the peer is available without having to send a real stanza.</p>
+  </section1>
+
+  <section1 topic='Stanza Acknowledgements' anchor='acks'>
+    <section2 topic='Overview' anchor='overview'>
+      <p>XMPP includes a method for acknowledging stanza reception between the initiating and receiving entities, to allow for transmission error detection and recovery.</p>
+      <p>The following rules apply:</p>
+      <ol>
+        <li>An initiating entity that complies with this specification MUST include the 'version' attribute set to a value of "1.0" in the initial stream header.</li>
+        <li>When a receiving entity that complies with this specification receives an initial stream header that includes the 'version' attribute set to a value of at least "1.0", after sending a stream header in reply (including the version flag), and if the initiating entity has been authenticated, then the receiving entity MUST include an &lt;ack/&gt; element (qualified by the 'http://jabber.org/protocol/ack' namespace) along with the list of other stream features it supports.</li>
+      </ol>
+    </section2>
+    <section2 topic='Narrative' anchor='narrative'>
+      <p>When an initiating entity activates the acknowledgement feature with a receiving entity, the steps involved are as follows:</p>
+      <ol>
+        <li>The initiating entity opens a TCP connection and initiates the stream by sending the opening XML stream header to the receiving entity, including the 'version' attribute set to a value of at least "1.0".</li>
+        <li>The receiving entity responds by opening a TCP connection and sending an XML stream header to the initiating entity, including the 'version' attribute set to a value of at least "1.0".</li>
+        <li>The initiating entity authenticates itself to the receiving entity.</li>
+        <li>The receiving entity offers the acknowledgement feature to the initiating entity by including it with the list of other supported stream features.  The acknowledgement feature MUST NOT be offered unless the initiating entity has been authenticated.</li>
+        <li>The initiating entity issues the enable command (an &lt;enable/&gt; element qualified by the 'http://jabber.org/protocol/ack' namespace) to instruct the receiving entity that it wishes to enable the acknowledgement feature.  The element MAY contain a 'previd' attribute and a 'b' attribute, if the initiating entity wishes to recover a previously known acknowledgement session.  The value of the 'previd' attribute is set to the same value as the 'id' attribute of the &lt;stream&gt; in the previous session.  The value of the 'b' attribute, if applicable, is set to the last received sequence number (discussed below) by the initiating entity.  If the initiating entity is not recovering a past session, the 'previd' and 'b' attributes MUST NOT be included.</li>
+        <li>The receiving entity MUST reply with an &lt;enabled/&gt; element qualified by the 'http://jabber.org/protocol/ack' namespace.  If the initiating entity provided a 'previd' attribute in the &lt;enable/&gt; element, and the receiving entity supports session recovery, then the receiving entity MAY provide a 'b' attribute in the &lt;enabled/&gt; element.  The value of this attribute is set to the last received sequence number (discussed below) by the receiving entity in the previous session.  If the receiving entity does not support session recovery, or does not recognize the 'previd' as an earlier session, or there is no known last received sequence number for the session, then the attribute MUST NOT be included.  If session recovery is used, and the receiving entity still has the previously-identified stream open at this time, the old stream SHOULD be terminated.</li>
+        <li>After enabling the feature, the initiating or receiving entity MAY send acknowledgement elements at any time over the stream.  An acknowledgement element is either an &lt;r/&gt; element ("request ack") or an &lt;a/&gt; element ("gratuitous ack"), qualified by the 'http://jabber.org/protocol/ack' namespace.  Both elements will hereby be referred to as simply "ack elements."  An ack element MAY contain a 'c' attribute and/or a 'b' attribute.  A 'c' attribute is used to indicate a sequence number.  It is an integer value generated by the sender, and MUST be strictly increasing.  The 'b' attribute acknowledges a previously-received sequence number from the other entity.  Thus, an ack element is used to indicate a sequence number (contains 'c'), to acknowledge a sequence number (contains 'b'), or to do both at once (contains 'c' and contains 'b').  As a special exception, an &lt;r/&gt; element that does not contain a 'c' attribute can be used to indicate a hard synchronization point.  It is acknowledeged by an ack element that does not contain a 'b' attribute.  Acknowledging a previously-received ack element indicates stanza acceptance, in that all stanzas received up to that point are now safe in the receiver's hands and that the receiver will take care of them.  Acks do not indicate successful delivery to a remote entity beyond the receiver.</li>
+        <li>When an &lt;r/&gt; element ("request ack") is received, the recipient MUST acknowledge it by sending an ack element back to the sender.  The sender does not have to wait for an ack to continue sending stanzas.  If the element received has a 'c' attribute, then the response ack MUST contain a value of 'b' that is greater than or equal to the 'c' value given.  If the element received has no 'c' attribute, then the response ack MUST NOT have a 'b' attribute.  Thus, it is possible for ack elements to contain no attributes, if the entities don't wish to track sequence numbers.  Acks SHOULD be sent as soon as possible, and MUST NOT be withheld for any condition other than a timeout. For example, a client with a slow connection might want to collect many stanzas over a period of time before acking, and a server might want to throttle incoming stanzas. As acks indicate stanza acceptance, a server that is throttling stanzas MUST defer the acks until the client is no longer being penalized.</li>
+        <li>When a sequence number is received (via the 'c' attribute), the recipient SHOULD keep a record of this value as the last received sequence number for the current stream.  Everytime a new sequence number is received, the previous number can be discarded.  If a stream ends, and it is not resumed within a reasonable time (15 minutes is RECOMMENDED), then the sequence number and any associated state MAY be discarded.  Before the session state is discarded, implementations SHOULD take alternative action with any unacknowledged stanzas (e.g. stanzas sent after the latest sequence number reported by 'b').  A server implementation SHOULD treat unacknowledged stanzas in the same way that it would treat a stanza sent to an unavailable resource, by either returning an error to the sender or committing the stanza to offline storage.  A user-oriented client implementation SHOULD inform the user of the failure via appropriate user-interface elements.</li>
+        <li>When a session is resumed, and resource binding is completed (if required), both the initiating entity and the receiving entity SHOULD retransmit any stanzas that were not accepted during the previous session, each based on the last received sequence number reported by the other.</li>
+      </ol>
+      <p>Examples of stanza acknowledgements are provided in the next section.</p>
+    </section2>
+  </section1>
+
+  <section1 topic='Examples' anchor='examples'>
+    <example caption='Server responds by sending a stream header to client:'><![CDATA[
+<stream:features>
+  <ack xmlns='http://jabber.org/protocol/ack'/>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+    <required/>
+  </bind>
+</stream:features>
+]]></example>
+    <example caption='Client enables stanza acknowledgements:'><![CDATA[
+<enable xmlns='http://jabber.org/protocol/ack'/>
+]]></example>
+    <example caption='Server informs client that the feature is enabled:'><![CDATA[
+<enabled xmlns='http://jabber.org/protocol/ack'/>
+]]></example>
+    <example caption='Client sends a message, requesting an ack from the server:'><![CDATA[
+<message from='laurence@example.net/churchyard'
+        to='juliet@example.com'
+        xml:lang='en'>
+  <body>I'll send a friar with speed, to Mantua, with my letters to thy lord.</body>
+</message>
+<r xmlns:ack='http://jabber.org/protocol/ack'/>
+]]></example>
+    <example caption='Server responds with ack:'><![CDATA[
+<a xmlns='http://jabber.org/protocol/ack'/>
+]]></example>
+<example caption='Client sends a message, requesting an ack from the server using a sequence number:'><![CDATA[
+<message from='laurence@example.net/churchyard'
+        to='juliet@example.com'
+        xml:lang='en'>
+  <body>I'll send a friar with speed, to Mantua, with my letters to thy lord.</body>
+</message>
+<r xmlns:ack='http://jabber.org/protocol/ack' c='1'/>
+]]></example>
+<example caption='Server responds with sequence number ack:'><![CDATA[
+<a xmlns='http://jabber.org/protocol/ack' b='1'/>
+]]></example>
+    <example caption='Client sends a message, with attached sequence number:'><![CDATA[
+<message from='laurence@example.net/churchyard'
+        to='juliet@example.com'
+        xml:lang='en'>
+  <body>I'll send a friar with speed, to Mantua, with my letters to thy lord.</body>
+</message>
+<a xmlns:ack='http://jabber.org/protocol/ack' c='7'/>
+]]></example>
+  <example caption='Client enables stanza acknowledgements, attempting to recover a previous session:'><![CDATA[
+<enable xmlns='http://jabber.org/protocol/ack' previd='c2s_345'/>
+]]></example>
+  <example caption='Server informs client that the feature is enabled:'><![CDATA[
+<enabled xmlns='http://jabber.org/protocol/ack' b='7'/>
+]]></example>
+  </section1>
+
+  <section1 topic='Pinging' anchor='pinging'>
+    <p>Either entity can also ping the other, useful for ensuring that the TCP connection is still up and working, and also determining latency.  The procedure should replace the legacy behavior of sending whitespace.  Pinging is done by sending a 'ping' element:</p>
+    <example caption='Pinging the Peer'><![CDATA[
+<ping xmlns='http://jabber.org/protocol/ack'/>
+    ]]></example>
+    <p>The peer then MUST reply immediately with a 'pong' element.</p>
+    <example caption='Replying to a Ping'><![CDATA[
+<pong xmlns='http://jabber.org/protocol/ack'/>
+    ]]></example>
+    <p>A server that is throttling stanzas (and thus withholding acks until later) SHOULD still immediately reply to pings.</p>
+  </section1>
+
+  <section1 topic='Implementation Notes' anchor='impl'>
+<ul>
+  <li>
+    <p>To save bandwidth, it is recommended that implementations specify an XML namespace prefix assignment in the initial &lt;stream&gt; element for the 'http://jabber.org/protocol/ack' namespace.</p>
+    <example caption='Setting a Namespace Prefix'><![CDATA[
+<stream:stream
+       to='example.com'
+       xmlns='jabber:client'
+       xmlns:stream='http://etherx.jabber.org/streams'
+       xmlns:ack='http://jabber.org/protocol/ack'
+       version='1.0'>
+    ]]></example>
+    <example caption='Acking'><![CDATA[
+<ack:a/>
+    ]]></example>
+  </li>
+  <li>Ack elements should ideally be sent in the same TCP packet as other stanzas, to reduce the number of total packets sent.  In particular, if a request ack is received, applications may want to wait a short period for something else to send before responding, so that the response ack may share a packet with the other data.</li>
+</ul>
+  </section1>
+
+  <section1 topic='IANA Considerations' anchor='iana'>
+    <p>This XEP requires no interaction with &IANA;. </p>
+  </section1>
+
+  <section1 topic='Jabber Registrar Considerations' anchor='registrar'>
+    <section2 topic='Stream Features' anchor='registrar-stream'>
+      <p>Upon approval of this XEP, the Jabber Registrar shall add 'http://jabber.org/features/ack' to its registry of stream features.</p>
+    </section2>
+    <section2 topic='Protocol Namespaces' anchor='registrar'>
+      <p>Upon approval of this XEP, the &REGISTRAR; shall add 'http://jabber.org/protocol/ack' to its registry of protocol namespaces.</p>
+    </section2>
+  </section1>
+
+  <section1 topic='XML Schemas' anchor='schemas'>
+    <section2 topic='Stream Feature' anchor='schemas-stream'>
+      <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='http://jabber.org/features/ack'
+    xmlns='http://jabber.org/features/ack'
+    elementFormDefault='qualified'>
+
+  <xs:element name='ack'/>
+
+</xs:schema>
+      ]]></code>
+    </section2>
+    <section2 topic='Protocol Namespace' anchor='schemas-protocol'>
+      <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='http://jabber.org/protocol/ack'
+    xmlns='http://jabber.org/protocol/ack'
+    elementFormDefault='qualified'>
+
+  <xs:element name='enable' type='empty'/>
+  <xs:element name='enabled' type='empty'/>
+  <xs:element name='r' type='empty'/>
+  <xs:element name='a' type='empty'/>
+  <xs:element name='ping' type='empty'/>
+  <xs:element name='pong' type='empty'/>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+      ]]></code>
+    </section2>
+  </section1>
+
+</xep>
