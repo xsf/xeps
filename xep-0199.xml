@@ -7,7 +7,7 @@
 <xep>
 <header>
   <title>XMPP Ping</title>
-  <abstract>This document defines an XMPP protocol extension for sending pings over an XML stream.</abstract>
+  <abstract>This document defines an XMPP protocol extension for sending pings over XML streams.</abstract>
   &LEGALNOTICE;
   <number>0199</number>
   <status>Experimental</status>
@@ -22,6 +22,12 @@
   <shortname>ping</shortname>
   &stpeter;
   <revision>
+    <version>0.2</version>
+    <date>2006-11-22</date>
+    <initials>psa</initials>
+    <remark><p>Changed IQ-set to IQ-get; clarified requirements; specified protocol description; added use cases.</p></remark>
+  </revision>
+  <revision>
     <version>0.1</version>
     <date>2006-11-21</date>
     <initials>psa</initials>
@@ -29,30 +35,38 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>As specified in &rfc3920;, the XML streams used in XMPP are bound to TCP. Unfortunately, TCP connections can go down without the application (XMPP) layer knowing about it. The traditional approach to solving this issue has been to periodically send so-called "whitespace pings" over the XML stream. This document recommends a more XML-friendly and XMPP-friendly approach, which can also be used with other bindings such as &xep0124;.</p>
+  <p>As specified in &rfc3920;, the XML streams used in XMPP are bound to TCP. Unfortunately, TCP connections can go down without the application (XMPP) layer knowing about it. The traditional approach to solving this issue has been to periodically send so-called "whitespace pings" over the XML stream. This document recommends a more XML-friendly approach, which can also be used with other bindings such as the &xep0124;.</p>
 </section1>
 <section1 topic='Requirements' anchor='reqs'>
   <p>This document addresses the following requirements:</p>
   <ol start='1'>
-    <li>Determining the per-hop viability of an XML stream (i.e., its underlying binding) between a client and a server, or between two servers.</li>
-    <li>Determining end-to-end connectivity between any two XMPP entities.</li>
+    <li>Determining the viability of an XML stream (i.e., its underlying binding) between a client and a server, or between two servers.</li>
+    <li>Determining end-to-end connectivity between any two XMPP entities (e.g., two clients).</li>
   </ol>
 </section1>
+<section1 topic='Protocol' anchor='protocol'>
+  <p>The XMPP ping protocol is extremely simple:</p>
+  <ol>
+    <li>The pinging entity sends an IQ-get containing a &lt;ping/&gt; element qualified by the 'urn:xmpp:ping' namespace.</li>
+    <li>The pinged entity returns either an IQ-result (if it supports the namespace) or an IQ-error (if it does not). <note>The pinged entity MAY ignore the IQ (i.e., return neither a result nor an error) if doing so would reveal its presence information to an entity that is not authorized to view that information; this mainly applies to client-to-client pings.</note></li>
+  </ol>
+  <p>The number of "hops" for which the ping tests connectivity depends on how far the pinged entity is from the pinging entity, as shown in the following use cases.</p>
+</section1>
 <section1 topic='Use Cases' anchor='usecases'>
-  <section2 topic='Stream-Level Pings' anchor='stream'>
-    <p>The typical usage for stream-level pings is for a server to test the viability of the underlying stream connection by pinging a connected client or server (however, a client may send pings as well). This is done by sending an &IQ; set over the stream, which SHOULD NOT include 'to' and 'from' addresses.</p>
+  <section2 topic='Client-To-Server Pings' anchor='c2s'>
+    <p>One popular usage is for a server to test the viability of the underlying stream connection by pinging a connected client (note: a client may send pings as well). This is done by sending an &IQ; get over the stream between the two entities.</p>
     <example caption="Ping"><![CDATA[
-<iq type='set' id='ping123'>
+<iq from='capulet.com' to='juliet@capulet.com/balcony' id='ping123' type='get'>
   <ping xmlns='urn:xmpp:ping'/>
 </iq>
     ]]></example>
     <p>If the other party to the stream supports the ping namespace, it MUST return an IQ result:</p>
     <example caption="Pong"><![CDATA[
-<iq type='result' id='ping123'/>
+<iq from='juliet@capulet.com/balcony' to='capulet.com' id='ping123' type='result'/>
     ]]></example>
     <p>If the other party to the stream does not support the ping namespace, it MUST return an IQ error, which SHOULD be &unavailable;:</p>
     <example caption="Ping Not Supported"><![CDATA[
-<iq type='error' id='ping123'>
+<iq from='juliet@capulet.com/balcony' to='capulet.com' id='ping123' type='error'>
   <ping xmlns='urn:xmpp:ping'/>
   <error type='cancel'>
     <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
@@ -60,39 +74,93 @@
 </iq>
     ]]></example>
   </section2>
-  <section2 topic='End-to-End Pings' anchor='e2e'>
-    <p>For end-to-end pings, the 'from' and 'to' addresses are necessary.</p>
+  <section2 topic='Server-To-Server Pings' anchor='s2s'>
+    <p>Pings can also be used to test a server-to-server connection. This is done by sending an &IQ; get over the stream from one server to another.</p>
+    <example caption="Ping"><![CDATA[
+<iq from='capulet.com' to='montague.net' id='ping234' type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>If the other party to the stream supports the ping namespace, it MUST return an IQ result:</p>
+    <example caption="Pong"><![CDATA[
+<iq from='montague.net' to='capulet.com' id='ping234' type='result'/>
+    ]]></example>
+    <p>If the other party to the stream does not support the ping namespace, it MUST return an IQ error, which SHOULD be &unavailable;:</p>
+    <example caption="Ping Not Supported"><![CDATA[
+<iq from='montague.net' to='capulet.com' id='ping234' type='error'>
+  <ping xmlns='urn:xmpp:ping'/>
+  <error type='cancel'>
+    <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Client-to-Client Pings' anchor='e2e'>
+    <p>Pings can also be used for client-to-client (i.e., end-to-end) pings.</p>
     <example caption="Ping"><![CDATA[
 <iq from='romeo@montague.net/home' 
     to='juliet@capulet.com/chamber'
-    type='set' 
-    id='ping234'>
+    type='get' 
+    id='ping345'>
   <ping xmlns='urn:xmpp:ping'/>
 </iq>
   </iq>
     ]]></example>
-    <p>If the receiving entity supports the ping namespace, it SHOULD return an IQ result:</p>
+    <p>If the pinged entity supports the ping namespace, it SHOULD return an IQ result:</p>
     <example caption="Pong"><![CDATA[
-<iq from='romeo@montague.net/home' 
-    to='juliet@capulet.com/chamber'
-    type='result'
-    id='ping234'/>
+<iq from='juliet@capulet.com/chamber'
+    to='romeo@montague.net/home' 
+    id='ping345'
+    type='result'/>
     ]]></example>
-    <p>If the receiving entity does not support the ping namespace, it SHOULD return an IQ error, which SHOULD be &unavailable;:</p>
+    <p>If the pinged entity does not support the ping namespace, it SHOULD return an IQ error, which SHOULD be &unavailable;:</p>
     <example caption="Ping Not Supported"><![CDATA[
-<iq type='error' id='ping234'>
+<iq from='juliet@capulet.com/chamber'
+    to='romeo@montague.net/home' 
+    id='ping345'
+    type='result'>
   <ping xmlns='urn:xmpp:ping'/>
   <error type='cancel'>
     <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
   </error>
 </iq>
     ]]></example>
-    <p>However, the receiving entity MAY ignore the IQ (e.g., if doing so would reveal presence information to an entity that is not authorized to view that information).</p>
+  </section2>
+  <section2 topic='Component-to-Client Pings' anchor='other'>
+    <p>Pings can also be used for component-to-client pings, for example from a &xep0045; component to a client.</p>
+    <example caption="Ping"><![CDATA[
+<iq from='chat.shakespeare.lit'
+    to='juliet@capulet.com/chamber'
+    type='get' 
+    id='ping456'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+  </iq>
+    ]]></example>
+    <p>If the pinged entity supports the ping namespace, it SHOULD return an IQ result:</p>
+    <example caption="Pong"><![CDATA[
+<iq from='juliet@capulet.com/chamber'
+    to='chat.shakespeare.lit'
+    id='ping456'
+    type='result'/>
+    ]]></example>
+    <p>If the pinged entity does not support the ping namespace, it SHOULD return an IQ error, which SHOULD be &unavailable;:</p>
+    <example caption="Ping Not Supported"><![CDATA[
+<iq from='juliet@capulet.com/chamber'
+    to='chat.shakespeare.lit'
+    id='ping456'
+    type='error'>
+  <ping xmlns='urn:xmpp:ping'/>
+  <error type='cancel'>
+    <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
   </section2>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
-  <p>This specification introduces no known security concerns above and beyond those specified in <cite>RFC 3920</cite>.</p>
+  <p>A pinged entity MAY ignore the IQ (i.e., return neither a result nor an error) if doing so would reveal its presence information to an entity that is not authorized to view that information; this mainly applies to client-to-client pings.</p>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
