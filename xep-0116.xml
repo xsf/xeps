@@ -43,8 +43,8 @@
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 <xep>
 <header>
-  <title>Encrypted Sessions</title>
-  <abstract>This document specifies an XMPP protocol extension for session-based, end-to-end encryption.</abstract>
+  <title>Encrypted Session Negotiation</title>
+  <abstract>This document specifies an XMPP protocol extension for negotiating an end-to-end encrypted session.</abstract>
   &LEGALNOTICE;
   <number>0116</number>
   <status>Experimental</status>
@@ -52,6 +52,7 @@
   <jig>Standards JIG</jig>
   <dependencies>
     <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
     <spec>RFC 2104</spec>
     <spec>RFC 2409</spec>
     <spec>RFC 3526</spec>
@@ -62,6 +63,7 @@
     <spec>XEP-0030</spec>
     <spec>XEP-0068</spec>
     <spec>XEP-0155</spec>
+    <spec>XEP-0200</spec>
   </dependencies>
   <supersedes>None</supersedes>
   <supersededby>None</supersededby>
@@ -71,9 +73,9 @@
   &dizzyd;
   <revision>
     <version>0.13</version>
-    <date>2006-11-16</date>
+    <date>2006-11-23</date>
     <initials>ip</initials>
-    <remark><p>Added disclosure field and Back Doors section</p></remark>
+    <remark><p>Added disclosure field; added Back Doors and Key Associations sections; employed HMAC instead of hash; moved exchanging stanzas and rekeying sections to XEP-0200; changed namespace</p></remark>
   </revision>
   <revision>
     <version>0.12</version>
@@ -152,7 +154,7 @@
 <section1 topic='Introduction' anchor='intro'>
   <p>End-to-end encryption is a desirable feature for any communication technology. Ideally, such a technology would design encryption in from the beginning and would forbid unencrypted communications. Realistically, most communication technologies have not been designed in that manner, and Jabber/XMPP technologies are no exception. In particular, the original Jabber technologies developed in 1999 did not include end-to-end encryption by default. PGP-based encryption of message bodies and signing of presence information was added as an extension to the core protocols in the year 2000; this extension is documented in &xep0027;. When the core protocols were formalized within the Internet Standards Process by the IETF's XMPP Working Group in 2003, a different extension was defined using S/MIME-based signing and encryption of CPIM-formatted messages (see &rfc3862;) and PIDF-formatted presence information (see &rfc3863;); this extension is specified in &rfc3923;.</p>
   <p>For reasons described in &xep0188;, the foregoing proposals (and others not mentioned) have not been widely implemented and deployed. This is unfortunate, since an open communication protocol needs to enable end-to-end encryption in order to be seriously considered for deployment by a broad range of users.</p>
-  <p>This proposal describes a different approach to end-to-end encryption for use by entities that communicate using XMPP. The requirements and the consequent cryptographic design that underpin this protocol are described in <cite>Cryptographic Design of Encrypted Sessions</cite>. The basic concept is that of an encrypted session which acts as a secure tunnel between two endpoints. Once the tunnel is established, the content of each one-to-one XML stanza exchanged between the endpoints will be encrypted and then transmitted within a "wrapper" stanza.</p>
+  <p>This proposal describes a different approach to end-to-end encryption for use by entities that communicate using XMPP. The requirements and the consequent cryptographic design that underpin this protocol are described in <cite>Cryptographic Design of Encrypted Sessions</cite>. The basic concept is that of an encrypted session which acts as a secure tunnel between two endpoints. Once the tunnel is established, the content of each one-to-one XML stanza exchanged between the endpoints will be encrypted and then transmitted within a "wrapper" stanza using &xep0200;.</p>
 </section1>
 
 <section1 topic="Dramatis Personae" anchor='personae'>
@@ -162,7 +164,7 @@
     <li>"Bob" is the name of the other participant in the ESession started by Alice. Within the scope of this document, his fully-qualified JID is: &lt;bob@example.com/laptop&gt;.</li>
     <li>"Aunt Tillie" the archetypal typical user (i.e. non-technical, with only very limited knowledge of how to use a computer, and averse to performing any procedures that are not familiar).</li>
   </ol>
-  <p>While Alice and Bob are introduced as "end users", they are simply meant to be examples of Jabber entities. Any directly addressable Jabber entity may participate in an ESession.</p>
+  <p>While Alice and Bob are introduced as "end users", they are simply meant to be examples of XMPP entities. Any directly addressable XMPP entity may participate in an ESession.</p>
 </section1>
 
 <section1 topic='Discovering Support' anchor='disco'>
@@ -176,7 +178,7 @@
   <query xmlns='http://jabber.org/protocol/disco#info'/>
 </iq>
   ]]></example>
-  <p>If Bob sends a disco#info reply and he supports the protocol defined herein, then he MUST include a service discovery feature variable of "http://jabber.org/protocol/esession".</p>
+  <p>If Bob sends a disco#info reply and he supports the protocol defined herein, then he MUST include a service discovery feature variable of "urn:xmpp:esession".</p>
   <example caption='Bob Returns disco#info Data'><![CDATA[
 <iq type='result'
     from='bob@example.com/laptop'
@@ -185,7 +187,7 @@
   <query xmlns='http://jabber.org/protocol/disco#info'>
     <identity category='client' type='pc'/>
     ...
-    <feature var='http://jabber.org/protocol/esession'/>
+    <feature var='urn:xmpp:esession'/>
     ...
   </query>
 </iq>
@@ -193,12 +195,20 @@
 </section1>
 
 <section1 topic="Online ESession Negotiation" anchor='init'>
+    <section2 topic="Introduction" anchor='init-intro'>
     <p>The process for establishing a secure session over an insecure transport is essentially a negotiation of various ESession algorithms and other parameters, combined with a translation into XMPP syntax of the &sigma; approach to key exchange (see <cite>Cryptographic Design of Encrypted Sessions</cite>).</p>
     <p>If Alice believes Bob may be online then she SHOULD use the protocol specified in &xep0155; and in this section to negotiate the ESession options and the keys.</p>
     <p>Note: If Alice believes Bob is offline then she SHOULD NOT use this negotiation protocol. However, she MAY use the protocol specified in <cite>Offline Encrypted Sessions</cite> to establish the ESession options and keys. Alternatively, she MAY send stanzas without encryption - in which case her client MUST make absolutely clear to her that the stanzas will not be protected and give her the option not to send the stanzas.</p>
-    <p>Note: In any case, Alice MUST NOT initiate a new ESession with Bob if she already has one established with him.</p>
+    <p>Each entity (or each user of a client installation) MUST be assigned a large random Anonymous ID (AID) upon first use.</p>
+    <p>This protocol supports both 3- and 4-message key negotiations. The 3-message SIGMA-I-based key exchange protects the identity of the <em>initiator</em> against active attacks. This SHOULD NOT be used to establish client-to-client sessions since the <em>responder's</em> identity is not protected against active attacks. However, it SHOULD be used to establish client-to-service (server) sessions, especially where the identity of the service is well known to third parties.</p>
+    <p>The 4-message SIGMA-R-based key exchange with hash commitment defends the <em>responder's</em> identity against active attacks and facilitates detection of a Man in the Middle attack. It SHOULD be used to establish client-to-client sessions. The 4-message key exchange also features optional Short-Authentication-String protection against Man-in-the-Middle attacks without the need to generate, distribute or authenticate any public keys. As long as a hash commitment is used at the start of the key exchange then only a short human-friendly string needs to be verified out-of-band (e.g. by recognizable voice communication).</p>
+    <p>The 4-message key exchange also features optional secret retention. If retained secrets are employed <em>consistently</em> during key exchanges, then the Man in the Middle would need to be present for every session, including the first, and the out-of-band verification would only need to be performed once to verify the absence of a Man in the Middle for all sessions between the parties (past, present and future). <note>This combination of techniques underpins the <cite>ZRTP</cite> key agreement protocol.</note></p>
+    <p>Public keys are optional in the diagram below. It describes the same SIGMA-R with SAS key exchange protocol as the <link url='#foundations-skeleton-r'>SIGMA-R Overview</link>. It provides much more detail including the use of retained secrets and other secrets. Note: These <em>optional</em> security enhancements are especially important when the protocol is being used without public keys.</p>
+    <p>Alternatively Alice and Bob could agree a shared secret via secure out-of-band communication, Bob could then use it to create an HMAC of his public key that only Alice could verify.</p>
+    </section2>
+
     <section2 topic="ESession Request" anchor='init-online-request'>
-      <p>In addition to the "accept", "security", "otr" and "disclosure" fields (see <link url='#sec-backdoor'>Back Doors</link>) specified in <cite>Chat Session Negotiation</cite>, Alice MUST send to Bob each of the ESession options (see list below) that she is willing to use, in her order of preference (see <link url='#sec-mandatory'>Mandatory to Implement Technologies</link>). Note: Alice SHOULD NOT include a "reason" field since Aunt Tillie may not be aware the ESession request is <em>not</em> encrypted.</p>
+      <p>In addition to the "accept", "security", "otr" and "disclosure" fields (see <link url='#sec-backdoor'>Back Doors</link>) specified in <cite>Chat Session Negotiation</cite>, Alice MUST send to Bob each of the ESession options (see list below) that she is willing to use, in her order of preference (see <link url='#sec-mandatory'>Mandatory to Implement Technologies</link>).</p>
       <ol>
         <li><p>The list of Modular Exponential (MODP) group numbers (as specified in &rfc2409; or &rfc3526;) that MAY be used for Diffie-Hellman key exchange (valid group numbers include 1,2,3,4,5,14,15,16,17 and 18)</p></li>
         <li><p>Symmetric block cipher algorithm names</p></li>
@@ -222,7 +232,7 @@
   <feature xmlns='http://jabber.org/protocol/feature-neg'>
     <x type='form' xmlns='jabber:x:data'>
       <field type="hidden" var="FORM_TYPE">
-        <value>http://jabber.org/protocol/chatneg</value>
+        <value>urn:xmpp:chatneg</value>
       </field>
       <field type="boolean" var="accept">
         <value>1</value>
@@ -313,7 +323,7 @@
   <feature xmlns='http://jabber.org/protocol/feature-neg'>
     <x type='submit' xmlns='jabber:x:data'>
       <field var="FORM_TYPE">
-        <value>http://jabber.org/protocol/chatneg</value>
+        <value>urn:xmpp:chatneg</value>
       </field>
       <field var="accept"><value>1</value></field>
       <field var="otr"><value>true</value></field>
@@ -339,22 +349,22 @@
     </section2>
 
     <section2 topic="Generating Session Keys" anchor='init-keys'>
-      <p>Bob MUST use the shared secret ("K") and the selected hash algorithm ("HASH") to generate two sets of three keys, one set for each direction of the ESession.</p>
+      <p>Bob MUST use HMAC with the selected hash algorithm ("HASH") and the shared secret ("K") to generate two sets of three keys, one set for each direction of the ESession.</p>
       <p>For stanzas that Alice will send to Bob, the keys are calculated as:</p>
       <ol>
-        <li><p>Encryption key &KCsubA; = HASH(K, 0)</p></li>
-        <li><p>Integrity key &KMsubA; = HASH(K, 2)</p></li>
+        <li><p>Encryption key &KCsubA; = <em>HMAC</em>(HASH, K, "Initiator Cipher Key")</p></li>
+        <li><p>Integrity key &KMsubA; = <em>HMAC</em>(HASH, K, "Initiator MAC Key")</p></li>
         <!--  <note>&KMsubA; is a hash of &KCsubA; (not K) to ensure that if an attacker recovers the decryption key she will not be able to cryptographically convince anyone that it was not her who created the stanza.</note> -->
-        <li><p>SIGMA key &KSsubA; = HASH(K, 4)</p></li>
+        <li><p>SIGMA key &KSsubA; = <em>HMAC</em>(HASH, K, "Initiator SIGMA Key")</p></li>
       </ol>
       <p>For stanzas that Bob will send to Alice the keys are calculated as:</p>
       <ol start='4'>
-        <li><p>Encryption key &KCsubB; = HASH(K, 1)</p></li>
-        <li><p>Integrity key &KMsubB; = HASH(K, 3)</p></li>
-        <li><p>SIGMA key &KSsubB; = HASH(K, 5)</p></li>
+        <li><p>Encryption key &KCsubB; = <em>HMAC</em>(HASH, K, "Responder Cipher Key")</p></li>
+        <li><p>Integrity key &KMsubB; = <em>HMAC</em>(HASH, K, "Responder MAC Key")</p></li>
+        <li><p>SIGMA key &KSsubB; = <em>HMAC</em>(HASH, K, "Responder SIGMA Key")</p></li>
       </ol>
       <p>Once the sets of keys have been calculated the value of K MUST be securely destroyed.</p>
-      <p>Note: As many bits of key data as are needed for each key MUST be taken from the least significant bits of the hash output. When negotiating a hash, entities MUST ensure that the hash output is no shorter than the required key data. For algorithms with variable-length keys the maximum length (up to the hash output length) SHOULD be used.</p>
+      <p>Note: As many bits of key data as are needed for each key MUST be taken from the least significant bits of the HMAC output. When negotiating a hash, entities MUST ensure that the hash output is no shorter than the required key data. For algorithms with variable-length keys the maximum length (up to the hash output length) SHOULD be used.</p>
     </section2>
 
     <section2 topic="Hiding Identity" anchor='init-hide'>
@@ -384,7 +394,7 @@
   <feature xmlns='http://jabber.org/protocol/feature-neg'>
     <x type='submit' xmlns='jabber:x:data'>
       <field var="FORM_TYPE">
-        <value>http://jabber.org/protocol/chatneg</value>
+        <value>urn:xmpp:chatneg</value>
       </field>
       <field var="accept"><value>1</value></field>
       <field var="otr"><value>true</value></field>
@@ -422,7 +432,7 @@
   <feature xmlns='http://jabber.org/protocol/feature-neg'>
     <x type='submit' xmlns='jabber:x:data'>
       <field var="FORM_TYPE">
-        <value>http://jabber.org/protocol/chatneg</value>
+        <value>urn:xmpp:chatneg</value>
       </field>
       <field var="accept"><value>1</value></field>
       <field var="otr"><value>true</value></field>
@@ -498,22 +508,23 @@
       <code>&IDA; = CIPHER(&KCsubA;, &CsubA;, {&pubKeyA;, &signA;})</code>
       <code>&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)</code>
 
-      <p>Alice MUST send the Base64 encoded values of &NsubB;, &IDA; and &MsubA; to Bob. If Alice has already confirmed Bob's identity (i.e. if Bob included 'identity' and 'mac' fields in his response), then she MAY also send encrypted content (see <link url='#exchange'>Exchanging Stanzas</link>) in the same stanza as the proof of her identity.</p>
+      <p>Alice MUST send the Base64 encoded values of &NsubB;, &IDA; and &MsubA; to Bob. If Alice has already confirmed Bob's identity (i.e. if Bob included 'identity' and 'mac' fields in his response), then she MAY also send encrypted content (see &xep0200;) in the same stanza as the proof of her identity.</p>
       <example caption='Alice Sends Bob Her Identity'><![CDATA[
 <message from='alice@example.org/pda' to='bob@example.com/laptop'>
   <thread>ffd7076498744578d10edabfe7f4a866</thread>
   <feature xmlns='http://jabber.org/protocol/feature-neg'>
     <x type='result' xmlns='jabber:x:data'>
-      <field var="FORM_TYPE"><value>http://jabber.org/protocol/chatneg</value></field>
+      <field var="FORM_TYPE"><value>urn:xmpp:chatneg</value></field>
+      <field var="accept"><value>1</value></field>
       <field var="nonce"><value> ** Bob's Base64 encoded ESession ID ** </value></field>
       <field var="identity"><value> ** Encrypted identity ** </value></field>
       <field var="mac"><value> ** Integrity of identity ** </value></field>
     </x>
   </feature>
-  <encrypted xmlns='http://jabber.org/protocol/esession'>
+  <c xmlns='urn:xmpp:crypt'>
     <data> ** Base64 encoded m_final ** </data>
     <mac> ** Base64 encoded a_mac ** </mac>
-  </encrypted>
+  </c>
 </message>
       ]]></example>
       <p>If Alice also includes a 'terminate' field with its value set to "1" or "true" (see <link url='#terminate'>ESession Termination</link>) within the form then the ESession is terminated immediately. Note: This special case, where a single stanza is encrypted and sent in isolation, is equivalent to object encryption (or object signing if no encryption is specified) and offers several significant advantages over non-session approaches - including perfect forward secrecy.</p>
@@ -523,13 +534,13 @@
       <code>&macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;, &formA;})</code>
       <code>VERIFY(&signA;, &pubKeyA;, &macA;)</code>
       <p>If Alice has already confirmed Bob's identity (i.e. if Bob included 'identity' and 'mac' fields in his response above), then the ESession negotiation is complete.</p>
-      <p>Otherwise, one more step is necessary. Bob MUST send Alice the Base64 encoded values of &NsubA;, &IDB; and &MsubB; that he calculated previously (see <link url='#init-hide'>Hiding Identity</link>). Note: He MAY also send encrypted content (see <link url='#exchange'>Exchanging Stanzas</link>) in the same stanza.</p>
+      <p>Otherwise, one more step is necessary. Bob MUST send Alice the Base64 encoded values of &NsubA;, &IDB; and &MsubB; that he calculated previously (see <link url='#init-hide'>Hiding Identity</link>). Note: He MAY also send encrypted content (see <cite>Stanza Encryption</cite>) in the same stanza.</p>
       <example caption='Bob Sends Alice His Identity'><![CDATA[
 <message from='bob@example.com/laptop' to='alice@example.org/pda'>
   <thread>ffd7076498744578d10edabfe7f4a866</thread>
-  <init xmlns='http://jabber.org/protocol/esession#init'>
+  <init xmlns='urn:xmpp:esession#init'>
     <x type='result' xmlns='jabber:x:data'>
-      <field var="FORM_TYPE"><value>http://jabber.org/protocol/chatneg</value></field>
+      <field var="FORM_TYPE"><value>urn:xmpp:chatneg</value></field>
       <field var="nonce"><value> ** Alice's Base64 encoded ESession ID ** </value></field>
       <field var="identity"><value> ** Encrypted identity ** </value></field>
       <field var="mac"><value> ** Integrity of identity ** </value></field>
@@ -538,183 +549,36 @@
 </message>
       ]]></example>
       <p>After receiving Bob's identity Alice MUST verify it by performing steps described in the section <link url='#init-online-bobid'>Verifying Bob's Identity</link> above. Note: If Alice sends an error to Bob then she SHOULD ignore any encrypted content she received in the stanza.</p>
+      <p>Once ESession negotiation is complete, Alice and Bob MUST exchange only encrypted forms of the one-to-one stanza types they agreed upon (e.g., &MESSAGE; and &IQ; stanzas).</p>
+
+
+
+
     </section2>
 </section1>
 
 
-<section1 topic="Exchanging Stanzas" anchor='exchange'>
-  <section2 topic="Encryptable Content" anchor='exchange-separate'>
-    <p>Once ESession negotiation is complete, Alice and Bob MUST exchange only encrypted forms of the one-to-one stanza types they agreed upon (e.g., &MESSAGE; and &IQ; stanzas).</p>
-    <p>Either Alice or Bob MAY send encrypted stanzas. Here we describe the process where Alice sends Bob an encrypted stanza. She MUST only encrypt the XML content that would normally be ignored by the intermediate servers. She MUST NOT encrypt stanza wrapper elements (only their content), &THREAD; or <cite>Advanced Message Processing</cite> elements.</p>
-  <example caption='Unencrypted Stanza'><![CDATA[
-<message from='alice@example.org/pda'
-         to='bob@example.com/laptop'
-         type='chat'>
-  <thread>ffd7076498744578d10edabfe7f4a866</thread>
-  <body>Hello, Bob!</body>
-  <amp xmlns='http://jabber.org/protocol/amp'>
-    <rule action='error' condition='match-resource' value='exact'/>
-  </amp>
-  <active xmlns='http://jabber.org/protocol/chatstates'/>
-</message>
-]]></example>
-
-  <example caption='XML Content to be Encrypted'><![CDATA[
-<body>Hello, Bob!</body>
-<active xmlns='http://jabber.org/protocol/chatstates'/>
-]]></example>
-  </section2>
-  <section2 topic="Encryption" anchor='exchange-encrypt'>
-
-    <p>Alice MUST perform the following steps to encrypt the XML content. Note: if there is no XML content to be encrypted (e.g. if this is an empty <link url='#rekey'>Re-Keying</link> stanza), then &CsubA; MUST be incremented by 1 (see below), and only the last two steps (normalization and MAC calculation) should be performed.</p>
-    <ol start='1'>
-      <li><p>Serialize the XML content she wishes to send into an array of UTF-8 bytes, m. <note>Although counter mode encryption requires no padding, implementations MAY still disguise the length of m by appending a random number of white-space characters.</note></p></li>
-      <li>
-        <p>Compress m using the negotiated algorithm. If a compression algorithm other than 'none' was agreed, the compression context is typically initialized after key exchange and passed from one stanza to the next, with only a partial flush at the end of each stanza. <note>If Bob were to receive a stanza out-of-order, then he would fail to decrypt the stanza and be forced to terminate the ESession.</note></p>
-        <code>m_compressed = compress(m)</code>
-      </li>
-      <li>
-        <p>Encrypt the data with the agreed algorithm in counter mode, using the encryption key &KCsubA;. Note: &CsubA; MUST be incremented by 1 for each encrypted block or partial block (i.e. &CsubA; = (&CsubA; + 1) mod 2<span class='super'>n</span>, where n is the number of bits per cipher block for the agreed block cipher algorithm). Note: if the block cipher algorithm 'none' was agreed (see <link url='#sec-unencrypted'>Unencrypted ESessions</link>) then encryption MUST NOT be performed and &CsubA; MUST be incremented by 1 (for replay protection).</p>
-        <code>m_final = encrypt(&KCsubA;, &CsubA;, m_compressed)</code>
-      </li>
-      <li>
-        <p>Alice MUST now create the <link url='#sign-normal'>Normalized</link> XML <em>content</em> of the &lt;encrypted/&gt; XML element. If there is encrypted XML content, the XML MUST include the Base64 encoded value of m_final wrapped in a &lt;data/&gt; element. Note: the &lt;encrypted/&gt; element MAY also contain one &lt;key/&gt; element and one or more &lt;old/&gt; elements (see <link url='#rekey'>Re-Keying</link>).</p>
-        <code>m_content = '&lt;data&gt; ** Base64 encoded m_final ** &lt;/data&gt;'</code>
-      </li>
-      <li>
-        <p>The XML content and the value of Alice's block cipher counter &CsubA; <em>before</em> the data was encrypted, are now processed through the HMAC algorithm, along with the agreed hash algorithm ("HASH") and the integrity key &KMsubA;.</p>
-        <code>a_mac = <em>HMAC</em>(HASH, &KMsubA;, m_content, &CsubA;)</code>
-      </li>
-    </ol>
-
-  </section2>
-  <section2 topic="Sending an Encrypted Stanza" anchor='exchange-send'>
-    <p>Before sending the stanza to Bob, Alice MUST wrap m_content and the Base64 encoded value of a_mac (wrapped in a &lt;mac/&gt; element) inside an &lt;encrypted/&gt; element and insert it into the stanza in place of the original content. There MUST NOT be more than one &lt;encrypted/&gt; element per stanza.</p>
-    <example caption='Message Stanza with Encrypted Content'><![CDATA[
-<message from='alice@example.org/pda'
-         to='bob@example.com/laptop'
-         type='chat'>
-  <thread>ffd7076498744578d10edabfe7f4a866</thread>
-  <encrypted xmlns='http://jabber.org/protocol/esession'>
-    <data> ** Base64 encoded m_final ** </data>
-    <mac> ** Base64 encoded a_mac ** </mac>
-  </encrypted>
-  <amp xmlns='http://jabber.org/protocol/amp' per-hop='true'>
-    <rule action='error' condition='match-resource' value='exact'/>
-  </amp>
-</message>
-    ]]></example>
-  </section2>
-  <section2 topic="Decryption" anchor='exchange-decrypt'>
-
-    <p>When Bob receives the stanza from Alice, he extracts and Base64 decodes the values of m_final and a_mac from the content and performs the following steps.</p>
-    <ol start='1'>
-      <li>
-        <p>Remove the &lt;mac/&gt; element from the &lt;encrypted/&gt; element and <link url='#sign-normal'>Normalize</link> the remaining XML <em>content</em>. Calculate the Message Authentication Code (MAC) for the content.</p>
-        <code>b_mac = <em>HMAC</em>(HASH, &KMsubA;, m_content, &CsubA;)</code>
-      </li>
-      <li>
-        <p>Verify that b_mac and a_mac match. If they are not identical, the content has been tampered with and Bob MUST terminate the ESession, he MAY send a &notacceptable; error to Alice. <note>If Bob were to receive a stanza out-of-order, then the MACs would not match because the values of &CsubA; would not be synchronized.</note></p>
-      </li>
-      <li>
-        <p>Decrypt m_final using the agreed algorithm, &KCsubA; and &CsubA;. Note: &CsubA; MUST be incremented by 1 for each decrypted block (see <link url='#exchange-encrypt'>Encryption</link>). Note: if the block cipher algorithm 'none' was agreed decryption MUST NOT be performed and &CsubA; MUST be incremented by 1.</p>
-        <code>m_compressed = decrypt(&KCsubA;, &CsubA;, m_final)</code>
-      </li>
-      <li>
-        <p>Decompress m_compressed using the negotiated algorithm (usually 'none').</p>
-        <code>m = decompress(m_compressed)</code>
-      </li>
-      <li>
-        <p>Replace the &lt;encrypted/&gt; element in the serialized XML stanza with m and feed the stanza into an XML parser. If the parser returns an XML format error then Bob MUST terminate the ESession, he MAY send a &notacceptable; error to Alice. <note>Bob MUST NOT send a stream error to his server since intermediate entities are not responsible for encoded content.</note></p>
-      </li>
-    </ol>
-  </section2>
-  </section1>
-
-<section1 topic='Re-Key Exchange' anchor='rekey'>
-<p>Once an attacker has discovered an encryption key it could be used to decrypt all stanzas within a session, including stanzas that were intercepted <em>before</em> the key was discovered. To reduce the window of vulnerability, both Alice and Bob SHOULD change their values of x and y and re-exchange the encryption key as regularly as possible. They MUST also destroy all copies of keys as soon as they are no longer needed.</p>
-<p>Note: Although most entities are capable of re-keying after each stanza, clients running in constrained runtime environments may require a few seconds to re-key. During ESession negotiation these clients MAY negotiate the minimum number of stanzas to be exchanged between re-keys at the cost of a larger window of vulnerability. Entities MUST NOT initiate key re-exchanges more frequently than the agreed limit.</p>
-
-  <section2 topic='Re-Key Initiation' anchor='rekey-init'>
-    <p>Either Alice or Bob MAY initiate a key re-exchange. Here we describe the process initiated by Alice. First she MUST calculate new values for the encryption parameters:</p>
-    <ol start='1'>
-      <li><p>Generate a secret random number x (where &twosup2n; &lt; x &lt; p - 1, where n is the number of bits per cipher block for the agreed block cipher algorithm)</p></li>
-      <li><p>Calculate e = &gsupx; mod p</p></li>
-      <li><p>Calculate K = &dsupx; mod p (the new shared secret)</p></li>
-      <li><p>Calculate &KCsubA;, &KMsubA;, &KCsubB;, &KMsubB; from K (see <link url='#init-keys'>Generating Session Keys</link>)</p></li>
-    </ol>
-    <p>To avoid extra stanzas, the new value of e SHOULD be sent to Bob along with an encrypted stanza. Note: Alice MUST NOT use the new &KCsubA; and &KMsubA; to encrypt this stanza or to calculate the MAC. However, she MUST use them when sending subsequent stanzas.</p>
-    <p>Note: There is no need for Alice to provide a signature because the calculation of the MAC includes the new value of e, see <link url='#exchange'>Exchanging Stanzas</link>).</p>
-    <example caption='Alice Sends Re-Key Stanza'><![CDATA[
-<message from='alice@example.org/pda' to='bob@example.com/laptop'>
-  <thread>ffd7076498744578d10edabfe7f4a866</thread>
-  <encrypted xmlns='http://jabber.org/protocol/esession'>
-    <data> ** Base64 encoded m_final ** </data>
-    <key> ** Base64 encoded value of new e ** </key>
-    <mac> ** Base64 encoded a_mac ** </mac>
-  </encrypted>
-</message>
-    ]]></example>
-    <p>Note: Bob may not receive the new key before he sends his next stanzas (they may cross in transit). So, before destroying her old values of &KCsubB; and &KMsubB;, Alice MUST wait until either she receives a stanza encrypted with the new key, or a reasonable time has passed (60 seconds should cover a network round-trip and calculations by a constrained client). Similarly she MUST wait before destroying her old value of x, in case Bob sends two stanzas before receiving Alice's new key (the first stanza might include a re-key).</p>
-  </section2>
-  <section2 topic='Re-Key Acceptance' anchor='rekey-accept'>
-    <p>After Bob has received a stanza with a new value of e, has confirmed it is greater than one, and has decrypted the stanza with the old value of &KCsubA;, he MUST securely destroy all copies of &KCsubA; and &KCsubB; and perform the following calculations with the new value of e:</p>
-    <ol start='1'>
-      <li><p>Calculate K = &esupy; mod p</p></li>
-      <li><p>Calculate &KCsubA;, &KMsubA;, &KCsubB;, &KMsubB; from K (see <link url='#init-keys'>Generating Session Keys</link>)</p></li>
-    </ol>
-    <p>He MUST use these new values to encrypt and decrypt all subsequent stanzas. <note>If an entity fails to receive any stanza that includes a new key in the correct order, then it will fail to decrypt the next stanza it receives and be forced to terminate the ESession.</note></p>
-    <p>The next time Bob sends Alice a stanza he MUST specify the number of rekeys he has received from her since he sent her his last stanza. He does that by setting the 'rekeys' attribute of the &lt;data/&gt; element. Note: The default value of the 'rekeys' attribute is zero.</p>
-    <example caption="Bob's First Stanza After Receiving a Re-Key"><![CDATA[
-<message from='bob@example.com/laptop' to='alice@example.org/pda'>
-  <thread>ffd7076498744578d10edabfe7f4a866</thread>
-  <encrypted xmlns='http://jabber.org/protocol/esession'>
-    <data rekeys='1'> ** Base64 encoded m_final ** </data>
-    <mac> ** Base64 encoded b_mac ** </mac>
-  </encrypted>
-</message>
-    ]]></example>
-    <p>When Alice receives the stanza from Bob she MUST use the 'rekeys' attribute to decide which of her values of &KCsubB; and &KMsubB; (or x) she should use to decrypt the stanza - otherwise she would not know if Bob received her rekey(s) before he sent the stanza. Once she is sure Bob has received her rekey(s) she MUST discard all her older values of &KCsubB;, &KMsubB; and x.</p>
-  </section2>
-  <section2 topic='Publishing Old MAC Values' anchor='rekey-publish'>
-    <p>Once the expired MAC keys have been published, anyone could create valid arbitrary stanzas with them. This prevents anyone being able to prove the authenticity of a transcript of the ESession in the future.</p>
-    <p>Either entity MAY publish old values of &KMsubA; and/or &KMsubB; within any encrypted stanza as long as it knows that all the stanzas that MAY use the old values have been received and validated. Note: A 'man-in-the-middle' could delay the delivery of stanzas indefinitely. So, before Alice publishes &KMsubA; (and &KMsubB;), she MUST wait until she has both sent a re-key to Bob and received a stanza from Bob encrypted with her new key. (She MAY also publish &KMsubB; after she has received a re-key from Bob.)</p>
-    <example caption='Publishing Expired MAC Keys'><![CDATA[
-<message from='alice@example.org/pda' to='bob@example.com/laptop'>
-  <thread>ffd7076498744578d10edabfe7f4a866</thread>
-  <encrypted xmlns='http://jabber.org/protocol/esession'>
-    <data> ** Base64 encoded m_final ** </data>
-    <old> ** Base64 encoded old MAC key ** </old>
-    <old> ** Base64 encoded old MAC key ** </old>
-    <mac> ** Base64 encoded a_mac ** </mac>
-  </encrypted>
-</message>
-    ]]></example>
-    <p>Entities SHOULD ignore any &lt;old/&gt; elements they receive.</p>
-  </section2>
-  </section1>
-
 <section1 topic='ESession Termination' anchor='terminate'>
-    <p>Either entity MAY terminate an ESession at any time. Entities MUST terminate all open ESessions before they go offline. To terminate an ESession Alice MUST send an encrypted stanza to Bob including within the encrypted XML of the &lt;data/&gt; element a chat negotiation form with a "terminate" field (as specified in the Termination section of <cite>Chat Session Negotiation</cite>). Note: She MAY publish old values of &KMsubA; and/or &KMsubB; within her termination stanza as long as she is sure all the stanzas that MAY use the old values have been received and validated (see <link url='#rekey-publish'>Publishing Old MAC Values</link>). She MUST then securely destroy all keys associated with the ESession.</p>
+    <p>Either entity MAY terminate an ESession at any time. Entities MUST terminate all open ESessions before they go offline. To terminate an ESession Alice MUST send an encrypted stanza to Bob including within the encrypted XML of the &lt;data/&gt; element a chat negotiation form with a "terminate" field (as specified in the Termination section of <cite>Chat Session Negotiation</cite>). Note: She MAY publish old values of &KMsubA; and/or &KMsubB; within her termination stanza as long as she is sure all the stanzas that MAY use the old values have been received and validated (see <cite>Stanza Encryption</cite>). She MUST then securely destroy all keys associated with the ESession.</p>
     <example caption='Alice Terminates an ESession'><![CDATA[
 <message from='alice@example.org/pda' to='bob@example.com/laptop'>
   <thread>ffd7076498744578d10edabfe7f4a866</thread>
-  <encrypted xmlns='http://jabber.org/protocol/esession'>
+  <c xmlns='urn:xmpp:crypt'>
     <data> ** Base64 encoded encrypted terminate form ** </data>
     <old> ** Base64 encoded old MAC key ** </old>
     <mac> ** Base64 encoded a_mac ** </mac>
-  </encrypted>
+  </c>
 </message>
     ]]></example>
     <p>When Bob receives a termination stanza he MUST verify the MAC (to be sure he received all the stanzas Alice sent him during the ESession) and immediately send an encrypted termination acknowledgement form (as specified in the Termination section of <cite>Chat Session Negotiation</cite>) back to Alice. Note: He MAY publish <em>any</em> old values of &KMsubA; or &KMsubB; within the acknowledgement stanza. He MUST then securely destroy all keys associated with the ESession.</p>
     <example caption='Bob Acknowledges ESession Termination'><![CDATA[
 <message from='bob@example.com/laptop' to='alice@example.org/pda'>
   <thread>ffd7076498744578d10edabfe7f4a866</thread>
-  <encrypted xmlns='http://jabber.org/protocol/esession'>
+  <c xmlns='urn:xmpp:crypt'>
     <data> ** Base64 encoded encrypted acknowledgement form ** </data>
     <old> ** Base64 encoded old MAC key ** </old>
     <mac> ** Base64 encoded b_mac ** </mac>
-  </encrypted>
+  </c>
 </message>
     ]]></example>
     <p>When Alice receives the stanza she MUST verify the MAC to be sure she received all the stanzas Bob sent her during the ESession. Once an entity has sent a termination or termination acknowledgement stanza it MUST NOT send another stanza within the ESession.</p>
@@ -725,7 +589,7 @@
     <p>Before the signature or MAC of a block of XML is generated or verified, all character data <em>between</em> all elements MUST be removed and the XML MUST be converted to canonical form (see &w3canon;).</p>
     <p>All the XML this protocol requires to be signed or MACed is very simple, so in this case, canonicalization SHOULD only require the following changes:</p>
     <ul>
-      <li>Set attribute value delimiters to quotation marks (i.e. simply replace all single quotes in the serialized XML with double quotes)</li>
+      <li>Set attribute value delimiters to single quotation marks (i.e. simply replace all single quotes in the serialized XML with double quotes)</li>
       <li>Impose lexicographic order on the attributes of "field" elements (i.e. ensure "type" is before "var")</li>
     </ul>
     <p>Implementations MAY conceivably also need to make the following changes. Note: Empty elements and special characters SHOULD NOT appear in the signed or MACed XML specified in this protocol.</p>
@@ -782,35 +646,33 @@
   <section2 topic='Random Numbers' anchor='sec-prng'>
     <p>Weak pseudo-random number generators (PRNG) enable successful attacks. Implementors MUST use a cryptographically strong PRNG to generate all random numbers (see &rfc1750;).</p>
   </section2>
-  <section2 topic='Re-Keying Limits' anchor='sec-rekey'>
-    <p>After a key exchange an entity MUST NOT exchange a total of &twosup32; encrypted blocks before it initiates a key re-exchange (see &rfc4344;). Note: This limitation also ensures the same key and counter values are never used to encrypt two different blocks using counter mode (thus preventing simple attacks).</p>
-    <p>In order to reduce the Perfect Forward Secrecy window of vulnerability, after an extended period of activity, entities SHOULD either re-key or terminate the ESession.</p>
+  <section2 topic='Replay Attacks' anchor='sec-replay'>
+    <p>Alice and Bob MUST ensure that the value of e or d they provide when negotiating each online ESession is unique. This prevents complete online ESessions being replayed.</p>
   </section2>
   <section2 topic='Verifying Keys' anchor='sec-keys'>
     <p>The trust system outlined in this document is based on Alice trusting that the public key presented by Bob is <em>actually</em> Bob's key (and vice versa). Determining this trust may be done in a variety of ways depending on the entities' support for different public key (certificate) formats, signing algorithms and signing authorities. For instance, if Bob publishes a PGP/GPG public key, Alice MAY verify that his key is signed by another key that she knows to be good. Or, if Bob provides an X.509 certificate, she MAY check that his key has been signed by a Certificate Authority that she trusts.</p>
-    <p>When trust cannot be achieved automatically, methods that are not transparent to the users may be employed. For example, Bob could communicate the SHA-256 fingerprint of his public key to Alice via secure out-of-band communication (e.g. face-to-face). This would enable Alice to confirm that the public key she receives in-band is valid. Note however that very few people bother to verify fingerprints in this way. So this method is exceptionally vulnerable to 'man-in-the-middle' attacks. In order to reduce the window of vulnerability, an entity SHOULD remember the fingerprints of all user-validated public keys and alert the user in the future if ever the fingerprint(s) it stored for an entity do not match any of the received public keys.</p>
-    <p>Alternatively Alice and Bob could agree a shared secret via secure out-of-band communication, Bob could then use it to create an HMAC of his public key that only Alice could verify.</p>
+    <p>When trust cannot be achieved automatically, methods that are not transparent to the users may be employed. The out-of-band Short Authentication String mechanism described in this document is an easy way for people to do that. Alternatively, Bob could communicate the <em>full</em> SHA-256 fingerprint of his public key to Alice via secure out-of-band communication (e.g. face-to-face). This would enable Alice to confirm that the public key she receives in-band is valid. Note: Since very few people bother to (consistently) verify SAS or fingerprints, entities SHOULD protect against 'man-in-the-middle' attacks using retained secrets and/or other secrets.</p>
     <p>Note: If no keys are acceptable to Alice (because Alice has never verified any of the keys, and because either the keys are not signed, or Alice does not support the signature algorithms of the keys, or she cannot parse the certificate formats, or she does not recognise the authorities that signed the keys) then, although the ESession can still be encrypted, she cannot be sure she is communicating with Bob.</p>
   </section2>
-  <section2 topic='Replay Attacks' anchor='sec-replay'>
-    <p>The block cipher counters maintained implicitly by Alice and Bob (&CsubA; and &CsubB;) prevent stanzas being replayed within any ESession. They ensure that the MAC will be different for all stanzas, even if the HMAC key and the content of the stanza are identical.</p>
-    <p>Alice and Bob MUST ensure that the value of e or d they provide when negotiating each online ESession is unique. This prevents complete online ESessions being replayed.</p>
+  <section2 topic='Key Associations' anchor='sec-associations'>
+    <p>An entity SHOULD remember the fingerprints of all public keys it receives, and remember whether or not they have been validated by the user (see <link url='#sec-keys'>Verifying Keys</link>).</p>
+    <p>Entities MUST associate one or more JIDs with each public key fingerprint that they store, and alert their users immediately if another JID presents the same public key. This is necessary since if Bob already has fingerprints from Alice and Mallory, and Bob's client presents only the JID (or a name associated with the JID) to Bob, then Mallory could use his own public key (that is trusted by Bob) and pretend to be Alice simply by exchanging stanzas with Bob using Alice's JID.</p>
+    <p>If a JID for which a key has previously been stored attempts to establish an ESession using a public key with a different fingerprint (or no key at all) then the entity MUST alert its user.</p>
+    <p>Since Alice MAY use many different JIDs to talk to Bob, but always identify herself to him with the same public key, Entities SHOULD associate a "petname" with each public key fingerprint they store. Entities MUST present any public key petnames clearly to their users, and more prominently than any petname or nickname associated with the JID or the JID itself.</p>
+    <p>Entities MUST take the precautions described above also when storing retained secrets and other secrets (passwords) associated with Anonimous IDs.</p>
   </section2>
   <section2 topic='Unencrypted ESessions' anchor='sec-unencrypted'>
-    <p>Organisations with full disclosure policies may require entities to disable encryption (see <link url='#sec-backdoor'>Back Doors</link>) to enable the logging of all messages on their server. Unencrypted ESessions meet all the <link url='#reqs-sec'>Security Requirements</link> except for Confidentiality. Unencrypted ESessions enable Alice to to confirm <em>securely</em> with Bob that both client-server connections are secure. i.e. that the value of the 'security' option (as specified in <cite>Chat Session Negotiation</cite>) has not been tampered with.</p>
-  </section2>
-  <section2 topic='Storage' anchor='sec-storage'>
-    <p>If either entity stores a (re-encrypted) transcript of an ESession for future consultation then the Perfect Forward Secrecy offered by this protocol is lost. If the negotiated value of the 'otr' <cite>Chat Session Negotiation</cite> field is 'true' the entities MUST NOT store any part of the ESession content (not even in encrypted form).</p>
-  </section2>
-  <section2 topic='Extra Responsabilities of Implementors' anchor='sec-general'>
-    <p>Cryptography plays only a small part in an entity's security. Even if it implements this protocol perfectly it may still be vulnerable to other attacks. For examples, an implementation might store ESession keys on swap space or save private keys to a file in cleartext! Implementors MUST take very great care when developing applications with secure technologies.</p>
+    <p>Organisations with full disclosure policies may require entities to disable encryption (see <link url='#sec-backdoor'>Back Doors</link>) to enable the logging of all messages on their server. Unencrypted ESessions meet all the Security Requirements (see <cite>Cryptographic Design of Encrypted Sessions</cite>) except for Confidentiality. Unencrypted ESessions enable Alice to to confirm <em>securely</em> with Bob that both client-server connections are secure. i.e. that the value of the 'security' option (as specified in <cite>Chat Session Negotiation</cite>) has not been tampered with.</p>
   </section2>
   <section2 topic="Back Doors" anchor="sec-backdoor">
-    <p>The authors and the XSF would like to discourage the deliberate inclusion of "back doors" in implementations of this protocol. However, we recognize that some organizations must monitor chats or record chats in decryptable form for legal compliance reasons, or may choose to monitor chats for quality assurance purposes. In these cases it is important to inform the other entity of the disclosure before starting the ESession (if only to maintain public confidence in this protocol).</p>
+    <p>The authors and the XSF would like to discourage the deliberate inclusion of "back doors" in implementations of this protocol. However, we recognize that some organizations must monitor chats or record chats in decryptable form for legal compliance reasons, or may choose to monitor chats for quality assurance purposes. In these cases it is important to inform the other entity of the (potential for) disclosure before starting the ESession (if only to maintain public confidence in this protocol).</p>
     <p>Both implementations MUST immediately and clearly inform their users if the negotiated value of the 'disclose' field is not 'never'.</p>
     <p>Before disclosing any chat, an entity SHOULD either negotiate the value of the 'disclose' field to be 'enabled' or terminate the negotiation unsuccessfully. It MUST NOT negotiate the value of the 'disclose' field to be 'disabled' unless it would be illegal for it to divulge the disclosure to the other entity.</p>
     <p>In any case an implementation MUST NOT negotiate the value of the 'disclose' field to be 'never' unless it implements no feature or mechanism (not even a disabled feature or mechanism) that could be used directly or indirectly to divulge to <em>any</em> third-party either the identites of the participants, or the keys, or the content of <em>any</em> ESession (or information that could be used to recover any of those items). If an implementation deliberately fails to observe this last point (or fails to correct an accidental back door) then it is not compliant with this protocol and MUST NOT either claim or imply any compliance with this protocol or any of the other protocols developed by the authors or the XSF. In this case the authors and the XSF reserve all rights regarding the names of the protocols.</p>
     <p>The expectation is that this legal requirement will persuade many implementors either to tell the users of their products that a back door exists, or not to implement a back door at all (if, once informed, the market demands that).</p>
+  </section2>
+  <section2 topic='Extra Responsabilities of Implementors' anchor='sec-general'>
+    <p>Cryptography plays only a small part in an entity's security. Even if it implements this protocol perfectly it may still be vulnerable to other attacks. For examples, an implementation might store ESession keys on swap space or save private keys to a file in cleartext! Implementors MUST take very great care when developing applications with secure technologies.</p>
   </section2>
   <section2 topic='Mandatory to Implement Technologies' anchor='sec-mandatory'>
     <p>An implementation of ESession MUST support the Diffie-Hellman Key Agreement and HMAC algorithms. Note: The parameter names mentioned below are related to secure shell; see <cite>SSH Transport Layer Encryption Modes</cite> for block cipher algorithm details; see the &ianassh; for other names.</p>
@@ -866,7 +728,7 @@
       <ul>
         <li>sha256 (see &nistfips180-2;)</li>
       </ul>
-      <p>An implementation of ESession SHOULD also support at least the following hash algorithm (sha1 and md5 are NOT RECOMMENDED):</p>
+      <p>An implementation of ESession SHOULD also support at least the following hash algorithm (sha1 and md5 are broken and therefore NOT RECOMMENDED):</p>
       <ul>
         <li>whirlpool (see &whirlpool;)</li>
       </ul>
@@ -893,15 +755,15 @@
   <section2 topic='Namespaces' anchor='registrar-ns'>
     <p>Upon approval of this document, the &REGISTRAR; shall register the following namespaces:</p>
     <ul>
-      <li>http://jabber.org/protocol/esession</li>
-      <li>http://jabber.org/protocol/esession#init</li>
+      <li>urn:xmpp:esession</li>
+      <li>urn:xmpp:esession#init</li>
     </ul>
   </section2>
   <section2 topic='Field Standardization' anchor='registrar-formtype'>
-    <p>&xep0068; defines a process for standardizing the fields used within Data Forms qualified by a particular namespace. The following fields shall be registered for use in <em>both</em> Encrypted Sessions and Chat Session Negotiation:</p>
+    <p>&xep0068; defines a process for standardizing the fields used within Data Forms qualified by a particular namespace. The following fields shall be registered for use in <em>both</em> Encrypted Session Negotiation and Chat Session Negotiation:</p>
     <code caption='Registry Submission'><![CDATA[
 <form_type>
-  <name>http://jabber.org/protocol/esession</name>
+  <name>urn:xmpp:esession</name>
   <jep>XEP-0116</jep>
   <desc>ESession negotiation forms</desc>
   <field
@@ -971,59 +833,20 @@
 </form_type>
 
 <form_type>
-  <name>http://jabber.org/protocol/chatneg</name>
+  <name>urn:xmpp:chatneg</name>
   <jep>XEP-0155</jep>
   ...
 </form_type>
     ]]></code>
   </section2>
 </section1>
-<section1 topic='XML Schemas' anchor='schema'>
-  <code><![CDATA[
-<?xml version='1.0' encoding='UTF-8'?>
 
-<xs:schema
-    xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='http://jabber.org/protocol/esession'
-    xmlns='http://jabber.org/protocol/esession'
-    elementFormDefault='qualified'>
-
-  <xs:element name='data'>
-    <xs:complexType>
-      <xs:simpleContent>
-        <xs:extension base='xs:string'>
-          <xs:attribute name='rekeys' type='xs:nonNegativeInteger' use='optional'/>
-        </xs:extension>
-      </xs:simpleContent>
-    </xs:complexType>
-  </xs:element>
-
-  <xs:element name='encrypted'>
-    <xs:complexType>
-      <xs:sequence>
-        <xs:element ref='data' minOccurs='0' maxOccurs='1'/>
-        <xs:element ref='key' minOccurs='0' maxOccurs='1'/>
-        <xs:element ref='mac' minOccurs='0' maxOccurs='1'/>
-        <xs:element ref='old' minOccurs='0' maxOccurs='unbounded'/>
-      </xs:sequence>
-    </xs:complexType>
-  </xs:element>
-
-  <xs:element name='key' type='xs:string'/>
-
-  <xs:element name='mac' type='xs:string'/>
-
-  <xs:element name='old' type='xs:string'/>
-
-</xs:schema>
-  ]]></code>
-</section1>
 
 <section1 topic='Open Issues' anchor='open'>
   <section2 topic='To Think About' anchor='open-tothink'>
     <ol>
       <li>Standardise on the X.509 public key and signature formats?</li>
-      <li>What challenges exist to make the OTR Gaim Plugin use this protocol natively when talking to Jabber entities? Can these be mitigated by 'non-critical' protocol changes?</li>
+      <li>What challenges exist to make the OTR Gaim Plugin use this protocol natively when talking to XMPP entities? Can these be mitigated by 'non-critical' protocol changes?</li>
       <li>Would anything in this protocol (e.g., its dependency on in-order stanza delivery) prevent an XMPP entity using it to exchange encrypted messages and presence with a user of a non-XMPP messaging system, assuming that the gateway both supports this protocol and is compatible with a purpose-built security plugin on the other user's client (e.g. a Gaim plugin connects to the gateway via a non-XMPP network)?</li>
       <li>Could use &xep0013; (FOMR) instead of AMP to prevent any offline ESessions Bob can't decrypt being delivered to him. (Each &lt;item/&gt; that corresponds to an ESession message would have to contain a &lt;ESessionID/&gt; child, to allow Bob to discover which of his stored values of y was used to encrypt the message.)</li>
     </ol>
