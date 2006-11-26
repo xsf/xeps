@@ -25,6 +25,8 @@
 <!ENTITY IDB "ID<span class='sub'>B</span>">
 <!ENTITY formA "form<span class='sub'>A</span>">
 <!ENTITY formB "form<span class='sub'>B</span>">
+<!ENTITY formA2 "form<span class='sub'>A2</span>">
+<!ENTITY formB2 "form<span class='sub'>B2</span>">
 <!ENTITY macA "mac<span class='sub'>A</span>">
 <!ENTITY macB "mac<span class='sub'>B</span>">
 <!ENTITY signA "sign<span class='sub'>A</span>">
@@ -202,7 +204,7 @@
       <p>Note: If Alice believes Bob is offline then she SHOULD NOT use this negotiation protocol. However, she MAY use the protocol specified in <cite>Offline Encrypted Sessions</cite> to establish the ESession options and keys. Alternatively, she MAY send stanzas without encryption - in which case her client MUST make absolutely clear to her that the stanzas will not be protected and give her the option not to send the stanzas.</p>
     </section2>
 
-    <section2 topic="Three- or Four-Message Negotiations" anchor='init-variants'>
+    <section2 topic="Three- or Four-Message Negotiation?" anchor='init-variants'>
       <p>This protocol supports both 3- and 4-message key negotiations.</p>
       <p>The 3-message SIGMA-I-based key exchange protects the identity of the <em>initiator</em> against active attacks. This SHOULD NOT be used to establish client-to-client sessions since the <em>responder's</em> identity is not protected against active attacks. However, it SHOULD be used to establish client-to-service (server) sessions, especially where the identity of the service is well known to third parties.</p>
       <p>The 4-message SIGMA-R-based key exchange with hash commitment defends the <em>responder's</em> identity against active attacks and facilitates detection of a Man in the Middle attack. It SHOULD be used to establish client-to-client sessions. The 4-message key exchange also includes the following optional security enhancements:</p>
@@ -342,9 +344,29 @@
   </amp>
 </message>
       ]]></example>
+    </section2>
+
+    <section2 topic="ESession Rejection" anchor='init-online-reject'>
       <p>If Bob does not want to reveal presence to Alice for whatever reason then Bob SHOULD return no response or error.</p>
-      <p>If Bob supports <em>none</em> of the options for one or more ESession fields, then he SHOULD return a &notacceptable; error and SHOULD specify the field(s) with unsupported options in a comma-separated list in the XMPP &lt;text/&gt; element:</p>
-      <example caption='Bob Informs Alice that Her Options Are Not Supported'><![CDATA[
+      <p>If Alice initiated a 3-message negotiation but Bob only supports 4-message negotiations (with Alice) then he SHOULD return a &feature; error specifying the 'dhkeys' field:</p>
+      <example caption='Bob Informs Alice that 3-message Negotiation is Not Supported'><![CDATA[
+<message type='error'
+         from='bob@example.com/laptop'
+         to='alice@example.org/pda'>
+  <thread>ffd7076498744578d10edabfe7f4a866</thread>
+  <feature xmlns='http://jabber.org/protocol/feature-neg'>
+    ...
+  </feature>
+  <error type='cancel'>
+    <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <feature xmlns='http://jabber.org/protocol/feature-neg'>
+      <field var='dhkeys'/>
+    </feature>
+  </error>
+</message>
+      ]]></example>
+      <p>If Bob supports <em>none</em> of the options for one or more ESession fields, then he SHOULD return a &notacceptable; error specifying the field(s) with unsupported options:</p>
+      <example caption='Bob Informs Alice that Her Options are Not Supported'><![CDATA[
 <message type='error'
          from='bob@example.com/laptop'
          to='alice@example.org/pda'>
@@ -354,7 +376,10 @@
   </feature>
   <error type='cancel'>
     <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-    <text xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>modp,ver</text>
+    <feature xmlns='http://jabber.org/protocol/feature-neg'>
+      <field var='modp'/>
+      <field var='ver'/>
+    </feature>
   </error>
 </message>
       ]]></example>
@@ -377,65 +402,31 @@
 </message>
       ]]></example>
     </section2>
-    <section2 topic="Diffie-Hellman Preparation (Bob)" anchor='init-online-bobprep'>
-      <p>If Bob supports one or more of each of Alice's ESession options and is willing to start an ESession with Alice, then he MUST select one of the options from each of the ESession fields he received from Alice including one hash algorithm ("HASH"), and one of the MODP groups (see &rfc3766; or <cite>RFC 3526</cite> for recommendations regarding balancing the sizes of symmetric cipher blocks and Diffie-Hellman moduli) and Alice's corresponding value of 'He' (for 4-message negotiations) or 'e' (for 3-message negotiations).</p>
-      <p>Note: Each MODP group has at least two well known constants: a large prime number p, and a generator g for a subgroup of GF(p).</p>
-      <p>For 3-message negotiations, Bob SHOULD return a &feature; error unless: 1 &lt; e &lt; p - 1</p>
-      <p>Bob MUST then perform the following computations (where n is the number of bits per cipher block for the selected block cipher algorithm):</p>
-      <ol start='1'>
-        <li><p>Generate a random number &NsubB; (his ESession ID)</p></li>
-        <li><p>Generate an n-bit random number &CsubA; (the block cipher counter for stanzas sent from Alice to Bob)</p></li>
-        <li><p>Set &CBeCAx2n1; (where &CsubB; is the block counter for stanzas sent from Bob to Alice)</p></li>
-        <li><p>Generate a secret random number y (where &twosup2n; &lt; y &lt; p - 1)</p></li>
-        <li><p>Calculate d = &gsupy; mod p</p></li>
-        <li><p>Calculate K = HASH(&esupy; mod p) (the shared secret)</p></li>
-      </ol>
-      <p>If this is a 4-message negotiation Bob MUST skip the last step above and all the steps described in the next two sections. He can skip straight to the <link url='#init-online-response'>ESession Response</link> section.</p>
-    </section2>
 
-    <section2 topic="Generating Session Keys" anchor='init-keys'>
-      <p>Bob MUST use HMAC with the selected hash algorithm ("HASH") and the shared secret ("K") to generate two sets of three keys, one set for each direction of the ESession.</p>
-      <p>For stanzas that Alice will send to Bob, the keys are calculated as:</p>
-      <ol>
-        <li><p>Encryption key &KCsubA; = <em>HMAC</em>(HASH, K, "Initiator Cipher Key")</p></li>
-        <li><p>Integrity key &KMsubA; = <em>HMAC</em>(HASH, K, "Initiator MAC Key")</p></li>
-        <!--  <note>&KMsubA; is a hash of &KCsubA; (not K) to ensure that if an attacker recovers the decryption key she will not be able to cryptographically convince anyone that it was not her who created the stanza.</note> -->
-        <li><p>SIGMA key &KSsubA; = <em>HMAC</em>(HASH, K, "Initiator SIGMA Key")</p></li>
-      </ol>
-      <p>For stanzas that Bob will send to Alice the keys are calculated as:</p>
-      <ol start='4'>
-        <li><p>Encryption key &KCsubB; = <em>HMAC</em>(HASH, K, "Responder Cipher Key")</p></li>
-        <li><p>Integrity key &KMsubB; = <em>HMAC</em>(HASH, K, "Responder MAC Key")</p></li>
-        <li><p>SIGMA key &KSsubB; = <em>HMAC</em>(HASH, K, "Responder SIGMA Key")</p></li>
-      </ol>
-      <p>Once the sets of keys have been calculated the value of K MUST be securely destroyed.</p>
-      <p>Note: As many bits of key data as are needed for each key MUST be taken from the least significant bits of the HMAC output. When negotiating a hash, entities MUST ensure that the hash output is no shorter than the required key data. For algorithms with variable-length keys the maximum length (up to the hash output length) SHOULD be used.</p>
-    </section2>
+    <section2 topic="ESession Response" anchor='init-response'>
 
-    <section2 topic="Hiding Identity" anchor='init-hide'>
-      <p>Bob MUST perform the following steps before he can prove his identity to Alice while protecting it from third parties.</p>
-      <ol>
-        <li><p>If the value of the 'pubkey' field that Alice sent Bob was not 'none' then Bob MUST set &pubKeyB; to a zero length string of characters. Otherwise Bob SHOULD select &pubKeyB;, the public key Alice will use to authenticate his signature with the signature algorithm he selected ("SIGN").</p></li>
-        <li><p>Set &formB; to the <link url='#sign-normal'>Normalized</link>&#160;<em>content</em> of the reponse data form he will send back to Alice (including his responses for all the fields he received from Alice) - see <link url='#init-online-response'>ESession Response</link>.</p>
-            <p>Bob MUST encapsulate the Base64 encoded values of &CsubA; and Alice's &NsubA; in two new 'counter' and 'nonce' fields and add them to &formB;. He MUST set the 'pubkey' field to specify what sort of identification he requires from Alice (see <link url='#init-online-request'>ESession Request</link>). He MUST set the value of the 'rekey_freq' field to be less than &twosup32; and greater than or equal to the value specified by Alice. Bob MUST place his Base64 encoded values of &NsubB; and d in the 'my_nonce' and 'dhkeys' fields. Note: Bob MUST NOT return Alice's values of &NsubA; and e in these fields.</p></li>
-        <li><p>Concatenate Alice's ESession ID, Bob's ESession ID, d, &pubKeyB; and &formB;, and calculate the HMAC (as defined in Section 2 of &rfc2104;) of the resulting byte string using the selected hash algorithm ("HASH") and the key &KSsubB;.</p>
-            <code>&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})</code></li>
-        <li><p>If the value of the 'pubkey' field that Alice sent Bob was not 'none' then Bob MUST calculate &signB;, the signature of the HMAC result using his private signature key that corresponds to &pubKeyB;</p>
-            <code>&signB; = SIGN(&signKeyB;, &macB;)</code></li>
-        <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'hash' then Bob SHOULD set &pubKeyB; to the key's fingerprint</p>
-            <code>if (pubkey == 'hash') &pubKeyB; = HASH(&pubKeyB;)</code></li>
-        <li><p>Encrypt the byte string resulting from the concatenation of &pubKeyB; and &signB; (or, if the value of the 'pubkey' field that Alice sent Bob was 'none', encrypt just the HMAC result) with the agreed algorithm ("CIPHER") in counter mode (see &nistfips800-38a;), using the encryption key &KCsubB; and block counter &CsubB;. Note: &CsubB; MUST be incremented by 1 for each encrypted block or partial block (i.e. &CsubB; = (&CsubB; + 1) mod 2<span class='super'>n</span>, where n is the number of bits per cipher block for the agreed block cipher algorithm).</p>
-            <code>&IDB; = CIPHER(&KCsubB;, &CsubB;, {&pubKeyB;, &signB;})</code>
-            <p>or</p>
-            <code>&IDB; = CIPHER(&KCsubB;, &CsubB;, &macB;)</code></li>
-        <li><p>Calculate the HMAC of the encrypted identity (&IDB;) and the value of Bob's block cipher counter &CsubB;&#160;<em>before</em> the encryption above using the selected hash algorithm ("HASH") and the integrity key &KMsubB;.</p>
-            <code>&MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)</code></li>
-      </ol>
-    </section2>
+      <section3 topic="Diffie-Hellman Preparation (Bob)" anchor='init-online-bobprep'>
+        <p>If Bob supports one or more of each of Alice's ESession options and is willing to start an ESession with Alice, then he MUST select one of the options from each of the ESession fields he received from Alice including one hash algorithm ("HASH"), and one of the MODP groups (see &rfc3766; or <cite>RFC 3526</cite> for recommendations regarding balancing the sizes of symmetric cipher blocks and Diffie-Hellman moduli) and Alice's corresponding value of 'He' (for 4-message negotiations) or 'e' (for 3-message negotiations).</p>
+        <p>Note: Each MODP group has at least two well known constants: a large prime number p, and a generator g for a subgroup of GF(p).</p>
+        <p>For 3-message negotiations, Bob SHOULD return a &feature; error unless: 1 &lt; e &lt; p - 1</p>
+        <p>Bob MUST then perform the following computations (where n is the number of bits per cipher block for the selected block cipher algorithm):</p>
+        <ol start='1'>
+          <li><p>Generate a random number &NsubB; (his ESession ID)</p></li>
+          <li><p>Generate an n-bit random number &CsubA; (the block cipher counter for stanzas sent from Alice to Bob)</p></li>
+          <li><p>Set &CBeCAx2n1; (where &CsubB; is the block counter for stanzas sent from Bob to Alice)</p></li>
+          <li><p>Generate a secret random number y (where &twosup2n; &lt; y &lt; p - 1)</p></li>
+          <li><p>Calculate d = &gsupy; mod p</p></li>
+          <li><p>Calculate K = HASH(&esupy; mod p) (the shared secret)</p></li>
+        </ol>
+        <p>If this is a 4-message negotiation Bob MUST skip the last step above.</p>
+      </section3>
 
-    <section2 topic="ESession Response" anchor='init-online-response'>
-    <p>Bob responds to Alice by sending her &formB;.</p>
-    <example caption='Bob Responds to Alice (4-Message Negotiation)'><![CDATA[
+      <section3 topic="Response Form" anchor='init-online-form'>
+        <p>Bob SHOULD generate the form that he will send back to Alice, including his responses for all the fields Alice sent him except that he MUST NOT include a 'dhhashes' field.</p>
+        <p>He MUST set the 'pubkey' field to specify what sort of identification he requires from Alice (see <link url='#init-online-request'>ESession Request</link>). He MUST set the value of the 'rekey_freq' field to be less than &twosup32; and greater than or equal to the value specified by Alice. Bob MUST place his Base64 encoded values of &NsubB; and d in the 'my_nonce' and 'dhkeys' fields. Note: Bob MUST NOT return Alice's values of &NsubA; and e in these fields.</p>
+        <p>Bob MUST encapsulate the Base64 encoded values of &CsubA; and Alice's &NsubA; in two new 'counter' and 'nonce' fields and append them to the form.</p>
+        <p>If this is a 4-message negotiation Bob SHOULD respond to Alice by sending her the form (&formB;) immediately - there is nothing more for him to do until he receives Alice's next message (i.e. he can skip the following sections). If this is a 3-message negotiation Bob MUST NOT send the form until he has completed the steps in the following sections.</p>
+        <example caption='Bob Responds to Alice (4-Message Negotiation only)'><![CDATA[
 <message from='bob@example.com/laptop' to='alice@example.org/pda'>
   <thread>ffd7076498744578d10edabfe7f4a866</thread>
   <feature xmlns='http://jabber.org/protocol/feature-neg'>
@@ -471,9 +462,51 @@
     </x>
   </feature>
 </message>
-    ]]></example>
-    <p>If Bob prefers the RECOMMENDED 3-message ESession negotiation, where Alice's identity is protected from active attacks instead of his own, then he should encapsulate the Base64 encoded values of &IDB; and &MsubB; in data form fields ('identity' and 'mac'), and append the new fields to &formB; before sending it to Alice.</p>
-    <example caption='Bob Responds to Alice (3-Message Negotiation)'><![CDATA[
+        ]]></example>
+      </section3>
+
+      <section3 topic="Generating Session Keys" anchor='init-keys'>
+        <p>Bob MUST use HMAC with the selected hash algorithm ("HASH") and the shared secret ("K") to generate two sets of three keys, one set for each direction of the ESession.</p>
+        <p>For stanzas that Alice will send to Bob, the keys are calculated as:</p>
+        <ol>
+          <li><p>Encryption key &KCsubA; = <em>HMAC</em>(HASH, K, "Initiator Cipher Key")</p></li>
+          <li><p>Integrity key &KMsubA; = <em>HMAC</em>(HASH, K, "Initiator MAC Key")</p></li>
+          <!--  <note>&KMsubA; is a hash of &KCsubA; (not K) to ensure that if an attacker recovers the decryption key she will not be able to cryptographically convince anyone that it was not her who created the stanza.</note> -->
+          <li><p>SIGMA key &KSsubA; = <em>HMAC</em>(HASH, K, "Initiator SIGMA Key")</p></li>
+        </ol>
+        <p>For stanzas that Bob will send to Alice the keys are calculated as:</p>
+        <ol start='4'>
+          <li><p>Encryption key &KCsubB; = <em>HMAC</em>(HASH, K, "Responder Cipher Key")</p></li>
+          <li><p>Integrity key &KMsubB; = <em>HMAC</em>(HASH, K, "Responder MAC Key")</p></li>
+          <li><p>SIGMA key &KSsubB; = <em>HMAC</em>(HASH, K, "Responder SIGMA Key")</p></li>
+        </ol>
+        <p>Once the sets of keys have been calculated the value of K MUST be securely destroyed.</p>
+        <p>Note: As many bits of key data as are needed for each key MUST be taken from the least significant bits of the HMAC output. When negotiating a hash, entities MUST ensure that the hash output is no shorter than the required key data. For algorithms with variable-length keys the maximum length (up to the hash output length) SHOULD be used.</p>
+      </section3>
+
+      <section3 topic="Hiding Bob's Identity" anchor='init-hide'>
+        <p>Bob MUST perform the following steps before he can prove his identity to Alice while protecting it from third parties.</p>
+        <ol>
+          <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'none' then Bob MUST set &pubKeyB; to a zero length string of characters. Otherwise Bob SHOULD select &pubKeyB;, the public key Alice will use to authenticate his signature with the signature algorithm he selected ("SIGN").</p></li>
+          <li><p>Set &formB; to be the full <link url='#sign-normal'>Normalized</link>&#160;<em>content</em> of the reponse data form he generated above (see <link url='#init-online-form'>Response Form</link>). Note: this MUST NOT include 'identity' or 'mac' fields.</p></li>
+          <li><p>Concatenate Alice's ESession ID, Bob's ESession ID, d, &pubKeyB; and &formB;, and calculate the HMAC (as defined in Section 2 of &rfc2104;) of the resulting byte string using the selected hash algorithm ("HASH") and the key &KSsubB;.</p>
+              <code>&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})</code></li>
+          <li><p>If the value of the 'pubkey' field that Alice sent Bob was not 'none' then Bob MUST calculate &signB;, the signature of the HMAC result using his private signature key that corresponds to &pubKeyB;</p>
+              <code>&signB; = SIGN(&signKeyB;, &macB;)</code></li>
+          <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'hash' then Bob SHOULD set &pubKeyB; to the key's fingerprint</p>
+              <code>if (pubkey == 'hash') &pubKeyB; = HASH(&pubKeyB;)</code></li>
+          <li><p>Encrypt the byte string resulting from the concatenation of &pubKeyB; and &signB; (or, if the value of the 'pubkey' field that Alice sent Bob was 'none', encrypt just the HMAC result) with the agreed algorithm ("CIPHER") in counter mode (see &nistfips800-38a;), using the encryption key &KCsubB; and block counter &CsubB;. Note: &CsubB; MUST be incremented by 1 for each encrypted block or partial block (i.e. &CsubB; = (&CsubB; + 1) mod 2<span class='super'>n</span>, where n is the number of bits per cipher block for the agreed block cipher algorithm).</p>
+              <code>&IDB; = CIPHER(&KCsubB;, &CsubB;, {&pubKeyB;, &signB;})</code>
+              <p>or</p>
+              <code>&IDB; = CIPHER(&KCsubB;, &CsubB;, &macB;)</code></li>
+          <li><p>Calculate the HMAC of the encrypted identity (&IDB;) and the value of Bob's block cipher counter &CsubB;&#160;<em>before</em> the encryption above using the selected hash algorithm ("HASH") and the integrity key &KMsubB;.</p>
+              <code>&MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)</code></li>
+        </ol>
+      </section3>
+
+      <section3 topic="Sending the Response (3-message negotiations)" anchor='init-online-send3'>
+        <p>For 3-message negotiations Bob should append the Base64 encoded values of &IDB; and &MsubB; to &formB; wrapped in 'identity' and 'mac' fields, and send the resulting form to Alice:</p>
+        <example caption='Bob Responds to Alice (3-Message Negotiation)'><![CDATA[
 <message from='bob@example.com/laptop' to='alice@example.org/pda'>
   <thread>ffd7076498744578d10edabfe7f4a866</thread>
   <feature xmlns='http://jabber.org/protocol/feature-neg'>
@@ -481,28 +514,9 @@
       <field var="FORM_TYPE">
         <value>urn:xmpp:chatneg</value>
       </field>
-      <field var="accept"><value>1</value></field>
-      <field var="otr"><value>true</value></field>
-      <field var="disclosure"><value>never</value></field>
-      <field var="security"><value>e2e</value></field>
-      <field var="modp"><value>5</value></field>
-      <field var="crypt_algs"><value>aes256-ctr</value></field>
-      <field var="hash_algs"><value>sha256</value></field>
-      <field var="sign_algs"><value>rsa</value></field>
-      <field var="compress"><value>none</value></field>
-      <field var="stanzas"><value>message</value></field>
-      <field var="pubkey"><value>hash</value></field>
-      <field var="ver"><value>1.3</value></field>
-      <field var="rekey_freq"><value>50</value></field>
-      <field var="my_nonce">
-        <value> ** Bob's Base64 encoded ESession ID ** </value>
-      </field>
-      <field var="dhkeys">
-        <value> ** Base64 encoded value of d ** </value>
-      </field>
-      <field var="nonce">
-        <value> ** Alice's Base64 encoded ESession ID ** </value>
-      </field>
+      ...
+      ...
+      ...
       <field var="counter">
         <value> ** Base64 encoded block counter ** </value>
       </field>
@@ -515,48 +529,60 @@
     </x>
   </feature>
 </message>
-    ]]></example>
+        ]]></example>
+      </section3>
+
     </section2>
 
-    <section2 topic="Diffie-Hellman Preparation (Alice)" anchor='init-online-aliceprep'>
-      <p>After Alice receives Bob's response, she MUST use the value of d and the ESession options specified in Bob's response to perform the following steps (where p and g are the constants associated with the selected MODP group, HASH is the selected hash algorithm, and n is the number of bits per cipher block for the agreed block cipher algorithm):</p>
-      <ol start='1'>
-        <li><p>Return a &feature; error to Bob if she is not prepared to support any of the ESession options specified by Bob (if any of the options were not included in her initial ESession request)</p></li>
-        <li><p>Return a &feature; error to Bob unless: 1 &lt; d &lt; p - 1</p></li>
-        <li><p>Set &CBeCAx2n1; (where &CsubB; is the block counter for stanzas sent from Bob to Alice)</p></li>
-        <li><p>Select her values of x and e that correspond to the selected MODP group (from all the values of x and e she calculated previously)</p></li>
-        <li><p>Calculate K = HASH(&dsupx; mod p) (the shared secret)</p></li>
-        <li><p>Generate the session keys (&KCsubA;, &KMsubA;, &KSsubA;, &KCsubB;, &KMsubB; and &KSsubB;) in the same way as Bob did (see <link url='#init-keys'>Generating Session Keys</link>)</p></li>
-      </ol>
-    </section2>
-    <section2 topic="Verifying Bob's Identity" anchor='init-online-bobid'>
-      <p>If Bob included 'identity' and 'mac' fields in his response then Alice MUST also perform the following steps:</p>
-      <ol start='1'>
-        <li><p>Calculate the HMAC of the encrypted identity (&IDB;) and the value of Bob's block cipher counter using HASH and the integrity key &KMsubB;.</p>
-            <code>&MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)</code></li>
-        <li><p>Return a &feature; error to Bob unless the value of &MsubB; she calculated matches the one she received in the 'mac' field</p></li>
-        <li><p>Obtain &pubKeyB; and &signB; by decrypting &IDB; with the agreed symmetric block cipher algorithm ("DECIPHER") in counter mode, using the encryption key &KCsubB; and block counter &CsubB;. Note: &CsubB; MUST be incremented by 1 for each encrypted block or partial block (i.e. &CsubB; = (&CsubB; + 1) mod 2<span class='super'>n</span>, where n is the number of bits per cipher block for the agreed block cipher algorithm).</p>
-            <code>{&pubKeyB;, &signB;} = DECIPHER(&KCsubB;, &CsubB;, &IDB;)</code></li>
-        <li><p>If the value of the 'pubkey' field she sent to Bob in her <link url='#init-online-request'>ESession Request</link> was 'hash', then Alice SHOULD change the value of &pubKeyB; to be her copy of the public key whose HASH matches the value of &pubKeyB; that she received from Bob. Note: If she cannot find a copy of the public key then Alice MUST terminate the ESession. She MAY then request a new ESession with the 'pubkey' field set to 'key' or 'none'.</p></li>
-        <li><p>Return a &feature; error to Bob unless she can confirm (or has previously confirmed) that &pubKeyB; really is Bob's public key, for examples, via secure out-of-band communication, or through a third-party authority (see <link url='#sec-keys'>Verifying Keys</link>).</p></li>
-        <li><p>Set the value of &formB; to be the <link url='#sign-normal'>Normalized</link>&#160;<em>content</em> of the form she received from Bob without any 'identity' or 'mac' fields.</p></li>
-        <li><p>Concatenate Alice's ESession ID, Bob's ESession ID, d, &pubKeyB; and &formB;, and calculate the HMAC of the resulting byte string using HASH and the key &KSsubB;.</p>
-            <code>&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})</code></li>
-        <li><p>Return a &feature; error to Bob unless she can use &pubKeyB; with the selected signature verification algorithm ("VERIFY") to confirm that &signB; is the signature of the HMAC result (see <link url='#sign'>Signature Verification</link>).</p>
-            <code>VERIFY(&signB;, &pubKeyB;, &macB;)</code></li>
-      </ol>
-    </section2>
+    <section2 topic="ESession Accept (Alice)" anchor='init-acceptalice'>
 
-    <section2 topic="ESession Completion" anchor='init-online-complete'>
-      <p>Alice MUST then prove her identity to Bob while protecting it from third parties. She MUST perform the steps equivalent to those Bob performed above (see <link url='#init-hide'>Hiding Identity</link> for a more detailed description). Alice's calculations are summarised below (pay attention to the order of &NsubB; and &NsubA; when calculating &macA;). Note: &formA; is the <link url='#sign-normal'>Normalized</link>&#160;<em>content</em> of the <link url='#init-online-request'>ESession Request</link> data form that she sent to Bob previously.</p>
-      <code>&macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;, &formA;})</code>
-      <code>&signA; = SIGN(&signKeyA;, &macA;)</code>
-      <code>if (pubkey == 'hash') &pubKeyA; = HASH(&pubKeyA;)</code>
-      <code>&IDA; = CIPHER(&KCsubA;, &CsubA;, {&pubKeyA;, &signA;})</code>
-      <code>&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)</code>
+      <section3 topic="Diffie-Hellman Preparation (Alice)" anchor='init-acceptalice-prep'>
+        <p>After Alice receives Bob's response, she MUST use the value of d and the ESession options specified in Bob's response to perform the following steps (where p and g are the constants associated with the selected MODP group, HASH is the selected hash algorithm, and n is the number of bits per cipher block for the agreed block cipher algorithm):</p>
+        <ol start='1'>
+          <li><p>Verify that the ESession options selected by Bob are acceptable</p></li>
+          <li><p>Return a &notacceptable; error to Bob unless: 1 &lt; d &lt; p - 1</p></li>
+          <li><p>Set &CBeCAx2n1; (where &CsubB; is the block counter for stanzas sent from Bob to Alice)</p></li>
+          <li><p>Select her values of x and e that correspond to the selected MODP group (from all the values of x and e she calculated previously - see <link url='#init-online-request'>ESession Request</link>)</p></li>
+          <li><p>Calculate K = HASH(&dsupx; mod p) (the shared secret)</p></li>
+          <li><p>Generate the session keys (&KCsubA;, &KMsubA;, &KSsubA;, &KCsubB;, &KMsubB; and &KSsubB;) in exactly the same way as Bob did (see <link url='#init-keys'>Generating Session Keys</link>). Note: In the case of 4-message negotiation it is only necessary to generate the keys for the messages Alice sends to Bob (&KCsubA;, &KMsubA;, &KSsubA;).</p></li>
+        </ol>
+        <p>If this is a 4-message negotiation then Alice MUST skip the next section and proceed by executing the steps in the <link url='#init-acceptalice-hide'>Hiding Alice's Identity</link> section.</p>
+      </section3>
+      <section3 topic="Verifying Bob's Identity" anchor='init-online-bobid'>
+        <p>If Bob included 'identity' and 'mac' fields in his response then Alice MUST also perform the following steps:</p>
+        <ol start='1'>
+          <li><p>Calculate the HMAC of the encrypted identity (&IDB;) and the value of Bob's block cipher counter using HASH and the integrity key &KMsubB;.</p>
+              <code>&MsubB; = <em>HMAC</em>(HASH, &KMsubB;, &CsubB;, &IDB;)</code></li>
+          <li><p>Return a &feature; error to Bob unless the value of &MsubB; she calculated matches the one she received in the 'mac' field</p></li>
+          <li><p>Obtain &macB; (if the value of the 'pubkey' field she sent to Bob in her <link url='#init-online-request'>ESession Request</link> was 'none') or &pubKeyB; and &signB; (otherwise) by decrypting &IDB; with the agreed symmetric block cipher algorithm ("DECIPHER") in counter mode, using the encryption key &KCsubB; and block counter &CsubB;. Note: &CsubB; MUST be incremented by 1 for each encrypted block or partial block (i.e. &CsubB; = (&CsubB; + 1) mod 2<span class='super'>n</span>, where n is the number of bits per cipher block for the agreed block cipher algorithm).</p>
+              <code>&macB; = DECIPHER(&KCsubB;, &CsubB;, &IDB;)</code>
+              <p>or</p>
+              <code>{&pubKeyB;, &signB;} = DECIPHER(&KCsubB;, &CsubB;, &IDB;)</code></li>
+          <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'none' then Bob MUST set pubKeyB to a zero length string of characters. Otherwise, if the value was 'hash', then Alice SHOULD change the value of &pubKeyB; to be her copy of the public key whose HASH matches the value of &pubKeyB; that she received from Bob.</p>
+              <p>Note: If she cannot find a copy of the public key then Alice MUST terminate the ESession. She MAY then request a new ESession with the 'pubkey' field set to 'key' or 'none'.</p></li>
+          <li><p>Set the value of &formB; to be the <link url='#sign-normal'>Normalized</link>&#160;<em>content</em> of the form she received from Bob without any 'identity' or 'mac' fields.</p></li>
+          <li><p>Concatenate Alice's ESession ID, Bob's ESession ID, d, &pubKeyB; and &formB;, and calculate the HMAC of the resulting byte string using HASH and the key &KSsubB;.</p>
+              <code>&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})</code></li>
+          <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'none' then return a &feature; error to Bob if the two values of &macB; she calculated above do not match.</p>
+              <p>If the value of the 'pubkey' field was not 'none', return a &feature; error unless she can confirm (or has previously confirmed) that &pubKeyB; really is Bob's public key (see <link url='#sec-keys'>Verifying Keys</link>) and she can use &pubKeyB; with the selected signature verification algorithm ("VERIFY") to confirm that &signB; is the signature of the HMAC result (see <link url='#sign'>Signature Verification</link>).</p>
+              <code>VERIFY(&signB;, &pubKeyB;, &macB;)</code></li>
+        </ol>
+      </section3>
 
-      <p>Alice MUST send the Base64 encoded values of &NsubB;, &IDA; and &MsubA; to Bob. If Alice has already confirmed Bob's identity (i.e. if Bob included 'identity' and 'mac' fields in his response), then she MAY also send encrypted content (see &xep0200;) in the same stanza as the proof of her identity.</p>
-      <example caption='Alice Sends Bob Her Identity'><![CDATA[
+      <section3 topic="Hiding Alice's Identity" anchor='init-acceptalice-hide'>
+        <p>Alice MUST then prove her identity to Bob while protecting it from third parties. She MUST perform the steps equivalent to those Bob performed above (see <link url='#init-hide'>Hiding Bob's Identity</link> for a more detailed description). Alice's calculations are summarised below. Note: When calculating &macA; pay attention to the order of &NsubB; and &NsubA; and to the inclusion of &formA2;.</p>
+        <p>Note: &formA; is the full <link url='#sign-normal'>Normalized</link>&#160;<em>content</em> of the <link url='#init-online-request'>ESession Request</link> data form that Alice sent to Bob at the start of the negotiation, while &formA2; is the full <link url='#sign-normal'>Normalized</link>&#160;<em>content</em> of Alice's session negotiation completion form excluding the 'identity' or 'mac' fields (see <link url='#init-acceptalice-send'>Sending Alice's Identity</link> below).</p>
+        <code>&macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;, &formA;, &formA2;})</code>
+        <code>&signA; = SIGN(&signKeyA;, &macA;)</code>
+        <code>if (pubkey == 'hash') &pubKeyA; = HASH(&pubKeyA;)</code>
+        <code>&IDA; = CIPHER(&KCsubA;, &CsubA;, {&pubKeyA;, &signA;})  <em>OR</em>&#160; &IDA; = CIPHER(&KCsubA;, &CsubA;, &macA;)</code>
+        <code>&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)</code>
+      </section3>
+
+      <section3 topic="Sending Alice's Identity" anchor='init-acceptalice-send'>
+        <p>Alice MUST send the Base64 encoded values of &NsubB; (wrapped in a 'nonce' field), &IDA; (wrapped in an 'identity' field) and &MsubA; (wrapped in a 'mac' field) to Bob in her session negotiation completion message.</p>
+        <p>In the case of a 3-message negotiation Alice MAY also send encrypted content (see <cite>Stanza Encryption</cite>) in the same stanza as the proof of her identity:</p>
+        <example caption='Alice Sends Bob Her Identity (3-Message Negotiation)'><![CDATA[
 <message from='alice@example.org/pda' to='bob@example.com/laptop'>
   <thread>ffd7076498744578d10edabfe7f4a866</thread>
   <feature xmlns='http://jabber.org/protocol/feature-neg'>
@@ -573,15 +599,47 @@
     <mac> ** Base64 encoded a_mac ** </mac>
   </c>
 </message>
-      ]]></example>
-      <p>If Alice also includes a 'terminate' field with its value set to "1" or "true" (see <link url='#terminate'>ESession Termination</link>) within the form then the ESession is terminated immediately. Note: This special case, where a single stanza is encrypted and sent in isolation, is equivalent to object encryption (or object signing if no encryption is specified) and offers several significant advantages over non-session approaches - including perfect forward secrecy.</p>
+        ]]></example>
+        <p>Note: If Alice also includes a 'terminate' field with its value set to "1" or "true" (see <link url='#terminate'>ESession Termination</link>) within the form then the ESession is terminated immediately. Note: This special case, where a single stanza is encrypted and sent in isolation, is equivalent to object encryption (or object signing if no encryption is specified) and offers several significant advantages over non-session approaches - including perfect forward secrecy.</p>
+        <p>In the case of a 4-message negotiation Alice MUST also include in the data form her Base64 encoded values of e (wrapped in a 'dhkeys' field) and the Base64 encoded HMAC (using HASH and the key &NsubA; <note>The HMACs of the retained secrets are generated using Alice's unique session nonce to prevent her being identified by her retained secrets (only one secret changes each session, and some might not change very often).</note>) of each secret that Alice has retained from her previous session with each of Bob's clients (wrapped in a 'rshashes' field) - see <link url='#sign-normal'>XXXXXXXXXX</link>. Note: Alice MUST also append a few random numbers to the 'rshashes' field to make it difficult for an active attacker to discover if she has communicated with Bob before or how many clients Bob has used to communicate with her.</p>
+        <example caption='Alice Sends Bob Her Identity (4-Message Negotiation)'><![CDATA[
+<message from='alice@example.org/pda' to='bob@example.com/laptop'>
+  <thread>ffd7076498744578d10edabfe7f4a866</thread>
+  <feature xmlns='http://jabber.org/protocol/feature-neg'>
+    <x type='result' xmlns='jabber:x:data'>
+      <field var="FORM_TYPE"><value>urn:xmpp:chatneg</value></field>
+      <field var="accept"><value>1</value></field>
+      <field var="nonce"><value> ** Bob's Base64 encoded ESession ID ** </value></field>
+      <field type="hidden" var="dhkeys">
+        <value> ** Base64 encoded value of e5 ** </value>
+      </field>
+      <field type="hidden" var="rshashes">
+        <value> ** Base64 encoded hash of retained secret ** </value>
+        <value> ** Base64 encoded hash of retained secret ** </value>
+        <value> ** Base64 encoded random value ** </value>
+        <value> ** Base64 encoded random value ** </value>
+      </field>
+      <field var="identity"><value> ** Encrypted identity ** </value></field>
+      <field var="mac"><value> ** Integrity of identity ** </value></field>
+    </x>
+  </feature>
+  <c xmlns='urn:xmpp:crypt'>
+    <data> ** Base64 encoded m_final ** </data>
+    <mac> ** Base64 encoded a_mac ** </mac>
+  </c>
+</message>
+        ]]></example>
+      </section3>
+    </section2>
+
+    <section2 topic="ESession Accept (Bob)" anchor='init-init-acceptbob'>
       <p>After receiving Alice's identity Bob MUST verify it by performing steps equivalent to those described in the section <link url='#init-online-bobid'>Verifying Bob's Identity</link> above. Some of Bob's calculations are summarised below (pay attention to the order of &NsubB; and &NsubA; when calculating &macA;). Note: &formA; is the <link url='#sign-normal'>Normalized</link>&#160;<em>content</em> of the <link url='#init-online-request'>ESession Request</link> data form (the <em>first</em> form) that Alice sent him. Note: If Bob sends an error to Alice then he SHOULD ignore any encrypted content he received in the stanza.</p>
       <code>&MsubA; = <em>HMAC</em>(HASH, &KMsubA;, &CsubA;, &IDA;)</code>
       <code>{&pubKeyA;, &signA;} = DECIPHER(&KCsubA;, &CsubA;, &IDA;)</code>
       <code>&macA; = <em>HMAC</em>(HASH, &KSsubA;, {&NsubB;, &NsubA;, e, &pubKeyA;, &formA;})</code>
       <code>VERIFY(&signA;, &pubKeyA;, &macA;)</code>
       <p>If Alice has already confirmed Bob's identity (i.e. if Bob included 'identity' and 'mac' fields in his response above), then the ESession negotiation is complete.</p>
-      <p>Otherwise, one more step is necessary. Bob MUST send Alice the Base64 encoded values of &NsubA;, &IDB; and &MsubB; that he calculated previously (see <link url='#init-hide'>Hiding Identity</link>). Note: He MAY also send encrypted content (see <cite>Stanza Encryption</cite>) in the same stanza.</p>
+      <p>Otherwise, one more step is necessary. Bob MUST send Alice the Base64 encoded values of &NsubA;, &IDB; and &MsubB; that he calculated previously (see <link url='#init-hide'>Hiding Bob's Identity</link>). Note: He MAY also send encrypted content (see <cite>Stanza Encryption</cite>) in the same stanza.</p>
       <example caption='Bob Sends Alice His Identity'><![CDATA[
 <message from='bob@example.com/laptop' to='alice@example.org/pda'>
   <thread>ffd7076498744578d10edabfe7f4a866</thread>
@@ -597,10 +655,6 @@
       ]]></example>
       <p>After receiving Bob's identity Alice MUST verify it by performing steps described in the section <link url='#init-online-bobid'>Verifying Bob's Identity</link> above. Note: If Alice sends an error to Bob then she SHOULD ignore any encrypted content she received in the stanza.</p>
       <p>Once ESession negotiation is complete, Alice and Bob MUST exchange only encrypted forms of the one-to-one stanza types they agreed upon (e.g., &MESSAGE; and &IQ; stanzas).</p>
-
-
-
-
     </section2>
 </section1>
 
