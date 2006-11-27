@@ -78,7 +78,7 @@
     <version>0.13</version>
     <date>2006-11-27</date>
     <initials>ip</initials>
-    <remark><p>Added optional public key independence, hash commitment, SAS authentication, retained secrets and other secrets to the 4-message key exchange; defined when 3- and 4-message negotiations should be used; added disclosure field; added Back Doors and Key Associations sections; employed HMAC instead of hash; moved exchanging stanzas and rekeying sections to XEP-0200; changed namespace</p></remark>
+    <remark><p>Added optional public key independence, hash commitment, SAS authentication, retained secrets and other secrets to the 4-message key exchange; defined when 3- and 4-message negotiations should be used; added disclosure field; added Back Doors and Key Associations sections; employed HMAC instead of hash; required public keys to be in W3C xmldsig KeyValue format and signatures to be wrapped in a SignatureValue element; deleted Signature Generation and Verification section in favor of xmldsig; moved exchanging stanzas and rekeying sections to XEP-0200; changed namespace</p></remark>
   </revision>
   <revision>
     <version>0.12</version>
@@ -228,7 +228,7 @@
         <li><p>The list of stanza types that MAY be encrypted and decrypted</p></li>
         <li><p>The different versions of this protocol that are supported <note>This version of this document describes version 1.0 of this protocol.</note></p></li>
         <li><p>The minimum number of stanzas that MUST be exchanged before an entity MAY initiate a key re-exchange (1 - every stanza, 100 - every hundred stanzas). Note: This value MUST be less than &twosup32; (see <link url='#sec-rekey'>Re-Keying Limits</link>)</p></li>
-        <li><p>What sort of identification is required from the other entity. This MUST be either 'key' (its public signature-verification key), or 'hash' (a fingerprint of its public key) <note>If the entity already possesses one of the other entity's public keys then it is RECOMMENDED that only the fingerprint is requested from the other entity - since this saves bandwidth.</note>, or 'none' (no identification). 'none' MUST NOT be specified with 3-message negotiation.</p></li>
+        <li><p>What sort of identification is required from the other entity. This MUST be either 'key' (its public signature-verification key wrapped in a &lt;KeyValue/&gt; element as specified in &w3xmlsig;), or 'hash' (a fingerprint of the public key - the result of processing the <link url='#sign-normal'>Normalized</link> &lt;KeyValue/&gt; element with the selected hash algorithm, "HASH") <note>If the entity already possesses one of the other entity's public keys then it is RECOMMENDED that only the fingerprint is requested from the other entity - since this saves bandwidth.</note>, or 'none' (no authentication via public keys). Note: 'none' MUST NOT be specified with 3-message negotiation.</p></li>
       </ol>
       <p>Each MODP group has at least two well known constants: a large prime number p, and a generator g for a subgroup of GF(p). For each MODP group that Alice specifies she MUST perform the following computations to calculate her Diffie-Hellman keys (where n is the number of bits per cipher block for the block cipher algorithm with the largest block size out of those she specified):</p>
       <ol>
@@ -279,8 +279,8 @@
         <option><value>sha256</value></option>
       </field>
       <field type="list-single" var="sign_algs">
-        <option><value>rsa</value></option>
-        <option><value>dsa</value></option>
+        <option><value>http://www.w3.org/2000/09/xmldsig#rsa-sha256</value></option>
+        <option><value>http://www.w3.org/2000/09/xmldsig#dsa-sha256</value></option>
       </field>
       <field type="list-single" var="compress">
         <option><value>none</value></option>
@@ -445,7 +445,7 @@
       <field var="modp"><value>5</value></field>
       <field var="crypt_algs"><value>aes256-ctr</value></field>
       <field var="hash_algs"><value>sha256</value></field>
-      <field var="sign_algs"><value>rsa</value></field>
+      <field var="sign_algs"><value>http://www.w3.org/2000/09/xmldsig#rsa-sha256</value></field>
       <field var="compress"><value>none</value></field>
       <field var="stanzas"><value>message</value></field>
       <field var="pubkey"><value>hash</value></field>
@@ -492,14 +492,14 @@
       <section3 topic="Hiding Bob's Identity" anchor='init-hide'>
         <p>Bob MUST perform the following steps before he can prove his identity to Alice while protecting it from third parties.</p>
         <ol>
-          <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'none' then Bob MUST set &pubKeyB; to a zero length string of characters. Otherwise Bob SHOULD select &pubKeyB;, the public key Alice will use to authenticate his signature with the signature algorithm he selected ("SIGN").</p></li>
+          <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'none' then Bob MUST set &pubKeyB; to a zero length string of characters. Otherwise Bob SHOULD select &pubKeyB;, which MUST be a <link url='#sign-normal'>Normalized</link> &lt;KeyValue/&gt; element (as specified in <cite>XML Signature</cite>). This is the public key Alice will use to authenticate his signature with the signature algorithm he selected ("SIGN").</p></li>
           <li><p>Set &formB; to be the full <link url='#sign-normal'>Normalized</link>&#160;<em>content</em> of the reponse data form he generated above (see <link url='#init-online-form'>Response Form</link>). Note: this MUST NOT include 'identity' or 'mac' fields.</p></li>
           <li><p>Concatenate Alice's ESession ID, Bob's ESession ID, d, &pubKeyB; and &formB;, and calculate the HMAC (as defined in Section 2 of &rfc2104;) of the resulting byte string using the selected hash algorithm ("HASH") and the key &KSsubB;.</p>
               <code>&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})</code></li>
-          <li><p>If the value of the 'pubkey' field that Alice sent Bob was not 'none' then Bob MUST calculate &signB;, the signature of the HMAC result using his private signature key that corresponds to &pubKeyB;</p>
+          <li><p>If the value of the 'pubkey' field that Alice sent Bob was <em>not</em> 'none' then Bob MUST calculate &signB;, the signature (using his private signature key that corresponds to &pubKeyB;) of the HMAC result wrapped in a &lt;SignatureValue/&gt; element. Note: &signB; MUST be calculated as specified in <cite>XML Signature</cite> except that it is signature of the HMAC result, <em>not</em> of a &lt;SignedInfo/&gt; element.</p>
               <code>&signB; = SIGN(&signKeyB;, &macB;)</code></li>
-          <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'hash' then Bob SHOULD set &pubKeyB; to the key's fingerprint</p>
-              <code>if (pubkey == 'hash') &pubKeyB; = HASH(&pubKeyB;)</code></li>
+          <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'hash' then Bob SHOULD set &pubKeyB; to the key's fingerprint wrapped in a &lt;fingerprint/&gt; element</p>
+              <code>if (pubkey == 'hash') &pubKeyB; = '&lt;fingerprint&gt;' + HASH(&pubKeyB;) + '&lt;/fingerprint&gt;'</code></li>
           <li><p>Encrypt the byte string resulting from the concatenation of &pubKeyB; and &signB; (or, if the value of the 'pubkey' field that Alice sent Bob was 'none', encrypt just the HMAC result) with the agreed algorithm ("CIPHER") in counter mode (see &nistfips800-38a;), using the encryption key &KCsubB; and block counter &CsubB;. Note: &CsubB; MUST be incremented by 1 for each encrypted block or partial block (i.e. &CsubB; = (&CsubB; + 1) mod 2<span class='super'>n</span>, where n is the number of bits per cipher block for the agreed block cipher algorithm).</p>
               <code>&IDB; = CIPHER(&KCsubB;, &CsubB;, {&pubKeyB;, &signB;})</code>
               <p>or</p>
@@ -572,13 +572,13 @@
               <code>&macB; = DECIPHER(&KCsubB;, &CsubB;, &IDB;)</code>
               <p>or</p>
               <code>{&pubKeyB;, &signB;} = DECIPHER(&KCsubB;, &CsubB;, &IDB;)</code></li>
-          <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'none' then Bob MUST set pubKeyB to a zero length string of characters. Otherwise, if the value was 'hash', then Alice SHOULD change the value of &pubKeyB; to be her copy of the public key whose HASH matches the value of &pubKeyB; that she received from Bob.</p>
+          <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'none' then Alice MUST set &pubKeyB; to be a zero length string of characters. Otherwise, if the value was 'hash', then Alice SHOULD change the value of &pubKeyB; to be her copy of the public key (a <link url='#sign-normal'>Normalized</link> &lt;KeyValue/&gt; element) whose HASH matches the value wrapped in the &pubKeyB; &lt;fingerprint/&gt; element that she received from Bob.</p>
               <p>Note: If she cannot find a copy of the public key then Alice MUST terminate the ESession. She MAY then request a new ESession with the 'pubkey' field set to 'key' or 'none'.</p></li>
           <li><p>Set the value of &formB; to be the <link url='#sign-normal'>Normalized</link>&#160;<em>content</em> of the form she received from Bob without any 'identity' or 'mac' fields.</p></li>
           <li><p>Concatenate Alice's ESession ID, Bob's ESession ID, d, &pubKeyB; and &formB;, and calculate the HMAC of the resulting byte string using HASH and the key &KSsubB;.</p>
               <code>&macB; = <em>HMAC</em>(HASH, &KSsubB;, {&NsubA;, &NsubB;, d, &pubKeyB;, &formB;})</code></li>
           <li><p>If the value of the 'pubkey' field that Alice sent Bob was 'none' then return a &feature; error to Bob if the two values of &macB; she calculated above do not match.</p>
-              <p>If the value of the 'pubkey' field was not 'none', return a &feature; error unless she can confirm (or has previously confirmed) that &pubKeyB; really is Bob's public key (see <link url='#sec-keys'>Verifying Keys</link>) and she can use &pubKeyB; with the selected signature verification algorithm ("VERIFY") to confirm that &signB; is the signature of the HMAC result (see <link url='#sign'>Signature Verification</link>).</p>
+              <p>If the value of the 'pubkey' field was not 'none', return a &feature; error unless she can confirm (or has previously confirmed) that &pubKeyB; really is Bob's public key (see <link url='#sec-keys'>Verifying Keys</link>) and she can use &pubKeyB; with the selected signature verification algorithm ("VERIFY") to confirm that &signB; is the signature of the HMAC result (see <cite>XML Signature</cite>).</p>
               <code>VERIFY(&signB;, &pubKeyB;, &macB;)</code></li>
         </ol>
       </section3>
@@ -750,63 +750,20 @@
     <p>When Alice receives the stanza she MUST verify the MAC to be sure she received all the stanzas Bob sent her during the ESession. Once an entity has sent a termination or termination acknowledgement stanza it MUST NOT send another stanza within the ESession.</p>
   </section1>
 
-<section1 topic='Signature Generation and Verification' anchor='sign'>
-  <section2 topic='XML Normalization' anchor='sign-normal'>
-    <p>Before the signature or MAC of a block of XML is generated or verified, all character data <em>between</em> all elements MUST be removed and the XML MUST be converted to canonical form (see &w3canon;).</p>
-    <p>All the XML this protocol requires to be signed or MACed is very simple, so in this case, canonicalization SHOULD only require the following changes:</p>
-    <ul>
-      <li>Set attribute value delimiters to single quotation marks (i.e. simply replace all single quotes in the serialized XML with double quotes)</li>
-      <li>Impose lexicographic order on the attributes of "field" elements (i.e. ensure "type" is before "var")</li>
-    </ul>
-    <p>Implementations MAY conceivably also need to make the following changes. Note: Empty elements and special characters SHOULD NOT appear in the signed or MACed XML specified in this protocol.</p>
-    <ul>
-      <li>Ensure there are no character references</li>
-      <li>Convert empty elements to start-end tag pairs</li>
-      <li>Ensure there is no whitespace except for single spaces before attributes</li>
-    </ul>
-  </section2>
-  <section2 topic='Hash' anchor='sign-hash'>
-    <p>Before the signature or MAC of a block of XML is generated or verified, the agreed hash algorithm MUST be used to generate the hash of the normalized XML.</p>
-    <code>m_hash = HASH(m_content)</code>
-  </section2>
-  <section2 topic='Generation' anchor='sign-calc'>
-    <p>The signature generation depends on the type of private key being used.</p>
-    <section3 topic='RSA' anchor='sign-rsa-gen'>
-      <code>signature_rsa = rsa_sign(rsa_private_key, m_hash, hashOID)</code>
-      <p>The multiprecision integer signature_rsa is the signature (see &rfc3447;).</p>
-    </section3>
-    <section3 topic='DSA' anchor='sign-dsa-gen'>
-      <code>sig_dsa_r, sig_dsa_s = dsa_sign(dsa_private_key, m_hash)</code>
-      <p>The multiprecision integers sig_dsa_r and sig_dsa_s are the signature (see &nistfips186-2;).</p>
-    </section3>
-  </section2>
-  <section2 topic='Signature Format' anchor='sign-format'>
-    <p>The signature formats are the same for all public key formats. All integers are stored in big-endian byte order.</p>
-    <section3 topic='RSA' anchor='sign-rsa-format'>
-      <p>Base64 encoding of the signature_rsa multiprecision integer (without any header or length prefix).</p>
-    </section3>
-    <section3 topic='DSA' anchor='sign-dsa-format'>
-      <p>Base64 encoding of the following structure:</p>
-      <ul>
-        <li>number of bytes in sig_dsa_r (2-byte integer)</li>
-        <li>sig_dsa_r</li>
-        <li>number of bytes in sig_dsa_s (2-byte integer)</li>
-        <li>sig_dsa_s</li>
-      </ul>
-    </section3>
-  </section2>
-  <section2 topic='Verification' anchor='sign-calc'>
-    <p>The signature verification depends on the type of public key being used.</p>
-    <section3 topic='RSA' anchor='sign-rsa-verify'>
-      <p>The rsa_modulus and rsa_public_exponent multiprecision integers are extracted from the other entity's authenticated public key. The signature_rsa multiprecision integer is the signature received from the other entity.</p>
-      <code>boolean = rsa_verify(signature_rsa, m_hash, hashOID, rsa_modulus, rsa_public_exponent)</code>
-    </section3>
-    <section3 topic='DSA' anchor='sign-dsa-verify'>
-      <p>The dsa_p, dsa_q, dsa_g and dsa_y multiprecision integers are extracted from the other entity's authenticated public key. The sig_dsa_r and sig_dsa_s multiprecision integers are the signature received from the other entity.</p>
-      <code>boolean = dsa_verify(sig_dsa_r, sig_dsa_s, m_hash, dsa_p, dsa_q, dsa_g, dsa_y)</code>
-    </section3>
-  </section2>
-  </section1>
+<section1 topic='XML Normalization' anchor='sign-normal'>
+  <p>Before the signature or MAC of a block of XML is generated or verified, all character data <em>between</em> all elements MUST be removed and the XML MUST be converted to canonical form (see &w3canon;).</p>
+  <p>All the XML this protocol requires to be signed or MACed is very simple, so in this case, canonicalization SHOULD only require the following changes:</p>
+  <ul>
+    <li>Set attribute value delimiters to single quotation marks (i.e. simply replace all single quotes in the serialized XML with double quotes)</li>
+    <li>Impose lexicographic order on the attributes of "field" elements (i.e. ensure "type" is before "var")</li>
+  </ul>
+  <p>Implementations MAY conceivably also need to make the following changes. Note: Empty elements and special characters SHOULD NOT appear in the signed or MACed XML specified in this protocol.</p>
+  <ul>
+    <li>Ensure there are no character references</li>
+    <li>Convert empty elements to start-end tag pairs</li>
+    <li>Ensure there is no whitespace except for single spaces before attributes</li>
+  </ul>
+</section1>
 
 <section1 topic='Security Considerations' anchor='sec'>
   <section2 topic='Random Numbers' anchor='sec-prng'>
@@ -816,7 +773,7 @@
     <p>Alice and Bob MUST ensure that the value of e or d they provide when negotiating each online ESession is unique. This prevents complete online ESessions being replayed.</p>
   </section2>
   <section2 topic='Verifying Keys' anchor='sec-keys'>
-    <p>The trust system outlined in this document is based on Alice trusting that the public key presented by Bob is <em>actually</em> Bob's key (and vice versa). Determining this trust may be done in a variety of ways depending on the entities' support for different public key (certificate) formats, signing algorithms and signing authorities. For instance, if Bob publishes a PGP/GPG public key, Alice MAY verify that his key is signed by another key that she knows to be good. Or, if Bob provides an X.509 certificate, she MAY check that his key has been signed by a Certificate Authority that she trusts.</p>
+    <p>The trust system outlined in this document is based on Alice trusting that the public key presented by Bob (wrapped in a &lt;KeyValue/&gt; element) is <em>actually</em> Bob's key (and vice versa). Determining this trust may be done in a variety of ways depending on the entities' support for different public key (certificate) formats, signing algorithms and signing authorities. For instance, if Bob publishes a PGP/GPG public key, Alice MAY verify that his key is signed by another key that she knows to be good. Or, if Bob provides an X.509 certificate, she MAY check that his key has been signed by a Certificate Authority that she trusts.</p>
     <p>When trust cannot be achieved automatically, methods that are not transparent to the users may be employed. The out-of-band Short Authentication String mechanism described in this document is an easy way for people to do that. Alternatively, Bob could communicate the <em>full</em> SHA-256 fingerprint of his public key to Alice via secure out-of-band communication (e.g. face-to-face). This would enable Alice to confirm that the public key she receives in-band is valid. Note: Since very few people bother to (consistently) verify SAS or fingerprints, entities SHOULD protect against 'man-in-the-middle' attacks using retained secrets and/or other secrets.</p>
     <p>Note: If no keys are acceptable to Alice (because Alice has never verified any of the keys, and because either the keys are not signed, or Alice does not support the signature algorithms of the keys, or she cannot parse the certificate formats, or she does not recognise the authorities that signed the keys) then, although the ESession can still be encrypted, she cannot be sure she is communicating with Bob.</p>
   </section2>
@@ -839,82 +796,75 @@
   <section2 topic='Extra Responsabilities of Implementors' anchor='sec-general'>
     <p>Cryptography plays only a small part in an entity's security. Even if it implements this protocol perfectly it may still be vulnerable to other attacks. For examples, an implementation might store ESession keys on swap space or save private keys to a file in cleartext! Implementors MUST take very great care when developing applications with secure technologies.</p>
   </section2>
-  <section2 topic='Mandatory to Implement Technologies' anchor='sec-mandatory'>
-    <p>An implementation of ESession MUST support the Diffie-Hellman Key Agreement and HMAC algorithms. Note: The parameter names mentioned below are related to secure shell; see <cite>SSH Transport Layer Encryption Modes</cite> for block cipher algorithm details; see the &ianassh; for other names.</p>
-    <section3 topic='Block Cipher Algorithms' anchor='sec-mandatory-encryption'>
-      <p>An implementation of ESession MUST support at least the following block cipher algorithm:</p>
-      <ul>
-        <li>aes128-ctr (see &nistfips197;)</li>
-      </ul>
-      <p>The block length of an block cipher algorithm's cipher SHOULD be at least 128 bits. An implementation of ESession MAY also support the following block cipher algorithms:</p>
-      <ul>
-        <li>aes256-ctr</li>
-        <li>aes192-ctr</li>
-        <li>twofish256-ctr (see &twofish;)</li>
-        <li>twofish192-ctr</li>
-        <li>twofish128-ctr</li>
-        <li>serpent256-ctr (see &serpent;)</li>
-        <li>serpent192-ctr</li>
-        <li>serpent128-ctr</li>
-        <li>none (no encryption, only signing)</li>
-      </ul>
-    </section3>
-    <section3 topic='Key Signing Algorithms' anchor='sec-mandatory-sign'>
-      <p>An implementation of ESession MUST support at least the following signing algorithm:</p>
-      <ul>
-        <li>rsa (see <cite>RFC 3447</cite>)</li>
-      </ul>
-      <p>An implementation of ESession SHOULD also support at least the following signing algorithm:</p>
-      <ul>
-        <li>dsa (see <cite>Digital Signature Standard</cite>)</li>
-      </ul>
-    </section3>
-    <section3 topic='Public Signature-Verification-Key Formats' anchor='sec-mandatory-public'>
-      <p>An implementation of ESession MUST support the following public key formats:</p>
-      <ul>
-        <li>ssh-rsa</li>
-      </ul>
-      <p>An implementation of ESession SHOULD also support at least the following public key formats:</p>
-      <ul>
-        <li>ssh-dss</li>
-        <li>x509v3-sign-rsa (see &sshx509;)</li>
-        <li>x509v3-sign-dss</li>
-        <li>pgp-sign-rsa</li>
-        <li>pgp-sign-dss</li>
-      </ul>
-      <p>An implementation of ESession MAY also support the following public key formats:</p>
-      <ul>
-        <li>spki-sign-rsa</li>
-        <li>spki-sign-dss</li>
-      </ul>
-    </section3>
-    <section3 topic='Hash Algorithms' anchor='sec-mandatory-hash'>
-      <p>An implementation of ESession MUST support the following hash algorithm:</p>
-      <ul>
-        <li>sha256 (see <cite>Secure Hash Standard</cite>)</li>
-      </ul>
-      <p>An implementation of ESession SHOULD also support at least the following hash algorithm (sha1 and md5 are broken and therefore NOT RECOMMENDED):</p>
-      <ul>
-        <li>whirlpool (see &whirlpool;)</li>
-      </ul>
-    </section3>
-    <section3 topic='Short Authentication String Generation Algorithms' anchor='sec-mandatory-sas'>
-      <p>An implementation of ESession MUST support the following SAS generation algorithm:</p>
-      <ul>
-        <li>sas28x5 (see <link url='#sas'>The sas28x5 SAS Algorithm</link>)</li>
-      </ul>
-    </section3>
-    <section3 topic='Compression Algorithms' anchor='sec-mandatory-compress'>
-      <p>An implementation of ESession MUST support the following compression algorithm:</p>
-      <ul>
-        <li>none (no compression, the output MUST be the same as the input)</li>
-      </ul>
-      <p>Support for other algorithms is NOT RECOMMENDED since compression partially defeats the <link url='#reqs-repudiate'>Repudiability</link> requirement of this document by making it more difficult for a third party (with some knowledge of the plaintext) to modify a transcript of an encrypted session in a meaningful way. However, encrypted content is pseudo-random and cannot be compressed, so, in those cases where bandwidth is severely constrained, an implementation of ESession MAY support the following algorithms to compress content before it is encrypted:</p>
-      <ul>
-        <li>lzw (see &ecma151;)</li>
-        <li>zlib (see &rfc1950;)</li>
-      </ul>
-    </section3>
+</section1>
+<section1 topic='Mandatory to Implement Technologies' anchor='sec-mandatory'>
+  <p>An implementation of ESession MUST support the Diffie-Hellman Key Agreement and HMAC algorithms. Note: Some of the parameter names mentioned below are related to secure shell; see <cite>SSH Transport Layer Encryption Modes</cite> for block cipher algorithm details; see the &ianassh; for some of the other names.</p>
+  <section2 topic='Block Cipher Algorithms' anchor='sec-mandatory-encryption'>
+    <p>An implementation of ESession MUST support the following block cipher algorithm:</p>
+    <ul>
+      <li>aes128-ctr (see &nistfips197;)</li>
+    </ul>
+    <p>The block length of an block cipher algorithm's cipher SHOULD be at least 128 bits. An implementation of ESession MAY also support the following block cipher algorithms:</p>
+    <ul>
+      <li>aes256-ctr</li>
+      <li>aes192-ctr</li>
+      <li>twofish256-ctr (see &twofish;)</li>
+      <li>twofish192-ctr</li>
+      <li>twofish128-ctr</li>
+      <li>serpent256-ctr (see &serpent;)</li>
+      <li>serpent192-ctr</li>
+      <li>serpent128-ctr</li>
+      <li>none (no encryption, only signing)</li>
+    </ul>
+  </section2>
+  <section2 topic='Key Signing Algorithms' anchor='sec-mandatory-sign'>
+    <p>An implementation of ESession MUST support the following signing algorithm:</p>
+    <ul>
+      <li><p>http://www.w3.org/2000/09/xmldsig#rsa-sha256</p>
+    <p>(the same as http://www.w3.org/2000/09/xmldsig#rsa-sha1 except that it uses SHA256 instead of SHA1, see <cite>XML Signature</cite>)</p></li>
+    </ul>
+    <p>An implementation of ESession SHOULD also support at least the following signing algorithm:</p>
+    <ul>
+      <li><p>http://www.w3.org/2000/09/xmldsig#dsa-sha256</p>
+    <p>(the same as http://www.w3.org/2000/09/xmldsig#dsa-sha1 except that it uses SHA256 instead of SHA1, see <cite>XML Signature</cite>)</p></li>
+    </ul>
+  </section2>
+  <section2 topic='Public Signature-Verification-Key Formats' anchor='sec-mandatory-public'>
+    <p>&lt;KeyValue/&gt; elements (as specified in <cite>XML Signature</cite>) may contain different public key formats. An implementation of ESession MUST support the following format:</p>
+    <ul>
+      <li>&lt;RSAKeyValue/&gt;</li>
+    </ul>
+    <p>An implementation of ESession SHOULD also support the following public key format:</p>
+    <ul>
+      <li>&lt;DSAKeyValue/&gt;</li>
+    </ul>
+  </section2>
+  <section2 topic='Hash Algorithms' anchor='sec-mandatory-hash'>
+    <p>An implementation of ESession MUST support the following hash algorithm:</p>
+    <ul>
+      <li>sha256 (see <cite>Secure Hash Standard</cite>)</li>
+    </ul>
+    <p>An implementation of ESession SHOULD also support at least the following hash algorithm (sha1 and md5 are broken and therefore NOT RECOMMENDED):</p>
+    <ul>
+      <li>whirlpool (see &whirlpool;)</li>
+    </ul>
+  </section2>
+  <section2 topic='Short Authentication String Generation Algorithms' anchor='sec-mandatory-sas'>
+    <p>An implementation of ESession MUST support the following SAS generation algorithm:</p>
+    <ul>
+      <li>sas28x5 (see <link url='#sas'>The sas28x5 SAS Algorithm</link>)</li>
+    </ul>
+  </section2>
+  <section2 topic='Compression Algorithms' anchor='sec-mandatory-compress'>
+    <p>An implementation of ESession MUST support the following compression algorithm:</p>
+    <ul>
+      <li>none (no compression, the output MUST be the same as the input)</li>
+    </ul>
+    <p>Support for other algorithms is NOT RECOMMENDED since compression partially defeats the <link url='#reqs-repudiate'>Repudiability</link> requirement of this document by making it more difficult for a third party (with some knowledge of the plaintext) to modify a transcript of an encrypted session in a meaningful way. However, encrypted content is pseudo-random and cannot be compressed, so, in those cases where bandwidth is severely constrained, an implementation of ESession MAY support the following algorithms to compress content before it is encrypted:</p>
+    <ul>
+      <li>lzw (see &ecma151;)</li>
+      <li>zlib (see &rfc1950;)</li>
+    </ul>
   </section2>
 </section1>
 
@@ -1065,7 +1015,6 @@
 <section1 topic='Open Issues' anchor='open'>
   <section2 topic='To Think About' anchor='open-tothink'>
     <ol>
-      <li>Standardise on the X.509 public key and signature formats?</li>
       <li>What challenges exist to make the OTR Gaim Plugin use this protocol natively when talking to XMPP entities? Can these be mitigated by 'non-critical' protocol changes?</li>
       <li>Would anything in this protocol (e.g., its dependency on in-order stanza delivery) prevent an XMPP entity using it to exchange encrypted messages and presence with a user of a non-XMPP messaging system, assuming that the gateway both supports this protocol and is compatible with a purpose-built security plugin on the other user's client (e.g. a Gaim plugin connects to the gateway via a non-XMPP network)?</li>
       <li>Could use &xep0013; (FOMR) instead of AMP to prevent any offline ESessions Bob can't decrypt being delivered to him. (Each &lt;item/&gt; that corresponds to an ESession message would have to contain a &lt;ESessionID/&gt; child, to allow Bob to discover which of his stored values of y was used to encrypt the message.)</li>
@@ -1074,7 +1023,6 @@
   <section2 topic='To Do' anchor='open-todo'>
     <ol>
       <li>Ask the authors of AMP to explain how to achieve the match_resource functionality specified in XEP-0187.</li>
-      <li>Define names for X.509 SubjectPublicKeyInfo public key formats (different to X.509 certificates). This format must be used when keys are distributed within session negotiation.</li>
       <li>Add non-repudiable signing option</li>
       <li>Perhaps the document needs to specify more carefully how block counters are handled between messages, especially in the event of partial blocks?</li>
       <li>Give examples of specific errors and discuss error scenarios throughout document (e.g., what should Bob do if he is not offline and he receives an offline key exchange stanza?).</li>
