@@ -1,0 +1,438 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+<!ENTITY setA "{&KCsubB;&#160;&KMsubB;&#160;x}">
+<!ENTITY setB "{&KCsubA;&#160;&KMsubA;&#160;y}">
+<!ENTITY esupy "e<span class='super'>y</span>">
+<!ENTITY dsupx "d<span class='super'>x</span>">
+<!ENTITY gsupx "g<span class='super'>x</span>">
+<!ENTITY gsupy "g<span class='super'>y</span>">
+<!ENTITY CsubA "C<span class='sub'>A</span>">
+<!ENTITY CsubB "C<span class='sub'>B</span>">
+<!ENTITY KMsubA "KM<span class='sub'>A</span>">
+<!ENTITY KMsubB "KM<span class='sub'>B</span>">
+<!ENTITY KCsubA "KC<span class='sub'>A</span>">
+<!ENTITY KCsubB "KC<span class='sub'>B</span>">
+<!ENTITY twosup32 "2<span class='super'>32</span>">
+<!ENTITY twosup2n "2<span class='super'>2n-1</span>">
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Stanza Encryption</title>
+  <abstract>This document specifies an XMPP protocol extension for session-based stanza encryption.</abstract>
+  &LEGALNOTICE;
+  <number>0200</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <jig>Standards JIG</jig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>RFC 2104</spec>
+    <spec>RFC 3548</spec>
+  </dependencies>
+  <supersedes>None</supersedes>
+  <supersededby>None</supersededby>
+  <shortname>crypt</shortname>
+  &ianpaterson;
+  <revision>
+    <version>0.1</version>
+    <date>2006-11-23</date>
+    <initials>ip</initials>
+    <remark><p>Initial version (extracted from XEP-0116 version 0.12); clarified Re-Key Exchange section; removed canonicalization requirement; employed HMAC instead of hash; added new sections; changed element name and namespace</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>End-to-end encryption is a desirable feature for any communication technology. Ideally, such a technology would design encryption in from the beginning and would forbid unencrypted communications. Realistically, most communication technologies have not been designed in that manner, and Jabber/XMPP technologies are no exception. In particular, the original Jabber technologies developed in 1999 did not include end-to-end encryption by default. PGP-based encryption of message bodies and signing of presence information was added as an extension to the core protocols in the year 2000; this extension is documented in &xep0027;. When the core protocols were formalized within the Internet Standards Process by the IETF's XMPP Working Group in 2003 (see &rfc3920; and &rfc3921;), a different extension was defined using S/MIME-based signing and encryption of CPIM-formatted messages (see &rfc3862;) and PIDF-formatted presence information (see &rfc3863;); this extension is specified in &rfc3923;.</p>
+  <p>For reasons described in &xep0188;, the foregoing proposals (and others not mentioned) have not been widely implemented and deployed. This is unfortunate, since an open communication protocol needs to enable end-to-end encryption in order to be seriously considered for deployment by a broad range of users.</p>
+  <p>This document describes a different session-based approach to the end-to-end encryption of the full content of XMPP stanzas sent between two entities. The protocol assumes that the encrypted session parameters (initial keys, counters and algorithms etc.) have already been agreed, typically through a negotiation protocol such as &xep0116; or &xep0187;. The session approach when combined with short-lived keys offers many important advantages over the existing "Object Encryption" proposals, including Perfect Forward Secrecy.</p>
+</section1>
+
+
+<section1 topic="Requirements" anchor='require'>
+  <p>The requirements and the consequent cryptographic design that underpin this protocol and its associated protocols are described in <cite>Cryptographic Design of Encrypted Sessions</cite>. The specific objectives of this protocol include:</p>
+  <ul>
+    <li><p>Encryption of the full stanza content (except that which is required for stanza routing)</p></li>
+    <li><p>Minimise the Perfect Forward Secrecy window by enabling light-weight renegotiation of the short-term keys without requiring a full session renegotiation.</p></li>
+    <li><p>Minimise bandwidth overhead</p></li>
+    <li><p>No dependence on XML canonicalization</p></li>
+  </ul>
+</section1>
+
+
+<section1 topic="Dramatis Personae" anchor='personae'>
+  <p>This document introduces two characters to help the reader follow the necessary exchanges:</p>
+  <ol start='1'>
+    <li>"Alice" is the name of the entity sending the encrypted stanza or initiating a re-key. Within the scope of this document, we stipulate that her fully-qualified JID is: &lt;alice@example.org/pda&gt;.</li>
+    <li>"Bob" is the name of the entity receiving the encrypted stanza or accepting a re-key. Within the scope of this document, his fully-qualified JID is: &lt;bob@example.com/laptop&gt;.</li>
+  </ol>
+  <p>While Alice and Bob are introduced as "end users", they are simply meant to be examples of XMPP entities. Any directly addressable XMPP entity may send or receive encrypted stanzas within an encrypted session or initiate a re-key.</p>
+  <p>Here we assume that Alice and Bob have already established an encrypted session. Either Alice or Bob MAY send encrypted stanzas within the encrypted session or initiate a re-key. The following sections describe the process where Alice sends Bob an encrypted stanza and initiates a re-key.</p>
+</section1>
+
+
+<section1 topic="Assumptions" anchor='assume'>
+  <p>The following sections assume that the parameters in the tables below have already been agreed. For more details refer to an encrypted session negotiation protocol such as <cite>Encrypted Session Negotiation</cite>.</p>
+  <table caption='Encryption Parameters'>
+    <tr>
+      <th>Parameter</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td>&CsubA;, &CsubB;</td>
+      <td>The initial block cipher counter value for blocks sent by Alice and Bob</td>
+    </tr>
+    <tr>
+      <td>&KCsubA;, &KCsubB;</td>
+      <td>The initial secret cipher keys that Alice and Bob use to encrypt</td>
+    </tr>
+    <tr>
+      <td>&KMsubA;, &KMsubB;</td>
+      <td>The initial secret MAC keys that Alice and Bob use to protect the integrity of encrypted data</td>
+    </tr>
+    <tr>
+      <td>HASH</td>
+      <td>Agreed hash algorithm</td>
+    </tr>
+    <tr>
+      <td>CIPHER, DECIPHER</td>
+      <td>Agreed CTR-mode block cipher algorithm</td>
+    </tr>
+    <tr>
+      <td>COMPRESS, DECOMPRESS</td>
+      <td>Agreed compression algorithm</td>
+    </tr>
+  </table>
+  <table caption='Re-Key Parameters'>
+    <tr>
+      <th>Parameter</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td>g</td>
+      <td>Diffie-Hellman generator</td>
+    </tr>
+    <tr>
+      <td>p</td>
+      <td>Diffie-Hellman prime</td>
+    </tr>
+    <tr>
+      <td>e, d</td>
+      <td>Alice and Bob's initial public Diffie-Hellman keys</td>
+    </tr>
+    <tr>
+      <td>x, y</td>
+      <td>*Alice and Bob's initial private Diffie-Hellman keys</td>
+    </tr>
+  </table>
+  <p>* x and y MUST be known only to Alice and Bob respectively, all other parameters MUST be known by both parties</p>
+  <p>All parameters except the algorithms are multi-precision integers, so implementations will need a Big Integer Math library to perform the necessary modular arithmetic. Note: A simple HMAC function and a cryptographic-strength pseudo-random number generator are also required, but no other cryptographic code is necessary.</p>
+</section1>
+
+
+<section1 topic="Encryptable Content" anchor='content'>
+  <p>Alice MAY use this protocol to encrypt only that part of the <em>content</em> of one-to-one &MESSAGE;, &PRESENCE; and &IQ; stanzas that would normally be ignored by the intermediate servers. She MUST NOT encrypt:</p>
+  <ul>
+    <li><p>Stanza wrapper element tags (only stanza content)</p></li>
+    <li><p>&lt;error/&gt; elements <note>RFC 3920 requires that stanzas of type 'error' contain an &lt;error/&gt; child element.</note></p></li>
+    <li><p>&lt;defined-condition xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/&gt; child elements of &lt;error/&gt; elements. <note>RFC 3920 requires that &lt;error/&gt; elements contain a &lt;defined-condition/&gt; child element.</note></p></li>
+    <li><p>&THREAD; elements <note>Applications typically use &THREAD; elements internally to route stanzas to the process handling a session. The content of thread elements MUST be opaque with no semantic meaning and only exact comparisons MAY be made against it.</note></p></li>
+    <li><p>&lt;amp/&gt; elements (see &xep0079;)</p></li>
+  </ul>
+  <p>A stanza MUST NOT contain more than one &lt;c xmlns='urn:xmpp:crypt'/&gt; element, and it MUST be an immediate child of the stanza wrapper element. There is only one exception to those two rules, if the stanza is type 'error' then its &lt;error/&gt; child element MAY also contain a &lt;c xmlns='urn:xmpp:crypt'/&gt; element.</p>
+  <example caption='Plain Message Stanza'><![CDATA[
+<message from='alice@example.org/pda'
+         to='bob@example.com/laptop'
+         type='chat'>
+  <thread>ffd7076498744578d10edabfe7f4a866</thread>
+  <body>Hello, Bob!</body>
+  <amp xmlns='http://jabber.org/protocol/amp'>
+    <rule action='error' condition='match-resource' value='exact'/>
+  </amp>
+  <active xmlns='http://jabber.org/protocol/chatstates'/>
+</message>
+  ]]></example>
+
+  <example caption='Message Content to be Encrypted'><![CDATA[
+<body>Hello, Bob!</body>
+<active xmlns='http://jabber.org/protocol/chatstates'/>
+  ]]></example>
+
+  <example caption='Plain Presence Stanza'><![CDATA[
+<presence from='alice@example.org/pda'
+          to='bob@example.com/laptop'
+          type='available'>
+  <show>dnd</show>
+  <status>Working</status>
+  <c xmlns='http://jabber.org/protocol/caps'
+     node='http://exodus.jabberstudio.org/caps'
+     ver='0.9'
+     ext='jingle ftrans xhtml'/>
+  <geoloc xmlns='http://jabber.org/protocol/geoloc'>
+    <alt>1609</alt>
+    <description>Jabber, Inc.</description>
+    <error>10</error>
+    <lat>39.75477</lat>
+    <lon>-104.99768</lon>
+    <timestamp>2004-02-19T21:12Z</timestamp>
+  </geoloc>
+</presence>
+  ]]></example>
+
+  <example caption='Presence with Encrypted Content'><![CDATA[
+<presence from='alice@example.org/pda'
+          to='bob@example.com/laptop'
+          type='available'>
+  <c xmlns='urn:xmpp:crypt'>
+    <data> ** Base64 encoded m_final ** </data>
+    <mac> ** Base64 encoded a_mac ** </mac>
+  </c>
+</presence>
+  ]]></example>
+
+  <example caption='Plain IQ Error Stanza'><![CDATA[
+<iq from='alice@example.org/pda'
+    to='bob@example.com/laptop'
+    id='publish1'
+    type='error'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='princely_musings'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'>
+        ...
+      </item>
+    </publish>
+  </pubsub>
+  <error type='modify'>
+    <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <payload-too-big xmlns='http://jabber.org/protocol/pubsub#errors'/>
+  </error>
+</iq>
+  ]]></example>
+
+  <example caption='Encrypted IQ Error Stanza'><![CDATA[
+<iq from='alice@example.org/pda'
+    to='bob@example.com/laptop'
+    id='publish1'
+    type='error'>
+  <c xmlns='urn:xmpp:crypt'>
+    <data> ** Base64 encoded m_final ** </data>
+    <mac> ** Base64 encoded a_mac ** </mac>
+  </c>
+  <error type='modify'>
+    <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <c xmlns='urn:xmpp:crypt'>
+      <data> ** Base64 encoded m_final ** </data>
+      <mac> ** Base64 encoded a_mac ** </mac>
+    </c>
+  </error>
+</iq>
+  ]]></example>
+</section1>
+
+
+<section1 topic="Encrypting a Stanza" anchor='encrypt'>
+  <p>Alice MUST perform the following steps to encrypt the XML content. Note: if there is no XML content to be encrypted (e.g. if this is an empty <link url='#rekey'>Re-Key Exchange</link> stanza), then &CsubA; MUST be incremented by 1 (see below), and only the last two steps (normalization and MAC calculation) should be performed.</p>
+  <ol start='1'>
+    <li><p>Serialize the XML content she wishes to send into an array of UTF-8 bytes, m. <note>Although counter mode encryption requires no padding, implementations MAY still disguise the length of m by appending a random number of white-space characters.</note></p></li>
+    <li>
+      <p>Compress m using the negotiated algorithm. If a compression algorithm other than 'none' was agreed, the compression context is typically initialized after key exchange and passed from one stanza to the next, with only a partial flush at the end of each stanza. <note>If Bob were to receive a stanza out-of-order, then he would fail to decrypt the stanza and be forced to terminate the encrypted session.</note></p>
+      <code>m_compressed = COMPRESS(m)</code>
+    </li>
+    <li>
+      <p>Encrypt the data with the agreed algorithm in counter mode, using the encryption key &KCsubA;. Note: &CsubA; MUST be incremented by 1 for each encrypted block or partial block (i.e. &CsubA; = (&CsubA; + 1) mod 2<span class='super'>n</span>, where n is the number of bits per cipher block for the agreed block cipher algorithm). Note: if the block cipher algorithm 'none' was agreed then encryption MUST NOT be performed and &CsubA; MUST be incremented by 1 (for replay protection).</p>
+      <code>m_final = CIPHER(&KCsubA;, &CsubA;, m_compressed)</code>
+    </li>
+    <li>
+      <p>Generate the whole serialized <em>content</em> of the &lt;c/&gt; element:</p>
+      <p>If there is encrypted XML content, the XML MUST include the Base64 encoded (even if the block cipher algorithm 'none' was agreed <note>The content is encoded even if no encryption is used to avoid triggering namespace errors when entities parse the XML.</note>, in accordance with Section 3 of &rfc3548;) value of m_final wrapped in a &lt;data/&gt; element.</p>
+      <p>Only if Alice has received stanzas containing a &lt;key/&gt; element (see <link url='#rekey'>Re-Key Exchange</link>) from Bob since she sent her last stanza then the XML MUST include the (positive, non-zero) number of such stanzas she has received (since she sent her last stanza) wrapped in a &lt;new/&gt; element.</p>
+      <p>The content may also contain one &lt;key/&gt; element (see <link url='#rekey'>Re-Key Exchange</link>) and one or more &lt;old/&gt; elements (see <link url='#publish'>Publishing Old MAC Values</link>).</p>
+      <p>Alice MUST normalize the content by removing any whitespace from the serialized content (i.e. remove all character data from <em>between</em> all elements). Note: &lt;c/&gt; elements are so simple that there should <em>never</em> be a need to convert the XML to canonical form.</p>
+      <p>For example:</p>
+      <code>m_content = '&lt;data&gt; ** Base64 encoded m_final ** &lt;/data&gt;&lt;new&gt;1&lt;/new&gt;'</code>
+    </li>
+    <li>
+      <p>Process the XML content, concatenated with the value of Alice's block cipher counter &CsubA;&#160;<em>before</em> the data was encrypted, through the HMAC algorithm (as defined in Section 2 of &rfc2104;), along with the agreed hash algorithm ("HASH") and the integrity key &KMsubA;.</p>
+      <code>a_mac = <em>HMAC</em>(HASH, &KMsubA;, m_content | &CsubA;)</code>
+    </li>
+  </ol>
+</section1>
+
+
+<section1 topic="Sending an Encrypted Stanza" anchor='send'>
+  <p>Before sending the stanza to Bob, Alice MUST wrap the (unnormalized) content and the Base64 encoded value of a_mac (wrapped in a &lt;mac/&gt; element) inside an &lt;c/&gt; element and insert it into the stanza in place of the original content.</p>
+  <example caption='Message Stanza with Encrypted Content'><![CDATA[
+<message from='alice@example.org/pda'
+         to='bob@example.com/laptop'
+         type='chat'>
+  <thread>ffd7076498744578d10edabfe7f4a866</thread>
+  <c xmlns='urn:xmpp:crypt'>
+    <data> ** Base64 encoded m_final ** </data>
+    <new>1</new>
+    <mac> ** Base64 encoded a_mac ** </mac>
+  </c>
+  <amp xmlns='http://jabber.org/protocol/amp' per-hop='true'>
+    <rule action='error' condition='match-resource' value='exact'/>
+  </amp>
+</message>
+  ]]></example>
+</section1>
+
+
+<section1 topic="Decrypting a Stanza" anchor='decrypt'>
+  <p>When Bob receives the stanza from Alice, he MUST extract and Base64 decode the values of m_final and a_mac from the content and perform the following steps.</p>
+  <ol start='1'>
+    <li>
+      <p>Use any &lt;new/&gt; element the stanza may (or may not) contain to determine which of his &lt;key/&gt; elements (see <link url='#rekey-init'>Re-Key Initiation</link>) Alice had received before she sent him the stanza. He MUST use this information to determine which of his stored sets of values &setB; he should use to decrypt and verify the stanza. Bob MUST then securely destroy any of his sets of values that are older than the selected set.</p>
+    </li>
+    <li>
+      <p>Remove the &lt;mac/&gt; element from the serialized content of the &lt;c/&gt; element, and normalize the remaining content by removing all whitespace. Calculate the Message Authentication Code (MAC) for the <em>content</em> concatenated with Alice's block cipher counter using the agreed hash algorithm ("HASH") and the integrity key &KMsubA;.</p>
+      <code>b_mac = <em>HMAC</em>(HASH, &KMsubA;, m_content | &CsubA;)</code>
+    </li>
+    <li>
+      <p>Verify that b_mac and a_mac match. If they are not identical, the content has been tampered with and Bob MUST terminate the encrypted session, he MAY send a &notacceptable; error to Alice. <note>If Bob were to receive a stanza out-of-order, then the MACs would not match because the values of &CsubA; would not be synchronized.</note></p>
+    </li>
+    <li>
+      <p>Decrypt m_final using the agreed algorithm, &KCsubA; and &CsubA;. Note: &CsubA; MUST be incremented by 1 for each decrypted block (see <link url='#encrypt'>Encrypting a Stanza</link>). Note: if the block cipher algorithm 'none' was agreed decryption MUST NOT be performed and &CsubA; MUST be incremented by 1.</p>
+      <code>m_compressed = DECIPHER(&KCsubA;, &CsubA;, m_final)</code>
+    </li>
+    <li>
+      <p>Decompress m_compressed using the negotiated algorithm (usually 'none').</p>
+      <code>m = DECOMPRESS(m_compressed)</code>
+    </li>
+    <li>
+      <p>Replace the &lt;c/&gt; element in the serialized XML stanza with m and feed the stanza into an XML parser. If the parser returns an XML format error then Bob MUST terminate the encrypted session, he MAY send a &notacceptable; error to Alice. <note>Bob MUST NOT send a stream error to his server since intermediate entities are not responsible for encoded content.</note></p>
+    </li>
+  </ol>
+</section1>
+
+
+<section1 topic='Re-Key Exchange' anchor='rekey'>
+  <section2 topic='Introduction' anchor='rekey-intro'>
+    <p>Once an attacker has discovered an encryption key it could be used to decrypt all stanzas within a session, including stanzas that were intercepted <em>before</em> the key was discovered. To reduce the window of vulnerability, both Alice and Bob SHOULD use the Diffie-Hellman key exchange described below to agree a new encryption key as regularly as possible. They MUST also destroy all copies of keys as soon as they are no longer needed.</p>
+    <p>Note: Although most entities are capable of exchanging new keys after every stanza, clients running in constrained runtime environments may require a few seconds of full-load CPU time in order to re-key. During encrypted session negotiation (when using <cite>Encrypted Session Negotiation</cite> for example) these clients MAY negotiate the minimum number of stanzas to be exchanged between re-keys at the cost of a larger window of vulnerability. Entities MUST NOT initiate key re-exchanges more frequently than the agreed limit.</p>
+    <p>Either Alice or Bob MAY initiate a key re-exchange. Here we describe the process initiated by Alice.</p>
+  </section2>
+  <section2 topic='Re-Key Initiation' anchor='rekey-init'>
+    <p>First Alice MUST calculate new values for the encryption parameters:</p>
+    <ol start='1'>
+      <li><p>Generate: a secret random number x (where &twosup2n; &lt; x &lt; p - 1, where n is the number of bits per cipher block for CIPHER)</p></li>
+      <li><p>Calculate: e = &gsupx; mod p</p></li>
+      <li><p>Calculate: K = &dsupx; mod p (the new shared secret)</p></li>
+      <li><p>Alice's Encryption key: &KCsubA; = HMAC(HASH, K, "Rekey Initiator Crypt")</p></li>
+      <li><p>Bob's Encryption key: &KCsubB; = HMAC(HASH, K, "Rekey Acceptor Crypt")</p></li>
+      <li><p>Alice's Integrity key: &KMsubA; = HMAC(HASH, K, "Rekey Initiator MAC")</p></li>
+      <li><p>Bob's Integrity key: &KMsubB; = HMAC(HASH, K, "Rekey Acceptor MAC")</p></li>
+    </ol>
+    <p>Note: Once &KCsubA;, &KMsubA;, &KCsubB; and &KMsubB; have been calculated the value of K MUST be securely destroyed. When calculating those keys, as many bits of key data as are needed for each key MUST be taken from the <em>least</em> significant bits of the output of HMAC. For algorithms with variable-length keys the maximum length (up to the output length of HMAC) SHOULD be used.</p>
+    <p>The new value of e SHOULD be wrapped in a &lt;key/&gt; element and sent to Bob. To avoid unnecessary network traffic, it SHOULD be sent together with encrypted content (see <link url='#encrypt'>Encrypting a Stanza</link>). Alice MUST use her <em>old</em>&#160;&KCsubA; and &KMsubA; to encrypt and calculate the MAC of this stanza, after which she MUST securely destroy all copies of the old value of &KCsubA;. She MUST use her <em>new</em>&#160;&KCsubA; and &KMsubA; when sending <em>subsequent</em> stanzas.</p>
+    <p>Note: There is no need for Alice to provide a signature because the calculation of the MAC includes the new value of e (see <link url='#encrypt'>Encrypting a Stanza</link>).</p>
+    <example caption='Alice Sends Re-Key Stanza'><![CDATA[
+<message from='alice@example.org/pda' to='bob@example.com/laptop'>
+  <thread>ffd7076498744578d10edabfe7f4a866</thread>
+  <c xmlns='urn:xmpp:crypt'>
+    <data> ** Base64 encoded m_final ** </data>
+    <key> ** Base64 encoded value of new e ** </key>
+    <mac> ** Base64 encoded a_mac ** </mac>
+  </c>
+</message>
+    ]]></example>
+    <p>Note: Bob may send one of more stanzas before he receives Alice's &lt;key/&gt; element (i.e. the stanzas may be in transit at the same time). So, before destroying her old values of &KCsubB; and &KMsubB;, Alice MUST wait until either she receives a stanza encrypted with her new key, or a reasonable time has passed (60 seconds should cover a network round-trip and calculations by a constrained client). Similarly she MUST wait before destroying her old value of x, in case Bob sends one or more stanzas including a &lt;key/&gt; element before he receives Alice's new key. Consequently, if Alice sends several &lt;key/&gt; elements to Bob within a reasonable time without receiving a stanza from him, then she MUST remember several "sets" of the three values: &setA;.</p>
+    <p>Note: Alice never remembers more than one copy of &KCsubA; and &KMsubA;.</p>
+  </section2>
+
+  <section2 topic='Re-Key Acceptance' anchor='rekey-accept'>
+    <p>After receiving and <link url='#decrypt'>decrypting a stanza</link> that contains a &lt;key/&gt; element Bob MUST extract the new value of e and confirm that it is greater than one. Then he MUST calculate K using the new value of e and the value of y from his oldest stored set of values &setB; (i.e. the set that also contains the value of &KCsubA; used to decrypt the stanza):</p>
+    <code>K = &esupy; mod p</code>
+    <p>Bob MUST replace the values of &KCsubA; and &KMsubA; in <em>all</em> his stored sets of values &setB; with values that are derived from K in exactly the same way as Alice did (see <link url='#rekey-init'>Re-Key Initiation</link>).</p>
+    <p>Only if Bob is storing exactly one set of values &setB; then he MUST also replace his values of &KCsubB; and &KMsubB; with values that are derived from K in exactly the same way as Alice did.</p>
+  </section2>
+</section1>
+
+
+<section1 topic='Publishing Old MAC Values' anchor='publish'>
+  <p>Once the expired MAC keys have been published, anyone could create valid arbitrary stanzas with them. This prevents anyone being able to prove the authenticity of a transcript of the encrypted session in the future.</p>
+  <p>Either entity MAY publish old values of &KMsubA; and/or &KMsubB; within any encrypted stanza as long as it knows that all the stanzas that MAY use the old values have been received and validated. Note: A 'man-in-the-middle' could delay the delivery of stanzas indefinitely. So, before Alice publishes &KMsubA; (and &KMsubB;), she MUST wait until she has <em>both</em> sent a re-key to Bob <em>and</em> received a stanza from Bob encrypted with her new key. (She MAY also publish &KMsubB; after she has received a re-key from Bob.)</p>
+  <example caption='Publishing Expired MAC Keys'><![CDATA[
+<message from='alice@example.org/pda' to='bob@example.com/laptop'>
+  <thread>ffd7076498744578d10edabfe7f4a866</thread>
+  <c xmlns='urn:xmpp:crypt'>
+    <data> ** Base64 encoded m_final ** </data>
+    <old> ** Base64 encoded old MAC key ** </old>
+    <old> ** Base64 encoded old MAC key ** </old>
+    <mac> ** Base64 encoded a_mac ** </mac>
+  </c>
+</message>
+  ]]></example>
+  <p>Entities SHOULD ignore any &lt;old/&gt; elements they receive.</p>
+</section1>
+
+
+<section1 topic='Security Considerations' anchor='sec'>
+  <section2 topic='Random Numbers' anchor='sec-prng'>
+    <p>Weak pseudo-random number generators (PRNG) enable successful attacks. Implementors MUST use a cryptographically strong PRNG to generate all random numbers (see &rfc1750;).</p>
+  </section2>
+  <section2 topic='Storage' anchor='sec-storage'>
+    <p>If either entity stores a (re-encrypted) transcript of an encrypted session for future consultation then the Perfect Forward Secrecy offered by this protocol is lost. If the negotiated value of the 'otr' <cite>Chat Session Negotiation</cite> field is 'true' the entities MUST NOT store any part of the encrypted session content (not even in encrypted form).</p>
+  </section2>
+  <section2 topic='Replay Attacks' anchor='sec-replay'>
+    <p>The block cipher counters maintained implicitly by Alice and Bob (&CsubA; and &CsubB;) prevent stanzas being replayed within any encrypted session. They ensure that the MAC will be different for all stanzas, even if the HMAC key and the content of the stanza are identical.</p>
+    <p>Alice and Bob MUST ensure that every value of x and y (and therefore e and d) they generate is unique. This prevents complete online encrypted sessions being replayed.</p>
+  </section2>
+  <section2 topic='Maximum Key Life' anchor='sec-life'>
+    <p>After each key exchange an entity MUST NOT exchange a total of &twosup32; encrypted <em>blocks</em> (not stanzas) before it initiates a key re-exchange (see &rfc4344;). Note: This limitation also ensures the same key and counter values are never used to encrypt two different blocks using counter mode (thus preventing simple attacks).</p>
+    <p>In order to reduce the Perfect Forward Secrecy window of vulnerability, after an extended period of inactivity entities SHOULD re-key (or terminate the encrypted session).</p>
+  </section2>
+  <section2 topic='Extra Responsabilities of Implementors' anchor='sec-general'>
+    <p>Cryptography plays only a small part in an entity's security. Even if it implements this protocol perfectly it may still be vulnerable to other attacks. For examples, an implementation might store encrypted session keys on swap space or save private keys to a file in cleartext! Implementors MUST take very great care when developing applications with secure technologies.</p>
+  </section2>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;. </p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>The &REGISTRAR; shall add 'urn:xmpp:crypt' to its registry of protocol namespaces.</p>
+</section1>
+
+<section1 topic='XML Schemas' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:crypt'
+    xmlns='urn:xmpp:crypt'
+    elementFormDefault='qualified'>
+
+  <xs:element name='data' type='xs:string'/>
+
+  <xs:element name='c'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='data' minOccurs='0' maxOccurs='1'/>
+        <xs:element ref='key' minOccurs='0' maxOccurs='1'/>
+        <xs:element ref='mac' minOccurs='0' maxOccurs='1'/>
+        <xs:element ref='new' minOccurs='0' maxOccurs='1'/>
+        <xs:element ref='old' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='key' type='xs:string'/>
+
+  <xs:element name='mac' type='xs:string'/>
+
+  <xs:element name='new' type='xs:positiveInteger'/>
+
+  <xs:element name='old' type='xs:string'/>
+
+</xs:schema>
+  ]]></code>
+</section1>
+
+</xep>
