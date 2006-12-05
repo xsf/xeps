@@ -8,17 +8,17 @@
   <xsl:template match='/'>
     <html>
       <head>
-        <title><xsl:value-of select='/jep/header/shortname'/></title>
+        <title><xsl:value-of select='/xep/header/shortname'/></title>
         <link rel='stylesheet' type='text/css' href='/xmpp.css' />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
         <link>
           <xsl:attribute name='rel'><xsl:text>alternate</xsl:text></xsl:attribute>
-          <xsl:attribute name='href'><xsl:text>http://www.jabber.org/jeps/jep-</xsl:text><xsl:value-of select='/jep/header/number'/><xsl:text>.html</xsl:text></xsl:attribute>
+          <xsl:attribute name='href'><xsl:text>http://www.xmpp.org/extensions/xep-</xsl:text><xsl:value-of select='/xep/header/number'/><xsl:text>.html</xsl:text></xsl:attribute>
         </link>
         <!-- BEGIN META TAGS FOR DUBLIN CORE -->
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Title</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'><xsl:value-of select='/jep/header/shortname'/></xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='/xep/header/shortname'/></xsl:attribute>
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Publisher</xsl:text></xsl:attribute>
@@ -26,32 +26,32 @@
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Date</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'><xsl:value-of select='/jep/header/revision/date'/></xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='/xep/header/revision/date'/></xsl:attribute>
         </meta>
         <!-- END META TAGS FOR DUBLIN CORE -->
       </head>
       <body>
-        <h1><xsl:value-of select='/jep/header/shortname'/></h1>
+        <h1><xsl:value-of select='/xep/header/shortname'/></h1>
         <p>This page provides information about the XML namespaces defined in 
         <a>
           <xsl:attribute name='href'>
-            <xsl:text>http://www.jabber.org/jeps/jep-</xsl:text>
-            <xsl:value-of select='/jep/header/number'/>
+            <xsl:text>http://www.xmpp.org/extensions/xep-</xsl:text>
+            <xsl:value-of select='/xep/header/number'/>
             <xsl:text>.html</xsl:text>
           </xsl:attribute>
-          <xsl:text>XEP-</xsl:text><xsl:value-of select='/jep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/jep/header/title' />
+          <xsl:text>XEP-</xsl:text><xsl:value-of select='/xep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' />
         </a>
-        (part of the <a href="http://www.jabber.org/jeps/">XEP series</a> published by the <a href="http://www.jabber.org/jsf/">Jabber Software Foundation</a>).</p>
+        (part of the <a href="http://www.xmpp.org/extensions/">XEP series</a> published by the <a href="http://www.jabber.org/jsf/">Jabber Software Foundation</a>).</p>
 
-        <xsl:variable name='schema.count' select='count(/jep/header/schemaloc)'/>
+        <xsl:variable name='schema.count' select='count(/xep/header/schemaloc)'/>
         <xsl:if test='$schema.count &gt; 0'>
-          <p>The following XML schemas are available for the <xsl:value-of select='/jep/header/title' /> protocol:</p>
+          <p>The following XML schemas are available for the <xsl:value-of select='/xep/header/title' /> protocol:</p>
           <ul>
-            <xsl:apply-templates select='/jep/header/schemaloc'/>
+            <xsl:apply-templates select='/xep/header/schemaloc'/>
           </ul>
         </xsl:if>
 
-        <p>Last Updated: <xsl:value-of select='/jep/header/revision/date'/></p>
+        <p>Last Updated: <xsl:value-of select='/xep/header/revision/date'/></p>
 
       </body>
     </html>
