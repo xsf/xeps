@@ -6,13 +6,12 @@
 # Last Modified: 2006-10-03
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
-# HowTo: ./announce.py xepnum dbuser dbpw 'cvsmodsurl'
+# HowTo: ./announce.py xepnum 'cvsmodsurl'
 #        NOTE: the cvsmodsurl MUST be in quotes!
 
 # IMPORTS:
 #
 import glob
-import MySQLdb
 import os
 from select import select
 import smtplib
@@ -35,13 +34,10 @@ now = int(time.time())
 # READ IN ARGS: 
 #
 # 1. XEP number
-# 2. database user
-# 3. database password
+# 2. URL for CVS mods
 
 xepnum = sys.argv[1];
-dbuser = sys.argv[2];
-dbpw = sys.argv[3];
-mods = sys.argv[4];
+mods = sys.argv[2];
 
 xepfile = 'xep-' + xepnum + '.xml'
 
@@ -96,30 +92,6 @@ elif (xepstatus == "Retracted"):
     xepflag = "retract"
 elif (xepstatus == "Deferred"):
     xepflag = "defer"
-
-# UPDATE DATABASE:
-#
-# number is $xepnum
-# name is $title
-# type is $xeptype
-# status is $xepstatus
-# notes is "Version $version of XEP-$xepnum released $date."
-# version is $version
-# last_modified is $now
-# abstract is $abstract
-# changelog is "$remark ($initials)"
-
-db = MySQLdb.connect("localhost", dbuser, dbpw, "foundation")
-cursor = db.cursor()
-theNotes = "Version " + version + " of XEP-" + xepnum + " released " + date + "."
-theLog = remark + " (" + initials + ")"
-if xepflag == "new":
-    theStatement = "INSERT INTO jeps VALUES ('" + str(xepnum) + "', '" + title + "', '" + xeptype + "', '" + xepstatus + "', '" + theNotes + "', '" + str(version) + "', '" + str(now) + "', '" + abstract + "', '" + theLog + "', '0', '5', 'Proposed', 'none');"
-    cursor.execute(theStatement)
-else:
-    theStatement = "UPDATE jeps SET name='" + title + "', type='" + xeptype + "', status='" + xepstatus + "', notes='" + theNotes + "', version='" + str(version) + "', last_modified='" + str(now) + "', abstract='" + abstract + "', changelog='" + theLog + "' WHERE number='" + str(xepnum) + "';"
-    cursor.execute(theStatement) 
-result = cursor.fetchall()
 
 ## SEND MAIL:
 #

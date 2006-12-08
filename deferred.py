@@ -6,12 +6,11 @@
 # Last Modified: 2006-11-01
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
-# HowTo: ./deferred.py xepnum dbuser dbpw 
+# HowTo: ./deferred.py xepnum
 
 # IMPORTS:
 #
 import glob
-import MySQLdb
 import os
 from select import select
 import smtplib
@@ -34,12 +33,8 @@ now = int(time.time())
 # READ IN ARGS: 
 #
 # 1. XEP number
-# 2. database user
-# 3. database password
 
 xepnum = sys.argv[1];
-dbuser = sys.argv[2];
-dbpw = sys.argv[3];
 
 xepfile = 'xep-' + xepnum + '.xml'
 
@@ -72,26 +67,6 @@ initialsNode = (revNode.getElementsByTagName("initials")[0])
 initials = getText(initialsNode.childNodes)
 remarkNode = (revNode.getElementsByTagName("remark")[0])
 remark = getText(remarkNode.childNodes)
-
-# UPDATE DATABASE:
-#
-# number is $xepnum
-# name is $title
-# type is $xeptype
-# status is $xepstatus
-# notes is "Version $version of XEP-$xepnum released $date."
-# version is $version
-# last_modified is $now
-# abstract is $abstract
-# changelog is "$remark ($initials)"
-
-db = MySQLdb.connect("localhost", dbuser, dbpw, "foundation")
-cursor = db.cursor()
-theNotes = "Version " + version + " of XEP-" + xepnum + " released " + date + "; consideration deferred because of inactivity."
-theLog = remark + " (" + initials + ")"
-theStatement = "UPDATE jeps SET name='" + title + "', type='" + xeptype + "', status='Deferred', notes='" + theNotes + "', version='" + str(version) + "', last_modified='" + str(now) + "', abstract='" + abstract + "', changelog='" + theLog + "' WHERE number='" + str(xepnum) + "';"
-cursor.execute(theStatement) 
-result = cursor.fetchall()
 
 # SEND MAIL:
 #
