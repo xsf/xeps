@@ -117,7 +117,7 @@
         </xsl:if>
         <p><hr /></p>
         <!-- XEP INFO -->
-        <h2>XEP Information</h2>
+        <h2>Document Information</h2>
           <p class='indent'>
             Status: 
             <a>
