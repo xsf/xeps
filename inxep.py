@@ -34,7 +34,7 @@ def getText(nodelist):
 
 xepname = sys.argv[1];
 
-xepfile = 'inbox/' + xepname + '.xml'
+xepfile = xepname + '.xml'
 
 # PARSE XEP HEADERS:
 #
@@ -97,7 +97,6 @@ abstractline = 'Abstract: ' + abstract
 urlline = 'URL: http://www.xmpp.org/extensions/inbox/' + xepname + '.html'
 actionline = 'The XMPP Council will decide within 7 days (or at its next meeting) whether to accept this proposal as an official XEP.'
 
-#msg = "From: %s\r\n" % fromaddr
 msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr
 msg = msg + "To: %s\r\n" % toaddrs
 msg = msg + "Subject: %s\r\n" % thesubject
