@@ -2,6 +2,9 @@
 # for all XEPs, generates HTML files and IETF-style reference, then copies XML file
 # usage: ./all.sh
 
+# STAGE
+#xeppath=/var/www/stage.xmpp.org/extensions
+# PRODUCTION
 xeppath=/var/www/xmpp.org/extensions
 
 ls xep-0*.xml > tmp1.txt
@@ -12,7 +15,7 @@ rm tmp*.txt
 while read f
 do
     xsltproc xep.xsl xep-$f.xml > $xeppath/xep-$f.html
-    xsltproc ref.xsl xep-$f.xml > $xeppath/refs/reference.JSF.XEP-$f.xml
+    xsltproc ref.xsl xep-$f.xml > $xeppath/refs/reference.XSF.XEP-$f.xml
     cp xep-$f.xml $xeppath/
 done < nums.txt
 
