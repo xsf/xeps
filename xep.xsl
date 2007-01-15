@@ -23,7 +23,7 @@
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Publisher</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'>Jabber Software Foundation</xsl:attribute>
+          <xsl:attribute name='content'>XMPP Standards Foundation</xsl:attribute>
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Contributor</xsl:text></xsl:attribute>
@@ -65,49 +65,49 @@
         <xsl:variable name='thestatus' select='/xep/header/status'/>
         <xsl:variable name='thetype' select='/xep/header/type'/>
         <xsl:if test='$thestatus = "Active" and $thetype = "Historical"'>
-          <p style='color:green'>NOTICE: This Historical specification provides canonical documentation of a protocol that is in use within the Jabber/XMPP community. This document is not a standards-track specification within the Jabber Software Foundation's standards process; however, it may be converted to standards-track in the future or may be obsoleted by a more modern protocol.</p>
+          <p style='color:green'>NOTICE: This Historical specification provides canonical documentation of a protocol that is in use within the Jabber/XMPP community. This document is not a standards-track specification within the XMPP Standards Foundation's standards process; however, it may be converted to standards-track in the future or may be obsoleted by a more modern protocol.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Active" and $thetype = "Humorous"'>
           <p style='color:green'>NOTICE: This document is Humorous. It MAY provide amusement but SHOULD NOT be taken seriously.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Active" and $thetype = "Informational"'>
-          <p style='color:green'>NOTICE: This Informational specification defines a best practice or protocol profile that has been approved by the XMPP Council and/or the JSF Board of Directors. Implementations are encouraged and the best practice or protocol profile is appropriate for deployment in production systems.</p>
+          <p style='color:green'>NOTICE: This Informational specification defines a best practice or protocol profile that has been approved by the XMPP Council and/or the XSF Board of Directors. Implementations are encouraged and the best practice or protocol profile is appropriate for deployment in production systems.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Active" and $thetype = "Procedural"'>
-          <p style='color:green'>NOTICE: This Procedural document defines a process or activity of the Jabber Software Foundation (JSF) that has been approved by the XMPP Council and/or the JSF Board of Directors. The JSF is currently following the process or activity defined herein and will do so until this document is deprecated or obsoleted.</p>
+          <p style='color:green'>NOTICE: This Procedural document defines a process or activity of the XMPP Standards Foundation (XSF) that has been approved by the XMPP Council and/or the XSF Board of Directors. The XSF is currently following the process or activity defined herein and will do so until this document is deprecated or obsoleted.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Deferred"'>
-          <p style='color:red'>WARNING: Consideration of this document has been Deferred by the Jabber Software Foundation. Implementation of the protocol described herein is not recommended.</p>
+          <p style='color:red'>WARNING: Consideration of this document has been Deferred by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Deprecated"'>
-          <p style='color:red'>WARNING: This document has been deprecated by the Jabber Software Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been deprecated by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Draft"'>
-          <p style='color:green'>NOTICE: The protocol defined herein is a Draft Standard of the Jabber Software Foundation. Implementations are encouraged and the protocol is appropriate for deployment in production systems, but some changes to the protocol are possible before it becomes a Final Standard.</p>
+          <p style='color:green'>NOTICE: The protocol defined herein is a Draft Standard of the XMPP Standards Foundation. Implementations are encouraged and the protocol is appropriate for deployment in production systems, but some changes to the protocol are possible before it becomes a Final Standard.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Historical"'>
-          <p style='color:red'>NOTICE: This Historical document attempts to provide canonical documentation of a protocol that is in use within the Jabber/XMPP community. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the Jabber Software Foundation. This document is not a standards-track specification within the Jabber Software Foundation's standards process; however, it may be converted to standards-track in the future or may be obsoleted by a more modern protocol.</p>
+          <p style='color:red'>NOTICE: This Historical document attempts to provide canonical documentation of a protocol that is in use within the Jabber/XMPP community. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. This document is not a standards-track specification within the XMPP Standards Foundation's standards process; however, it may be converted to standards-track in the future or may be obsoleted by a more modern protocol.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Informational"'>
-          <p style='color:red'>WARNING: This Informational document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the Jabber Software Foundation. Implementation of the best practice or protocol profile described herein is encouraged in exploratory implementations, although production systems should not deploy implementations of this protocol until it advances to a status of Draft.</p>
+          <p style='color:red'>WARNING: This Informational document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. Implementation of the best practice or protocol profile described herein is encouraged in exploratory implementations, although production systems should not deploy implementations of this protocol until it advances to a status of Draft.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Procedural"'>
-          <p style='color:red'>NOTICE: This Procedural document proposes that the process or activity defined herein shall be followed by the Jabber Software Foundation (JSF). However, this process or activity has not yet been approved by the XMPP Council and/or the JSF Board of Directors and is therefore not currently in force.</p>
+          <p style='color:red'>NOTICE: This Procedural document proposes that the process or activity defined herein shall be followed by the XMPP Standards Foundation (XSF). However, this process or activity has not yet been approved by the XMPP Council and/or the XSF Board of Directors and is therefore not currently in force.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Standards Track"'>
-          <p style='color:red'>WARNING: This Standards-Track document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the Jabber Software Foundation. Implementation of the protocol described herein is encouraged in exploratory implementations, but production systems should not deploy implementations of this protocol until it advances to a status of Draft.</p>
+          <p style='color:red'>WARNING: This Standards-Track document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. Implementation of the protocol described herein is encouraged in exploratory implementations, but production systems should not deploy implementations of this protocol until it advances to a status of Draft.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Final"'>
-          <p style='color:green'>NOTICE: The protocol defined herein is a Final Standard of the Jabber Software Foundation and may be considered a stable technology for implementation and deployment.</p>
+          <p style='color:green'>NOTICE: The protocol defined herein is a Final Standard of the XMPP Standards Foundation and may be considered a stable technology for implementation and deployment.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Obsolete"'>
-          <p style='color:red'>WARNING: This document has been obsoleted by the Jabber Software Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been obsoleted by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Proposed"'>
-          <p style='color:red'>NOTICE: This document is currently within Last Call or under consideration by the XMPP Council for advancement to the next stage in the JSF standards process.</p>
+          <p style='color:red'>NOTICE: This document is currently within Last Call or under consideration by the XMPP Council for advancement to the next stage in the XSF standards process.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "ProtoXEP"'>
-          <p style='color:red'>WARNING: This document has not yet been accepted for consideration or approved in any official manner by the Jabber Software Foundation, and this document must not be referred to as an XMPP Extension Protocol (XEP). If this document is accepted as a XEP by the XMPP Council, it will be published at &lt;<a href="http://www.xmpp.org/extensions/">http://www.xmpp.org/extensions/</a>&gt; and announced on the &lt;standards-jig@jabber.org&gt; mailing list.</p>
+          <p style='color:red'>WARNING: This document has not yet been accepted for consideration or approved in any official manner by the XMPP Standards Foundation, and this document must not be referred to as an XMPP Extension Protocol (XEP). If this document is accepted as a XEP by the XMPP Council, it will be published at &lt;<a href="http://www.xmpp.org/extensions/">http://www.xmpp.org/extensions/</a>&gt; and announced on the &lt;standards-jig@jabber.org&gt; mailing list.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Rejected"'>
           <p style='color:red'>WARNING: This document has been Rejected by the XMPP Council. Implementation of the protocol described herein is not recommended under any circumstances.</p>
@@ -119,6 +119,9 @@
         <!-- XEP INFO -->
         <h2>Document Information</h2>
           <p class='indent'>
+            Series: <a href='http://www.xmpp.org/extensions/'>XEP</a><br />
+            Number: <xsl:value-of select='/xep/header/number'/><br />
+            Publisher: <a href='http://www.xmpp.org/xsf/'>XMPP Standards Foundation</a><br />
             Status: 
             <a>
               <xsl:attribute name='href'><xsl:text>http://www.xmpp.org/extensions/xep-0001.html#states-</xsl:text><xsl:value-of select='/xep/header/status'/></xsl:attribute>
@@ -131,21 +134,19 @@
               <xsl:value-of select='/xep/header/type'/>
             </a>
             <br />
-            Number: <xsl:value-of select='/xep/header/number'/><br />
             Version: <xsl:value-of select='/xep/header/revision[position()=1]/version'/><br />
             Last Updated: <xsl:value-of select='/xep/header/revision[position()=1]/date'/><br />
             <xsl:variable name='expires.count' select='count(/xep/header/expires)'/>
             <xsl:if test='$expires.count &gt; 0'>
               Expires: <xsl:value-of select='/xep/header/expires'/><br />
             </xsl:if>
-            Publishing Organization: <a href='http://www.jabber.org/jsf/'>Jabber Software Foundation</a><br />
             <xsl:variable name='ApprovingBody' select='/xep/header/approver'/>
             <xsl:choose>
               <xsl:when test='$ApprovingBody = "Board"'>
-                Approving Body: <a href='http://www.jabber.org/board/'>JSF Board of Directors</a><br />
+                Approving Body: <a href='http://www.xmpp.org/board/'>XSF Board of Directors</a><br />
               </xsl:when>
               <xsl:otherwise>
-                Approving Body: <a href='http://www.jabber.org/council/'>XMPP Council</a><br />
+                Approving Body: <a href='http://www.xmpp.org/council/'>XMPP Council</a><br />
               </xsl:otherwise>
             </xsl:choose>
             <xsl:variable name='dependencies.count' select='count(/xep/header/dependencies/spec)'/>
@@ -196,7 +197,7 @@
             <xsl:if test='$reg.count &gt; 0'>
               Registry: 
               <xsl:variable name='registryURL'>
-                <xsl:text>http://www.jabber.org/registrar/</xsl:text>
+                <xsl:text>http://www.xmpp.org/registrar/</xsl:text>
                 <xsl:value-of select='/xep/header/shortname'/>
                 <xsl:text>.html</xsl:text>
               </xsl:variable>
@@ -226,13 +227,13 @@
         <xsl:variable name='Approver' select='/xep/header/approver'/>
         <xsl:choose>
           <xsl:when test='$Approver = "Board"'>
-            <p class='indent'>The preferred venue for discussion of this document is the Standards-JIG discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards-jig">http://mail.jabber.org/mailman/listinfo/standards-jig</a>&gt;.</p>
-            <p class='indent'>Discussion by the membership of the JSF may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/members">http://mail.jabber.org/mailman/listinfo/members</a>&gt; for details).</p>
+            <p class='indent'>The preferred venue for discussion of this document is the Standards discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards-jig">http://mail.jabber.org/mailman/listinfo/standards-jig</a>&gt;.</p>
+            <p class='indent'>Discussion by the membership of the XSF may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/members">http://mail.jabber.org/mailman/listinfo/members</a>&gt; for details).</p>
           </xsl:when>
           <xsl:otherwise>
-            <p class='indent'>The preferred venue for discussion of this document is the Standards-JIG discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards-jig">http://mail.jabber.org/mailman/listinfo/standards-jig</a>&gt;.</p>
+            <p class='indent'>The preferred venue for discussion of this document is the Standards discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards-jig">http://mail.jabber.org/mailman/listinfo/standards-jig</a>&gt;.</p>
             <xsl:if test='contains(/xep/header/dependencies,"RFC")'>
-              <p class='indent'>Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the JSF-IETF list may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/jsf-ietf">http://mail.jabber.org/mailman/listinfo/jsf-ietf</a>&gt; for details).</p>
+              <p class='indent'>Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the XSF-IETF list may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/jsf-ietf">http://mail.jabber.org/mailman/listinfo/jsf-ietf</a>&gt; for details).</p>
             </xsl:if>
           </xsl:otherwise>
         </xsl:choose>
@@ -240,7 +241,7 @@
         <!-- (we don't put these on Procedural XEPs) -->
         <xsl:if test='$thetype = "Standards Track" or $thetype = "Historical" or $thetype = "Informational"'>
           <h2>Relation to XMPP</h2>
-          <p class='indent'>The Extensible Messaging and Presence Protocol (XMPP) is defined in the XMPP Core (RFC 3920) and XMPP IM (RFC 3921) specifications contributed by the Jabber Software Foundation to the Internet Standards Process, which is managed by the Internet Engineering Task Force in accordance with RFC 2026. Any protocol defined in this document has been developed outside the Internet Standards Process and is to be understood as an extension to XMPP rather than as an evolution, development, or modification of XMPP itself.</p>
+          <p class='indent'>The Extensible Messaging and Presence Protocol (XMPP) is defined in the XMPP Core (RFC 3920) and XMPP IM (RFC 3921) specifications contributed by the XMPP Standards Foundation to the Internet Standards Process, which is managed by the Internet Engineering Task Force in accordance with RFC 2026. Any protocol defined in this document has been developed outside the Internet Standards Process and is to be understood as an extension to XMPP rather than as an evolution, development, or modification of XMPP itself.</p>
           <h2>Conformance Terms</h2>
           <p class='indent'>The following keywords as used in this document are to be interpreted as described in RFC 2119: "MUST", "SHALL", "REQUIRED"; "MUST NOT", "SHALL NOT"; "SHOULD", "RECOMMENDED"; "SHOULD NOT", "NOT RECOMMENDED"; "MAY", "OPTIONAL".</p>
         </xsl:if>

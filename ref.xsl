@@ -66,7 +66,7 @@
         </date>
       </front>
       <seriesInfo>
-        <xsl:attribute name='name'><xsl:text>JSF XEP</xsl:text></xsl:attribute>
+        <xsl:attribute name='name'><xsl:text>XSF XEP</xsl:text></xsl:attribute>
         <xsl:attribute name='value'><xsl:value-of select='/xep/header/number'/></xsl:attribute>
       </seriesInfo>
       <format>

@@ -22,7 +22,7 @@
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Publisher</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'>Jabber Software Foundation</xsl:attribute>
+          <xsl:attribute name='content'>XMPP Standards Foundation</xsl:attribute>
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Date</xsl:text></xsl:attribute>
@@ -41,7 +41,7 @@
           </xsl:attribute>
           <xsl:text>XEP-</xsl:text><xsl:value-of select='/xep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' />
         </a>
-        (part of the <a href="http://www.xmpp.org/extensions/">XEP series</a> published by the <a href="http://www.jabber.org/jsf/">Jabber Software Foundation</a>).</p>
+        (part of the <a href="http://www.xmpp.org/extensions/">XEP series</a> published by the <a href="http://www.xmpp.org/xsf/">XMPP Standards Foundation</a>).</p>
 
         <xsl:variable name='schema.count' select='count(/xep/header/schemaloc)'/>
         <xsl:if test='$schema.count &gt; 0'>
