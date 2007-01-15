@@ -121,7 +121,7 @@
           <p class='indent'>
             Series: <a href='http://www.xmpp.org/extensions/'>XEP</a><br />
             Number: <xsl:value-of select='/xep/header/number'/><br />
-            Publisher: <a href='http://www.xmpp.org/xsf/'>XMPP Standards Foundation</a><br />
+            Publisher: <a href='/xsf/'>XMPP Standards Foundation</a><br />
             Status: 
             <a>
               <xsl:attribute name='href'><xsl:text>http://www.xmpp.org/extensions/xep-0001.html#states-</xsl:text><xsl:value-of select='/xep/header/status'/></xsl:attribute>
