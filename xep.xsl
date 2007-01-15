@@ -143,7 +143,7 @@
             <xsl:variable name='ApprovingBody' select='/xep/header/approver'/>
             <xsl:choose>
               <xsl:when test='$ApprovingBody = "Board"'>
-                Approving Body: <a href='http://www.xmpp.org/board/'>XSF Board of Directors</a><br />
+                Approving Body: <a href='http://www.xmpp.org/xsf/board/'>XSF Board of Directors</a><br />
               </xsl:when>
               <xsl:otherwise>
                 Approving Body: <a href='http://www.xmpp.org/council/'>XMPP Council</a><br />
