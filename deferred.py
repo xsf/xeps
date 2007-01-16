@@ -70,8 +70,8 @@ remark = getText(remarkNode.childNodes)
 
 # SEND MAIL:
 #
-# From: editor@jabber.org
-# To: standards-jig@jabber.org
+# From: editor@xmpp.org
+# To: standards@xmpp.org
 # Subject: DEFERRED: XEP-$xepnum ($title)
 # Body:
 #    XEP-$xepnum ($title) has been Deferred because of inactivity.
@@ -84,11 +84,11 @@ remark = getText(remarkNode.childNodes)
 #    its status will be changed back to Experimental.
 #
 
-fromaddr = "editor@jabber.org"
+fromaddr = "editor@xmpp.org"
 # for testing...
 # toaddrs = "stpeter@jabber.org"
 # for real...
-toaddrs = "standards-jig@jabber.org"
+toaddrs = "standards@xmpp.org"
 
 thesubject = 'DEFERRED: XEP-' + xepnum + " (" + title + ")"
 introline = 'XEP-' + xepnum + ' (' + title + ') has been Deferred because of inactivity.'

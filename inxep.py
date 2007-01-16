@@ -68,8 +68,8 @@ remark = getText(remarkNode.childNodes)
 
 # SEND MAIL:
 #
-# From: editor@jabber.org
-# To: standards-jig@jabber.org
+# From: editor@xmpp.org
+# To: standards@xmpp.org
 # Subject: Proposed XMPP Extension: XEP-$xepnum ($title)
 # Body:
 #    The XMPP Extensions Editor has received a proposal for a new XEP.
@@ -84,11 +84,11 @@ remark = getText(remarkNode.childNodes)
 #    this proposal as a full XEP.
 #
 
-fromaddr = "editor@jabber.org"
+fromaddr = "editor@xmpp.org"
 # for testing...
 # toaddrs = "stpeter@jabber.org"
 # for real...
-toaddrs = "standards-jig@jabber.org"
+toaddrs = "standards@xmpp.org"
 
 thesubject = 'Proposed XMPP Extension: ' + title
 introline = 'The XMPP Extensions Editor has received a proposal for a new XEP.'

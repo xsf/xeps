@@ -107,7 +107,7 @@
           <p style='color:red'>NOTICE: This document is currently within Last Call or under consideration by the XMPP Council for advancement to the next stage in the XSF standards process.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "ProtoXEP"'>
-          <p style='color:red'>WARNING: This document has not yet been accepted for consideration or approved in any official manner by the XMPP Standards Foundation, and this document must not be referred to as an XMPP Extension Protocol (XEP). If this document is accepted as a XEP by the XMPP Council, it will be published at &lt;<a href="http://www.xmpp.org/extensions/">http://www.xmpp.org/extensions/</a>&gt; and announced on the &lt;standards-jig@jabber.org&gt; mailing list.</p>
+          <p style='color:red'>WARNING: This document has not yet been accepted for consideration or approved in any official manner by the XMPP Standards Foundation, and this document must not be referred to as an XMPP Extension Protocol (XEP). If this document is accepted as a XEP by the XMPP Council, it will be published at &lt;<a href="http://www.xmpp.org/extensions/">http://www.xmpp.org/extensions/</a>&gt; and announced on the &lt;standards@xmpp.org&gt; mailing list.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Rejected"'>
           <p style='color:red'>WARNING: This document has been Rejected by the XMPP Council. Implementation of the protocol described herein is not recommended under any circumstances.</p>
@@ -227,11 +227,11 @@
         <xsl:variable name='Approver' select='/xep/header/approver'/>
         <xsl:choose>
           <xsl:when test='$Approver = "Board"'>
-            <p class='indent'>The preferred venue for discussion of this document is the Standards discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards-jig">http://mail.jabber.org/mailman/listinfo/standards-jig</a>&gt;.</p>
+            <p class='indent'>The preferred venue for discussion of this document is the Standards discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">http://mail.jabber.org/mailman/listinfo/standards</a>&gt;.</p>
             <p class='indent'>Discussion by the membership of the XSF may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/members">http://mail.jabber.org/mailman/listinfo/members</a>&gt; for details).</p>
           </xsl:when>
           <xsl:otherwise>
-            <p class='indent'>The preferred venue for discussion of this document is the Standards discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards-jig">http://mail.jabber.org/mailman/listinfo/standards-jig</a>&gt;.</p>
+            <p class='indent'>The preferred venue for discussion of this document is the Standards discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">http://mail.jabber.org/mailman/listinfo/standards</a>&gt;.</p>
             <xsl:if test='contains(/xep/header/dependencies,"RFC")'>
               <p class='indent'>Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the XSF-IETF list may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/jsf-ietf">http://mail.jabber.org/mailman/listinfo/jsf-ietf</a>&gt; for details).</p>
             </xsl:if>

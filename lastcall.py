@@ -72,8 +72,8 @@ remark = getText(remarkNode.childNodes)
 
 # SEND MAIL:
 #
-# From: editor@jabber.org
-# To: standards-jig@jabber.org
+# From: editor@xmpp.org
+# To: standards@xmpp.org
 # Subject: LAST CALL: XEP-$xepnum ($title)
 # Body:
 #    This message constitutes notice of a Last Call
@@ -87,11 +87,11 @@ remark = getText(remarkNode.childNodes)
 #    of business on $enddate.
 #
 
-fromaddr = "editor@jabber.org"
+fromaddr = "editor@xmpp.org"
 # for testing...
 # toaddrs = "stpeter@jabber.org"
 # for real...
-toaddrs = "standards-jig@jabber.org"
+toaddrs = "standards@xmpp.org"
 
 thesubject = 'LAST CALL: XEP-' + xepnum + " (" + title + ")"
 introline = 'This message constitutes notice of a Last Call for XEP-' + xepnum + ' (' + title + ').'

@@ -95,8 +95,8 @@ elif (xepstatus == "Deferred"):
 
 ## SEND MAIL:
 #
-# From: editor@jabber.org
-# To: standards-jig@jabber.org
+# From: editor@xmpp.org
+# To: standards@xmpp.org
 # Subject: UPDATED: XEP-$xepnum ($title)
 # [or "NEW..." if version 0.1]
 # Body:
@@ -106,11 +106,11 @@ elif (xepstatus == "Deferred"):
 #    CVS Diff: $mods
 #    URL: http://www.xmpp.org/extensions/xep-$xepnum.html
 
-fromaddr = "editor@jabber.org"
+fromaddr = "editor@xmpp.org"
 # for testing...
 # toaddrs = "stpeter@jabber.org"
 # for real...
-toaddrs = "standards-jig@jabber.org"
+toaddrs = "standards@xmpp.org"
 
 if xepflag == "new":
     thesubject = 'NEW: XEP-'
