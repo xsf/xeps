@@ -90,6 +90,8 @@ elif (version == "2.0"):
     xepflag = "final"
 elif (xepstatus == "Retracted"):
     xepflag = "retract"
+elif (xepstatus == "Deprecated"):
+    xepflag = "deprecate"
 elif (xepstatus == "Deferred"):
     xepflag = "defer"
 
@@ -124,6 +126,8 @@ elif xepflag == "active":
     thesubject = 'ACTIVE: XEP-'
 elif xepflag == "retract":
     thesubject = 'RETRACTED: XEP-'
+elif xepflag == "deprecate":
+    thesubject = 'DEPRECATED: XEP-'
 elif xepflag == "defer":
     thesubject = 'DEFERRED: XEP-'
 else:
