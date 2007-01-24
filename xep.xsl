@@ -726,10 +726,6 @@
     </div>
   </xsl:template>
 
-  <xsl:template match='pre'>
-    <pre><xsl:apply-templates/></pre>
-  </xsl:template>
-
   <xsl:template match='img'>
     <img>
       <xsl:attribute name='src'><xsl:value-of select='@src'/></xsl:attribute>
@@ -789,31 +785,19 @@
     </p>
   </xsl:template> 
 
-  <xsl:template match='tt'>
-    <tt>
-      <xsl:apply-templates/>
-    </tt>
-  </xsl:template>
-
-  <xsl:template match='em'>
-    <span style='font-style: italic'>
-      <xsl:apply-templates/>
-    </span>
-  </xsl:template>
-
-  <xsl:template match='strong'>
-    <span style='font-weight: bold'>
-      <xsl:apply-templates/>
-    </span>
-  </xsl:template>
+<!-- PRESENTATIONAL ELEMENTS -->
 
   <xsl:template match='cite'>
-    <span style='font-weight: bold'>
+    <span class='cite'>
       <xsl:apply-templates/>
     </span>
   </xsl:template>
 
-<!-- PRESENTATIONAL ELEMENTS -->
+  <xsl:template match='dfn'>
+    <span class='dfn'>
+      <xsl:apply-templates/>
+    </span>
+  </xsl:template>
 
   <xsl:template match='div'>
     <div>
@@ -829,6 +813,16 @@
     </div>
   </xsl:template>
 
+  <xsl:template match='em'>
+    <span class='em'>
+      <xsl:apply-templates/>
+    </span>
+  </xsl:template>
+
+  <xsl:template match='pre'>
+    <pre><xsl:apply-templates/></pre>
+  </xsl:template>
+
   <xsl:template match='span'>
     <span>
       <xsl:variable name='class.count' select='count(@class)'/>
@@ -841,6 +835,18 @@
       </xsl:if>
       <xsl:apply-templates/>
     </span>
+  </xsl:template>
+
+  <xsl:template match='strong'>
+    <span class='strong'>
+      <xsl:apply-templates/>
+    </span>
+  </xsl:template>
+
+  <xsl:template match='tt'>
+    <tt>
+      <xsl:apply-templates/>
+    </tt>
   </xsl:template>
 
 <!-- END OF PRESENTATIONAL ELEMENTS -->
