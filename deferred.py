@@ -109,10 +109,10 @@ msg = msg + "\r\n\n"
 msg = msg + endline
 msg = msg + "\r\n"
 
-#server = smtplib.SMTP('localhost')
-#server.set_debuglevel(1)
-#server.sendmail(fromaddr, toaddrs, msg)
-#server.quit()
+server = smtplib.SMTP('localhost')
+server.set_debuglevel(1)
+server.sendmail(fromaddr, toaddrs, msg)
+server.quit()
 
 # END
 
