@@ -154,10 +154,10 @@ msg = msg + "\r\n\n"
 msg = msg + urlline
 msg = msg + "\r\n\n"
 
-server = smtplib.SMTP('localhost')
-server.set_debuglevel(1)
-server.sendmail(fromaddr, toaddrs, msg)
-server.quit()
+#server = smtplib.SMTP('localhost')
+#server.set_debuglevel(1)
+#server.sendmail(fromaddr, toaddrs, msg)
+#server.quit()
 
 # END
 
