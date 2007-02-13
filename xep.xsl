@@ -3,7 +3,7 @@
 
 <xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='1.0'>
 
-  <xsl:output method='html'/>
+  <xsl:output doctype-public='-//W3C//DTD XHTML 1.0 Transitional//EN' doctype-system='http://www.w3.org/TR/xhtml1/DTD/xhtml1-loose.dtd' method='xml'/>
 
   <xsl:template match='/'>
     <html>
@@ -61,7 +61,7 @@
         <!-- ABSTRACT -->
         <p><xsl:value-of select='/xep/header/abstract'/></p>
         <!-- NOTICE -->
-        <p><hr/></p>
+        <hr />
         <xsl:variable name='thestatus' select='/xep/header/status'/>
         <xsl:variable name='thetype' select='/xep/header/type'/>
         <xsl:if test='$thestatus = "Active" and $thetype = "Historical"'>
@@ -115,7 +115,7 @@
         <xsl:if test='$thestatus = "Retracted"'>
           <p style='color:red'>WARNING: This document has been retracted by the author(s). Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
         </xsl:if>
-        <p><hr /></p>
+        <hr />
         <!-- XEP INFO -->
         <h2>Document Information</h2>
           <p class='indent'>
@@ -246,24 +246,24 @@
           <p class='indent'>The following keywords as used in this document are to be interpreted as described in RFC 2119: "MUST", "SHALL", "REQUIRED"; "MUST NOT", "SHALL NOT"; "SHOULD", "RECOMMENDED"; "SHOULD NOT", "NOT RECOMMENDED"; "MAY", "OPTIONAL".</p>
         </xsl:if>
         <!-- TABLE OF CONTENTS -->
-        <p><hr /></p>
+        <hr />
         <xsl:call-template name='processTOC' />
         <!-- XEP CONTENTS -->
-        <p><hr /></p>
+        <hr />
         <xsl:apply-templates select='/xep/section1'/>
         <!-- NOTES -->
-        <p><hr /></p>
-        <a name="notes"></a><h2>Notes</h2>
+        <hr />
+        <h2><a name="notes"></a>Notes</h2>
         <div class='indent'>
           <xsl:apply-templates select='//note' mode='endlist'/>
         </div>
         <!-- REVISION HISTORY -->
-        <p><hr /></p>
-        <a name="revs"></a><h2>Revision History</h2>
+        <hr />
+        <h2><a name="revs"></a>Revision History</h2>
           <div class='indent'>
             <xsl:apply-templates select='/xep/header/revision'/>
           </div>
-        <p><hr /></p>
+        <hr />
         <p>END</p>
       </body>
     </html>
@@ -285,11 +285,11 @@
   <xsl:template name='processTOC'>
     <h2>Table of Contents</h2>
     <div class='indent'>
-    <dl>
+    <p>
       <xsl:apply-templates select='//section1' mode='toc'/>
-      <dt><a href="#notes">Notes</a></dt>
-      <dt><a href="#revs">Revision History</a></dt>
-    </dl>
+      <br /><a href="#notes">Notes</a>
+      <br /><a href="#revs">Revision History</a>
+    </p>
     </div>
   </xsl:template>
     
@@ -325,7 +325,7 @@
         <br />
       </xsl:if>
       <xsl:if test='$jid.count &gt; 0'>
-        JID: 
+        JabberID: 
         <a>
           <xsl:attribute name='href'>
             <xsl:text>xmpp:</xsl:text>
@@ -387,7 +387,7 @@
       <xsl:number level='multiple' count='section1'/><xsl:text>.</xsl:text>
     </xsl:variable>
     <xsl:variable name='sect2.count' select='count(section2)'/>
-    <dt>
+    <br />
       <xsl:value-of select='$num'/> <xsl:text>  </xsl:text>
       <a>
         <xsl:attribute name='href'>
@@ -404,13 +404,10 @@
         </xsl:attribute>
         <xsl:value-of select='@topic' />
       </a>
-    </dt>
     <xsl:if test='$sect2.count &gt; 0'>
-      <dl>
         <xsl:apply-templates select='section2' mode='toc'>
           <xsl:with-param name='prevnum' select='$num'/>
         </xsl:apply-templates>
-      </dl>
     </xsl:if>
   </xsl:template>
 
@@ -453,7 +450,7 @@
       <xsl:value-of select='$prevnum'/><xsl:number level='multiple' count='section2'/><xsl:text>.</xsl:text>
     </xsl:variable>
     <xsl:variable name='sect3.count' select='count(section3)'/>
-    <dt>
+    <br />&#160;&#160;&#160;
       <xsl:value-of select='$num'/> <xsl:text>  </xsl:text>
       <a>
         <xsl:attribute name='href'>
@@ -469,13 +466,10 @@
         </xsl:attribute>
         <xsl:value-of select='@topic' />
       </a>
-    </dt>
     <xsl:if test='$sect3.count &gt; 0'>
-      <dl>
         <xsl:apply-templates select='section3' mode='toc'>
           <xsl:with-param name='prevnum' select='$num'/>
         </xsl:apply-templates>
-      </dl>
     </xsl:if>
   </xsl:template>
 
@@ -520,7 +514,7 @@
       <xsl:value-of select='$prevnum'/><xsl:number level='multiple' count='section3'/><xsl:text>.</xsl:text>
     </xsl:variable>
     <xsl:variable name='sect4.count' select='count(section4)'/>
-    <dt>
+    <br />&#160;&#160;&#160;&#160;&#160;&#160;
       <xsl:value-of select='$num'/> <xsl:text>  </xsl:text>
       <a>
         <xsl:attribute name='href'>
@@ -536,13 +530,10 @@
         </xsl:attribute>
         <xsl:value-of select='@topic' />
       </a>
-    </dt>
     <xsl:if test='$sect4.count &gt; 0'>
-      <dl>
         <xsl:apply-templates select='section4' mode='toc'>
           <xsl:with-param name='prevnum' select='$num'/>
         </xsl:apply-templates>
-      </dl>
     </xsl:if>
   </xsl:template>
 
@@ -586,7 +577,7 @@
     <xsl:variable name='num'>
       <xsl:value-of select='$prevnum'/><xsl:number level='multiple' count='section4'/><xsl:text>.</xsl:text>
     </xsl:variable>
-    <dt>
+    <br />
       <xsl:value-of select='$num'/> <xsl:text>  </xsl:text>
       <a>
         <xsl:attribute name='href'>
@@ -602,7 +593,6 @@
         </xsl:attribute>
         <xsl:value-of select='@topic' />
       </a>
-    </dt>
   </xsl:template>
 
   <xsl:template match='section4'>
@@ -710,10 +700,8 @@
   </xsl:template>
 
   <xsl:template match='example'>
-    <a>
-      <xsl:attribute name='name'><xsl:text>example-</xsl:text><xsl:number level='any' count='example'/></xsl:attribute>
-    </a>
-    <p class='caption'>Example <xsl:number level='any' count='example'/>.<xsl:text> </xsl:text><xsl:value-of select='@caption'/></p>
+    <p class='caption'>
+    <a><xsl:attribute name='name'><xsl:text>example-</xsl:text><xsl:number level='any' count='example'/></xsl:attribute></a>Example <xsl:number level='any' count='example'/>.<xsl:text> </xsl:text><xsl:value-of select='@caption'/></p>
     <div class='indent'>
       <pre><xsl:apply-templates/></pre>
     </div>
@@ -747,17 +735,32 @@
 
   <xsl:template match='th'>
     <th>
-      <xsl:attribute name='colspan'><xsl:value-of select='@colspan'/></xsl:attribute>
-      <xsl:attribute name='rowspan'><xsl:value-of select='@rowspan'/></xsl:attribute>
+      <xsl:variable name='colspan.count' select='count(@colspan)'/>
+      <xsl:variable name='rowspan.count' select='count(@rowspan)'/>
+      <xsl:if test='$colspan.count &gt; 0'>
+        <xsl:attribute name='colspan'><xsl:value-of select='@colspan'/></xsl:attribute>
+      </xsl:if>
+      <xsl:if test='$colspan.count &gt; 0'>
+        <xsl:attribute name='rowspan'><xsl:value-of select='@rowspan'/></xsl:attribute>
+      </xsl:if>
       <xsl:apply-templates/>
     </th>
   </xsl:template>
 
   <xsl:template match='td'>
     <td>
-      <xsl:attribute name='align'><xsl:value-of select='@align'/></xsl:attribute>
-      <xsl:attribute name='colspan'><xsl:value-of select='@colspan'/></xsl:attribute>
-      <xsl:attribute name='rowspan'><xsl:value-of select='@rowspan'/></xsl:attribute>
+      <xsl:variable name='align.count' select='count(@align)'/>
+      <xsl:variable name='colspan.count' select='count(@colspan)'/>
+      <xsl:variable name='rowspan.count' select='count(@rowspan)'/>
+      <xsl:if test='$align.count &gt; 0'>
+        <xsl:attribute name='align'><xsl:value-of select='@align'/></xsl:attribute>
+      </xsl:if>
+      <xsl:if test='$colspan.count &gt; 0'>
+        <xsl:attribute name='colspan'><xsl:value-of select='@colspan'/></xsl:attribute>
+      </xsl:if>
+      <xsl:if test='$colspan.count &gt; 0'>
+        <xsl:attribute name='rowspan'><xsl:value-of select='@rowspan'/></xsl:attribute>
+      </xsl:if>
       <xsl:apply-templates/>
     </td>
   </xsl:template>
