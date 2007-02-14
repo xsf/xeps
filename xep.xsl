@@ -662,10 +662,6 @@
       <xsl:if test='$start.count &gt; 0'>
         <xsl:attribute name='start'><xsl:value-of select='@start'/></xsl:attribute>
       </xsl:if>
-      <xsl:variable name='type.count' select='count(@type)'/>
-      <xsl:if test='$type.count &gt; 0'>
-        <xsl:attribute name='type'><xsl:value-of select='@type'/></xsl:attribute>
-      </xsl:if>
       <xsl:variable name='class.count' select='count(@class)'/>
       <xsl:if test='$class.count &gt; 0'>
         <xsl:attribute name='class'><xsl:value-of select='@class'/></xsl:attribute>
