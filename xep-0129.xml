@@ -7,11 +7,11 @@
 <xep>
 <header>
   <title>WebDAV File Transfers</title>
-  <abstract>This document specifies best practices for completing Jabber file transfers using WebDAV.</abstract>
+  <abstract>This document a method for completing Jabber file transfers using WebDAV.</abstract>
   &LEGALNOTICE;
   <number>0129</number>
-  <status>Deferred</status>
-  <type>Informational</type>
+  <status>Experimental</status>
+  <type>Standards Track</type>
   <sig>Standards</sig>
   <dependencies>
     <spec>XMPP Core</spec>
@@ -22,24 +22,30 @@
   </dependencies>
   <supersedes/>
   <supersededby/>
-  <shortname>webdav-filexfer</shortname>
+  <shortname>TO BE ASSIGNED</shortname>
   &dizzyd;
   &stpeter;
+  <revision>
+    <version>0.3</version>
+    <date>2007-02-02</date>
+    <initials>psa</initials>
+    <remark><p>Incorporated WedDAV feedback.</p></remark>
+  </revision>
   <revision>
     <version>0.2</version>
     <date>2004-04-13</date>
     <initials>psa</initials>
-    <remark>Added information about service discovery.</remark>
+    <remark><p>Added information about service discovery.</p></remark>
   </revision>
   <revision>
     <version>0.1</version>
     <date>2004-03-12</date>
-    <initials>psa</initials>
-    <remark>Initial version.</remark>
+    <initials>psa/ds</initials>
+    <remark><p>Initial version.</p></remark>
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>&xep0096; defines mechanisms for transferring files between Jabber users, and defines the preferred approach for file transfers in Jabber applications. Unfortunately, the mechanisms defined therein require that both the sender and recipient be online at the same time. However, sometimes it is desirable for the sender to initiate a file transfer while the recipient is offline. One way to make this possible is for the sender to upload the file to a unique URL, then inform the recipient of the URL. The sender could do this by uploading the file to his or her own web server, but not everyone has their own web server. Fortunately, there is a well-defined protocol for such file management operations: a set of HTTP extensions known as WebDAV and defined in &rfc2518;.</p>
+  <p>&xep0096; defines mechanisms for transferring files between Jabber users, and defines the preferred approach for file transfers in Jabber applications. Unfortunately, the mechanisms defined therein require that both the sender and recipient be online at the same time. However, sometimes it is desirable for the sender to initiate a file transfer while the recipient is offline. One way to make this possible is for the sender to upload the file to a unique URL, then inform the recipient of the URL. The sender could do this by uploading the file to his or her own web server, but not everyone has their own web server. Fortunately, there is a well-defined protocol for such file management operations: a set of HTTP extensions known as WebDAV and defined in &rfc2518; (see also the revision-in-progress, &rfc2518bis;).</p>
   <p>The use case in which the recipient is offline is the main driver behind this document. Another WebDAV use case presents itself in environments that use, or even require, WebDAV for file transfers using other protocols (e.g., files attached to email messages). The usual rationale for such deployments is virus-checking: the file is put onto the WebDAV server (either by an end-user or a script that, for example, strips attached files off email messages) and then checked for viruses; only after the virus check successfully completes is the recipient allowed to retrieve the file. A further benefit of such deployments is that it enables the sender to provide the file to multiple recipients. Thus the approach defined herein provides the added benefit of being usable in generic WebDAV environments as well.</p>
 </section1>
 <section1 topic='Requirements' anchor='reqs'>
@@ -50,12 +56,123 @@
   </ol>
 </section1>
 <section1 topic='Terminology' anchor='terms'>
-  <section2 topic='HTTP Terms' anchor='terms-http'>
-    <p>This document inherits terms from RFC 2518, &rfc2616;, and &rfc2617;.</p>
-  </section2>
+  <p>This document inherits terms from <cite>RFC 2518</cite>, &rfc2616;, and &rfc2617;.</p>
+</section1>
+<section1 topic='Protocol Flow' anchor='protocol'>
+  <p>The client SHOULD attempt to PUT the file on the server. <note>Alternatively, the client MAY first attempt one or more HEAD requests to determine a unique URL.</note> The PUT request MUST include an "If-None-Match" header as well as an "Authorization" header that specifies appropriate authentication information.</p>
+  <example caption='Initial PUT Request'><![CDATA[
+  PUT /uniqueurl HTTP/1.1
+  Host: files.shakespeare.lit
+  Authorization: Basic cm9tZW9AbW9udGFndWUubmV0
+  If-None-Match: *
+  Content-Length: xxx
+  Content-Type: text/html
+
+  [body omitted]
+  ]]></example>
+  <p>Prior to storing the file, the server MUST verify the user's authentication credentials via any supported method. When the file is stored, the server also MUST set the owner "live" property to ensure that only the user that originally posted this file is allowed to modify the file in any way. Other users MAY be allowed to see properties and retrieve the file (upon authentication) but MUST NOT be able to DELETE, MOVE, PROPPATCH, etc.</p>
+  <example caption='HTTP OK'><![CDATA[
+  HTTP/1.1 200 OK
+  Date: Thu, 18 Dec 2003 15:01:20 GMT
+  ]]></example>
+  <p>In the absence of any other authorization method (e.g., SAML) in use by the deployed WebDAV server, the client MUST perform a PROPPATCH request to set the list of Jabber IDs authorized to retrieve this file, and the server MUST NOT allow access until this configuration is completed.</p>
+  <example caption='PROPPATCH Request'><![CDATA[
+  PROPPATCH /uniqueurl HTTP/1.1
+  Host: files.shakespeare.lit
+  Authorization: x-xmpp-auth jid=[base64 encoded jid]
+  Content-Type: text/xml
+  Content-Length: 176
+
+  <propertyupdate xmlns='DAV:'>
+    <set>
+      <prop>
+	<jidlist xmlns='http://www.xmpp.org/extensions/xep-0129.html#ns'>
+	  <jid>juliet@capulet.com</jid>
+	  <jid>benvolio@montague.net/home</jid>
+	  <jid>mercutio@capulet.com</jid>
+	</jidlist>
+      </prop>
+    </set>
+  </propertyupdate>]]></example>
+  <p>Note: The semantics of the JID list defined above are:</p>
+  <ul>
+    <li>If a JID is a bare JID (no resource), any fully-qualified form of that JID may access this resource (in the example above, this means that any resource of juliet@capulet.com may access this URL).</li>
+    <li>If a JID includes a resource identifier, only that specific JID may access this URL (in the example above, this means that only the JID benvolio@montague.net/home may access this URL; benvolio@montague.net/other may NOT).</li>
+    <li>If both a full JID and a bare JID are specified in a single JID list, the bare JID takes precedence.</li>
+  </ul>
+  <p>The server responds when the properties have been updated. This is typically a 207 (MultiPart) response, which means that the body can contain multiple status codes, as shown in the following example.</p>
+  <example caption='Server Returns HTTP 207'><![CDATA[
+  HTTP/1.1 207 MultiPart Response
+  Date: Thu, 18 Dec 2003 15:03:20 GMT
+  Content-Type: text/xml; charset=UTF-8
+  Content-Length: 211
+
+  <multistatus xmlns='DAV:'>
+    <response>
+      <href>http://files.shakespeare.lit/uniqueurl</href>
+      <propstat>
+	<prop><jidlist xmlns='http://www.xmpp.org/extensions/xep-0129#ns'/></prop>
+	<status>HTTP/1.1 200 OK</status>
+      </propstat>
+    </response>
+  </multistatus>
+  ]]></example>
+  <p>Now that the file is available via WebDAV and the client has specified what Jabber IDs may access the URL, the sender sends a message to the target user(s) containing the URL of the file, encoded using &xep0066; to ensure backwards compatibility. (The example below shows the file being sent to multiple users using the &xep0033; protocol.)</p>
+  <example caption='Sender Generates XMPP Message with URL'><![CDATA[
+  <message from='romeo@montague.net/pda' to='multicast.jabber.org'>
+    <addresses xmlns='http://jabber.org/protocol/address'>
+      <address type='to' jid='juliet@capulet.com/chamber'/>
+      <address type='to' jid='benvolio@montague.net/home'/>
+      <address type='cc' jid='mercutio@capulet.com/pda'/>
+    </addresses>
+    <x xmlns='jabber:x:oob'>
+      <url>http://files.shakespeare.lit/uniqueurl</url>
+    </x>
+  </message>
+  ]]></example>
+  <p>When the target recipients have received the message, they may then perform an HTTP GET to download the file (the following request is from juliet@capulet.com).</p>
+  <example caption='Recipient GET Request'><![CDATA[
+  GET /uniqueurl HTTP/1.1
+  Host: files.shakespeare.lit
+  Authorization: Basic anVsaWV0QGNhcHVsZXQuY29t
+  ]]></example>
+  <p>The server then checks to ensure that the provided JID is on the jidlist property. If not, the server MUST return an HTTP 403 (Forbidden) error; if so, the server attempts to authorize the user via &xep0070;:</p>
+  <example caption='Confirmation Request Sent via Message'><![CDATA[
+<message type='normal'
+         from='files.shakespeare.lit' 
+         to='juliet@capulet.com'>
+  <thread>e0ffe42b28561960c6b12b944a092794b9683a38</thread>
+  <body>
+    Someone (maybe you) has requested the following file:
+
+       https://files.shakespeare.lit:9345/missive.html.
+
+    The transaction identifier is:
+
+       a7374jnjlalasdf82
+
+    If you wish to confirm the request, please reply
+    to this message by typing "OK". If not, please 
+    reply with "No".
+  </body>
+  <confirm xmlns='http://jabber.org/protocol/http-auth'
+           id='a7374jnjlalasdf82'
+           method='GET'
+           url='https://files.shakespeare.lit:9345/missive.html'/>
+</message>
+  ]]></example>
+  <p>If the <cite>XEP-0070</cite> verification is successful, the server then allows the file to be retrieved:</p>
+  <example caption='Server Returns File'><![CDATA[
+  HTTP/1.1 200 OK
+  Date: Thu, 18 Dec 2003 18:00:00 GMT
+  Content-Type: text/html
+  Content-Length: xxx
+
+  [body omitted]
+  ]]></example>
 </section1>
 <section1 topic='Discovery' anchor='disco'>
-  <p>In order to discover a WebDAV server that supports this protocol, a client SHOULD use &xep0030;. Support for this protocol MUST be advertised by means of a service discovery feature named "http://jabber.org/protocol/webdav-filexfer". An example of the discovery flow is shown below.</p>
+  <p>In order to discover a WebDAV server that supports this protocol, a client SHOULD use &xep0030;. Support for this protocol MUST be advertised by means of a service discovery feature named "http://www.xmpp.org/extensions/xep-0129.html#ns" (see <link url='#ns'>Protocol Namespaces</link>). An example of the discovery flow is shown below.</p>
   <example caption='Client Discovers Services'><![CDATA[
 <iq from='romeo@shakespeare.lit/home'
     id='disco1'
@@ -90,131 +207,48 @@
   <query xmlns='http://jabber.org/protocol/disco#info'>
     ...
     <feature var='http://jabber.org/protocol/http-auth'/>
-    <feature var='http://jabber.org/protocol/webdav-filexfer'/>
+    <feature var='http://www.xmpp.org/extensions/xep-0129.html#ns'/>
     ...
   </query>
 </iq>
   ]]></example>
   <p>The user now knows that the "files.shakespeare.lit" service supports this protocol.</p>
 </section1>
-<section1 topic='Protocol Flow' anchor='protocol'>
-  <p>The client MUST generate a unique URL and execute an HTTP HEAD request to see if that URL exists; this action SHOULD be repeated until the WebDAV server returns a 404 Not Found.</p>
-  <code><![CDATA[
-  HEAD /uniqueurl HTTP/1.1
-  Host: files.shakespeare.lit
-  ]]></code>
-  <p>Because the WebDAV server supports &xep0070;, the initial request fails (since the user did not provide Jabber authentication).</p>
-  <code><![CDATA[
-  HTTP/1.1 401 Unauthorized
-  WWW-Authenticate: x-xmpp-auth realm=xmpp
-  ]]></code>
-  <p>In this case, the client then re-requests the HEAD with the appropriate credentials. Of course, the client could have avoided this by just providing the Authorization header on the initial request.</p>
-  <code><![CDATA[
-  HEAD /uniqueurl HTTP/1.1
-  Host: files.shakespeare.lit
-  Authorization: x-xmpp-auth jid=[base64 encoded jid]
-  ]]></code>
-  <p>Upon receipt of the HEAD request, the server then proceeds to verify the request using the x-xmpp-auth mechanism defined in XEP-0070. If the verification successfully completed, the server MAY cache further operations on this particular URL for the duration of the HTTP connection. It is recommended that clients keep the HTTP connection open, in accordance with HTTP/1.1 semantics.</p>
-  
-  <p>In the "happy" path, the server responds that the requested URL was not found.</p>
-  <code><![CDATA[
-  HTTP/1.1 404 Not Found
-  Date: Thu, 18 Dec 2003 15:00:00 GMT
-  ]]></code>
-  <p>Now the client can PUT the file on the server, with the unique URL. To protect against someone else using the same URL in the timeframe between the HEAD and the PUT, the client MUST include an If-None-Match:* header to ensure that the server will not allow another URL to be overwritten.</p>
-  <code><![CDATA[
-  PUT /uniqueurl HTTP/1.1
-  Host: files.shakespeare.lit
-  Authorization: xmpp-auth (base64 encoded jid)
-  If-None-Match: *
-  Content-Length: xxx
-  Content-Type: text/html
-
-  [body omitted]
-  ]]></code>
-  <p>Prior to storing the file, the server MUST verifies the user's authorization (as detailed above). When the file is stored, the server also MUST set the owner "live" property to ensure that only the user that originally posted this file is allowed to modify the file in any way. Other users MAY be allowed to see properties and retrieve the file (upon authentication) but MUST NOT be able to DELETE, MOVE, PROPPATCH, etc.</p>
-  <code><![CDATA[
-  HTTP/1.1 200 OK
-  Date: Thu, 18 Dec 2003 15:01:20 GMT
-  ]]></code>
-  <p>In the absence of any other authorization method (e.g., SAML) in use by the deployed WebDAV server, the client MUST perform a PROPPATCH request to set the list of Jabber IDs authorized to retrieve this file, and the server MUST NOT allow access until this configuration is completed.</p>
-  <code><![CDATA[
-  PROPPATCH /uniqueurl HTTP/1.1
-  Host: files.shakespeare.lit
-  Authorization: x-xmpp-auth jid=[base64 encoded jid]
-  Content-Type: text/xml
-  Content-Length: 176
-
-  <propertyupdate xmlns='DAV:'>
-    <set>
-      <prop>
-	<jidlist xmlns='jabberjidlisturl'>
-	  <jid>juliet@capulet.com</jid>
-	  <jid>benvolio@montague.net/home</jid>
-	  <jid>mercutio@capulet.com</jid>
-	</jidlist>
-      </prop>
-    </set>
-  </propertyupdate>]]></code>
-  <p>Note: The semantics of the JID list defined above are:</p>
-  <ul>
-    <li>If a JID is a bare JID (no resource), any fully-qualified form of that JID may access this resource (in the example above, this means that any resource of juliet@capulet.com may access this URL).</li>
-    <li>If a JID includes a resource identifier, only that specific JID may access this URL (in the example above, this means that only the JID benvolio@montague.net/home may access this URL; benvolio@montague.net/other may NOT).</li>
-    <li>If both a full JID and a bare JID are specified in a single JID list, the bare JID takes precedence.</li>
-  </ul>
-  <p>The server responds when the properties have been updated. The book "WebDAV: Next-Generation Collaborative Web Authoring" (Prentice Hall, 2004) suggests that this is typically a 207 (MultiPart) response, which means that the body can contain multiple status codes, as shown in the following example.</p>
-  <code><![CDATA[
-  HTTP/1.1 207 MultiPart Response
-  Date: Thu, 18 Dec 2003 15:03:20 GMT
-  Content-Type: text/xml; charset=UTF-8
-  Content-Length: 211
-
-  <multistatus xmlns='DAV:'>
-    <response>
-      <href>http://files.shakespeare.lit/uniqueurl</href>
-      <propstat>
-	<prop><jidlist xmlns='jabberjidlisturi'/></prop>
-	<status>HTTP/1.1 200 OK</status>
-      </propstat>
-    </response>
-  </multistatus>
-  ]]></code>
-  <p>Now that the file is available via WebDAV and the client has specified what Jabber IDs may access the URL, the sender sends a message to the target user(s) containing the URL of the file, encoded using &xep0066; to ensure backwards compatibility. (The example below shows the file being sent to multiple users using the &xep0033; protocol.)</p>
-  <code><![CDATA[
-  <message to='multicast.jabber.org'>
-   <addresses xmlns='http://jabber.org/protocol/address'>
-       <address type='to' jid='juliet@capulet.com/chamber'/>
-       <address type='to' jid='benvolio@montague.net/home'/>
-       <address type='cc' jid='mercutio@capulet.com/pda'/>
-   </addresses>
-    <x xmlns='jabber:x:oob'>
-      <url>http://files.shakespeare.lit/uniqueurl</url>
-    </x>
-  </message>
-  ]]></code>
-  <p>When the target recipients have received the message, they may then perform an HTTP GET to download the file.</p>
-  <code><![CDATA[
-  GET /uniqueurl HTTP/1.1
-  Host: files.shakespeare.lit
-  Authorization: xmpp-auth (base64 encoded JID; juliet@capulet.com)
-  ]]></code>
-  <p>The server then checks to ensure that the provided JID is on the jidlist property, and then authorizes the user via XEP-0070; if a JID not on the jidlist attempts to access the file, the server MUST return an HTTP 403 (Forbidden) error. On completion, the server then allows the file to be retrieved.</p>
-  <code><![CDATA[
-  HTTP/1.1 200 OK
-  Date: Thu, 18 Dec 2003 18:00:00 GMT
-  Content-Type: text/html
-  Content-Length: xxx
-
-  [body omitted]
-  ]]></code>
-</section1>
 <section1 topic='Security Considerations' anchor='security'>
-  <p>See <strong>RFC 2518</strong>, <strong>XMPP Core</strong>, and <strong>XEP-0070</strong> for security considerations related to those protocols, which are used by the profile defined herein. The initiating client MUST ensure that appropriate access controls are specified, normally by performing a PROPPATCH request to set the list of Jabber IDs authorized to retrieve the file. The server MUST NOT allow access to the file until access controls have been specified. In addition, the server MUST NOT allow access to the file by any unauthorized entity.</p>
+  <p>See <cite>RFC 2518</cite>, <cite>XMPP Core</cite>, and <cite>XEP-0070</cite> for security considerations related to those protocols, which are used by the profile defined herein. The initiating client MUST ensure that appropriate access controls are specified, normally by performing a PROPPATCH request to set the list of Jabber IDs authorized to retrieve the file. The server MUST NOT allow access to the file until access controls have been specified. In addition, the server MUST NOT allow access to the file by any unauthorized entity.</p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with &IANA;.</p>
 </section1>
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
-  <p>Upon advancement of this document to a status of Active, the &REGISTRAR; shall add the string "http://jabber.org/protocol/webdav-filexfer" to its registry of service discovery features.</p>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>Until this specification advances to a status of Draft, its associated namespace shall be "http://www.xmpp.org/extensions/xep-0129.html#ns"; upon advancement of this specification, the &REGISTRAR; shall issue one or more permanent namespaces in accordance with the process defined in Section 4 of &xep0053;.</p>
+  </section2>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='http://www.xmpp.org/extensions/xep-0186.html#ns'
+    xmlns='http://www.xmpp.org/extensions/xep-0186.html#ns'
+    elementFormDefault='qualified'>
+
+  <xs:element name='invisible' type='empty'/>
+
+  <xs:element name='visible' type='empty'/>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+  ]]></code>
+</section1>
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>Thanks to Lisa Dusseault and Julian Reschke for their feedback.</p>
 </section1>
 </xep>
