@@ -9,6 +9,7 @@
 <!ENTITY xep0214 "<span class='ref'>BOAH</span> <note>XEP-0214: Bidirectional-streams Over Asynchronous HTTP (BOAH) &lt;<link url='http://www.xmpp.org/extensions/xep-0214.html'>http://www.xmpp.org/extensions/xep-0214.html</link>&gt;.</note>" >
 <!ENTITY ECMAScript "<span class='ref'>ECMAScript (JavaScript)</span> <note>Standard ECMA-262: ECMAScript Language Specification 3rd edition &lt;<link url='http://www.ecma-international.org/publications/standards/Ecma-262.htm'>http://www.ecma-international.org/publications/standards/Ecma-262.htm</link>&gt;.</note>" >
 <!ENTITY rfc4627 "<span class='ref'>RFC 4627</span> <note>RFC 4627: The application/json Media Type for JavaScript Object Notation (JSON) &lt;<link url='http://tools.ietf.org/html/rfc4627'>http://tools.ietf.org/html/rfc4627</link>&gt;.</note>" >
+<!ENTITY violation "&lt;policy-violation/&gt;">
 
 
 ]>
@@ -47,7 +48,7 @@
       <version>1.5</version>
       <date>2006-04-28</date>
       <initials>ip/psa</initials>
-      <remark>Added optional Multiple Streams section; added security considerations about encrypted HTTP connections; recommended use of SSL rather than HTTP over TLS; specified that request ID values must not exceed 9007199254740991; corrected datatypes of inactivity, polling, rid, and wait attributes in the schema; added &lt;any/&gt; and &lt;anyAttribute/&gt; elements to schema to optionally support non-XMPP XML elements and attributes.</remark>
+      <remark>Added optional Multiple Streams section; added security considerations about encrypted HTTP connections; recommended use of SSL rather than HTTP over TLS; specified that request ID values must not exceed 9007199254740991; corrected datatypes of inactivity, polling, rid, and wait attributes in the schema; added &lt;any/&gt; and &lt;anyAttribute/&gt; elements to schema to optionally support non-XMPP XML elements and attributes; depricated HTTP error codes in favor of new terminal binding conditions.</remark>
     </revision>
     <revision>
       <version>1.4</version>
@@ -409,24 +410,39 @@ Content-Length: 98
   </section1>
   <section1 topic='Overactivity' anchor='overactive'>
     <p>The client SHOULD NOT make more simultaneous requests than specified by the 'requests' attribute in the connection manager's <link url="#session-create">Session Creation Response</link>. However the client MAY make one additional request if it is to <link url="#inactive">pause</link> or <link url="#terminate">terminate</link> a session.</p>
-    <p>If during any period the client sends a sequence of new requests (i.e. requests with incremented rid attributes, not repeat requests) longer than the number specified by the 'requests' attribute, and if the connection manager has not yet responded to any of the requests, and if the last request did not include either a 'pause' attribute or a 'type' attribute set to "terminate", then the connection manager SHOULD consider that the client is making too many simultaneous requests and terminate the HTTP session and return an HTTP 403 (Forbidden) error to the client. Note: This behavior applies to equally to normal and polling sessions.</p>
+    <p>If during any period the client sends a sequence of new requests (i.e. requests with incremented rid attributes, not repeat requests) longer than the number specified by the 'requests' attribute, and if the connection manager has not yet responded to any of the requests, and if the last request did not include either a 'pause' attribute or a 'type' attribute set to "terminate", then the connection manager SHOULD consider that the client is making too many simultaneous requests and terminate the HTTP session and return a 'policy-violation' terminal binding error to the client. Note: This behavior applies to equally to normal and polling sessions.</p>
     <example caption="Too many simultaneous requests response">
-<![CDATA[HTTP/1.1 403 Forbidden
-Content-Length: 0]]></example>
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 68
+
+<body type='terminate'
+      condition='policy-violation'
+      xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
     <p>Note: If the connection manager did not specify a 'requests' attribute in the session creation response, then it MUST allow the client to send as many simultaneous requests as it chooses.</p>
-    <p>If during any period the client sends a sequence of new requests equal in length to the number specified by the 'requests' attribute, and if the connection manager has not yet responded to any of the requests, and if the last request was empty and did not include either a 'pause' attribute or a 'type' attribute set to "terminate", and if the last two requests arrived within a period shorter than the number of seconds specified by the 'polling' attribute in the session creation response, then the connection manager SHOULD consider that the client is making requests more frequently than it was permitted and terminate the HTTP session and return an HTTP 403 (Forbidden) error to the client. Note: the behavior for <link url="#poll">Polling Sessions</link> is slightly different.</p>
+    <p>If during any period the client sends a sequence of new requests equal in length to the number specified by the 'requests' attribute, and if the connection manager has not yet responded to any of the requests, and if the last request was empty and did not include either a 'pause' attribute or a 'type' attribute set to "terminate", and if the last two requests arrived within a period shorter than the number of seconds specified by the 'polling' attribute in the session creation response, then the connection manager SHOULD consider that the client is making requests more frequently than it was permitted and terminate the HTTP session and return a 'policy-violation' terminal binding error to the client. Note: the behavior for <link url="#poll">Polling Sessions</link> is slightly different.</p>
     <example caption="Too frequent requests response">
-<![CDATA[HTTP/1.1 403 Forbidden
-Content-Length: 0]]></example>
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 68
+
+<body type='terminate'
+      condition='policy-violation'
+      xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
     <p>Note: If the connection manager did not specify a 'polling' attribute in the session creation response, then it MUST allow the client to send requests as frequently as it chooses.</p>
   </section1>
   <section1 topic='Polling Sessions' anchor='poll'>
     <p>It may not be possible for a constrained client to either use HTTP Pipelining or open more than one HTTP connection with the connection manager at a time. In this case the client SHOULD inform the connection manager by setting the values of the 'wait' and/or 'hold' attributes in its session creation request to "0", and then "poll" the connection manager at regular intervals throughout the session for stanzas it may have received from the server. Note: Even if the client does not request a polling session then the connection manager MAY require a client to use polling by setting the 'requests' attribute (which specifies the number of simultaneous requests the client may make) of its <link url="#session-create">Session Creation Response</link> to "1", however this is NOT RECOMMENDED.</p>
     <p>If a session will use polling the connection manager SHOULD specify a higher than normal value for the 'inactivity' attribute (see <link url="#inactive">Inactivity</link>) in its session creation response. The increase SHOULD be greater than the value it specifies for the 'polling' attribute.</p>
-    <p>If the client sends two consecutive empty new requests (i.e. requests with incremented rid attributes, not repeat requests) within a period shorter than the number of seconds specified by the 'polling' attribute (the shortest allowable polling interval) in the session creation response, and if the connection manager's response to the first request contained no stanzas, then upon reception of the second request the connection manager SHOULD terminate the HTTP session and return an HTTP 403 (Forbidden) error to the client.</p>
+    <p>If the client sends two consecutive empty new requests (i.e. requests with incremented rid attributes, not repeat requests) within a period shorter than the number of seconds specified by the 'polling' attribute (the shortest allowable polling interval) in the session creation response, and if the connection manager's response to the first request contained no stanzas, then upon reception of the second request the connection manager SHOULD terminate the HTTP session and return a 'policy-violation' terminal binding error to the client.</p>
     <example caption="Too frequent polling response">
-<![CDATA[HTTP/1.1 403 Forbidden
-Content-Length: 0]]></example>
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 68
+
+<body type='terminate'
+      condition='policy-violation'
+      xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
     <p>Note: If the connection manager did not specify a 'polling' attribute in the session creation response, then it MUST allow the client to poll as frequently as it chooses.</p>
   </section1>
   <section1 topic='Terminating the HTTP Session' anchor='terminate'>
@@ -449,21 +465,31 @@ Content-Length: 153
   </section1>
   <section1 topic="Request IDs" anchor='rids'>
     <section2 topic='Syntax' anchor='rids-syntax'>
-      <p>The client MUST generate a large, random, positive integer for the initial 'rid' (this prevents proxies from caching Script Syntax responses, also see <link url="#security">Security Considerations</link>) and then increment that value by one for each subsequent request. The client MUST take care to choose an initial 'rid' that will never be incremented above 9007199254740991 <note>9007199254740991 is 2<span class='super'>53</span>-1. Some weakly typed languages use IEEE Standard 754 Doubles to represent all numbers. These Doubles cannot represent integers above 2<span class='super'>53</span> accurately.</note> within the session. In practice, a session would have to be extraordinarily long (or involve the exchange of an extraordinary number of packets) to exceed the defined limit.</p>
+      <p>The client MUST generate a large, random, positive integer for the initial 'rid' (see <link url="#security">Security Considerations</link>, this also prevents non-compliant proxies from caching <link url="#script">Script Syntax</link> responses) and then increment that value by one for each subsequent request. The client MUST take care to choose an initial 'rid' that will never be incremented above 9007199254740991 <note>9007199254740991 is 2<span class='super'>53</span>-1. Some weakly typed languages use IEEE Standard 754 Doubles to represent all numbers. These Doubles cannot represent integers above 2<span class='super'>53</span> accurately.</note> within the session. In practice, a session would have to be extraordinarily long (or involve the exchange of an extraordinary number of packets) to exceed the defined limit.</p>
     </section2>
     <section2 topic='In-Order Message Forwarding' anchor='rids-order'>
       <p>When a client makes simultaneous requests, the connection manager may receive them out of order. The connection manager MUST forward the stanzas to the &server; and respond to the client requests in the order specified by the 'rid' attributes. The client MUST process responses received from the connection manager in the order the requests were made.</p>
       <p>The connection manager SHOULD expect the 'rid' attribute to be within a window of values greater than the 'rid' of the previous request. The size of the window is equal to the maximum number of simultaneous requests allowed by the connection manager. If it receives a request with a 'rid' greater than the values in the window, then the connection manager MUST terminate the session with an error:</p>
       <example caption="Unexpected rid error">
-<![CDATA[HTTP/1.1 404 Not Found
-Content-Length: 0]]></example>
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 68
+
+<body type='terminate'
+      condition='item-not-found'
+      xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
     </section2>
     <section2 topic='Broken Connections' anchor='rids-broken'>
       <p>Unreliable network communications or client constraints can result in broken connections. The connection manager SHOULD remember the 'rid' and the associated HTTP response body of the client's most recent requests which were not session pause requests (see <link url="#inactive">Inactivity</link>) and which did not result in an HTTP or binding error. The number of responses to non-pause requests kept in the buffer SHOULD be the same as the maximum number of simultaneous requests allowed by the connection manager.</p>
-      <p>If the network connection is broken or closed before the client receives a response to a request from the connection manager, then the client MAY resend an exact copy of the original request. Whenever the connection manager receives a request with a 'rid' that it has already received, it SHOULD return an HTTP 200 (OK) response that includes the buffered copy of the original XML response to the client (i.e., a &lt;body/&gt; wrapper possessing appropriate attributes and optionally containing one or more XML stanzas or other allowable XML elements). If the original response is not available (e.g., it is no longer in the buffer), then the connection manager MUST return an HTTP 404 (Not Found) error:</p>
+      <p>If the network connection is broken or closed before the client receives a response to a request from the connection manager, then the client MAY resend an exact copy of the original request. Whenever the connection manager receives a request with a 'rid' that it has already received, it SHOULD return an HTTP 200 (OK) response that includes the buffered copy of the original XML response to the client (i.e., a &lt;body/&gt; wrapper possessing appropriate attributes and optionally containing one or more XML stanzas or other allowable XML elements). If the original response is not available (e.g., it is no longer in the buffer), then the connection manager MUST return an 'item-not-found' terminal binding error:</p>
       <example caption="Response not in buffer error">
-<![CDATA[HTTP/1.1 404 Not Found
-Content-Length: 0]]></example>
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 68
+
+<body type='terminate'
+      condition='item-not-found'
+      xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
       <p>Note: The error is the same whether the 'rid' is too large or too small. This makes it more difficult for an attacker to discover an acceptable value.</p>
     </section2>
   </section1>
@@ -515,10 +541,15 @@ Content-Length: 88
       sid='SomeSID'
       key='bfb06a6f113cd6fd3838ab9d300fdb4fe3da2f7d'
       xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
-      <p>The connection manager MAY verify the key by calculating the SHA-1 hash of the key and comparing it to the 'newkey' attribute of the previous request (or the 'key' attribute if the 'newkey' attribute was not set). If the values do not match (or if it receives a request without a 'key' attribute and the 'newkey' or 'key' attribute of the previous request was set), then the connection manager MUST NOT process the element, MUST terminate the session, and MUST return an HTTP 404 (Not Found) error.</p>
+      <p>The connection manager MAY verify the key by calculating the SHA-1 hash of the key and comparing it to the 'newkey' attribute of the previous request (or the 'key' attribute if the 'newkey' attribute was not set). If the values do not match (or if it receives a request without a 'key' attribute and the 'newkey' or 'key' attribute of the previous request was set), then the connection manager MUST NOT process the element, MUST terminate the session, and MUST return an 'item-not-found' terminal binding error.</p>
       <example caption="Invalid Key Sequence Error">
-<![CDATA[HTTP/1.1 404 Not Found
-Content-Length: 0]]></example>
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 68
+
+<body type='terminate'
+      condition='item-not-found'
+      xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
     </section2>
     <section2 topic="Switching to Another Key Sequence" anchor='keys-switch'>
       <p>A client SHOULD choose a high value for "n" when generating the key sequence. However, if the session lasts long enough that the client arrives at the last key in the sequence K(1) then the client MUST switch to a new key sequence.</p>
@@ -606,7 +637,7 @@ Content-Length: 128
     </section2>
     <section2 topic="Transmitting Stanzas" anchor='multi-transmit'>
       <p>If more than one stream has been opened within a session, then all non-empty &lt;body/&gt; elements sent by the connection manager MUST include a 'stream' attribute that specifies which stream <em>all</em> the stanzas it contains belong to. The client SHOULD include a 'stream' attribute for the same purpose. The client MAY omit the 'stream' attribute if it wants the connection manager to broadcast the stanzas over all open streams. Note: A &lt;body/&gt; element MUST NOT contain different stanzas for different streams.</p>
-      <p>If a stream name does not correspond to one of the session's open streams, then the receiving connection manager SHOULD return an HTTP 404 (Not Found) error, or the receiving client SHOULD terminate the session. However, if the receiving entity has only just closed the stream (and the sender may not have been aware of that when it sent the stanzas), then it MAY instead simply silently ignore any stanzas the &lt;body/&gt; element contains.</p>
+      <p>If a stream name does not correspond to one of the session's open streams, then the receiving connection manager SHOULD return an 'item-not-found' terminal binding error, or the receiving client SHOULD terminate the session. However, if the receiving entity has only just closed the stream (and the sender may not have been aware of that when it sent the stanzas), then it MAY instead simply silently ignore any stanzas the &lt;body/&gt; element contains.</p>
       <p>Note: Empty &lt;body/&gt; elements that do not include a 'from' or 'secure' attribute SHOULD NOT include a 'stream' attribute (since nothing is being transmitted for any stream). If such a &lt;body/&gt; element does include a 'stream' attribute then the receiving entity SHOULD ignore the attribute.</p>
     <example caption="Client sends stanza with a stream name">
 <![CDATA[POST /webclient HTTP/1.1
@@ -638,7 +669,7 @@ Content-Length: 185
     <body>Hi yourself!</body>
   </message>
 </body>]]></example>
-      <p>If no stream name is specified by the connection manager then the client MUST assume the stanzas are associated with the first stream (even if the first stream has been closed - see the 404 error above).</p>
+      <p>If no stream name is specified by the connection manager then the client MUST assume the stanzas are associated with the first stream (even if the first stream has been closed).</p>
       <p>If no stream name is specified by the client then the connection manager MUST broadcast the stanzas over all open streams. <note>The broadcast stanzas may be of any type.</note></p>
     <example caption="Client asks for a stanza to be broadcast">
 <![CDATA[POST /webclient HTTP/1.1
@@ -692,41 +723,52 @@ Content-Length: 68
     <p>There are four types of error and status reporting in HTTP responses:</p>
     <table caption='Error Condition Types'>
       <tr><th>Condition Type</th><th>Description</th></tr>
-      <tr><td><strong>HTTP Conditions</strong></td><td>The connection manager responds to an invalid client request with a standard HTTP error. These are used for binding syntax errors, possible attacks, etc. Note that constrained clients are unable to differentiate between HTTP errors.</td></tr>
-      <tr><td><strong>Terminal Binding Conditions</strong></td><td>These error conditions may be read by constrained clients. They are used for connection manager problems, abstracting stream errors, and communication problems between the connection manager and the &server;.</td></tr>
+      <tr><td><strong>HTTP Conditions</strong>&#32;<em>(Depricated)</em></td><td>The connection manager responds to an invalid request from a <em>legacy</em> client with a standard HTTP error. These are used for binding syntax errors, possible attacks, etc. Note that constrained clients are unable to differentiate between HTTP errors.</td></tr>
+      <tr><td><strong>Terminal Binding Conditions</strong></td><td>These error conditions may be read by constrained clients. They are used for connection manager problems, abstracting stream errors, communication problems between the connection manager and the &server;, and invalid client requests (binding syntax errors, possible attacks, etc.)</td></tr>
       <tr><td><strong>Recoverable Binding Conditions</strong></td><td>These report communication problems between the connection manager and the client. They do not terminate the session. Clients recover from these errors by resending all the preceding &lt;body/&gt; wrappers that have not received responses.</td></tr>
       <tr><td><strong>Transported Protocol Conditions</strong></td><td>Errors relating to the XML stanzas <em>within</em> &lt;body/&gt; wrappers are, in general, defined in the documentation of the protocol being transported. They do not terminate the session.</td></tr>
     </table>
     <p>Full descriptions are provided below.</p>
     <section2 topic='HTTP Conditions' anchor='errorstatus-http'>
-      <p>The following HTTP error and status codes are used in particular ways by this protocol (other HTTP error and status codes may be used as appropriate). Upon receiving an HTTP error (400, 403, 404), the HTTP client MUST consider the HTTP session to be null and void.</p>
+      <p><em>Note: All HTTP codes except 200 have been superseded by Terminal Binding Conditions to allow clients to determine whether the source of errors is the connection manager application or an HTTP intermediary.</em></p>
+      <p>A legacy client (or connection manager) is a client (or connection manager) that did not include a 'ver' attribute in its session creation request (or response). A legacy client (or connection manager) will interpret (or respond with) HTTP error codes according to the table below. Non-legacy connection managers SHOULD NOT send HTTP error codes unless they are communicating with a legacy client. Upon receiving an HTTP error (400, 403, 404), a legacy client or any client that is communicating with a legacy connection manager MUST consider the HTTP session to be null and void. A non-legacy client that is communicating with a non-legacy connection manager MAY consider that the session is still active.</p>
       <table caption='HTTP Error and Status Codes'>
         <tr>
           <th>Code</th>
           <th>Name</th>
+          <th>Superseded&#160;by</th>
           <th>Purpose</th>
         </tr>
         <tr>
           <td>200</td>
           <td>OK</td>
+          <td>-</td>
           <td>Response to valid client request.</td>
         </tr>
         <tr>
           <td>400</td>
           <td>Bad Request</td>
+          <td>bad-request</td>
           <td>Inform client that the format of an HTTP header or binding element is unacceptable (e.g., syntax error).</td>
         </tr>
         <tr>
           <td>403</td>
           <td>Forbidden</td>
+          <td>policy-violation</td>
           <td>Inform client that it has broken the session rules (polling too frequently, requesting too frequently, too many simultaneous requests).</td>
         </tr>
         <tr>
           <td>404</td>
           <td>Not Found</td>
-          <td>Inform client that (1) 'sid' is not valid, (2) 'stream' is not valid, (3) 'rid' is larger than the upper limit of the expected window, (4) connection manager is unable to resend response, (5) 'key' sequence is invalid, (6) Script Syntax is not supported.</td>
+          <td>item-not-found</td>
+          <td>Inform client that (1) 'sid' is not valid, (2) 'stream' is not valid, (3) 'rid' is larger than the upper limit of the expected window, (4) connection manager is unable to resend response, (5) 'key' sequence is invalid.</td>
         </tr>
       </table>
+      <p>No other HTTP error and status codes were defined.</p>
+      <p>Note: Any connection manager (not only legacy connection managers) MAY indicate that it does not support <link url="#script">Script Syntax</link> by sending an HTTP 404 error code (instead of sending a bad-request error using Scrypt Syntax).</p>
+      <example caption="Script Syntax not supported error">
+<![CDATA[HTTP/1.1 404 Not Found
+Content-Length: 0]]></example>
     </section2>
     <section2 topic='Terminal Binding Conditions' anchor='errorstatus-terminal'>
       <p>In any response it sends to the client, the connection manager MAY return a fatal error by setting a 'type' attribute of the &lt;body/&gt; element to "terminate". These binding errors imply that the HTTP session is terminated (unless a 'stream' attribute is specified - see <link url="#multi-error">Multiple Stream Error Conditions</link>).</p>
@@ -746,6 +788,10 @@ Content-Length: 68
           <th>Purpose</th>
         </tr>
         <tr>
+          <td>bad-request*</td>
+          <td>The format of an HTTP header or binding element received from the client is unacceptable (e.g., syntax error), or Script Syntax is not supported.</td>
+        </tr>
+        <tr>
           <td>host-gone</td>
           <td>The target domain specified in the 'to' attribute or the target host or port specified in the 'route' attribute is no longer serviced by the connection manager.</td>
         </tr>
@@ -762,8 +808,16 @@ Content-Length: 68
           <td>The connection manager has experienced an internal error that prevents it from servicing the request.</td>
         </tr>
         <tr>
+          <td>item-not-found*</td>
+          <td>(1) 'sid' is not valid, (2) 'stream' is not valid, (3) 'rid' is larger than the upper limit of the expected window, (4) connection manager is unable to resend response, (5) 'key' sequence is invalid</td>
+        </tr>
+        <tr>
           <td>other-request</td>
           <td>Another request being processed at the same time as this request caused the session to terminate.</td>
+        </tr>
+        <tr>
+          <td>policy-violation*</td>
+          <td>The client has broken the session rules (polling too frequently, requesting too frequently, too many simultaneous requests).</td>
         </tr>
         <tr>
           <td>remote-connection-failed</td>
@@ -786,6 +840,7 @@ Content-Length: 68
           <td>The error is not one of those defined herein; the connection manager SHOULD include application-specific information in the content of the &lt;body/&gt; wrapper.</td>
         </tr>
       </table>
+      <p>* If the client did not include a 'ver' attribute in its session creation request then the connection manager SHOULD send a <em>depricated</em>&#32;<link url="#errorstatus-http">HTTP Error Condition</link> instead of this terminal binding condition. If the connection manager did not include a 'ver' attribute in its session creation response then the client SHOULD expect it to send a <em>depricated</em> HTTP Error Condition instead of this terminal binding condition.</p>
       <p>The following is an example of a "see-other-uri" condition:</p>
       <example caption="See other URI error">
 <![CDATA[HTTP/1.1 200 OK
@@ -834,8 +889,17 @@ Content-Length: 68
     <section2 topic='Introduction' anchor='script-intro'>
       <p>The cross domain security restrictions of some runtime environments permit clients to access pure XML text only if it was received from a specific server (e.g., the hostname a Web client was downloaded from). Astonishingly the same environments typically permit clients to receive and execute scripts from any server! <note>This security hole is unlikely to be closed by browser vendors since it facilitates online advertising.</note> The <link url="#security">Security Considerations</link> section below describes the significant risks of deploying Script Syntax.</p>
       <p>To enable domain-restricted clients to use BOSH with any connection manager, this section proposes an <em>optional</em> alternative to the standard "BOSH Pure Syntax" seen in the other sections of this document. The "BOSH Script Syntax" defined here essentially inserts each &lt;body/&gt; element sent by the client into an HTTP GET header instead of into the body of a POST request. Each &lt;body/&gt; element sent by the connection manager is wrapped inside an &ECMAScript; string and function call. No changes to the &lt;body/&gt; element or to any other aspects of the protocol are required.</p>
-      <p>If, and only if, a client is <em>unable</em> to use the Pure Syntax, then it MAY send a session request to a BOSH connection manager using Script Syntax instead. If the connection manager supports Script Syntax then it MUST send its <link url="#session-create">Session Creation Response</link> using Script Syntax, and all subsequent client requests and connection manager responses within the session MUST be sent using Script Syntax. If the connection manager does not support the "BOSH Script" syntax then it SHOULD return an HTTP 404 (Not Found) error in response to the client's session request:</p>
-      <example caption="Script Syntax not supported error">
+      <p>If, and only if, a client is <em>unable</em> to use the Pure Syntax, then it MAY send a session request to a BOSH connection manager using Script Syntax instead. If the connection manager supports Script Syntax then it MUST send its <link url="#session-create">Session Creation Response</link> using Script Syntax, and all subsequent client requests and connection manager responses within the session MUST be sent using Script Syntax. If the connection manager does not support the "BOSH Script" syntax then it SHOULD return either an 'item-not-found' terminal binding error (in Script Syntax) or an HTTP 404 (Not Found) error in response to the client's session request:</p>
+      <example caption="Script Syntax not supported binding error">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/javascript; charset=utf-8
+Cache-Control: no-store
+Cache-Control: no-cache
+Pragma: no-cache
+Content-Length: 212
+
+_BOSH_("<body type='terminate' condition='item-not-found' xmlns='http://jabber.org/protocol/httpbind'/>")]]></example>
+      <example caption="Script Syntax not supported HTTP error">
 <![CDATA[HTTP/1.1 404 Not Found
 Content-Length: 0]]></example>
     </section2>
@@ -919,7 +983,7 @@ _BOSH_("<body rid='1249243562' sid='SomeSID' xmlns='http://jabber.org/protocol/h
       <p>The session identifier (SID) and initial request identifier (RID) are security-critical and therefore MUST be both unpredictable and nonrepeating (see &rfc1750; for recommendations regarding randomness of SIDs and initial RIDs for security purposes).</p>
     </section2>
     <section2 topic='Script Syntax' anchor='security-script'>
-      <p>To avoid the storage of private communications by third parties, when using the alternative Script Syntax connection managers MUST (and clients SHOULD) include all the appropriate HTTP/1.0 and/or HTTP/1.1 headers necessary to ensure as far as possible that no request or response will ever be cached or stored by any intermediary.</p>
+      <p>To avoid the storage of private communications by third parties, when using the alternative <link url="#script">Script Syntax</link> connection managers MUST (and clients SHOULD) include all the appropriate HTTP/1.0 and/or HTTP/1.1 headers necessary to ensure as far as possible that no request or response will ever be cached or stored by any intermediary.</p>
       <p>The alternative Script Syntax returns code for the client to execute. This code is typically executed immediately without any validation and with the same rights as the code of the client itself. This vulnerability could be exploited to steal passwords and private keys, or to fabricate messages sent from and received by the client, or to forward or modify priviledged information on the servers to which the client has access, or to interfere with any aspect of the client's functionality - limited only by the extent of the runtime environment ("sandbox"), by the extent that naive users may be tricked into doing things outside that environment, and by the attacker's fertile imagination. Therefore, although the client could use Script Syntax with any connection manager on the network, in practice it MUST take care to employ it only with connection managers that the client's user trusts (as much as the server from which the client was downloaded). To prevent a-man-in-the-middle from manipulating the code clients SHOULD only use Script Syntax over encrypted connections (see above). If the client was downloaded over an encrypted connection then it MUST NOT use Script Syntax over connections that are not encrypted.</p>
     </section2>
   </section1>
