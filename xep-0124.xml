@@ -221,7 +221,7 @@ Connection Manager
       <p>The first request from the client to the connection manager requests a new session.</p>
       <p>The &lt;body/&gt; element of the first request SHOULD possess the following attributes (they SHOULD NOT be included in any other requests except as specified in <link url="#multi-add">Adding Streams To A Session</link>):</p>
       <ul>
-        <li><strong>'to'</strong> -- This attribute specifies the target domain.</li>
+        <li><strong>'to'</strong> -- This attribute specifies the target domain of the first stream.</li>
         <li><strong>'xml:lang'</strong> -- This attribute (as defined in Section 2.12 of &w3xml;) specifies the default language of any human-readable XML character data sent or received during the session.</li>
         <li><strong>'ver'</strong> -- This attribute specifies the highest version of the BOSH protocol that the client supports. The numbering scheme is "&lt;major&gt;.&lt;minor&gt;" (where the minor number MAY be incremented higher than a single digit, so it MUST be treated as a separate integer). Note: The 'ver' attribute should not be confused with the version of any protocol being transported.</li>
         <li><strong>'wait'</strong> -- This attribute specifies the longest time (in seconds) that the connection manager is allowed to wait before responding to any request during the session. This enables the client to limit the delay before it discovers any network failure, and to prevent its HTTP/TCP connection from expiring due to inactivity.</li>
@@ -336,15 +336,16 @@ Content-Length: 64
 Content-Type: text/xml; charset=utf-8
 Content-Length: 185
 
-<bosh:body xmlns:bosh='http://jabber.org/protocol/httpbind'
-           xmlns:json='http://json.org/'
-           xmlns='jabber:client'>
+<body xmlns='http://jabber.org/protocol/httpbind'
+      xmlns:json='http://json.org/'>
   <message from='contact@example.com'
-           to='user@example.com'>
+           to='user@example.com'
+           xmlns='jabber:client'>
     <body>Hi yourself!</body>
   </message>
   <message from='friend@example.com'
-           to='user@example.com'>
+           to='user@example.com'
+           xmlns='jabber:client'>
     <body>Hi yourself!</body>
   </message>
   <json:json>
@@ -371,7 +372,7 @@ Content-Length: 185
     }
   ]
   </json:json>
-</bosh:body>]]></example>
+</body>]]></example>
     <p>The client MAY poll the connection manager for incoming stanzas by sending an empty &lt;body/&gt; element.</p>
     <example caption="Requesting XML Stanzas">
 <![CDATA[POST /webclient HTTP/1.1
@@ -390,7 +391,7 @@ Content-Length: 88
     <p>If the connection manager has responded to all the requests it has received within a session and the time since its last response is longer than the maximum inactivity period, then it SHOULD assume the client has been disconnected and terminate the session without informing the client. If the client subsequently makes another request, then the connection manager SHOULD respond as if the session does not exist.</p>
     <p>If the connection manager did not specify a maximum inactivity period in the session creation response, then it SHOULD allow the client to be inactive for as long as it chooses.</p>
     <p>If the session is not a polling session then the connection manager SHOULD specify a relatively short inactivity period to ensure disconnections are discovered as early as possible. The RECOMMENDED time would be a little more than the number of seconds for a comfortable network round trip between the connection manager and the client under difficult network conditions (since the client can be expected to make a new request immediately - see above).</p>
-    <p>If a client encounters an exceptional temporary situation during which it will be unable to send requests to the connection manager for a period of time greater than the maximum inactivity period, and if the connection manager included a 'maxpause' attribute in its <link url="#session-create">Session Creation Response</link>, then the client MAY request a temporary increase to the maximum inactivity period by including a 'pause' attribute in a request. Note: If the connection manager did not specify a 'maxpause' attribute at the start of the session then the client MUST NOT send a 'pause' attribute during the session.</p>
+    <p>If a client encounters an exceptional temporary situation during which it will be unable to send requests to the connection manager for a period of time greater than the maximum inactivity period (e.g., while a runtime environment changes from one web page to another), and if the connection manager included a 'maxpause' attribute in its <link url="#session-create">Session Creation Response</link>, then the client MAY request a temporary increase to the maximum inactivity period by including a 'pause' attribute in a request. Note: If the connection manager did not specify a 'maxpause' attribute at the start of the session then the client MUST NOT send a 'pause' attribute during the session.</p>
     <example caption="Requesting a Session Pause">
 <![CDATA[POST /webclient HTTP/1.1
 Host: httpcm.jabber.org
@@ -403,6 +404,7 @@ Content-Length: 98
       pause='60'
       xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
     <p>Upon reception of a session pause request, if the requested period is not greater than the maximum permitted time, then the connection manager SHOULD respond immediately to all pending requests (including the pause request) and <em>temporarily</em> increase the maximum inactivity period to the requested time. Note: The response to the pause request MUST NOT contain any stanzas.</p>
+    <p>Note: If the client simply wants the connection manager to return all the requests it is holding then it MAY set the value of the 'pause' attribute to be the value of the 'inactivity' attribute in the connection manager's session creation response. (If the client believes it is in danger of becoming disconnected indefinitely then it MAY even request a temporary reduction of the maximum inactivity period by specifying a 'pause' value less than the 'inactivity' value, thus enabling the connection manager to discover any subsequent disconnection more quickly.)</p>
     <p>The connection manager SHOULD set the maximum inactivity period back to normal upon reception of the next request from the client (assuming the connection manager hasn't already terminated the session).</p>
   </section1>
   <section1 topic='Overactivity' anchor='overactive'>
@@ -843,16 +845,23 @@ Content-Length: 0]]></example>
         <li><p>Certain octets within the UTF-8 encoded &lt;body/&gt; element SHOULD be replaced according to the rules for escaping octets within URIs defined by &rfc3986;. Therefore all octets except those representing 7-bit alphanumeric characters or the characters -._~!$&amp;'()*+,;=:@/? should be substituted with a character triplet, consisting of the percent character "%" followed by the two hexadecimal digits that represent the value of the octet.</p></li>
         <li><p>A '?' character and the URI-encoded &lt;body/&gt; element MUST be appended to the URI at which the connection manager is operating within its server.</p></li>
         <li><p>The resulting URI MUST be sent to the connection manager within an HTTP GET request.</p></li>
+        <li><p>Include extra HTTP headers to prevent request/response caching or storage by any intermediary.</p></li>
       </ol>
       <example caption="Requesting an HTTP session in Script Syntax">
 <![CDATA[GET /webclient?%3Cbody%20content='text/xml;%20charset=utf-8'%20hold='1'%20rid='1573741820'%20to='jabber.org'%20route='xmpp:jabber.org:9999'%20secure='true'%20ver='1.6'%20wait='60'%20xml:lang='en'%20xmlns='http://jabber.org/protocol/httpbind'/%3E HTTP/1.1
 Host: httpcm.jabber.org
 Accept-Encoding: gzip, deflate
+Cache-Control: no-store
+Cache-Control: no-cache
+Pragma: no-cache
 Content-Length: 0]]></example>
     <example caption="Transmitting stanzas in Script Syntax">
 <![CDATA[GET /webclient?%3Cbody%20rid='1249243562'%20sid='SomeSID'%20xmlns='http://jabber.org/protocol/httpbind'%3E%3Cmessage%20to='friend@example.com'%20xmlns='jabber:client'%3E%3Cbody%3EI%20said%20%22Hi!%22%3C/body%3E%3C/message%3E%3C/body%3E HTTP/1.1
 Host: httpcm.jabber.org
 Accept-Encoding: gzip, deflate
+Cache-Control: no-store
+Cache-Control: no-cache
+Pragma: no-cache
 Content-Length: 0]]></example>
       <p>Although <cite>RFC 2616</cite> does not limit the length of HTTP URIs, the runtime environment of the client might restrict the length of the URI that it can include in each GET request. <note>Internet Explorer versions 4.0 thru 7.0 have a maximum <em>path</em> length of 2048 characters and a maximum URL length of 2083 characters. Other popular browsers appear to have no limit.</note> In these cases the client MUST reduce the content of the &lt;body/&gt; element accordingly and send the remaining content in subsequent HTTP GET requests wrapped in new &lt;body/&gt; elements (with incremented 'rid' attributes). This is possible since, unlike Pure Syntax, with Script Syntax the connection manager MUST treat the string of characters between the opening and closing &lt;body&gt; tags of each request as part of an octet stream instead of as a set of complete XML stanzas. The content of any one &lt;body/&gt; element MUST NOT be parsed in isolation from the rest of the stream.</p>
     </section2>
@@ -870,19 +879,26 @@ Content-Length: 0]]></example>
             <tr><td>\</td><td>U+005C</td><td>\\</td></tr>
           </table>
           <p>Each Unicode format-control character (i.e., the characters in category "Cf" in the Unicode Character Database, e.g., LEFT-TO-RIGHT MARK or RIGHT-TO-LEFT MARK) MUST also be substituted by its Unicode escape sequence (e.g. \u200e or \u200f).</p></li>
-        <li>The following eight characters MUST be prepended to the &lt;body/&gt; element: <code>_BOSH_("</code></li>
-        <li>The following two characters MUST be appended to the &lt;body/&gt; element: <code>")</code></li>
-        <li>If the client request does not possess a 'content' attribute, then the HTTP Content-Type header of responses MUST be either "text/javascript; charset=utf-8" or "application/x-javascript; charset=utf-8".</li>
+        <li><p>The following eight characters MUST be prepended to the &lt;body/&gt; element: <code>_BOSH_("</code></p></li>
+        <li><p>The following two characters MUST be appended to the &lt;body/&gt; element: <code>")</code></p></li>
+        <li><p>If the client request does not possess a 'content' attribute, then the HTTP Content-Type header of responses MUST be either "text/javascript; charset=utf-8" or "application/x-javascript; charset=utf-8".</p></li>
+        <li><p>Include extra HTTP headers to prevent caching or storage by any intermediary.</p></li>
       </ol>
       <example caption="Session creation response in Script Syntax">
 <![CDATA[HTTP/1.1 200 OK
 Content-Type: text/javascript; charset=utf-8
+Cache-Control: no-store
+Cache-Control: no-cache
+Pragma: no-cache
 Content-Length: 233
 
 _BOSH_("<body wait='60' inactivity='30' polling='5' requests='2' hold='1' accept='deflate,gzip' maxpause='120' sid='SomeSID' charsets='ISO_8859-1 ISO-2022-JP' ver='1.6' from='jabber.org' secure='true' xmlns='http://jabber.org/protocol/httpbind'/>")]]></example>
     <example caption="Receiving stanzas in Script Syntax">
 <![CDATA[HTTP/1.1 200 OK
 Content-Type: text/javascript; charset=utf-8
+Cache-Control: no-store
+Cache-Control: no-cache
+Pragma: no-cache
 Content-Length: 212
 
 _BOSH_("<body rid='1249243562' sid='SomeSID' xmlns='http://jabber.org/protocol/httpbind'>\n<message to='contact@example.com' xmlns='jabber:client'>\n<body>I said \"Hi!\"</body>\n</message>\n</body>")]]></example>
@@ -903,7 +919,8 @@ _BOSH_("<body rid='1249243562' sid='SomeSID' xmlns='http://jabber.org/protocol/h
       <p>The session identifier (SID) and initial request identifier (RID) are security-critical and therefore MUST be both unpredictable and nonrepeating (see &rfc1750; for recommendations regarding randomness of SIDs and initial RIDs for security purposes).</p>
     </section2>
     <section2 topic='Script Syntax' anchor='security-script'>
-      <p>The alternative Script Syntax returns code for the client to execute. This code is typically executed immediately without any validation and with the same rights as the code of the client itself. This vulnerability could be exploited to steal passwords and private keys, or to fabricate messages sent from and received by the client, or to forward or modify priviledged information on the servers to which the client has access, or to interfere with any aspect of the client's functionality - limited only by the extent of the runtime environment ("sandbox"), by the extent that users may be tricked into doing things outside that environment, and by the attacker's fertile imagination. Therefore, although the client could use Script Syntax with any connection manager on the network, in practice it MUST take care to employ it only with connection managers that the client's user trusts (as much as the server from which the client was downloaded). To prevent a-man-in-the-middle from manipulating the code clients SHOULD only use Script Syntax over encrypted connections (see above). If the client was downloaded over an encrypted connection then it MUST NOT use Script Syntax over connections that are not encrypted.</p>
+      <p>To avoid the storage of private communications by third parties, when using the alternative Script Syntax connection managers MUST (and clients SHOULD) include all the appropriate HTTP/1.0 and/or HTTP/1.1 headers necessary to ensure as far as possible that no request or response will ever be cached or stored by any intermediary.</p>
+      <p>The alternative Script Syntax returns code for the client to execute. This code is typically executed immediately without any validation and with the same rights as the code of the client itself. This vulnerability could be exploited to steal passwords and private keys, or to fabricate messages sent from and received by the client, or to forward or modify priviledged information on the servers to which the client has access, or to interfere with any aspect of the client's functionality - limited only by the extent of the runtime environment ("sandbox"), by the extent that naive users may be tricked into doing things outside that environment, and by the attacker's fertile imagination. Therefore, although the client could use Script Syntax with any connection manager on the network, in practice it MUST take care to employ it only with connection managers that the client's user trusts (as much as the server from which the client was downloaded). To prevent a-man-in-the-middle from manipulating the code clients SHOULD only use Script Syntax over encrypted connections (see above). If the client was downloaded over an encrypted connection then it MUST NOT use Script Syntax over connections that are not encrypted.</p>
     </section2>
   </section1>
   <section1 topic='IANA Considerations' anchor='iana'>
@@ -932,32 +949,10 @@ _BOSH_("<body rid='1249243562' sid='SomeSID' xmlns='http://jabber.org/protocol/h
     </xs:documentation>
   </xs:annotation>
 
-  <xs:import namespace='http://etherx.jabber.org/streams'
-             schemaLocation='http://www.xmpp.org/schemas/streams.xsd'/>
-
   <xs:element name='body'>
     <xs:complexType>
-      <xs:choice xmlns:stream='http://etherx.jabber.org/streams'>
-        <xs:element ref='stream:features'
-                minOccurs='0'
-                maxOccurs='1'/>
-        <xs:any namespace='urn:ietf:params:xml:ns:xmpp-tls'
-                minOccurs='0'
-                maxOccurs='1'/>
-        <xs:any namespace='urn:ietf:params:xml:ns:xmpp-sasl'
-                minOccurs='0'
-                maxOccurs='1'/>
-        <xs:any namespace='urn:ietf:params:xml:ns:xmpp-streams'
-                minOccurs='0'
-                maxOccurs='1'/>
-        <xs:any namespace='jabber:client'
-                minOccurs='0'
-                maxOccurs='unbounded'/>
-        <xs:element name='uri'
-                minOccurs='0'
-                maxOccurs='1'
-                type='xs:string'/>
-        <xs:any namespace='##other'
+      <xs:choice>
+        <xs:any namespace='##any'
                 minOccurs='0'
                 maxOccurs='unbounded'
                 processContents='lax'/>
@@ -1007,7 +1002,7 @@ _BOSH_("<body rid='1249243562' sid='SomeSID' xmlns='http://jabber.org/protocol/h
       <xs:attribute name='ver' type='xs:string' use='optional'/>
       <xs:attribute name='wait' type='xs:short' use='optional'/>
       <xs:attribute name='xml:lang' type='xs:string' use='optional'/>
-      <xs:anyAttribute namespace='##other' processContents='lax'/>
+      <xs:anyAttribute namespace='##any' processContents='lax'/>
     </xs:complexType>
   </xs:element>
 
