@@ -1,0 +1,396 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>XMPP Over BOSH</title>
+  <abstract>This document defines how the BOSH protocol (Bidirectional-streams Over Synchronous HTTP) may be used to transport XMPP stanzas.</abstract>
+  &LEGALNOTICE;
+  <number>0206</number>
+  <status>Draft</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0124</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>xbosh</shortname>
+  &ianpaterson;
+  <revision>
+    <version>1.0</version>
+    <date>2007-02-28</date>
+    <initials>ip</initials>
+    <remark><p>Initial version (extracted from XEP-0124 version 1.5); deprecated non-SASL authentication and authid attribute; multiple clarifications and restructuring without changes to protocol itself; added optional version and restart attributes.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>The &xep0124; protocol defines how arbitrary XML elements may be transported efficiently and reliably over HTTP in both directions between a client and server. This document defines some minor extensions to that protocol that enable XMPP streams (as specified in &rfc3920; and &rfc3921;) to be bound to HTTP.</p>
+</section1>
+<section1 topic="&lt;body/&gt; Wrapper Element" anchor='wrapper'>
+    <p>If the BOSH &lt;body/&gt; wrapper is not empty, then it SHOULD contain one of the following:</p>
+    <ul>
+      <li>A complete &lt;stream:features/&gt; element (in which case the BOSH &lt;body/&gt; element MUST include the namespace xmlns:stream='http://etherx.jabber.org/streams').</li>
+      <li>A complete element used for SASL negotiation and qualified by the 'urn:ietf:params:xml:ns:xmpp-sasl' namespace.</li>
+      <li>XML elements extracted from a &lt;stream:error/&gt; element and wrapped in a BOSH &lt;body/&gt; element that features the 'remote-stream-error' terminal error condition. Each such element MUST be qualified either by the namespace 'urn:ietf:params:xml:ns:xmpp-streams' or by an application-specific namespace.</li>
+      <li>One or more complete &lt;message/&gt;, &lt;presence/&gt;, and/or &lt;iq/&gt; elements qualified by the 'jabber:client' namespace.</li>
+    </ul>
+    <p>Note: Many existing XMPP-specific implementations of BOSH clients and connection managers do not specify the namespace of &lt;message/&gt;, &lt;presence/&gt;, or &lt;iq/&gt; elements, since that allows them to forward stanzas without modification (the XMPP &lt;stream:stream/&gt; wrapper element used with TCP typically sets the default namespace to 'jabber:client'). They instead simply assume that the full content of the 'jabber:client' namespace is a subset of the 'http://jabber.org/protocol/httpbind' namespace.</p>
+    <p>Note: Inclusion of TLS negotiation elements is allowed but is NOT RECOMMENDED. The definition of how TLS might be implemented over BOSH is currently beyond the scope of this document.</p>
+</section1>
+<section1 topic="Session Creation Request" anchor='initiate'>
+  <p>The client SHOULD include a 'xmpp:version' attribute qualified by the 'urn:xmpp:xbosh' namespace in its session creation request. This attribute corresponds to the 'version' attribute of the XMPP &lt;stream:stream/&gt; element as defined in <cite>RFC 3920</cite>. The connection manager SHOULD forward the value to the XMPP server accordingly.</p>
+  <example caption="Requesting a session with a version attribute">
+<![CDATA[POST /webclient HTTP/1.1
+Host: httpcm.jabber.org
+Accept-Encoding: gzip, deflate
+Content-Type: text/xml; charset=utf-8
+Content-Length: 104
+
+<body content='text/xml; charset=utf-8'
+      hold='1'
+      rid='1573741820'
+      to='jabber.org'
+      route='xmpp:jabber.org:9999'
+      secure='true'
+      wait='60'
+      xml:lang='en'
+      xmpp:version='1.0'
+      xmlns='http://jabber.org/protocol/httpbind'
+      xmlns:xmpp='urn:xmpp:xbosh'
+      xmlns:stream='http://etherx.jabber.org/streams'/>]]></example>
+  <p>Note: Unlike the protocol defined in &xep0025;, an opening &lt;stream:stream&gt; tag is not sent to the connection manager (since BOSH &lt;body/&gt; elements MUST not contain partial XML elements). Any XML streams between the connection manager and an XMPP server are the responsibility of the connection manager (and beyond the scope of this document).</p>
+</section1>
+<section1 topic="Session Creation Response" anchor='create'>
+  <p>The connection manager SHOULD include a 'xmpp:version' attribute (qualified by the 'urn:xmpp:xbosh' namespace) and a &lt;stream:features/&gt; element (qualified by the 'http://etherx.jabber.org/streams' namespace) in a response as soon as they are available, either in its session creation response, or (if it has not yet received them from the XMPP server) in any subsequent response. If no &lt;stream:features/&gt; element is included in the connection manager's session creation response, then the client SHOULD send empty request elements until it receives a response containing a &lt;stream:features/&gt; element.</p>
+  <p>Note: The same procedure applies to the <em>deprecated</em> XMPP-specific 'authid' attribute of the BOSH &lt;body/&gt; element which contains the value of the XMPP stream ID generated by the XMPP server. This value is needed only by legacy XMPP clients in order to complete digest authentication using the <em>deprecated</em>&#32;&xep0078; protocol. <note>Separate 'sid' and 'authid' attributes are required because the connection manager is not necessarily part of a single XMPP server (e.g., it may handle HTTP connections on behalf of multiple XMPP servers).</note></p>
+  <example caption="Session creation response with stream features">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 674
+
+<body wait='60'
+      inactivity='30'
+      polling='5'
+      requests='2'
+      hold='1'
+      accept='deflate,gzip'
+      sid='SomeSID'
+      secure='true'
+      charsets='ISO_8859-1 ISO-2022-JP'
+      xmpp:version='1.0'
+      authid='ServerStreamID'
+      xmlns='http://jabber.org/protocol/httpbind'
+      xmlns:xmpp='urn:xmpp:xbosh'
+      xmlns:stream='http://etherx.jabber.org/streams'>
+  <stream:features>
+    <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+      <mechanism>DIGEST-MD5</mechanism>
+      <mechanism>PLAIN</mechanism>
+    </mechanisms>
+    <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/>
+    <session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>
+  </stream:features>
+</body>]]></example>
+
+  <example caption="Subsequent response with stream features">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 483
+
+<body xmpp:version='1.0'
+      authid='ServerStreamID'
+      xmlns='http://jabber.org/protocol/httpbind'
+      xmlns:xmpp='urn:xmpp:xbosh'
+      xmlns:stream='http://etherx.jabber.org/streams'>
+  <stream:features>
+    <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+      <mechanism>DIGEST-MD5</mechanism>
+      <mechanism>PLAIN</mechanism>
+    </mechanisms>
+    <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/>
+    <session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>
+  </stream:features>
+</body>]]></example>
+  <p>Note: The client SHOULD ignore any Transport Layer Security (TLS) feature since BOSH channel encryption SHOULD be negotiated at the HTTP layer.</p>
+  <p>TLS compression (as defined in <cite>RFC 3920</cite>) and Stream Compression (as defined in &xep0138;) are NOT RECOMMENDED since compression SHOULD be negotiated at the HTTP layer and using the 'accept' attribute of the BOSH session creation response. TLS compression and Stream Compression SHOULD NOT be used at the same time as HTTP content encoding.</p>
+  <p>Note: The 'xmpp:version' attribute SHOULD also be included on the request and response when adding new streams to a session.</p>
+</section1>
+<section1 topic="Authentication, Resource Binding, and IM Session Establishment" anchor='preconditions-sasl'>
+  <p>A success case for authentication, resource binding, and IM session establishment using the XMPP protocols is shown below. For detailed specification of these protocols (including error cases), refer to <cite>RFC 3920</cite> and <cite>RFC 3921</cite>.</p>
+  <example caption="SASL authentication step 1">
+<![CDATA[POST /webclient HTTP/1.1
+Host: httpcm.jabber.org
+Accept-Encoding: gzip, deflate
+Content-Type: text/xml; charset=utf-8
+Content-Length: 172
+
+<body rid='1573741821'
+      sid='SomeSID'
+      xmlns='http://jabber.org/protocol/httpbind'>
+  <auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='DIGEST-MD5'/>
+</body>]]></example>
+
+
+  <example caption="SASL authentication step 2">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 250
+
+<body xmlns='http://jabber.org/protocol/httpbind'>
+  <challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    cmVhbG09InNvbWVyZWFsbSIsbm9uY2U9Ik9BNk1HOXRFUUdtMmhoIixxb3A9
+    ImF1dGgiLGNoYXJzZXQ9dXRmLTgsYWxnb3JpdGhtPW1kNS1zZXNzCg==
+  </challenge>
+</body>]]></example>
+
+
+  <example caption="SASL authentication step 3">
+<![CDATA[POST /webclient HTTP/1.1
+Host: httpcm.jabber.org
+Accept-Encoding: gzip, deflate
+Content-Type: text/xml; charset=utf-8
+Content-Length: 418
+
+<body rid='1573741822'
+      sid='SomeSID'
+      xmlns='http://jabber.org/protocol/httpbind'>
+  <response xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    dXNlcm5hbWU9InNvbWVub2RlIixyZWFsbT0ic29tZXJlYWxtIixub25jZT0i
+    T0E2TUc5dEVRR20yaGgiLGNub25jZT0iT0E2TUhYaDZWcVRyUmsiLG5jPTAw
+    MDAwMDAxLHFvcD1hdXRoLGRpZ2VzdC11cmk9InhtcHAvZXhhbXBsZS5jb20i
+    LHJlc3BvbnNlPWQzODhkYWQ5MGQ0YmJkNzYwYTE1MjMyMWYyMTQzYWY3LGNo
+    YXJzZXQ9dXRmLTgK
+  </response>
+</body>]]></example>
+
+
+  <example caption="SASL authentication step 4">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 190
+
+<body xmlns='http://jabber.org/protocol/httpbind'>
+  <challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    cnNwYXV0aD1lYTQwZjYwMzM1YzQyN2I1NTI3Yjg0ZGJhYmNkZmZmZAo=
+  </challenge>
+</body>]]></example>
+
+
+  <example caption="SASL authentication step 5">
+<![CDATA[POST /webclient HTTP/1.1
+Host: httpcm.jabber.org
+Accept-Encoding: gzip, deflate
+Content-Type: text/xml; charset=utf-8
+Content-Length: 152
+
+<body rid='1573741823'
+      sid='SomeSID'
+      xmlns='http://jabber.org/protocol/httpbind'>
+  <response xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+</body>]]></example>
+
+
+  <example caption="SASL authentication step 6">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 121
+
+<body xmlns='http://jabber.org/protocol/httpbind'>
+  <success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+</body>]]></example>
+
+
+      <p>Upon receiving the &lt;success/&gt; element, the client SHOULD then ask the connection manager to restart the stream. It does this by setting to "true" the 'xmpp:restart' attribute (qualified by the 'urn:xmpp:xbosh' namespace) of the BOSH &lt;body/&gt; element. Note: The client SHOULD also include 'to' and 'xml:lang' attributes in its request:</p>
+  <example caption="Restart a stream request">
+<![CDATA[POST /webclient HTTP/1.1
+Content-Type: text/xml; charset=utf-8
+Content-Length: 240
+
+<body rid='1573741824'
+      sid='SomeSID'
+      to='jabber.org'
+      xml:lang='en'
+      xmpp:restart='true'
+      xmlns='http://jabber.org/protocol/httpbind'
+      xmlns:xmpp='urn:xmpp:xbosh'/>]]></example>
+
+
+  <p>Upon receiving any request with the 'xmpp:restart' attribute set to "true" the connection manager SHOULD consider the original stream with the XMPP server to be closed (it is not necessary to send a closing &lt;/stream:stream&gt; tag). It SHOULD then initiate a new stream by sending an opening &lt;stream:stream&gt; tag over the same TCP connection to the XMPP server. Upon receiving the response from the XMPP server, it SHOULD forward any available features (or an empty <features/> element) to the client:</p>
+  <example caption="Restart a stream result">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 221
+
+<body xmlns='http://jabber.org/protocol/httpbind'>
+  <stream:features>
+    <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/>
+  </stream:features>
+</body>]]></example>
+
+
+  <example caption="Resource binding request">
+<![CDATA[POST /webclient HTTP/1.1
+Content-Type: text/xml; charset=utf-8
+Content-Length: 240
+
+<body rid='1573741825'
+      sid='SomeSID'
+      xmlns='http://jabber.org/protocol/httpbind'>
+  <iq id='bind_1'
+      type='set'
+      xmlns='jabber:client'>
+    <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+      <resource>httpclient</resource>
+    </bind>
+  </iq>
+</body>]]></example>
+
+
+  <example caption="Resource binding result">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 221
+
+<body xmlns='http://jabber.org/protocol/httpbind'>
+  <iq id='bind_1'
+      type='result'
+      xmlns='jabber:client'>
+    <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+      <jid>stpeter@jabber.org/httpclient</jid>
+    </bind>
+  </iq>
+</body>]]></example>
+
+
+  <example caption="IM session request">
+<![CDATA[POST /webclient HTTP/1.1
+Content-Type: text/xml; charset=utf-8
+Content-Length: 261
+
+<body rid='1573741826'
+      sid='SomeSID'
+      xmlns='http://jabber.org/protocol/httpbind'>
+  <iq from='stpeter@jabber.org/httpclient'
+      id='sess_1'
+      to='jabber.org'
+      type='set'
+      xmlns='jabber:client'>
+    <session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>
+  </iq>
+</body>]]></example>
+
+
+  <example caption="IM session result">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 175
+
+<body xmlns='http://jabber.org/protocol/httpbind'>
+  <iq from='jabber.org'
+      id='sess_1'
+      to='stpeter@jabber.org/httpclient'
+      type='result'
+      xmlns='jabber:client'/>
+</body>]]></example>
+</section1>
+<section1 topic='remote-stream-error' anchor='error'>
+  <p>The content of the &lt;body/&gt; element is a copy of the content of the &lt;stream:error/&gt; element received from the XMPP server:</p>
+  <example caption="Remote error">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 68
+
+<body condition='remote-stream-error'
+      type='terminate'
+      xmlns='http://jabber.org/protocol/httpbind'>
+  <xml-not-well-formed xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
+  <text xmlns='urn:ietf:params:xml:ns:xmpp-streams'
+        xml:lang='en'>
+    Some special application diagnostic information!
+  </text>
+  <escape-your-data xmlns='application-ns'/>
+</body>]]></example>
+</section1>
+<section1 topic='&recipient;' anchor='security'>
+  <p>It is possible that a connection manager will receive a stanza for delivery to a client even though the client connection is no longer active (e.g., before the connection manager is able to inform the XMPP server that the connection has died). In this case, the connection manager would return an error to the XMPP server; it is RECOMMENDED that the connection manager proceed as follows, since the situation is similar to that addressed by point #2 of Section 11.1 of <cite>RFC 3921</cite>:</p>
+  <ol>
+    <li>If the delivered stanza was &PRESENCE;, silently drop the stanza and do not return an error to the sender.</li>
+    <li>If the delivered stanza was &IQ;, return a &unavailable; error to the sender.</li>
+    <li>If the delivered stanza was &MESSAGE;, return a &recipient; error to the sender.</li>
+  </ol>
+  <p>When an XMPP server receives a &MESSAGE; stanza of type "error" containing a &recipient; condition from a connection manager, it SHOULD store the message for later delivery if offline storage is enabled, otherwise route the error stanza to the sender.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>This protocol does not introduce any new security considerations beyond those specified in <cite>BOSH</cite>.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+  <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+      <p>The &REGISTRAR; includes 'urn:xmpp:xbosh' in its registry of protocol namespaces.</p>
+    </section2>
+  </section1>
+  <section1 topic='XML Schema' anchor='schema'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:xbosh'
+    xmlns='urn:xmpp:xbosh'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      XEP-0206: http://www.xmpp.org/extensions/xep-0206.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:import namespace='http://etherx.jabber.org/streams'
+             schemaLocation='http://www.xmpp.org/schemas/streams.xsd'/>
+
+  <xs:element name='body'>
+    <xs:complexType>
+      <xs:choice xmlns:stream='http://etherx.jabber.org/streams'>
+        <xs:element ref='stream:features'
+                minOccurs='0'
+                maxOccurs='1'/>
+        <xs:any namespace='urn:ietf:params:xml:ns:xmpp-tls'
+                minOccurs='0'
+                maxOccurs='1'/>
+        <xs:any namespace='urn:ietf:params:xml:ns:xmpp-sasl'
+                minOccurs='0'
+                maxOccurs='1'/>
+        <xs:any namespace='urn:ietf:params:xml:ns:xmpp-streams'
+                minOccurs='0'
+                maxOccurs='1'/>
+        <xs:any namespace='jabber:client'
+                minOccurs='0'
+                maxOccurs='unbounded'/>
+        <xs:element name='uri'
+                minOccurs='0'
+                maxOccurs='1'
+                type='xs:string'/>
+        <xs:any namespace='##any'
+                minOccurs='0'
+                maxOccurs='unbounded'
+                processContents='lax'/>
+      </xs:choice>
+      <xs:attribute name='restart' type='xs:boolean' use='optional' default='false'/>
+      <xs:attribute name='version' type='xs:string' use='optional' default='1.0'/>
+      <xs:anyAttribute namespace='##any' processContents='lax'/>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>
+    ]]></code>
+  </section1>
+</xep>
