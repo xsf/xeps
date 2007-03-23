@@ -6,8 +6,8 @@
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 <xep>
 <header>
-  <title>Jingle Video Content Description Format</title>
-  <abstract>This document defines a content description format for Jingle video sessions.</abstract>
+  <title>Jingle Video via RTP</title>
+  <abstract>This document defines methods for negotiating Jingle video sessions that use the Real-time Transport Protocol (RTP) for media exchange.</abstract>
   &LEGALNOTICE;
   <number>0180</number>
   <status>Experimental</status>
@@ -27,6 +27,12 @@
     <surname>Chen</surname>
     <email>Milton.Chen@vseelab.com</email>
   </author>
+  <revision>
+    <version>0.5</version>
+    <date>2007-03-23</date>
+    <initials>psa</initials>
+    <remark><p>Added negotiation flow and SDP mapping; renamed to mention RTP as the associated transport; corrected negotiation flow to be consistent with SIP/SDP (each party specifies a list of the payload types it can receive); added profile attribute to content element in order to specify RTP profile in use.</p></remark>
+  </revision>
   <revision>
     <version>0.4</version>
     <date>2006-12-21</date>
@@ -59,23 +65,25 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>&xep0166; can be used to initiate and negotiate a wide range of peer-to-peer sessions. One session type of interest is video exchange. This document specifies a format for describing Jingle video sessions.</p>
+  <p>&xep0166; can be used to initiate and negotiate a wide range of peer-to-peer sessions. One session type of interest is video exchange. This document specifies a format for describing Jingle video sessions, where the media exchange occurs using the Real-time Transport Protocol (see &rfc3550;).</p>
 </section1>
+
 <section1 topic='Requirements' anchor='reqs'>
   <p>The Jingle content description format defined herein is designed to meet the following requirements:</p>
   <ol>
     <li>Enable negotiation of parameters necessary for video exchange.</li>
     <li>Map these parameters to Session Description Protocol (SDP; see &rfc4566;) to enable interoperability.</li>
-    <li>Define informational messages related to video exchange chat.</li>
+    <li>Define informational messages related to video chat.</li>
   </ol>
 </section1>
+
 <section1 topic='Content Description Format' anchor='format'>
-  <p>A Jingle video session is described by one or more encodings contained within a wrapper &DESCRIPTION; element. In the language of <cite>RFC 4566</cite> these encodings are payload-types; therefore, each &lt;payload-type/&gt; child element specifies an encoding that can be used for the video stream. Such encodings are often used in the context of the Real-time Transfer Protocol (RTP; see &rfc3550;) but may be used in other contexts as well. The most common encodings for the Audio/Video Profile (AVP) of RTP are listed in &rfc3551; (these "static" types are reserved from payload ID 0 through payload ID 96), although other encodings are allowed (these "dynamic" types use payload IDs 97 to 127) in accordance with the dynamic assignment rules described in Section 3 of <cite>RFC 3551</cite>. The &PAYLOADTYPE; element's 'id' attribute is REQUIRED and its 'name' attribute is RECOMMENDED. The encodings SHOULD be provided in order of preference.</p>
+  <p>A Jingle video session is described by one or more encodings contained within a wrapper &DESCRIPTION; element. In the language of <cite>RFC 4566</cite> these encodings are payload-types; therefore, each &lt;payload-type/&gt; child element specifies an encoding that can be used for the video stream. Such encodings are often used in the context of the Real-time Transfer Protocol (RTP; see <cite>RFC 3550</cite>) but may be used in other contexts as well. The most common encodings for the Audio/Video Profile (AVP) of RTP are listed in &rfc3551; (these "static" types are reserved from payload ID 0 through payload ID 95), although other encodings are allowed (these "dynamic" types use payload IDs 96 to 127) in accordance with the dynamic assignment rules described in Section 3 of <cite>RFC 3551</cite>. The &PAYLOADTYPE; element's 'id' attribute is REQUIRED and its 'name' attribute is RECOMMENDED. The encodings SHOULD be provided in order of preference.</p>
   <example caption="Video Description Format"><![CDATA[
-    <description xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns/description/video'>
+    <description xmlns='http://www.xmpp.org/extensions/xep-0180.html#ns'>
       <payload-type id='18' name='G729'/>
-      <payload-type id='97' name='IPCMWB'/>
-      <payload-type id='98' name='L16' transparent='true'/>
+      <payload-type id='99' name='IPCMWB'/>
+      <payload-type id='105' name='L16' transparent='true'/>
       <payload-type id='13' name='CN'/>
     </description>
   ]]></example>
@@ -134,11 +142,143 @@
     </tr>
   </table>
 </section1>
-<section1 topic='Mapping to Session Description Protocol' anchor='sdp'>
-  <p>To follow.</p>
+
+<section1 topic='Negotiating a Jingle Audio Session' anchor='negotiation'>
+  <p>When the initiator sends a session-initiate stanza to the receiver, the &DESCRIPTION; element includes all of the payload types that the initiator can receive for Jingle video (each one encapsulated in a separate &PAYLOADTYPE; element):</p>
+  <example caption="Initiation Example"><![CDATA[
+<iq from='romeo@montague.net/orchard' to='juliet@capulet.com/balcony' id='jinglevideo1' type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'>
+          action='session-initiate'
+          initiator='romeo@montague.net/orchard'
+          sid='v1d30k1ll3dth3r4d10st4r'>
+    <content content='initiator' name='this-is-the-video-content' profile='RTP/AVP'>
+      <description xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns'>
+        <payload-type id='96' name='theora'/>
+        <payload-type id='18' name='G729'/>
+        <payload-type id='103' name='L16' clockrate='16000' channels='2'/>
+        <payload-type id='98' name='x-ISAC' clockrate='8000'/>
+      </description>
+      <transport xmlns='http://www.xmpp.org/extensions/xep-0176.html#ns'/>
+    </content>
+  </jingle>
+</iq>
+  ]]></example>
+  <p>Upon receiving the session-initiate stanza, the receiver determines whether it can provisionally accept the session and proceed with the negotiation. The general Jingle error cases are specified in <cite>XEP-0166</cite>. In addition, the receiver must determine if it supports any of the payload types advertised by the initiator; if it does not, it MUST reject the session by sending a &lt;unsupported-codecs/&gt; error:</p>
+  <example caption="Receiver Does Not Support Codecs"><![CDATA[
+<iq type='error' from='juliet@capulet.com/balcony' to='romeo@montague.net/orchard' id='jinglevideo1'>
+  <error type='cancel'>
+    <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <unsupported-codecs xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns-errors'/>
+  </error>
+</iq>
+  ]]></example>
+  <p>If there is no error, the receiver provisionally accepts the session:</p>
+  <example caption="Receiver Provisionally Accepts Session"><![CDATA[
+  <iq from='juliet@capulet.com/balcony' to='romeo@montague.net/orchard' id='jinglevideo1' type='result' />
+  ]]></example>
+  <p>The receiver then should send a list of the payload types that it can receive via a Jingle "content-accept" (or "session-accept") action. The list that the receiver sends MAY include any payload types (not a subset of the payload types sent by the initiator) but SHOULD retain the ID numbers and order specified by the initiator.</p>
+  <example caption="Receiver Accepts Content Type"><![CDATA[
+<iq from='juliet@capulet.com/balcony' to='romeo@montague.net/orchard' id='jinglevideo2' type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'>
+          action='content-accept'
+          initiator='romeo@montague.net/orchard'
+          sid='v1d30k1ll3dth3r4d10st4r'>
+    <content content='initiator' name='this-is-the-video-content' profile='RTP/AVP'>
+      <description xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns'>
+        <payload-type id='96' name='theora'/>
+        <payload-type id='18' name='G729'/>
+        <payload-type id='0' name='PCMU' />
+        <payload-type id='102' name='iLBC'/>
+        <payload-type id='4' name='G723'/>
+        <payload-type id='8' name='PCMA'/>
+        <payload-type id='13' name='CN'/>
+      </description> 
+    <transport xmlns='http://www.xmpp.org/extensions/xep-0176.html#ns'/>
+    </content>
+  </jingle>
+</iq>
+  ]]></example>
+  <p>The initiator acknowledges the 'content-accept' with an empty IQ result:</p>
+  <example caption="Initiator Acknowledges Modified Content Description"><![CDATA[
+  <iq from='romeo@montegue.net/orchard' to='juliet@capulet.com/balcony' id='jinglevideo2' type='result' />
+  ]]></example>
+  <p>After successful transport negotiation (not shown here), the receiver then accepts the session:</p>
+  <example caption="Receiver Definitively Accepts the Session"><![CDATA[
+<iq type='set' from='juliet@capulet.com/balcony' to='romeo@montague.net/orchard' id='accept1'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-accept'
+          initiator='romeo@montague.net/orchard'
+          responder='juliet@capulet.com/balcony'
+          sid='v1d30k1ll3dth3r4d10st4r'>
+    <content creator='initiator' name='this-is-the-video-content' profile='RTP/AVP'>
+      <description xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns'/>
+      <transport xmlns='http://www.xmpp.org/extensions/xep-0176.html#ns'>
+        <candidate component='2'
+                   foundation='1'
+                   generation='0' 
+                   ip='192.0.2.3' 
+                   network='1'
+                   port='45664'
+                   priority='1107821052'
+                   protocol='udp'
+                   pwd='asd88fgpdd777uzjYhagZg'
+                   type='srflx'
+                   ufrag='8hhy'/>
+      </transport>
+    </content>
+  </jingle>
+</iq>
+  ]]></example>
+  <p>And the initiator acknowledges session acceptance:</p>
+  <example caption="Initiator Acknowledges Session Acceptance"><![CDATA[
+  <iq from='romeo@montague.net/orchard' to='juliet@capulet.com/balcony' id='accept1' type='result' />
+  ]]></example>
 </section1>
-<section1 topic='Service Discovery' anchor='disco'>
-  <p>If an entity supports the Jingle video content description format, it MUST advertise that fact by returning a feature of "http://www.xmpp.org/extensions/xep-0166.html#ns/description/video" in response to &xep0030; information requests.</p>
+
+<section1 topic='Mapping to Session Description Protocol' anchor='sdp'>
+  <p>If the payload type is static (payload-type IDs 0 through 95 inclusive), it MUST be mapped to a media field defined in <cite>RFC 4566</cite>. The generic format for the media field is as follows:</p>
+  <code><![CDATA[
+m=<media> <port> <transport> <fmt list>
+  ]]></code>
+  <p>In the context of Jingle video sessions, the &lt;media&gt; is "video", the &lt;port&gt; is the preferred port for such communications (which may be determined dynamically), the &lt;transport&gt; is whatever transport method is negotiated via the Jingle negotiation (e.g., "RTP/AVT"), and the &lt;fmt list&gt; is the payload-type ID.</p>
+  <p>For example, consider the following static payload-type:</p>
+  <example caption="Jingle Format for Static Payload-Type"><![CDATA[
+<payload-type id="13" name="CN"/>
+  ]]></example>
+  <example caption="SDP Mapping of Static Payload-Type"><![CDATA[
+m=video 9999 RTP/AVP 13
+  ]]></example>
+  <p>If the payload type is dynamic (payload-type IDs 96 through 127 inclusive), it SHOULD be mapped to an SDP media field plus an SDP attribute field named "rtpmap".</p>
+  <p>For example, consider a VC-1 payload such as that described in &rfc4425;:</p>
+  <example caption="Jingle Format for Dynamic Payload-Type"><![CDATA[
+<payload-type id='98' name='vc1' height='288' width='352'/>
+  ]]></example>
+  <example caption="SDP Mapping of Dynamic Payload-Type"><![CDATA[
+m=video 49170 RTP/AVP 98
+a=rtpmap:98 vc1/90000
+a=fmtp:98 width=352;height=288;
+  ]]></example>
+  <p>As noted, if additional parameters are to be specified, they shall be represented as attributes of the &lt;payload-type/&gt; element of the child &lt;parameter/&gt; element, as in the following example.</p>
+  <example caption="Jingle Format for Dynamic Payload-Type With Parameters"><![CDATA[
+<payload-type id='98' name='vc1'>
+  <parameter name='bitrate' value='384000'/>
+  <parameter name='buffer' value='2000'/>
+  <parameter name='config' value='4e291800'/>
+  <parameter name='framerate' value='15000'/>
+  <parameter name='level' value='2'/>
+  <parameter name='profile' value='0'/>
+</payload-type>
+  ]]></example>
+  <example caption="SDP Mapping of Dynamic Payload-Type With Parameters"><![CDATA[
+m=video 49170 RTP/AVP 98
+a=rtpmap:98 vc1/90000
+a=fmtp:98 profile=0;level=2;width=352;height=288;framerate=15000;
+bitrate=384000;buffer=2000;config=4e291800
+  ]]></example>
+</section1>
+
+<section1 topic='Determining Support' anchor='support'>
+  <p>If an entity supports Jingle video exchanges via RTP, it MUST advertise that fact by returning a feature of "http://www.xmpp.org/extensions/xep-0180.html#ns" in response to &xep0030; information requests.</p>
   <example caption="Service Discovery Information Request"><![CDATA[
 <iq from='romeo@montague.net/orchard' 
     id='disco1'
@@ -155,41 +295,47 @@
   <query xmlns='http://jabber.org/protocol/disco#info'>
     ...
     <feature var='http://www.xmpp.org/extensions/xep-0166.html#ns'/>
-    <feature var='http://www.xmpp.org/extensions/xep-0166.html#ns/description/video'/>
+    <feature var='http://www.xmpp.org/extensions/xep-0180.html#ns'/>
     ...
   </query>
 </iq>
   ]]></example>
 </section1>
+
 <section1 topic='Informational Messages' anchor='info'>
-  <p>Informational messages may be sent by either party within the context of Jingle to communicate the status of a Jingle video session, device, or principal. The informational message MUST be an IQ-set containing a &JINGLE; element of type "content-info", where the informational message is a payload  element qualified by the 'http://www.xmpp.org/extensions/xep-0166.html#ns/info/video' namespace. No payload elements have yet been defined, but will be specified in a future version of this document.</p>
+  <p>Informational messages may be sent by either party within the context of Jingle to communicate the status of a Jingle video session, device, or principal. The informational message MUST be an IQ-set containing a &JINGLE; element of type "session-info", where the informational message is a payload  element qualified by the 'http://www.xmpp.org/extensions/xep-0180.html#ns-info' namespace. No payload elements have yet been defined, but may be specified in a future version of this document.</p>
 </section1>
+
 <section1 topic='Implementation Notes' anchor='impl'>
   <section2 topic='Codecs' anchor='impl-codecs'>
     <p>Support for the Theora codec <note>See &lt;<link url='http://www.theora.org/'>http://www.theora.org/</link>&gt;.</note> is RECOMMENDED.</p>
   </section2>
 </section1>
+
 <section1 topic='Security Considerations' anchor='security'>
-  <p>The description of a format for video sessions introduces no known security vulnerabilities.</p>
+  <p>In order to secure the data stream, implementations SHOULD use encryption methods appropriate to the transport method and media being exchanged; for example, in the case of UDP, that would include Datagram Transport Layer Security (DTLS) as specified in &rfc4347;. &sdpdtls; defines such methods for the Session Description Protocol; the relevant RTP profile (e.g., "UDP/TLS/RTP/AVP" for transporting the RTP stream over DTLS with UDP) shall be specified as the value of the &CONTENT; element's 'profile' attribute.</p>
 </section1>
+
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with &IANA;.</p>
 </section1>
+
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
   <section2 topic='Protocol Namespaces' anchor='ns'>
     <p>Until this specification advances to a status of Draft, its associated namespaces shall be "http://www.xmpp.org/extensions/xep-0180.html#ns" and "http://www.xmpp.org/extensions/xep-0180.html#ns-info"; upon advancement of this specification, the &REGISTRAR; shall issue permanent namespaces in accordance with the process defined in Section 4 of &xep0053;.</p>
   </section2>
   <section2 topic='Jingle Content Description Formats' anchor='registrar-content'>
-    <p>The XMPP Registrar shall include "video" in its registry of Jingle content description formats. The registry submission is as follows:</p>
+    <p>The XMPP Registrar shall include "video-rtp" in its registry of Jingle content description formats. The registry submission is as follows:</p>
     <code><![CDATA[
 <content>
-  <name>video</name>
-  <desc>Jingle sessions that support video exchanges</desc>
+  <name>video-rtp</name>
+  <desc>Jingle sessions that support video exchange via the Real-time Transport Protocol</desc>
   <doc>XEP-0180</doc>
 </content>
     ]]></code>
   </section2>
 </section1>
+
 <section1 topic='XML Schemas' anchor='schema'>
   <section2 topic='Content Description Format' anchor='schema-content'>
     <code><![CDATA[
@@ -197,8 +343,8 @@
 
 <xs:schema
     xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='http://www.xmpp.org/extensions/xep-0166.html#ns/description/video'
-    xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns/description/video'
+    targetNamespace='http://www.xmpp.org/extensions/xep-0180.html#ns'
+    xmlns='http://www.xmpp.org/extensions/xep-0180.html#ns'
     elementFormDefault='qualified'>
 
   <xs:element name='description'>
