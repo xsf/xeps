@@ -23,9 +23,15 @@
   &scottlu;
   &joebeda;
   &stpeter;
-  &hildjj;
-  &seanegan;
   &robmcqueen;
+  &seanegan;
+  &hildjj;
+  <revision>
+    <version>0.13</version>
+    <date>2007-03-23</date>
+    <initials>psa/ram</initials>
+    <remark><p>Simplified signalling process and state chart; Removed session-redirect action (use redirect error instead); removed content-decline action; removed transport-* actions (except transport-info for ICE negotiation); removed description-* actions; simplified syntax to allow only one transport per content type; corrected syntax of creator attribute to be either initiator or responder (not JIDs); added profile attribute to content element in order to specify RTP profile in use.</p></remark>
+  </revision>
   <revision>
     <version>0.12</version>
     <date>2006-12-21</date>
@@ -200,7 +206,7 @@
     </tr>
     <tr>
       <td>Content Type</td>
-      <td>The combination of one content description and at least one content transport method.</td>
+      <td>The combination of one content description and one content transport method.</td>
     </tr>
     <tr>
       <td>Content Description</td>
@@ -226,14 +232,14 @@
   <p>This document defines the semantics and syntax for overall session management. It also provides pluggable "slots" for content description formats and content transport methods, which are specified in separate documents; however, for the sake of completeness, this document also includes examples for all of the actions related to description formats and transport methods.</p>
   <p>At the most basic level, the process for negotiating a Jingle session is as follows:</p>
   <ol>
-    <li>One user (the "initator") sends to another user (the "receiver") a session request with one content type, which includes one content description and (say) two potential transport methods.</li>
+    <li>One user (the "initator") sends to another user (the "receiver") a session request with one content type, which includes at least one content type.</li>
     <li>If the receiver wants to proceed, it provisionally accepts the request by sending an IQ result.</li>
     <li>Both the initiator and receive start exchanging possible transport candidates as quickly as possible (these are sent in quick succession before further negotiation in order to minimize the time required before media data can flow).</li>
     <li>These candidates are checked for connectivity.</li>
     <li>As soon as the receiver finds a candidate over which media can flow, the receiver sends to the initiator a "session-accept" action.</li>
     <li>The parties start sending media over the negotiated candidate.</li>
   </ol>
-  <p>If the parties later discover a better candidate, they perform a "transport-modify" or "content-modify" negotiation and then switch to the better candidate. Naturally they can also modify various other parameters related to the session (e.g., adding video to a voice chat).</p>
+  <p>If the parties later discover a better candidate, they perform a "content-modify" negotiation and then switch to the better candidate. Naturally they can also modify various other parameters related to the session (e.g., adding video to a voice chat).</p>
   <section2 topic='Overall Session Management' anchor='concepts-session'>
     <p>The state machine for overall session management (i.e., the state per Session ID) is as follows:</p>
     <code>
@@ -245,26 +251,23 @@
          |/                        |
 PENDING  o---------------------+   |
          |  | session-info,    |   |
-         |  | content-remove,  |   |
-         |  | content-modify,  |   |
          |  | content-accept,  |   |
-         |  | content-decline  |   |
+         |  | content-modify,  |   |
+         |  | content-remove   |   |
          |  +------------------+   |
          |                         |
          | session-accept          |
          |                         |
  ACTIVE  o---------------------+   |
          |  | session-info,    |   |
-         |  | content-add,     |   |
-         |  | content-remove,  |   |
-         |  | content-modify,  |   |
          |  | content-accept,  |   |
-         |  | content-decline  |   |
+         |  | content-add,     |   |
+         |  | content-modify,  |   |
+         |  | content-remove   |   |
          |  +------------------+   |
          |                         |
          +-------------------------+
                                    |
-                                   | session-redirect,
                                    | session-terminate
                                    |
                                    o ENDED
@@ -276,121 +279,48 @@ PENDING  o---------------------+   |
       <li>ENDED</li>
     </ol>
     <p>The actions related to management of the overall Jingle session are as follows:</p>
-    <ol start='1'>
-      <li>content-accept</li>
-      <li>content-add</li>
-      <li>content-decline</li>
-      <li>content-modify</li>
-      <li>content-remove</li>
-      <li>session-accept</li>
-      <li>session-initiate</li>
-      <li>session-info</li>
-      <li>session-redirect</li>
-      <li>session-terminate</li>
-    </ol>
-    <p>These actions are defined in greater detail under <link url='#actions'>Jingle Actions</link>.</p>
-  </section2>
-  <section2 topic='Session Content' anchor='concepts-content'>
-    <p>The content type of a session is made up of two aspects:</p>
-    <ol start='1'>
-      <li>The content description format specifies the "what" of the session (e.g., audio).</li>
-      <li>The content transport method defines "how" the data shall be exchanged (e.g., raw UDP).</li>
-    </ol>
-    <p>The &CONTENT; element also specifies who will be sending content (the initiator, the recipient, or both).</p>
-    <section3 topic='Content Description Formats' anchor='concepts-description'>
-      <p>When negotiating the session and its content type, the entities involved in the session need to exchange content description formats. The approach taken herein is to specify pure session description information in separate specifications, one for each content description format (audio, video, etc.). <note>While it is possible to send raw Session Description Protocol (SDP) data for the session descriptions (the approach that was taken in <cite>XEP-0111</cite>), this is not necessarily helpful, since SDP is not structured data, not all SDP data is needed or used in the most common use cases, and SDP has been heavily extended in several useful directions that are not captured in the core SDP specification.</note> The session negotiation must contain some content description format(s), which are defined in separate specifications. Those specifications also define the state chart for the content description format in question.</p>
-      <p>The generic state machine for management of any given content description format is as follows:</p>
-      <code>
-         START
-           o  
-           |   
-           | session-initiate
-           | content-add
-           |
-[PENDING]  o-------------+
-           |   |         | description-info
-           |   |_________| description-modify
-           |
-           | content-accept
-           | description-accept
-           | session-accept
-           |
-           |  _____________________o [MODIFYING]
-           | / description-modify / \
-           |/                    /   |
- [ACTIVE]  o--------------------/    | 
-           |\  description-decline   |
-           | \______________________/
-           |   description-accept
-           |
-           | content-remove
-           | session-terminate
-           |
-           o [ENDED]
-      </code>
-      <p>The states related to management of content description formats are:</p>
-      <ol>
-        <li>PENDING</li>
-        <li>ACTIVE</li>
-        <li>MODIFYING</li>
-        <li>ENDED</li>
-      </ol>
-      <p>The actions related to management of content description formats are as follows:</p>
-      <ol>
-        <li>description-accept</li>
-        <li>description-decline</li>
-        <li>description-info</li>
-        <li>description-modify</li>
-      </ol>
-      <p>These actions are defined in greater detail under <link url='#actions'>Jingle Actions</link>.</p>
-    </section3>
-    <section3 topic='Content Transport Methods' anchor='concepts-transport'>
-      <p>As with the content description formats, the content transport methods are defined in separate specifications. Possible content transport methods include Real-time Transport Protocol (RTP) with Interactive Connectivity Establishment (ICE) and raw UDP. The relevant specifications also define the state chart for the content transport method in question.</p>
-      <p>The generic state machine for any given content transport method is as follows:</p>
-      <code>
-         START
-           o  
-           |   
-           | session-initiate
-           | content-add
-           |
-[PENDING]  o-------------+
-           |   |         | transport-info
-           |   |_________| transport-modify
-           |
-           | content-accept
-           | session-accept
-           | transport-accept
-           |
-           |  ___________________o [MODIFYING]
-           | / transport-modify / \
-           |/                  /   |
- [ACTIVE]  o------------------/    | 
-           |\  transport-decline   |
-           | \____________________/
-           |   transport-accept
-           |
-           | content-remove
-           | session-terminate
-           |
-           o [ENDED]
-      </code>
-      <p>The states related to management of content transport methods are:</p>
-      <ol>
-        <li>PENDING</li>
-        <li>ACTIVE</li>
-        <li>MODIFYING</li>
-        <li>ENDED</li>
-      </ol>
-      <p>The actions related to management of content transport methods are as follows:</p>
-      <ol>
-        <li>transport-accept</li>
-        <li>transport-decline</li>
-        <li>transport-info</li>
-        <li>transport-modify</li>
-      </ol>
-      <p>These actions are defined in greater detail under <link url='#actions'>Jingle Actions</link>.</p>
-    </section3>
+    <table caption='Jingle Actions'>
+      <tr>
+        <th>Action</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>content-accept</td>
+        <td>Accept a content-add or content-remove action received from another party.</td>
+      </tr>
+      <tr>
+        <td>content-add</td>
+        <td>Add one or more new content types to the session. This action MUST NOT be sent while the session is in the PENDING state. <note>In the event that a session contains two unidirectional streams of the same type because a content-add was issued simultaneously by both parties, it is RECOMMENDED that participants close the duplicate stream in favour of that created by the session initiator, which should be made bidirectional with a 'content-modify' action by the responder.</note></td>
+      </tr>
+      <tr>
+        <td>content-modify</td>
+        <td>Change an existing content type. The recipient MUST NOT reply to a content-modify action with another content-modify action.</td>
+      </tr>
+      <tr>
+        <td>content-remove</td>
+        <td>Remove one or more content types from the session. <note>A client MUST NOT return an error upon receipt of a 'content-remove' action for a content description that is received after a 'content-remove' action has been sent but before the action has been acknowledged by the peer.</note></td>
+      </tr>
+      <tr>
+        <td>session-accept</td>
+        <td>Definitively accept a session negotiation. Implicitly this action also serves as a content-accept (which in turn serves as a description-accept and transport-accept).</td>
+      </tr>
+      <tr>
+        <td>session-info</td>
+        <td>Send session-level information / messages, such as (for Jingle audio) a ringing message.</td>
+      </tr>
+      <tr>
+        <td>session-initiate</td>
+        <td>Request negotiation of a new Jingle session.</td>
+      </tr>
+      <tr>
+        <td>session-terminate</td>
+        <td>End an existing session.</td>
+      </tr>
+      <tr>
+        <td>transport-info</td>
+        <td>Exchange transport candidates; it is mainly used in <cite>XEP-0176</cite> but may be used in other transport specifications.</td>
+      </tr>
+    </table>
   </section2>
 </section1>
 <section1 topic='Session Flow' anchor='session'>
@@ -401,7 +331,7 @@ PENDING  o---------------------+   |
     <p>If a contact has more than one XMPP resource that supports Jingle and the desired content description format, it is RECOMMENDED for a client to use &xep0168; in order to determine which is the best resource with which to initiate the desired Jingle session.</p>
   </section2>
   <section2 topic='Initiation' anchor='protocol-initiate'>
-    <p>Once the initiating entity has discovered which of the receiver's XMPP resources is ideal for the desired content description format, it sends a session initiation request to the receiver. This request is an IQ-set containing a &JINGLE; element qualified by the 'http://www.xmpp.org/extensions/xep-0166.html#ns' namespace. The &JINGLE; element MUST possess the 'action', 'initiator', and 'sid' attributes (the latter two uniquely identify the session). For initiation, the 'action' attribute MUST have a value of "session-initiate" and the &JINGLE; element MUST contain one or more &CONTENT; elements, each of which defines a content type to be transferred during the session; each &CONTENT; element in turn contains one &DESCRIPTION; child element that specifies a desired content description format and one or more &TRANSPORT; child elements that specify potential content transport methods.</p>
+    <p>Once the initiating entity has discovered which of the receiver's XMPP resources is ideal for the desired content description format, it sends a session initiation request to the receiver. This request is an IQ-set containing a &JINGLE; element qualified by the 'http://www.xmpp.org/extensions/xep-0166.html#ns' namespace. The &JINGLE; element MUST possess the 'action', 'initiator', and 'sid' attributes (the latter two uniquely identify the session). For initiation, the 'action' attribute MUST have a value of "session-initiate" and the &JINGLE; element MUST contain one or more &CONTENT; elements, each of which defines a content type to be transferred during the session; each &CONTENT; element in turn contains one &DESCRIPTION; child element that specifies a desired content description format and one &TRANSPORT; child element that specifies a potential content transport method. If either party wishes to propose the use of multiple transport methods for the same content description, it must send multiple &CONTENT; elements.</p>
     <p>The following example shows a Jingle session initiation request for a session that contains both audio and video content:</p>
     <example caption="Initiation Example"><![CDATA[
 <iq from='romeo@montague.net/orchard' to='juliet@capulet.com/balcony' id='jingle1' type='set'>
@@ -409,22 +339,16 @@ PENDING  o---------------------+   |
           action='session-initiate'
           initiator='romeo@montague.net/orchard'
           sid='a73sjjvkla37jfea'>
-    <content creator='romeo@montague.net' name='this-is-the-audio-content'>
+    <content creator='initiator' name='this-is-the-audio-content'>
       <description xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns'>
         ...
       </description>
-      <transport xmlns='http://www.xmpp.org/extensions/xep-0177.html#ns'>
-        <candidate .../>
-      </transport>
       <transport xmlns='http://www.xmpp.org/extensions/xep-0176.html#ns'/>
     </content>
-    <content creator='romeo@montague.net' name='this-is-the-video-content'>
+    <content creator='initiator' name='this-is-the-video-content'>
       <description xmlns='http://www.xmpp.org/extensions/xep-0180.html#ns'>
         ...
       </description>
-      <transport xmlns='http://www.xmpp.org/extensions/xep-0177.html#ns'>
-        <candidate .../>
-      </transport>
       <transport xmlns='http://www.xmpp.org/extensions/xep-0176.html#ns'/>
     </content>
   </jingle>
@@ -442,6 +366,7 @@ PENDING  o---------------------+   |
     <ul>
       <li>The 'creator' attribute is REQUIRED; it specifies which party originally generated the content description (used to prevent race conditions regarding modifications).</li>
       <li>The 'name' attribute is REQUIRED; it specifies a unique name or identifier for the content type (this identifier is opaque and does not have semantic meaning).</li>
+      <li>The 'profile' attribute is RECOMMENDED; for some content types, it specifies the profile in use (e.g., "RTP/AVP" in the context of the Real-time Transport Protocol).</li>
       <li>The 'senders' attribute is RECOMMENDED; it specifies which entities in the session will be generating content; the allowable values are "initiator", "recipient", or "both" (where "both" is the default).</li>
     </ul>
   </section2>
@@ -453,17 +378,26 @@ PENDING  o---------------------+   |
     <p>If the receiver acknowledges receipt of the initation request, both parties must consider the session to be in the PENDING state.</p>
     <p>There are several reasons why the receiver might return an error instead of acknowledging receipt of the initiation request:</p>
     <ul>
-      <li>The initiating entity is unknown to the receiver (e.g., via presence subscription).</li>
+      <li>The initiating entity is unknown to the receiver (e.g., via presence subscription) and the receiver does not communicate with unknown entities.</li>
+      <li>The receiver wishes to redirect to another address.</li>
       <li>The receiver does not support Jingle.</li>
       <li>The receiver does not support any of the specified content description formats.</li>
       <li>The receiver does not support any of the specified content transport methods.</li>
       <li>The initiation request was malformed.</li>
     </ul>
-    <p>The initiating entity is unknown to the receiver (e.g., via presence subscription) and the receiver has a policy of not communicating via Jingle with unknown entities, it MUST return a &unavailable; error.</p>
+    <p>If the initiating entity is unknown to the receiver (e.g., via presence subscription) and the receiver has a policy of not communicating via Jingle with unknown entities, it SHOULD return a &unavailable; error.</p>
     <example caption="Initiating Entity Unknown to Receiver"><![CDATA[
 <iq type='error' from='juliet@capulet.com/balcony' to='romeo@montague.net/orchard' id='jingle1'>
   <error type='cancel'>
     <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>If the receiver wishes to redirect to another address, it SHOULD return a &redirect; error.</p>
+    <example caption="Receiver Redirection"><![CDATA[
+<iq type='error' from='juliet@capulet.com/balcony' to='romeo@montague.net/orchard' id='jingle1'>
+  <error type='cancel'>
+    <redirect xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>xmpp:voicemail@capulet.com</redirect>
   </error>
 </iq>
     ]]></example>
@@ -502,31 +436,6 @@ PENDING  o---------------------+   |
 </iq>
     ]]></example>
   </section2>
-  <section2 topic='Redirection' anchor='protocol-redirect'>
-    <p>After acknowledging receipt of the initiation request, the receiver MAY redirect the session to another address (e.g., because the principal is not answering at the original resource). This is done by sending a Jingle redirect action to the initiating entity:</p>
-    <example caption="Receiver Redirects the Session"><![CDATA[
-<iq from='juliet@capulet.com/balcony'
-    id='jingle2'
-    to='romeo@montague.net/orchard'
-    type='set'>
-  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
-          action='session-redirect'
-          initiator='romeo@montague.net/orchard'
-          responder='juliet@capulet.com/balcony'
-          sid='a73sjjvkla37jfea'>
-    <redirect>xmpp:voicemail@capulet.com</redirect>
-  </jingle>
-</iq>
-    ]]></example>
-    <p>The recipient then acknowledges the redirection:</p>
-    <example caption="Initiating Entity Acknowledges Redirection"><![CDATA[
-<iq from='romeo@montague.net/orchard'
-    id='jingle2'
-    to='juliet@capulet.com/balcony'
-    type='result'/>
-    ]]></example>
-    <p>Both entities MUST now consider the original session to be in the ENDED state, and if the initiating entity wishes to initiate a session with the redirected address it MUST do so by sending a session initiation request to that address with a new session ID.</p>
-  </section2>
   <section2 topic='Decline' anchor='protocol-decline'>
     <p>In order to decline the session initiation request, the receiver MUST acknowledge receipt of the session initiation request, then terminate the session as described under <link url='#session-terminate'>Termination</link>.</p>
   </section2>
@@ -539,7 +448,7 @@ PENDING  o---------------------+   |
           action='content-remove'
           initiator='romeo@montague.net/orchard'
           sid='a73sjjvkla37jfea'>
-    <content creator='romeo@montague.net' name='this-is-the-video-content'/>
+    <content creator='initiator' name='this-is-the-video-content'/>
   </jingle>
 </iq>
     ]]></example>
@@ -559,14 +468,13 @@ PENDING  o---------------------+   |
           initiator='romeo@montague.net/orchard'
           responder='juliet@capulet.com/balcony'
           sid='a73sjjvkla37jfea'>
-    <content creator='romeo@montague.net' name='this-is-the-audio-content'>
+    <content creator='initiator' name='this-is-the-audio-content'>
       <description xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns'>
         ...
       </description>
       <transport xmlns='http://www.xmpp.org/extensions/xep-0177.html#ns'>
         <candidate .../>
       </transport>
-      <transport xmlns='http://www.xmpp.org/extensions/xep-0176.html#ns'/>
     </content>
   </jingle>
 </iq>
@@ -589,14 +497,13 @@ PENDING  o---------------------+   |
           action='content-add'
           initiator='romeo@montague.net/orchard'
           sid='a73sjjvkla37jfea'>
-    <content creator='juliet@capulet.com' name='video-is-back'>
+    <content creator='responder' name='video-is-back'>
       <description xmlns='http://www.xmpp.org/extensions/xep-0180.html#ns'>
         ...
       </description>
       <transport xmlns='http://www.xmpp.org/extensions/xep-0177.html#ns'>
         <candidate .../>
       </transport>
-      <transport xmlns='http://www.xmpp.org/extensions/xep-0176.html#ns'/>
     </content>
   </jingle>
 </iq>
@@ -608,17 +515,16 @@ PENDING  o---------------------+   |
     <example caption="Content Acceptance"><![CDATA[
 <iq from='romeo@montague.net/orchard' to='juliet@capulet.com/balcony' id='add2' type='set'>
   <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
-          action='content-add'
+          action='content-accept'
           initiator='romeo@montague.net/orchard'
           sid='a73sjjvkla37jfea'>
-    <content creator='juliet@capulet.com' name='video-is-back'>
+    <content creator='responder' name='video-is-back'>
       <description xmlns='http://www.xmpp.org/extensions/xep-0180.html#ns'>
         ...
       </description>
       <transport xmlns='http://www.xmpp.org/extensions/xep-0177.html#ns'>
         <candidate .../>
       </transport>
-      <transport xmlns='http://www.xmpp.org/extensions/xep-0176.html#ns'/>
     </content>
   </jingle>
 </iq>
@@ -661,66 +567,6 @@ PENDING  o---------------------+   |
   </section2>
 </section1>
 
-<section1 topic='Jingle Actions' anchor='actions'>
-  <p>This section provides more detailed descriptions for each Jingle-related action.</p>
-  <section2 topic='content-accept' anchor='actions-content-accept'>
-    <p>This action enables a party to accept a content-add or content-remove action received from another party. Implicitly this action also serves as a description-accept and transport-accept.</p>
-  </section2>
-  <section2 topic='content-add' anchor='actions-content-add'>
-    <p>This action enables a party to add one or more new content types to the session. This action MUST NOT be sent while the session is in the PENDING state.</p>
-    <p>In the event that a session contains two unidirectional streams of the same type, due to content-add being issued simultaneously by both participants of the session, it is RECOMMENDED that participants close the duplicate stream in favour of that created by the session initiator, which should be made bidirectional with a 'content-modify' action by the responder.</p>
-  </section2>
-  <section2 topic='content-decline' anchor='actions-content-decline'>
-    <p>This action enables a party to reject a content-add or content-modify action received from another party.</p>
-  </section2>
-  <section2 topic='content-modify' anchor='actions-content-modify'>
-    <p>This action enables a party to change an existing content type. The recipient MUST NOT reply to a content-modify action with another content-modify action. The content-modify action is mainly used to modify the directionality of the session.</p>
-  </section2>
-  <section2 topic='content-remove' anchor='actions-content-remove'>
-    <p>This action enables a party to remove one or more content types from the session.</p>
-    <p>Clients MUST NOT return an error upon recipt of a 'content-remove' action for a content description which is received after a 'content-remove' action has been sent, but before the action has been acknowledged by the peer.</p>
-  </section2>
-  <section2 topic='description-accept' anchor='actions-description-accept'>
-    <p>This action enables a party to accept a description-modify action received from another party.</p>
-  </section2>
-  <section2 topic='description-decline' anchor='actions-description-decline'>
-    <p>This action enables a party to decline a description-modify action received from another party.</p>
-  </section2>
-  <section2 topic='description-info' anchor='actions-description-info'>
-    <p>This action enables a party to sent description-level information / messages.</p>
-  </section2>
-  <section2 topic='description-modify' anchor='actions-description-modify'>
-    <p>This action enables a party to request a change to a content description format.</p>
-  </section2>
-  <section2 topic='session-accept' anchor='actions-session-accept'>
-    <p>This action enables a party to definitively accept a session negotiation. Implicitly this action also serves as a content-accept (which in turn serves as a description-accept and transport-accept).</p>
-  </section2>
-  <section2 topic='session-initiate' anchor='actions-session-initiate'>
-    <p>This action enables a party to request negotiation of a new Jingle session.</p>
-  </section2>
-  <section2 topic='session-info' anchor='actions-session-info'>
-    <p>This action enables a party to send session-level information / messages.</p>
-  </section2>
-  <section2 topic='session-redirect' anchor='actions-session-redirect'>
-    <p>This action enables a party to redirect an initiate request to another address.</p>
-  </section2>
-  <section2 topic='session-terminate' anchor='actions-session-terminate'>
-    <p>This action enables a party to end an existing session.</p>
-  </section2>
-  <section2 topic='transport-accept' anchor='actions-transport-accept'>
-    <p>This action enables a party to accept a transport-modify action received from another party.</p>
-  </section2>
-  <section2 topic='transport-decline' anchor='actions-transport-decline'>
-    <p>This action enables a party to decline a transport-modify action received from another party.</p>
-  </section2>
-  <section2 topic='transport-info' anchor='actions-transport-info'>
-    <p>This action enables a party to send transport-level information / messages.</p>
-  </section2>
-  <section2 topic='transport-modify' anchor='actions-transport-modify'>
-    <p>This action enables a party to request a change to the content transport methods.</p>
-  </section2>
-</section1>
-
 <section1 topic='Error Handling' anchor='errors'>
   <p>The Jingle-specific error conditions are as follows.</p>
   <table caption='Other Error Conditions'>
@@ -752,12 +598,35 @@ PENDING  o---------------------+   |
   </table>
 </section1>
 
+<section1 topic='Determining Support' anchor='support'>
+  <p>If an entity supports Jingle, it MUST advertise that fact by returning a feature of "http://www.xmpp.org/extensions/xep-0167.html#ns" &NSNOTE; in response to &xep0030; information requests.</p>
+  <example caption="Service Discovery Information Request"><![CDATA[
+<iq from='romeo@montague.net/orchard'
+    id='disco1'
+    to='juliet@capulet.com/balcony'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+  ]]></example>
+  <example caption="Service Discovery Information Response"><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    id='disco1'
+    to='romeo@montague.net/orchard'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='http://www.xmpp.org/extensions/xep-0166.html#ns'/>
+    ...
+  </query>
+</iq>
+  ]]></example>
+</section1>
+
 <section1 topic='Implementation Notes' anchor='impl'>
   <p>There is a one-to-one relationship between content types and sessions. This reduces the complexity of managing a given session, since it avoids the need to de-multiplex traffic for different content types sent over the same connection. However, it may be desirable to share different kinds of content at the same time (e.g., during a video chat one party may want to share a file); in order to do this, the parties must establish a separate session for each content type. Management of multiple sessions is a client implementation matter and is not discussed in this specification.</p>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
-  <p><em>Note: This section is not yet complete.</em></p>
   <section2 topic='Denial of Service' anchor='security-dos'>
     <p>Jingle sessions may be resource-intensive. Therefore, it is possible to launch a denial-of-service attack against an entity by burdening it with too many Jingle sessions. Care must be taken to accept content sessions only from known entities and only if the entity's device is able to process such sessions.</p>
   </section2>
@@ -772,10 +641,10 @@ PENDING  o---------------------+   |
 
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
   <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
-    <p>The &REGISTRAR; shall include 'http://www.xmpp.org/extensions/xep-0166.html#ns' and 'http://www.xmpp.org/extensions/xep-0166.html#ns-errors' in its registry of protocol namespaces.</p>
+    <p>Until this specification advances to a status of Draft, its associated namespaces shall be "http://www.xmpp.org/extensions/xep-0166.html#ns" and "http://www.xmpp.org/extensions/xep-0167.html#ns-errors"; upon advancement of this specification, the &REGISTRAR; shall issue permanent namespaces in accordance with the process defined in Section 4 of &xep0053;.</p>
   </section2>
   <section2 topic='Jingle Content Description Formats Registry' anchor='registrar-content'>
-    <p>The XMPP Registrar shall maintain a registry of Jingle content description formats. All content description format registrations shall be defined in separate specifications (not in this document). Content description formats defined within the XEP series MUST be registered with the XMPP Registrar, resulting in protocol URIs of the form "http://www.xmpp.org/extensions/xep-0166.html#ns/description/name" (where "name" is the registered name of the content description format).</p>
+    <p>The XMPP Registrar shall maintain a registry of Jingle content description formats. All content description format registrations shall be defined in separate specifications (not in this document). Content description formats defined within the XEP series MUST be registered with the XMPP Registrar, resulting in protocol URNs of the form "urn:xmpp:jingle:description:name" (where "name" is the registered name of the content description format).</p>
     &REGPROCESS;
     <code><![CDATA[
 <content>
@@ -786,7 +655,7 @@ PENDING  o---------------------+   |
     ]]></code>
   </section2>
   <section2 topic='Jingle Content Transport Methods Registry' anchor='registrar-transports'>
-    <p>The XMPP Registrar shall maintain a registry of Jingle content transport methods. All content transport method registrations shall be defined in separate specifications (not in this document). Content transport methods defined within the XEP series MUST be registered with the XMPP Registrar, resulting in protocol URIs of the form "http://www.xmpp.org/extensions/xep-0166.html#ns/transport/name" (where "name" is the registered name of the content transport method).</p>
+    <p>The XMPP Registrar shall maintain a registry of Jingle content transport methods. All content transport method registrations shall be defined in separate specifications (not in this document). Content transport methods defined within the XEP series MUST be registered with the XMPP Registrar, resulting in protocol URNs of the form "urn:xmpp:jingle:transport:name" (where "name" is the registered name of the content transport method).</p>
     &REGPROCESS;
     <code><![CDATA[
 <transport>
@@ -818,22 +687,13 @@ PENDING  o---------------------+   |
           <xs:restriction base='xs:NCName'>
             <xs:enumeration value='content-accept'/>
             <xs:enumeration value='content-add'/>
-            <xs:enumeration value='content-decline'/>
             <xs:enumeration value='content-modify'/>
             <xs:enumeration value='content-remove'/>
-            <xs:enumeration value='description-accept'/>
-            <xs:enumeration value='description-decline'/>
-            <xs:enumeration value='description-info'/>
-            <xs:enumeration value='description-modify'/>
             <xs:enumeration value='session-accept'/>
             <xs:enumeration value='session-info'/>
             <xs:enumeration value='session-initiate'/>
-            <xs:enumeration value='session-redirect'/>
             <xs:enumeration value='session-terminate'/>
-            <xs:enumeration value='transport-accept'/>
-            <xs:enumeration value='transport-decline'/>
             <xs:enumeration value='transport-info'/>
-            <xs:enumeration value='transport-modify'/>
           </xs:restriction>
         </xs:simpleType>
       </xs:attribute>
@@ -850,8 +710,16 @@ PENDING  o---------------------+   |
           <xs:any namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
         </xs:sequence>
       </xs:choice>
-      <xs:attribute name='creator' use='required' type='xs:string'/>
+      <xs:attribute name='creator' use='required'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='initiator'>
+            <xs:enumeration value='responder'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
       <xs:attribute name='name' use='required' type='xs:string'/>
+      <xs:attribute name='profile' use='optional' type='xs:string'/>
       <xs:attribute name='senders' use='optional' default='both'>
         <xs:simpleType>
           <xs:restriction base='xs:NCName'>
@@ -893,6 +761,6 @@ PENDING  o---------------------+   |
   </section2>
 </section1>
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>The authors would like to thank Rohan Mahy for his valuable input on early versions of this document. Rob Taylor, Dafydd Harries, Jussi Laako, Saku Vainio, Antti Ij&#228;s, Brian West, Anthony Minessale, Matt O'Gorman, and others have also provided helpful input. Thanks also to those who have commented on the &SSIG; and (earlier) Jingle <note>Before this specification was accepted as a XMPP Extension Protocol specification, it was discussed on the semi-private &lt;jingle@jabber.org&gt; mailing list; although that list is no longer used (the Standards list is the preferred discussion venue), for historical purposes it is publicly archived at &lt;<link url='http://mail.jabber.org/pipermail/jingle/'>http://mail.jabber.org/pipermail/jingle/</link>&gt;.</note> mailing lists.</p>
+  <p>The authors would like to thank Rohan Mahy for his valuable input on early versions of this document. Dafydd Harries, Antti Ij&#228;s, Jussi Laako, Anthony Minessale, Matt O'Gorman, Rob Taylor, Saku Vainio, Brian West, and others have also provided helpful input. Thanks also to those who have commented on the &SSIG; and (earlier) Jingle <note>Before this specification was accepted as a XMPP Extension Protocol specification, it was discussed on the semi-private &lt;jingle@jabber.org&gt; mailing list; although that list is no longer used (the Standards list is the preferred discussion venue), for historical purposes it is publicly archived at &lt;<link url='http://mail.jabber.org/pipermail/jingle/'>http://mail.jabber.org/pipermail/jingle/</link>&gt;.</note> mailing lists.</p>
 </section1>
 </xep>
