@@ -790,7 +790,7 @@
 <!-- PRESENTATIONAL ELEMENTS -->
 
   <xsl:template match='cite'>
-    <span class='cite'>
+    <span class='ref'>
       <xsl:apply-templates/>
     </span>
   </xsl:template>
