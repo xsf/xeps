@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 # File: lastcall.py
-# Version: 0.4
+# Version: 0.5
 # Description: a script for announcing Last Calls
-# Last Modified: 2006-12-07
+# Last Modified: 2007-05-16
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
 # HowTo: ./lastcall.py xepnum enddate
@@ -77,27 +77,48 @@ remark = getText(remarkNode.childNodes)
 # Subject: LAST CALL: XEP-$xepnum ($title)
 # Body:
 #    This message constitutes notice of a Last Call
-#    for XEP-$xepnum ($title).
+#    for comments on XEP-$xepnum ($title).
 #
 #    Abstract: $abstract
 #
 #    URL: http://www.xmpp.org/extensions/xep-$xepnum.html
 #
-#    This Last Call begins now and shall end at the close
+#    This Last Call begins today and shall end at the close
 #    of business on $enddate.
+#
+#    Please consider the following questions during this Last Call and
+#    send your feedback to the standards@xmpp.org discussion list:
+#
+#    1. Is this specification needed to fill gaps in the XMPP
+#       protocol stack or to clarify an existing protocol?
+#    2. Does the specification solve the problem stated in the 
+#       introduction and requirements?
+#    3. Do you plan to implement this specification in your code? 
+#       If not, why not?
+#    4. Do you have any security concerns related to this specification?
+#    5. Is the specification accurate and clearly written?
+#
+#    Your feedback is appreciated!
 #
 
 fromaddr = "editor@xmpp.org"
 # for testing...
 # toaddrs = "stpeter@jabber.org"
 # for real...
-toaddrs = "standards@xmpp.org"
+toaddrs = "standards@xmpp.org, jdev@jabber.org"
 
 thesubject = 'LAST CALL: XEP-' + xepnum + " (" + title + ")"
-introline = 'This message constitutes notice of a Last Call for XEP-' + xepnum + ' (' + title + ').'
+introline = 'This message constitutes notice of a Last Call for comments on XEP-' + xepnum + ' (' + title + ').'
 abstractline = 'Abstract: ' + abstract
 urlline = 'URL: http://www.xmpp.org/extensions/xep-' + xepnum + '.html'
 schedline = 'This Last Call begins today and shall end at the close of business on ' + enddate + '.'
+qline0 = 'Please consider the following questions during this Last Call and send your feedback to the standards@xmpp.org discussion list:'
+qline1 = '1. Is this specification needed to fill gaps in the XMPP protocol stack or to clarify an existing protocol?'
+qline2 = '2. Does the specification solve the problem stated in the introduction and requirements?'
+qline3 = '3. Do you plan to implement this specification in your code? If not, why not?'
+qline4 = '4. Do you have any security concerns related to this specification?'
+qline5 = '5. Is the specification accurate and clearly written?'
+feedline = 'Your feedback is appreciated!'
 
 #msg = "From: %s\r\n" % fromaddr
 msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr
@@ -110,6 +131,20 @@ msg = msg + "\r\n\n"
 msg = msg + urlline
 msg = msg + "\r\n\n"
 msg = msg + schedline
+msg = msg + "\r\n\n"
+msg = msg + qline0
+msg = msg + "\r\n\n"
+msg = msg + qline1
+msg = msg + "\r\n"
+msg = msg + qline2
+msg = msg + "\r\n"
+msg = msg + qline3
+msg = msg + "\r\n"
+msg = msg + qline4
+msg = msg + "\r\n"
+msg = msg + qline5
+msg = msg + "\r\n\n"
+msg = msg + feedline
 msg = msg + "\r\n"
 
 server = smtplib.SMTP('localhost')
