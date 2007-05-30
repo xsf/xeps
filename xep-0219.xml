@@ -1,0 +1,312 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Hop Check</title>
+  <abstract>This document defines an XMPP protocol extension that enables an entity to check the security of client-to-server and server-to-server hops between it and another entity.</abstract>
+  &LEGALNOTICE;
+  <number>0219</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>TO BE ASSIGNED</shortname>
+  &stpeter;
+  <revision>
+    <version>0.1</version>
+    <date>2007-05-30</date>
+    <initials>psa</initials>
+    <remark><p>Initial published version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.4</version>
+    <date>2007-05-16</date>
+    <initials>psa</initials>
+    <remark><p>Split secure attribute into encrypted (for TLS/SSL) and auth.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.3</version>
+    <date>2007-05-11</date>
+    <initials>psa</initials>
+    <remark><p>Specified protocol.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2007-05-02</date>
+    <initials>psa</initials>
+    <remark><p>Added more detailed security considerations; broadened applicability to be more similar to traceroute; changed name of status attribute to secure and its type to boolean; added delay attribute; defined XML schema.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2007-05-01</date>
+    <initials>psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <section2 topic='Motivation' anchor='motivation'>
+    <p>When two XMPP users communicate, one or both of them may want to know the status of the XMPP communications path (i.e., of all the hops) between them. While the primary motivation is to determine if all the hops are secured via Transport Layer Security (see &rfc4346;) as specified for XMPP in &rfc3920;, more general information about the communications path may also be of interest.</p>
+    <p>This document describes a protocol for discovering such information, similar in spirit to the traceroute protocol specified in &rfc1393; but specific to XMPP.</p>
+  </section2>
+  <section2 topic='Approach' anchor='approach'>
+    <p>As a user, I may want to know three things:</p>
+    <ol>
+      <li>If my connection to my server is encrypted.</li>
+      <li>If my server's connection to my contact's server is encrypted.</li>
+      <li>If my contact's connection to their server is encrypted.</li>
+    </ol>
+    <p>If the answer to all three of these questions is "yes" and I have some level of trust in my XMPP server (see <link url='#security'>Security Considerations</link>) then I have some assurance that communications between me and my contact will not be subject to interception by the likes of "Eve" (a passive attacker who can eavesdrop on messages) and "Mallory" (an active attacker who can maliciously modify messages in transit).</p>
+    <p>The answer to the first question is straightforward, since my client knows if its connection to my server is encrypted (as well as the certificates involved).</p>
+    <p>If I trust my server, I can ask it to report on the security of its connection to my contact's server.</p>
+    <p>If the server-to-server connection is encrypted and my server trusts that connection, my server can ask my contact's server to report on the security of my contact's connection.</p>
+    <p>By feeling my way along the hops in this manner, I can learn if all three hops are encrypted and therefore can have some assurance that the entire communications path is encrypted.</p>
+  </section2>
+  <section2 topic='How It Works' anchor='howitworks'>
+    <p>Because XMPP has a decentralized architecture, there may be multiple hops along the communications path. Consider two users Juliet at capulet.lit and Romeo at montague.lit. <note>This specification uses the example of two clients, but the protocol can be used to check hops between any two XMPP entities.</note> There is one hop from Juliet's client to the capulet.lit server, one hop from the capulet.lit server to the montague.lit server, and one hop from the montague.lit server to Romeo's client. <note>If both capulet.lit and montague.lit are virtual hosts of the same server, it is possible that there are only two hops in this situation rather than three. Moreover, in certain circumstances (e.g., if one of the clients connects to a third-party HTTP connection manager) it is possible for there to be more than three hops. However, this document assumes a standard XMPP architecture.</note></p>
+    <p>We assume that Juliet's connection to capulet.lit is encrypted and that she has some trust in her server. If she wants to check the security of the path between her and Romeo, she should would send the following request:</p>
+    <example caption="Hop check request"><![CDATA[
+<iq type='get'
+    from='juliet@capulet.lit/balcony'
+    to='capulet.lit'
+    id='check1'>
+  <hopcheck xmlns='http://www.xmpp.org/extensions/xep-0219.html#ns' 
+            to='romeo@montague.lit/orchard'/>
+</iq>
+    ]]></example>
+    <p>Naturally, capulet.lit knows about the security of Juliet's connection to capulet.lit and about the security of its connection to montague.lit. But it does not know about the security of Romeo's connection to montague.net; therefore on behalf of Juliet it needs to ask montague.lit about that hop before returning an answer to Juliet:</p>
+    <example caption="Intermediate hop check request"><![CDATA[
+<iq type='get'
+    from='capulet.lit'
+    to='montague.lit'
+    id='check2'>
+  <hopcheck xmlns='http://www.xmpp.org/extensions/xep-0219.html#ns' 
+            for='juliet@capulet.lit/balcony'
+            to='romeo@montague.lit/orchard'/>
+</iq>
+    ]]></example>
+    <p>The montague.lit server would then report to capulet.lit regarding the hops from juliet@capulet.lit to romeo@montague.lit/orchard:</p>
+    <example caption="Intermediate hop check result"><![CDATA[
+<iq type='result'
+    from='montague.lit'
+    to='juliet@capulet.lit'
+    id='check2'>
+  <hopcheck xmlns='http://www.xmpp.org/extensions/xep-0219.html#ns' 
+            for='juliet@capulet.lit/balcony'
+            to='romeo@montague.lit/orchard'>
+    <hop from='capulet.lit' 
+         to='montague.lit' 
+         ip='192.0.2.1' 
+         delay='7.178' 
+         auth='EXTERNAL' 
+         encrypted='1'/>
+    <hop from='montague.lit' 
+         to='romeo@montague.lit/orchard' 
+         delay='15.734' 
+         auth='PLAIN' 
+         encrypted='1'/>
+  </hopcheck>
+</iq>
+    ]]></example>
+    <p>The capulet.lit server would then report to Juliet regarding the security of all the hops:</p>
+    <example caption="Hop check result"><![CDATA[
+<iq type='result'
+    from='capulet.lit'
+    to='juliet@capulet.lit/balcony'
+    id='check1'>
+  <hopcheck xmlns='http://www.xmpp.org/extensions/xep-0219.html#ns' 
+            from='juliet@capulet.lit/balcony'
+            to='romeo@montague.lit/orchard'>
+    <hop from='juliet@capulet.lit/balcony' 
+         to='capulet.lit' 
+         auth='DIGEST-MD5' 
+         encrypted='true'/>
+    <hop from='capulet.lit' 
+         to='montague.lit' 
+         ip='192.0.2.1' 
+         delay='11.602' 
+         auth='EXTERNAL' 
+         encrypted='true'/>
+    <hop from='montague.lit' 
+         to='romeo@montague.lit/orchard' 
+         delay='15.734' 
+         auth='PLAIN' 
+         encrypted='1'/>
+  </hopcheck>
+</iq>
+    ]]></example>
+    <p>The foregoing shows only the "happy path"; many alternate flows and error conditions are possible, as described in the <link url='#protocol'>Protocol</link> section of this document.</p>
+  </section2>
+</section1>
+
+<section1 topic='Protocol' anchor='protocol'>
+  <section2 topic='Request' anchor='protocol-request'>
+    <p>In order for an entity to check the communications path between itself and a target entity, the entity shall generate a hopcheck request of the following form:</p>
+    <code><![CDATA[
+<iq type='get'
+    from='sender'
+    to='respondent'
+    id='foo'>
+  <hopcheck xmlns='http://www.xmpp.org/extensions/xep-0219.html#ns' 
+            [for='original-sender']
+            to='target'/>
+</iq>
+    ]]></code>
+    <p>The sender MUST set the respondent to be the entity that the sender believes is the entity at the other end of the next hop in the communications path. (For a connected resource, this is the server to which the client is connected; for a server, this is the server corresponding to the domain portion of the JID in the triggering request received from a connected resource or other local entity.)</p>
+    <p>If the sender is a server but it is making the request on behalf of a connected resource, it MUST include the 'for' attribute and set it to the 'from' address of the triggering request.</p>
+  </section2>
+  <section2 topic='Errors' anchor='protocol-errors'>
+    <p>The following error cases are defined:</p>
+    <ul>
+      <li>If the respondent does not support the hopcheck namespace, it MUST return a &unavailable; error.</li>
+      <li>If the &lt;hopcheck/&gt; element does not include a 'to' attribute, the respondent MUST return a &badrequest; error.</li>
+      <li>If the 'to' or 'for' attribute of the &lt;hopcheck/&gt; element contains a JID that is malformed, the respondent MUST return a &badjid; error.</li>
+      <li>If the respondent is a server and the sender is a full JID (&FULLJID;), the server MUST verify that the JID is a connected resource of the server (per <cite>RFC 3920</cite>); if it is not, then the respondent MUST return a &forbidden; error.</li>
+      <li>If both the sender and the respondent are servers and the domain identifier of the &lt;hopcheck/&gt; element's 'to' attribute does not match a validated domain of the respondent, the respondent MUST return a &notfound; error.</li>
+      <li>If both the sender and the respondent are servers, the JID of the &lt;hopcheck/&gt; element's 'to' is a connected resource of the respondent server, and the JID of the &lt;hopcheck/&gt; element's 'for' is not authorized to know the presence of the target (either via presence subscription or temporary presence sharing via directed presence as defined in &rfc3921;), then the respondent MUST return a &forbidden; error.</li>
+    </ul>
+  </section2>
+  <section2 topic='Response' anchor='protocol-response'>
+    <p>If an error does not occur, the response shall be of the following form:</p>
+    <code><![CDATA[
+<iq type='result'
+    from='respondent'
+    to='sender'
+    id='foo'>
+  <hopcheck xmlns='http://www.xmpp.org/extensions/xep-0219.html#ns' 
+            [for='original-sender']
+            to='target'>
+    <hop auth='some-defined-value'
+         [delay='float']
+         from='sender-or-respondent' 
+         [ip='some-IP-address']
+         encrypted='boolean'
+         to='respondent-or-target'/>
+  </hopcheck>
+</iq>
+    ]]></code>
+    <p>The 'delay' attribute is OPTIONAL. If included, it represents the time in milliseconds that it took for the respondent to receive a reply from the target or intermediate respondent.</p>
+    <p>The 'ip' attribute is OPTIONAL. If included, it represents the IPv4 or IPv6 address of the target or intermediate respondent.</p>
+    <p>The 'encrypted' attribute is REQUIRED. It is a boolean &BOOLEANNOTE; that represents whether the hop in question is encrypted via Transport Layer Security (see &rfc4346;) or at a legacy SSL port.</p>
+    <p>The 'auth' attribute is REQUIRED. It represents whether and how the hop in question is authenticated, in particular via one of the following means:</p>
+    <ul>
+      <li>A Simple Authentication and Security Layer mechanism (see &rfc4422; for the specification and &ianasasl; for a list of registered SASL mechanisms; the names for standardized, non-obsolete mechanisms are used as values of the 'auth' attribute).</li>
+      <li>The legacy &xep0078; protocol using the "plaintext" or "digest" method.</li>
+      <li>The server dialback protocol ("dialback") as specified in <cite>RFC 3920</cite>.</li>
+    </ul>
+  </section2>
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>If an entity supports the Hop Check protocol, it MUST report that by including a service discovery feature of "http://www.xmpp.org/extensions/xep-0219.html#ns" &NSNOTE; in response to a &xep0030; information request:</p>
+  <example caption="Service Discovery information request"><![CDATA[
+<iq type='get'
+    from='juliet@capulet.lit/balcony'
+    from='capulet.lit'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+  ]]></example>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq type='result'
+    from='capulet.lit'
+    to='juliet@capulet.lit/balcony'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='http://www.xmpp.org/extensions/xep-0219.html#ns'/>
+    ...
+  </query>
+</iq>
+  ]]></example>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <section2 topic='Server Trust' anchor='security-trust'>
+    <p>Trust levels vary. The administrator of a server may have complete trust in the server they run. A user of a friend's server may have significant trust in the server. A user of a server in a military environment may have no choice of server and may trust that their superiors are doing the right thing. And so on. While the trust that a user places in a server may or may not be warranted, this document uses the level of trust that exists to bootstrap greater trust in the entire communications path.</p> 
+  </section2>
+  <section2 topic='Cleartext' anchor='security-cleartext'>
+    <p>Even if all the hops are encrypted, the traffic may still be available in cleartext to a representative of an Internet Service Provider ("Isaac"), a representative of the justice system ("Justin"), or a malicious attacker ("Mallory") that has gained access to any of the servers along the communications path. The protocol described herein is decidedly NOT a substitute for end-to-end encryption technologies such as &xep0116;.</p>
+  </section2>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p> 
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>Until this specification advances to a status of Draft, its associated namespace shall be "http://www.xmpp.org/extensions/xep-0219.html#ns"; upon advancement of this specification, the &REGISTRAR; shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;.</p>
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='http://www.xmpp.org/extensions/xep-0219.html#ns'
+    xmlns='http://www.xmpp.org/extensions/xep-0219.html#ns'
+    elementFormDefault='qualified'>
+
+  <xs:element name='hopcheck'>
+    <xs:complexType>
+      <xs:sequence minOccurs='0' maxOccurs='unbounded'>
+        <xs:element ref='hop'/>
+      </xs:sequence>
+      <xs:attribute name='for' type='xs:string' use='optional'/>
+      <xs:attribute name='to' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='hop'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='auth' use='required'>
+            <xs:simpleType>
+              <xs:restriction base='xs:NCName'>
+                <xs:enumeration value='ANONYMOUS'/>
+                <xs:enumeration value='CRAM-MD5'/>
+                <xs:enumeration value='DIGEST-MD5'/>
+                <xs:enumeration value='EXTERNAL'/>
+                <xs:enumeration value='GSSAPI'/>
+                <xs:enumeration value='KERBEROS_V4'/>
+                <xs:enumeration value='OTP'/>
+                <xs:enumeration value='PLAIN'/>
+                <xs:enumeration value='SECURID'/>
+                <xs:enumeration value='dialback'/>
+                <xs:enumeration value='digest'/>
+                <xs:enumeration value='plaintext'/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+          <xs:attribute name='delay' type='xs:double' use='optional'/>
+          <xs:attribute name='encrypted' type='xs:boolean' use='required'/>
+          <xs:attribute name='from' type='xs:string' use='required'/>
+          <xs:attribute name='ip' type='xs:string' use='optional'/>
+          <xs:attribute name='to' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+  ]]></code>
+</section1>
+</xep>
