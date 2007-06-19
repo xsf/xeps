@@ -6,8 +6,8 @@
 # Last Modified: 2006-10-03
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
-# HowTo: ./announce.py xepnum 'cvsmodsurl'
-#        NOTE: the cvsmodsurl MUST be in quotes!
+# HowTo: ./announce.py xepnum 'diffsurl'
+#        NOTE: the diffsurl MUST be in quotes!
 
 # IMPORTS:
 #
@@ -34,10 +34,10 @@ now = int(time.time())
 # READ IN ARGS: 
 #
 # 1. XEP number
-# 2. URL for CVS mods
+# 2. URL for source control diffs
 
 xepnum = sys.argv[1];
-mods = sys.argv[2];
+diffs = sys.argv[2];
 
 xepfile = 'xep-' + xepnum + '.xml'
 
@@ -105,7 +105,7 @@ elif (xepstatus == "Deferred"):
 #    Version $version of XEP-$xepnum ($title) is now available.
 #    Abstract: $abstract
 #    Changelog: $remark ($initials)
-#    CVS Diff: $mods
+#    CVS Diff: $diffs
 #    URL: http://www.xmpp.org/extensions/xep-$xepnum.html
 
 fromaddr = "editor@xmpp.org"
@@ -137,7 +137,7 @@ thesubject = thesubject + xepnum + ' (' + title + ')'
 versionline = 'Version ' + version + ' of XEP-' + xepnum + ' (' + title + ') has been released.' 
 abstractline = 'Abstract: ' + abstract
 changelogline = 'Changelog: ' + remark + ' (' + initials + ')'
-modsline = 'CVS Diff: ' + mods
+diffsline = 'Diff: ' + diffs
 urlline = 'URL: http://www.xmpp.org/extensions/xep-' + xepnum + '.html'
 
 msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr
@@ -149,7 +149,7 @@ msg = msg + abstractline
 msg = msg + "\r\n\n"
 msg = msg + changelogline
 msg = msg + "\r\n\n"
-msg = msg + modsline
+msg = msg + diffssline
 msg = msg + "\r\n\n"
 msg = msg + urlline
 msg = msg + "\r\n\n"
