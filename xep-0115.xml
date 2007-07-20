@@ -7,7 +7,7 @@
 <xep>
   <header>
     <title>Entity Capabilities</title>
-    <abstract>This document defines an XMPP protocol extension for broadcasting and discovering client, device, or generic entity capabilities in a way that minimizes network impact.</abstract>
+    <abstract>This document defines an XMPP protocol extension for broadcasting and dynamically discovering client, device, or generic entity capabilities in a way that minimizes network impact.</abstract>
     &LEGALNOTICE;
     <number>0115</number>
     <status>Draft</status>
@@ -28,10 +28,10 @@
     &stpeter;
     &remko;
     <revision>
-      <version>1.4pre2</version>
-      <date>in progress, last updated 2007-07-11</date>
+      <version>1.4pre3</version>
+      <date>in progress, last updated 2007-07-20</date>
       <initials>psa/jjh</initials>
-      <remark><p>In response to persistent security concerns over caps poisoning, defined method for hashing concatenation of identity and supported features.</p></remark>
+      <remark><p>In response to persistent security concerns over caps poisoning, redefined ver attribute to be a hash of the service discovery identity and features in a way that is backward-compatible with the legacy format.</p></remark>
     </revision>
     <revision>
       <version>1.3</version>
@@ -104,20 +104,21 @@
   </header>
   <section1 topic='Introduction' anchor='intro'>
     <section2 topic='Motivation' anchor='motivation'>
-      <p>It is often desirable for a Jabber/XMPP application (commonly but not necessarily a client) to take different actions depending on the capabilities of another application from which it receives presence information. Examples include:</p>
+      <p>It is often desirable for an XMPP application (commonly but not necessarily a client) to take different actions depending on the capabilities of another application from which it receives presence information. Examples include:</p>
       <ul>
-        <li>Showing a different set of icons depending on the capabilities of other clients.</li>
-        <li>Not sending &xep0071; content to plaintext clients such as cell phones.</li> 
+        <li>Showing a different set of icons depending on the capabilities of other entities.</li>
+        <li>Not sending &xep0071; or other rich content to plaintext clients such as cell phones.</li> 
         <li>Allowing the initiation of a Voice over IP (VoIP) session only to clients that support &xep0166; and &xep0167;.</li>
         <li>Not showing a "Send a File" button if another user's client does not support &xep0096;.</li>
+        <li>Filtering &xep0060; notifications based on advertised subscriber interests.</li>
       </ul>
-      <p>Some older Jabber clients send one &xep0030; and one &xep0092; request to each entity from which they received presence after login. That "disco+version flood" results in an excessive use of bandwidth and is impractical on a larger scale, particularly for users or applications with large rosters. Therefore this document proposes a more robust and scalable solution: namely, a presence-based mechanism <note>This proposal is not limited to clients, and can be used by any entity that exchanges presence with another entity, e.g., a gateway. However, this document uses the example of clients throughout.</note> for exchanging information about entity capabilities. Clients SHOULD NOT engage in the older "disco+version flood" behavior and instead SHOULD use Entity Capabilities as specified herein.</p>
+      <p>In the past, some Jabber clients sent one &xep0030; and one &xep0092; request to each entity from which they received presence after login. That "disco+version flood" resulted in an excessive use of bandwidth and was impractical on a larger scale, particularly for users or applications with large rosters. Therefore this document defines a more robust and scalable solution: namely, a presence-based mechanism <note>This proposal is not limited to clients, and can be used by any entity that exchanges presence with another entity, e.g., a gateway. However, this document uses the example of clients throughout.</note> for exchanging information about entity capabilities. Clients should not engage in the older "disco+version flood" behavior and instead should use Entity Capabilities as specified herein.</p>
     </section2>
     <section2 topic='How It Works' anchor='howitworks'>
-      <p>This section provides a friendly, non-normative introduction to the workings of entity capabilities.</p>
-      <p>Imagine that you are a Shakespearean character named Juliet and one of your contacts, a handsome fellow named Romeo, becomes available. His client wants to publish its capabilities, and does this by adding a &lt;c/&gt; element to its presence packets. As a result, your client receives the following presence packet:</p>
+      <p>This section provides a friendly introduction to entity capabilities.</p>
+      <p>Imagine that you are a Shakespearean character named Juliet and one of your contacts, a handsome fellow named Romeo, becomes available. His client wants to publish its capabilities, and does this by adding a &lt;c/&gt; element with special attributes to its presence packets. As a result, your client receives the following presence packet:</p>
       <code><![CDATA[
-<presence from='romeo@montague.lit/home'>
+<presence from='romeo@montague.lit/351b50cc-36d3-11dc-85f7-000bcd821bfb'>
   <c xmlns='http://jabber.org/protocol/caps' 
      node='http://exodus.jabberstudio.org/caps'
      ver='8RovUdtOmiAjzj+xI7SK5BCw3A8='/>
@@ -126,13 +127,19 @@
       <p>The 'node' attribute represents the client Romeo is using (the client identifier is an "FYI" and is not used further in Entity Capabilities). The 'ver' attribute is a specially-constructed string that represents the identity (see &DISCOCATEGORIES;) and supported features (see &DISCOFEATURES;) of the entity.</p>
       <p>At this point, your client has no idea what the capabilities are of someone with a version string '8RovUdtOmiAjzj+xI7SK5BCw3A8='. Your client therefore sends a service discovery query to Romeo, asking what his client can do.</p>
       <code><![CDATA[
-<iq type='get' from='juliet@capulet.lit/chamber' to='romeo@montague.lit/home' id='disco1'>
+<iq from='juliet@capulet.lit/chamber' 
+    id='disco1'
+    to='romeo@montague.lit/351b50cc-36d3-11dc-85f7-000bcd821bfb' 
+    type='get'>
   <query xmlns='http://jabber.org/protocol/disco#info'/>
 </iq>
       ]]></code>
       <p>The response is:</p>
       <code><![CDATA[
-<iq type='result' from='romeo@montague.lit/home' to='juliet@capulet.lit/chamber' id='disco1'>
+<iq from='romeo@montague.lit/351b50cc-36d3-11dc-85f7-000bcd821bfb' 
+    id='disco1'
+    to='juliet@capulet.lit/chamber' 
+    type='result'>
   <query xmlns='http://jabber.org/protocol/disco#info'>
     <identity category='client' type='pc'/>
     <feature var='http://jabber.org/protocol/disco#info'/>
@@ -141,7 +148,7 @@
   </query>
 </iq>
       ]]></code>
-      <p>At this point, your client knows that anyone advertising a version string of '8RovUdtOmiAjzj+xI7SK5BCw3A8=' has a client that can do &xep0045;. Your client remembers this information, so that it does not need to explicitly query the capabilities of a contact with the same version string. For example, Benvolio may send you the following presence:</p>
+      <p>At this point, your client knows that anyone advertising a version string of '8RovUdtOmiAjzj+xI7SK5BCw3A8=' has a client that can do &xep0045; and the other features returned by Romeo's client (the string can be relied upon because of how it is generated and checked as explained later in this document). Your client remembers this information, so that it does not need to explicitly query the capabilities of a contact with the same version string. For example, Benvolio may send you the following presence:</p>
       <code><![CDATA[
 <presence from='benvolio@capulet.lit/230193'>
   <c xmlns='http://jabber.org/protocol/caps' 
@@ -175,28 +182,28 @@
       <li>The type of client I am using is of interest to the people in my roster.</li>
       <li>Clients for the people on my roster might want to make user interface decisions based on my capabilities.</li>
       <li>Different clients may support the same capabilities.</li>
-      <li>Members of a community tend to cluster around a small set of clients. More specifically, multiple people in my roster use the same client, and they upgrade versions relatively slowly (commonly a few times a year, perhaps once a week at most, certainly not once a minute).</li>
+      <li>Members of a community tend to cluster around a small set of clients with a small set of capabilities. More specifically, multiple people in my roster use the same client, and they upgrade versions relatively slowly (commonly a few times a year, perhaps once a week at most, certainly not once a minute).</li>
       <li>Some clients are running against servers without server-to-server connectivity enabled, and without access to the Internet via HTTP.</li>
       <li>Conversations are possible between users who are not on each other's rosters.</li>
-      <li>Client capabilities may change over the course of a session, due to features being enabled and disabled.</li>
+      <li>Client capabilities may change over the course of a presence session, due to features being enabled and disabled.</li>
     </ul>
   </section1>
 
   <section1 topic='Requirements' anchor='reqs'>
     <p>The protocol defined herein addresses the following requirements:</p>
     <ol>
-      <li>Clients MUST be able to participate even if they support only &xmppcore;, &xmppim;, and <cite>XEP-0030</cite>.</li>
-      <li>Clients MUST be able to participate even if they are on networks without connectivity to other XMPP servers, services offering specialized XMPP extensions, or HTTP servers.<note>These first two requirements effectively eliminated &xep0060; as a possible implementation of entity capabilities.</note></li>
-      <li>Clients MUST be able to retrieve information without querying each user.</li>
-      <li>Since presence is normally broadcasted to many users, the byte size of the proposed extension MUST be as small as possible.</li>
-      <li>It MUST be possible to write a &xep0045; implementation that passes the given information along.</li>
-      <li>It MUST be possible to publish a change in capabilities within a single session.</li>
-      <li>Server infrastructure above and beyond that defined in <cite>XMPP Core</cite> and <cite>XMPP IM</cite> MUST NOT be required for this approach to work, although additional server infrastructure MAY be used for optimization purposes.</li>
+      <li>Clients must be able to participate even if they support only &xmppcore;, &xmppim;, and <cite>XEP-0030</cite>.</li>
+      <li>Clients must be able to participate even if they are on networks without connectivity to other XMPP servers, services offering specialized XMPP extensions, or HTTP servers.<note>These first two requirements effectively eliminated &xep0060; as a possible implementation of entity capabilities.</note></li>
+      <li>Clients must be able to retrieve information without querying each user.</li>
+      <li>Since presence is normally broadcasted to many users, the byte size of the proposed extension must be as small as possible.</li>
+      <li>It must be possible to write a XEP-0045 server implementation that passes the given information along.</li>
+      <li>It must be possible to publish a change in capabilities within a single presence session.</li>
+      <li>Server infrastructure above and beyond that defined in <cite>XMPP Core</cite> and <cite>XMPP IM</cite> must not be required for this approach to work, although additional server infrastructure may be used for optimization purposes.</li>
     </ol>
   </section1>
 
   <section1 topic='Protocol' anchor='protocol'>
-    <p>Entity capabilities are encapsulated in a &lt;c/&gt; element qualified by the 'http://jabber.org/protocol/caps' namespace. The attributes of the &lt;c/&gt; element are as follows:</p>
+    <p>Entity capabilities are encapsulated in a &lt;c/&gt; element qualified by the 'http://jabber.org/protocol/caps' namespace. The attributes of the &lt;c/&gt; element are as follows.</p>
     <table caption='Attributes'>
       <tr>
         <th>Name</th>
@@ -220,7 +227,7 @@
       </tr>
       <tr>
         <td>ver</td>
-        <td>A string that specifies the identity and supported features of the entity. <note>Before version 1.4 of this specification, the 'ver' attribute was used to specify the released version of the software.</note></td>
+        <td>A string that specifies the identity and supported features of the entity. <note>Before version 1.4 of this specification, the 'ver' attribute was used to specify the released version of the software; however, the values of the 'ver' attribute that result from use of the algorithm specified since version 1.4 are backward-compatible with the legacy approach.</note></td>
         <td>REQUIRED</td>
       </tr>
     </table>
@@ -231,8 +238,8 @@
     <p>Note: All sorting operations MUST be performed using "i;octet" collation as specified in Section 9.3 of &rfc4790;.</p>
     <ol>
       <li>Initialize an empty string S.</li>
-      <li>Sort the service discovery identities by category and then by type (if it exists), formatted as "category" "/" "type".</li>
-      <li>For each identity, append the category/type to S, followed by the '&lt;' character.</li>
+      <li>Sort the service discovery identities by category and then by type (if it exists), formatted as 'category' '/' 'type'.</li>
+      <li>For each identity, append the 'category/type' to S, followed by the '&lt;' character.</li>
       <li>Sort the supported features.</li>
       <li>For each feature, append the feature to S, followed by the '&lt;' character.</li>
       <li>Compute ver by hashing S using the SHA-1 algorithm as specified in &rfc3174; (with binary output) and encoding the hash using Base64 as specified in Section 4 of &rfc4648; (note: the Base64 output MUST NOT include whitespace and MUST set padding bits to zero). <note>The OpenSSL command for producing such output is "echo -n 'S' | openssl dgst -binary -sha1 | openssl enc -nopad -base64".</note></li>
@@ -240,7 +247,7 @@
     <p>For example, consider an entity whose service discovery category is "client", whose service discovery type is "pc", and whose supported features are "http://jabber.org/protocol/disco#info", "http://jabber.org/protocol/disco#items", and "http://jabber.org/protocol/muc". The value of the 'ver' attribute would be generated as follows:</p>
     <ol>
       <li>S = ''</li>
-      <li>Only one identity: client/pc</li>
+      <li>Only one identity: "client/pc"</li>
       <li>S = 'client/pc&lt;'</li>
       <li>Sort the features: "http://jabber.org/protocol/disco#info", "http://jabber.org/protocol/disco#items", "http://jabber.org/protocol/muc".</li>
       <li>S = 'client/pc&lt;http://jabber.org/protocol/disco#info&lt;http://jabber.org/protocol/disco#items&lt;http://jabber.org/protocol/muc&lt;'</li>
@@ -250,9 +257,8 @@
 
   <section1 topic='Use Cases' anchor='usecases'>
     <section2 topic='Advertising Capabilities' anchor='advertise'>
-      <p>Each time a conformant client sends presence, it annotates that presence with a client identifier ('node' attribute) and identity and feature identifier ('ver' attribute). Unless the server optimizations shown later are being used, the client MUST send this with every presence change (except for unavailable presence) to enable existing servers to remember the last presence for use in responding to probes.</p>
-       <p>If the supported features change during a client's session (e.g., a user installs an updated version of a client plugin), the application MUST recompute the 'ver' attribute and SHOULD send a new presence broadcast.</p>
-      <p>Note: The values of the <strong>'node'</strong> and <strong>'ver'</strong> attributes MUST NOT contain the '#' character, since that character is used as a separator in the <link url="#discover">Discovering Capabilities</link> use case.</p>
+      <p>Each time a conformant entity sends presence, it annotates that presence with an entity identifier ('node' attribute) and identity and feature identifier ('ver' attribute). Unless the server optimizations shown later are being used, the client MUST send this with every presence change (except for unavailable presence) to enable existing servers to remember the last presence for use in responding to probes.</p>
+       <p>If the supported features change during a client's presence session (e.g., a user installs an updated version of a client plugin), the application MUST recompute the 'ver' attribute and SHOULD send a new presence broadcast.</p>
 
       <example caption='Annotated presence sent'><![CDATA[
 <presence>
@@ -264,18 +270,24 @@
     </section2>
 
     <section2 topic="Discovering Capabilities" anchor='discover'>
-      <p>A contact can learn what features a user's client supports by sending a disco#info request (as defined in <strong>XEP-0030: Service Discovery</strong>) to any client that sent a particular value of the <strong>ver</strong> attribute.</p>
+      <p>An application can learn what features another entity supports by sending a disco#info request (see <cite>XEP-0030</cite>) to any entity that sent a particular value of the <strong>ver</strong> attribute.</p>
 
-      <example caption='Disco#info request for client#version'><![CDATA[
-<iq type='get' from='bard@shakespeare.lit/globe' to='someuser@capulet.lit/resource' id='123'>
+      <example caption='Disco#info request'><![CDATA[
+<iq from='juliet@capulet.lit/balcony' 
+    id='disco1'
+    to='romeo@montague.lit/351b50cc-36d3-11dc-85f7-000bcd821bfb' 
+    type='get'>
   <query xmlns='http://jabber.org/protocol/disco#info'/>
 </iq>
       ]]></example>
 
-      <p>The user then returns all of the capabilities supported by software.</p>
+      <p>The entity then returns all of the capabilities it supports.</p>
 
-      <example caption='Disco#info response for client#version'><![CDATA[
-<iq type='result' from='someuser@capulet.lit/resource' to='bard@shakespeare.lit/globe' id='123'>
+      <example caption='Disco#info response'><![CDATA[
+<iq from='romeo@montague.lit/351b50cc-36d3-11dc-85f7-000bcd821bfb' 
+    id='disco1'
+    to='juliet@capulet.lit/balcony' 
+    type='result'>
   <query xmlns='http://jabber.org/protocol/disco#info'/>
     <identity category='client' type='pc'/>
     <feature var='http://jabber.org/protocol/disco#info'/>
@@ -285,7 +297,7 @@
 </iq>
       ]]></example>
 
-      <p>The client MUST check the identities and supported features against the 'ver' value by calculating the hash as described under <link url='#ver'>Generating the ver Attribute</link> and making sure that the values match. If the values do not match, the client MUST NOT accept the 'ver' value as reliable and SHOULD check the value of another user who advertises that value (if any). This helps to prevent poisoning of entity capabilities information.</p>
+      <p>The client MUST check the identities and supported features against the 'ver' value by calculating the hash as described under <link url='#ver'>Generating the ver Attribute</link> and making sure that the values match. If the values do not match, the client MUST NOT accept or cache the 'ver' value as reliable and SHOULD check the value of another user who advertises that value (if any). This helps to prevent poisoning of entity capabilities information.</p>
 
     </section2>
 
@@ -302,7 +314,7 @@
   </section1>
 
   <section1 topic='Server Optimizations' anchor='optimizations'>
-    <p>A server that is managing an entity's session MAY choose to optimize traffic through the server. In this case, the server MAY strip off redundant capabilities annotations. Because of this, receivers of annotations MUST NOT expect an annotation on every presence packet they receive. If the server wants to perform this traffic optimization, it MUST ensure that the first presence each subscriber receives contains the annotation. The server MUST also ensure that any changes in the annotation (typically in the <strong>'ext'</strong> attribute) are sent to all subscribers.</p>
+    <p>A server that is managing an entity's presence session MAY choose to optimize traffic through the server. In this case, the server MAY strip off redundant capabilities annotations. Because of this, receivers of annotations MUST NOT expect an annotation on every presence packet they receive. If the server wants to perform this traffic optimization, it MUST ensure that the first presence each subscriber receives contains the annotation. The server MUST also ensure that any changes in the annotation (e.g., an updated 'ver' attribute)(e.g., an updated 'ver' attribute)  are sent to all subscribers.</p>
 
       <p>A client MAY query the server using <strong>disco#info</strong> to determine if the server supports the <strong>'http://jabber.org/protocol/caps'</strong> feature. If so, the server MUST perform the optimization delineated above, and the client MAY choose to send the capabilities annotation only on the first presence packet, as well as whenever its capabilities change.</p>
 
@@ -325,17 +337,17 @@
     ]]></example>
   </section1>
 
-  <section1 topic='Implementation Notes' anchor='impl'>
+  <section1 topic='Directed Presence' anchor='directed'>
     <p>If two entities exchange messages but they do not normally exchange presence (i.e., via presence subscription), the entities MAY choose to send directed presence to each other, where the presence information SHOULD be annotated with the same capabilities information as each entity sends in broadcasted presence. If capabilities information has not been received from another entity, an application MUST assume that the other entity does not support capabilities.</p>
   </section1>
 
-  <section1 topic='Error Codes' anchor='error'>
-    <p>No application-specific error codes are defined by this document. See <strong>XEP-0030: Service Discovery</strong> for a list of potential service discovery error codes.</p>
+  <section1 topic='Caching' anchor='caching'>
+    <p>An application that accepts entity capabilities information SHOULD cache associations between the 'ver' attribute and discovered features within the scope of one presence session and MAY cache such associations across sessions. This obviates the need for extensive service discovery requests within a session or at the beginning of a session.</p>
   </section1>
 
   <section1 topic='Security Considerations' anchor='security'>
-    <p>Use of the protocol specified in this document might make some client-specific forms of attack slightly easier, since the attacker could more easily determine the type of client being used. However, since most clients respond to <strong>jabber:iq:version</strong> requests without performing access control checks, there is no new vulnerability. Entities that wish to restrict access to capabilities information SHOULD use &xep0016; to define appropriate communications blocking (e.g., an entity MAY choose to allow IQ requests only from "trusted" entities, such as those with whom it has a subscription of "both").</p>
-    <p>Adherence to the algorithm defined in the <link url='#ver'>Generation of ver Attribute</link> section of this document helps to guard against poisoning of entity capabilities information by malicious or improperly implemented entities.</p>
+    <p>Use of the protocol specified in this document might make some client-specific forms of attack slightly easier, since the attacker could more easily determine the type of client being used. However, since most clients respond to Service Discoery and Software Version requests without performing access control checks, there is no new vulnerability. Entities that wish to restrict access to capabilities information SHOULD use &xep0016; to define appropriate communications blocking (e.g., an entity MAY choose to allow IQ requests only from "trusted" entities, such as those with whom it has a subscription of "both").</p>
+    <p>Adherence to the algorithm defined in the <link url='#ver'>Generation of ver Attribute</link> section of this document for both generation and checking of the 'ver' attribute helps to guard against poisoning of entity capabilities information by malicious or improperly implemented entities.</p>
   </section1>
 
   <section1 topic='IANA Considerations' anchor='iana'>
@@ -371,7 +383,7 @@
         <xs:extension base='empty'>
           <xs:attribute name='ext' type='xs:NMTOKENS' use='optional'/>
           <xs:attribute name='hash' type='xs:NMTOKEN' use='optional' default='sha-1'/>
-          <xs:attribute name='node' type='xs:string' use='optional'/>
+          <xs:attribute name='node' type='xs:string' use='required'/>
           <xs:attribute name='ver' type='xs:string' use='required'/>
         </xs:extension>
       </xs:simpleContent>
