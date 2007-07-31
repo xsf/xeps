@@ -577,7 +577,7 @@
     <xsl:variable name='num'>
       <xsl:value-of select='$prevnum'/><xsl:number level='multiple' count='section4'/><xsl:text>.</xsl:text>
     </xsl:variable>
-    <br />
+    <br />&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;
       <xsl:value-of select='$num'/> <xsl:text>  </xsl:text>
       <a>
         <xsl:attribute name='href'>
