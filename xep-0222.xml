@@ -1,0 +1,284 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Persisting Objects via Publish-Subscribe</title>
+  <abstract>This document specifies protocol semantics for using the XMPP publish-subscribe extension to persistently store semi-public data objects such as public keys and personal profiles.</abstract>
+  &LEGALNOTICE;
+  <number>0222</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards JIG</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0115</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>TO BE ASSIGNED</shortname>
+  &stpeter;
+  <revision>
+    <version>0.1</version>
+    <date>2007-08-08</date>
+    <initials>psa</initials>
+    <remark><p>Initial published version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2007-07-18</date>
+    <initials>psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <section2 topic='Motivation' anchor='motivation'>
+    <p>&xep0163; introduced the idea of a virtual &xep0060; service associated with an IM user's bare JID (&BAREJID;). However, personal eventing (PEP) is not optimized for the persistent storage of semi-public data objects such as public keys or user profiles. Therefore this document defines a set of best practices that enable an IM user to persistently store semi-public data objects at their virtual pubsub service; in effect, we "sub-class" PEP by showing how a particular pubsub node can be configured for persisting objects (we call such a node a "POP node").</p>
+  </section2>
+  <section2 topic='How It Works' anchor='howitworks'>
+    <p>This section provides a friendly introduction to persisting objects via pubsub (a.k.a. POP).</p>
+    <p>Imagine that you are a Shakespearean character named Juliet and that you want to persistently store information such as your public keys (see &xep0189;) and user profile (see &xep0154;).</p>
+    <p>We assume that you have three contacts with the following relationship to you:</p>
+    <ol start='1'>
+      <li>benvolio@montague.lit, who has no subscription to your presence</li>
+      <li>nurse@capulet.lit, who has a bidirectional subscription to your presence and who is in your "Servants" roster group</li>
+      <li>romeo@montague.lit, who has a bidirectional subscription to your presence and who is in your "Friends" roster group</li>
+    </ol>
+    <p>We also assume that your server (capulet.lit) supports PEP along with the "publish-options" feature, and that your client discovered that support when you logged in.</p>
+    <p>Because you want to keep your communications with Romeo confidential, you decide to start encrypting your messages. Therefore you reconfigure your client, which generates an RSA key that it publishes to the virtual pubsub service hosted at your bare JID &lt;juliet@capulet.lit&gt;.</p>
+    <example caption='Publishing a key'><![CDATA[
+<iq from='juliet@capulet.lit/balcony' type='set' id='pub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
+      <item id='julietRSAkey1hash'>
+        <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+          <KeyName>julietRSAkey1hash</KeyName>
+          <KeyValue>
+            <RSAKeyValue>
+              <Modulus>...</Modulus>
+              <Exponent>AQAB</Exponent>
+            </RSAKeyValue>
+          </KeyValue>
+        </KeyInfo>
+      </item>
+    </publish>
+    <publish-options>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#publish-options</value>
+        </field>
+        <field var='pubsub#persist_items'>
+          <value>true</value>
+        </field>
+        <field var='pubsub#send_last_published_item'>
+          <value>never</value>
+        </field>
+        <field var='pubsub#access_model'>
+          <value>roster</value>
+        </field>
+        <field var='pubsub#roster_groups_allowed'>
+          <value>Friends</value>
+        </field>
+      </x>
+    </publish-options>
+  </pubsub>
+</iq>
+    ]]></example>
+    <p>Your publish request is a standard pubsub request except that:</p>
+    <ol start='1'>
+      <li>The item is persisted (pubsub#persist_items is true).</li>
+      <li>The last published item is never sent (i.e., items are pushed out only when modified).</li>
+      <li>In this case, access is limited to people in your Friends roster group.</li>
+    </ol>
+    <p>If all goes well (see <link url='#publish'>Publishing an Item</link>), your key will be pushed out to all appropriate individuals (in this case only Romeo). In particular, Romeo receives your key because he has auto-subscribed to the virtual pubsub service at your bare JID via a presence subscription and because his &xep0115; data indicated that he is interested in the "http://www.xmpp.org/extensions/xep-0189.html#ns" payload type.</p>
+    <example caption='Appropriate entities receive event notifications'><![CDATA[
+<message from='juliet@capulet.lit'
+         to='romeo@montague.lit/orchard'
+         type='headline'
+         id='keyfoo1'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
+      <item id='julietRSAkey1hash'>
+        <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+          <KeyName>julietRSAkey1hash</KeyName>
+          <KeyValue>
+            <RSAKeyValue>
+              <Modulus>...</Modulus>
+              <Exponent>AQAB</Exponent>
+            </RSAKeyValue>
+          </KeyValue>
+        </KeyInfo>
+      </item>
+    </items>
+  </event>
+</message>
+    ]]></example>
+    <p>Because PEP services must send notifications to the account owner, you too receive the notification at each of your resources (here "balcony" and "chamber").</p>
+    <example caption='Publisher receives event notification'><![CDATA[
+<message from='juliet@capulet.lit'
+         to='juliet@capulet.lit/balcony'
+         type='headline'
+         id='keyfoo2'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
+      <item id='julietRSAkey1hash'>
+        <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+          <KeyName>julietRSAkey1hash</KeyName>
+          <KeyValue>
+            <RSAKeyValue>
+              <Modulus>...</Modulus>
+              <Exponent>AQAB</Exponent>
+            </RSAKeyValue>
+          </KeyValue>
+        </KeyInfo>
+      </item>
+    </items>
+  </event>
+</message>
+
+<message from='juliet@capulet.lit'
+         to='juliet@capulet.lit/chamber'
+         type='headline'
+         id='keyfoo3'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
+      <item id='julietRSAkey1hash'>
+        <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+          <KeyName>julietRSAkey1hash</KeyName>
+          <KeyValue>
+            <RSAKeyValue>
+              <Modulus>...</Modulus>
+              <Exponent>AQAB</Exponent>
+            </RSAKeyValue>
+          </KeyValue>
+        </KeyInfo>
+      </item>
+    </items>
+  </event>
+</message>
+    ]]></example>
+    <p>So that's the general idea.</p>
+  </section2>
+</section1>
+
+<section1 topic='Concepts and Approach' anchor='approach'>
+  <p>Persisting objects via pubsub ("POP") re-uses the concepts already defined in <cite>XEP-0060</cite> and <cite>XEP-0163</cite>. In order to optimize for object persistence instead of transient event notifications, a POP node MUST be configured as follows:</p>
+  <ol start='1'>
+    <li>Set pubsub#persist_items to true.</li>
+    <li>Set pubsub#last_published_item to "never".</li>
+  </ol>
+  <p>The access model MAY be any model defined in <cite>XEP-0060</cite>.</p>
+</section1>
+
+<section1 topic='Publishing an Item' anchor='publish'>
+  <p>An account owner publishes an item to a node by following the protocol specified in <cite>XEP-0060</cite>:</p>
+  <example caption='Account owner publishes item'><![CDATA[
+<iq from='juliet@capulet.lit/balcony' type='set' id='pub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
+      <item id='julietRSAkey1hash'>
+        <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+          <KeyName>julietRSAkey1hash</KeyName>
+          <KeyValue>
+            <RSAKeyValue>
+              <Modulus>...</Modulus>
+              <Exponent>AQAB</Exponent>
+            </RSAKeyValue>
+          </KeyValue>
+        </KeyInfo>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+  ]]></example>
+  <p>If the node does not already exist, the virtual pubsubservice MUST create the node. As described in <cite>XEP-0163</cite>, this "auto-create" feature (defined in <cite>XEP-0060</cite>) MUST be supported by a PEP service. (Naturally, the account owner's client MAY follow the node creation use case specified in <cite>XEP-0060</cite> before attempting to publish an item.)</p>
+  <p>In order for the client to reliably persist objects, the virtual pubsub service must also support the "publish-options" feature defined in <cite>XEP-0060</cite>. Typically, a client will publish with options so that the object is properly persisted.</p>
+  <example caption='Publishing a key'><![CDATA[
+<iq from='juliet@capulet.lit/balcony' type='set' id='pub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
+      <item id='julietRSAkey1hash'>
+        <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+          <KeyName>julietRSAkey1hash</KeyName>
+          <KeyValue>
+            <RSAKeyValue>
+              <Modulus>...</Modulus>
+              <Exponent>AQAB</Exponent>
+            </RSAKeyValue>
+          </KeyValue>
+        </KeyInfo>
+      </item>
+    </publish>
+    <publish-options>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#publish-options</value>
+        </field>
+        <field var='pubsub#persist_items'>
+          <value>true</value>
+        </field>
+        <field var='pubsub#send_last_published_item'>
+          <value>never</value>
+        </field>
+        <field var='pubsub#access_model'>
+          <value>roster</value>
+        </field>
+        <field var='pubsub#roster_groups_allowed'>
+          <value>Friends</value>
+        </field>
+      </x>
+    </publish-options>
+  </pubsub>
+</iq>
+  ]]></example>
+  <p>If the publication logic dictates that event notifications shall be sent, the account owner's server generates notifications and sends them to all appropriate entities as described in the Receiving Event Notifications section of <cite>XEP-0163</cite>.</p>
+</section1>
+
+<section1 topic='Service Discovery' anchor='disco'>
+  <p>Before an account owner attempts to complete the use cases defined herein, its client SHOULD verify that the account owner's server supports both PEP and the "publish-options" feature; to do so, it MUST send a &xep0030; information request to the server:</p>
+  <example caption='Account owner queries server regarding protocol support'><![CDATA[
+<iq from='juliet@capulet.lit/balcony'
+    to='capulet.lit'
+    id='disco1'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+    ]]></example>
+    <p>The server MUST return an identity of "pubsub/pep" and include the "publish-options" feauture in the list of the namespaces and other features it supports:</p>
+    <example caption='Server communicates protocol support'><![CDATA[
+<iq from='capulet.lit'
+    to='juliet@capulet.lit/balcony'
+    id='disco1'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='server' type='im'/>
+    <identity category='pubsub' type='pep'/>
+    ...
+    <feature var='http://jabber.org/protocol/pubsub#publish-options'/>
+    ...
+  </query>
+</iq>
+  ]]></example>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>This document introduces no security considerations above and beyond those specified in <cite>XEP-0060</cite> and <cite>XEP-0163</cite>.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This document requires no interaction with the &REGISTRAR;.</p>
+</section1>
+
+</xep>
