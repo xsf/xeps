@@ -23,6 +23,13 @@
   <supersededby>None</supersededby>
   <shortname>NOT YET ASSIGNED</shortname>
   &ianpaterson;
+  &stpeter;
+  <revision>
+    <version>0.6</version>
+    <date>2008-08-15</date>
+    <initials>psa</initials>
+    <remark><p>More clearly explained node creation and key publication workflows.</p></remark>
+  </revision>
   <revision>
     <version>0.5</version>
     <date>2007-03-05</date>
@@ -55,7 +62,7 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>This document defines different methods an entity may use for publishing its long-term public keys:</p>
+  <p>This document defines different methods an entity MAY use for publishing its long-term public keys:</p>
   <ul>
     <li>Publishing public keys to a set of subscribers.</li>
     <li>Querying another entity for its public keys.</li>
@@ -64,11 +71,46 @@
 </section1>
 
 <section1 topic='Public Key Publication via PEP' anchor='usecases-pub'>
-  <p>An entity SHOULD use &xep0163; to publish all its long-term public keys via its own server.</p>
-  <p>If the pubkeys PEP node does not exist already then the entity MUST create it. In this case, the entity SHOULD specify that items published to the node are persistent and that the keys will only be pushed to subscribers whenever new keys are published (i.e. not when subscribers become newly available or when a new subscription is created). If the user wants to control access to his/her identity (see <link url='#security'>Security Considerations</link>) then the entity MUST also specify an appropriate access model other than "Open". The entity MAY create the node by including a &lt;configure/&gt; element when publishing a key for the first time (note: this functionality is not yet supported by &xep0060;).</p>
-  <p>The entity can update the keys that the node contains at any time. The value of the 'id' attribute of each &lt;item/&gt; element SHOULD be set to the fingerprint of the public key. i.e., the SHA256 hash (see &nistfips180-2;) of the key's normalized  &lt;KeyValue/&gt;, &lt;PGPData/&gt; or &lt;X509Data/&gt; element (all character data <em>between</em> all elements MUST be removed and the XML MUST be converted to canonical form - see &w3canon;). Thus subscribers are able to request a single key by specifying its fingerprint (for example, when a subscriber is using the &xep0116; protocol).</p>
-  <p>Each public key MUST be wrapped in a &lt;KeyInfo/&gt; element as specified in &w3xmlsig;. Each &lt;KeyInfo/&gt; element published using PEP MUST contain a &lt;KeyName/&gt; element with a unique (for the user) name to allow the key to be referenced by other XMPP Extension Protocols (for example, &xep0136;). The name MAY be the same as the value of the 'id' attribute. However, if two &lt;KeyInfo/&gt; elements contain the same public key in different formats (for example, an X.509 certificate may contain an RSA key), then the name of the two keys SHOULD be the same.</p>
-  <example caption='Entity Creates Public Keys Publishing Node and Publishes an RSA Key to its Server'><![CDATA[
+  <p>An entity SHOULD use &xep0163; to publish its long-term public keys via its own server. Processes for doing so are described in the following sections.</p>
+  <section2 topic='Creating the Node' anchor='usecases-pub-create'>
+    <p>If the pubkeys PEP node does not exist already then the entity must create it. The node MUST have a NodeID of "http://www.xmpp.org/extensions/xep-0189.html#ns" &NSNOTE;.</p>
+    <p>The node SHOULD be configured as follows (see also &xep0222;):</p>
+    <ul>
+      <li>Items published to the node are persistent (this is done by setting the "persistent-items" option to true).</li>
+      <li>Keys will be pushed to subscribers only when new keys are published, not when subscribers become newly available or when a new subscription is created (this is done by setting the "send_last_published_item" option to "never").</li>
+    </ul> 
+    <p>If the user wants to control access to his/her identity (see <link url='#security'>Security Considerations</link>) then the node access model SHOULD be something other than "Open" (this can be done by setting the "access_model" option to a value of "authorize", "presence", "roster", or "whitelist").</p>
+    <example caption='Entity Creates Node'><![CDATA[
+<iq type='set'
+    from='juliet@capulet.com/balcony'
+    to='pubsub.shakespeare.lit'
+    id='create1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <create node='http://www.xmpp.org/extensions/xep-0189.html#ns'/>
+    <configure>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#node_config</value>
+        </field>
+        <field var='pubsub#persist_items'>
+          <value>1</value>
+        </field>
+        <field var='pubsub#send_last_published_item'>
+          <value>never</value>
+        </field>
+        <field var='pubsub#access_model'>
+          <value>roster</value>
+        </field>
+        <field var='pubsub#roster_groups_allowed'>
+          <value>friends</value>
+        </field>
+      </x>
+    </configure>
+  </pubsub>
+</iq>
+    ]]></example>
+    <p>Alternatively, if the entity's pubsub service supports both the "auto-create" and "publish-options" features, then the entity MAY create the node by publishing a key and in the first publish including a &lt;publish-options/&gt; element. However, note that not all pubsub services support this feature, since it is optional in &xep0060;.</p>
+    <example caption='Entity Auto-Creates Node and Publishes an RSA Key'><![CDATA[
 <iq from='juliet@capulet.com/balcony' type='set' id='pub1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <publish node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
@@ -105,8 +147,14 @@
     </configure>
   </pubsub>
 </iq>
-  ]]></example>
-  <example caption='Entity Publishes a DSA Key to its Server'><![CDATA[
+    ]]></example>
+  </section2>
+  <section2 topic='Publishing a Key' anchor='usecases-pub-publish'>
+    <p>The entity publishes a key by sending a pubsub publish request to the pubsub service. A previously published key can be updated by re-publishing the key using the same ItemID.</p>
+    <p>Each public key MUST be wrapped in a &lt;KeyInfo/&gt; element qualified by the 'http://www.w3.org/2000/09/xmldsig#' namespace as specified in &w3xmlsig;. Each &lt;KeyInfo/&gt; element published using PEP MUST contain a &lt;KeyName/&gt; element with a name that is unique for the user; this enables the key to be referenced by other XMPP Extension Protocols (for example, &xep0136;). The name MAY be the same as the value of the ItemID. However, if two &lt;KeyInfo/&gt; elements contain the same public key in different formats (for example, an X.509 certificate may contain an RSA key), then the name of the two keys SHOULD be the same.</p>
+    <p>Before computing the fingerprint or publishing the key, all character data <em>between</em> all elements in the &lt;KeyInfo/&gt; element MUST be removed and the XML MUST be converted to canonical form according to &w3canon;. (Any whitespace or other character data shown in the examples herein is included only for the purpose of readability.)</p>
+    <p>The value of the ItemID SHOULD be set to the fingerprint of the public key, e.g., the SHA256 hash (see &nistfips180-2;) of the key's normalized  &lt;KeyValue/&gt;, &lt;PGPData/&gt; or &lt;X509Data/&gt; element. Therefore subscribers or other interested entities are able to request a single key by specifying its fingerprint (for example, when a subscriber is using the &xep0116; protocol).</p>
+    <example caption='Entity Publishes a DSA Key to its Server'><![CDATA[
 <iq from='juliet@capulet.com/balcony' type='set' id='pub2'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <publish node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
@@ -126,8 +174,8 @@
     </publish>
   </pubsub>
 </iq>
-  ]]></example>
-  <example caption='Entity Publishes an X.509 Certificate to its Server'><![CDATA[
+    ]]></example>
+    <example caption='Entity Publishes an X.509 Certificate to its Server'><![CDATA[
 <iq from='juliet@capulet.com/balcony' type='set' id='pub3'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <publish node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
@@ -150,8 +198,8 @@
     </publish>
   </pubsub>
 </iq>
-  ]]></example>
-  <example caption='Entity Publishes a PGP Key to its Server'><![CDATA[
+    ]]></example>
+    <example caption='Entity Publishes a PGP Key to its Server'><![CDATA[
 <iq from='juliet@capulet.com/balcony' type='set' id='pub4'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <publish node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
@@ -167,8 +215,9 @@
     </publish>
   </pubsub>
 </iq>
-  ]]></example>
-  <example caption='Subscriber Receives Event with Key'><![CDATA[
+    ]]></example>
+    <p>After the account owner publishes the key, the pubsub service shall a notification to each subscriber or otherwise authorized and interested entity.</p>
+    <example caption='Pubsub Service Sends Notification with Key'><![CDATA[
 <message to='romeo@montague.net/garden' from='juliet@capulet.com' type='headline'>
   <event xmlns='http://jabber.org/protocol/pubsub#event'>
     <items node='http://www.xmpp.org/extensions/xep-0189.html#ns'>
@@ -189,8 +238,9 @@
     <address type='replyto' jid='juliet@capulet.com/balcony'/>
   </addresses>
 </message>
-  ]]></example>
-  <p>Note: The stanza containing the event notification (see example above) MAY also include 'replyto' data (as specified by the &xep0033; protocol) to provide an explicit association between the published data and the <em>resource</em> that published it.</p>
+    ]]></example>
+    <p>Note: The stanza containing the event notification (see example above) MAY also include 'replyto' data (as specified by the &xep0033; protocol) to provide an explicit association between the published data and the <em>resource</em> that published it.</p>
+  </section2>
 </section1>
 
 <section1 topic='Public Key Retrieval via PEP' anchor='usecases-retrieve'>
@@ -276,7 +326,7 @@
 </section1>
 
 <section1 topic='Requesting Public Keys Directly From Another Entity' anchor='usecases-request'>
-  <p>If an entity wishes to request the public keys of another entity and it cannot access the keys via <cite>Personal Eventing via Pubsub</cite>, then the entity MAY send an &IQ; of type 'get' to the other entity:</p>
+  <p>If an entity wishes to request the public keys of another entity and it cannot access the keys via <cite>Personal Eventing via Pubsub</cite>, then the entity MAY send an &IQ; of type 'get' to the other entity, containing an empty &lt;pubkeys/&gt; element qualified by the 'http://www.xmpp.org/extensions/xep-0189.html#ns' namespace &NSNOTE;.</p>
   <example caption='Public keys request'><![CDATA[
 <iq type='get'
     id='keys1'
@@ -415,7 +465,7 @@
 
 <section1 topic='Security Considerations' anchor='security'>
   <p>The reliable association between a user or entity and its public keys is beyond the scope of this document. However, each client SHOULD maintain its own secure library of the public keys (or the "fingerprints" of the keys) it associates with other users (not necessarily JIDs).</p>
-  <p>Whenever public keys are published an identity is typically associated with a JID. Although the public keys are public information, it may be critically important for the user of the JID to keep his identity secret from all but a few specified people. Implementors MUST take great care to ensure the identity of the user of a JID is never divulged to anyone except the entities who have been permitted by the user to access the public key.</p>
+  <p>Whenever public keys are published an identity is typically associated with a JID. Although the public keys are public information, it may be critically important for the user of the JID to keep his identity secret from all but a few specified people. Implementors MUST take great care to ensure that the identity of the user of a JID is never divulged to anyone except the entities who have been permitted by the user to access the public key.</p>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -423,7 +473,9 @@
 </section1>
 
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
-  <p>Until this specification advances to a status of Draft, its associated namespace shall be "http://www.xmpp.org/extensions/xep-0189.html#ns"; upon advancement of this specification, the XMPP Registrar shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;.</p>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>Until this specification advances to a status of Draft, its associated namespace shall be "http://www.xmpp.org/extensions/xep-0189.html#ns"; upon advancement of this specification, the &REGISTRAR; shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;.</p>
+  </section2>
 </section1>
 
 <section1 topic='XML Schema' anchor='schema'>
