@@ -6,8 +6,8 @@
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 <xep>
 <header>
-  <title>STUN Server Discovery for Jingle</title>
-  <abstract>This document specifies methods for discovering STUN servers for use in negotiation of certain Jingle transport methods.</abstract>
+  <title>External Service Discovery</title>
+  <abstract>This document specifies an XMPP protocol extension for discovering services external to the XMPP network.</abstract>
   &LEGALNOTICE;
   <number>0215</number>
   <status>Experimental</status>
@@ -23,9 +23,15 @@
   &stpeter;
   &seanegan;
   <revision>
+    <version>0.2</version>
+    <date>2007-08-28</date>
+    <initials>psa</initials>
+    <remark><p>Broadened scope from discovery of STUN servers to discovery of any external (non-XMPP) service.</p></remark>
+  </revision>
+  <revision>
     <version>0.1</version>
     <date>2007-05-16</date>
-    <initials>psa</initials>
+    <initials>psa/se</initials>
     <remark><p>Initial published version.</p></remark>
   </revision>
   <revision>
@@ -61,81 +67,180 @@
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
-  <p>The administrator of an XMPP server may wish to deploy one or more STUN servers (see &rfc3489; and &rfc3489bis;) in order to ease the process of negotiating media exchanges via &xep0176;. A client can become aware of a STUN server in the following ways:</p>
+  <p>An XMPP client may need to discover services external to the XMPP network in order to complete certain XMPP-related use cases. One example is the discovery of STUN servers (see &rfc3489; and &rfc3489bis;) and STUN relays (see &turn;) for the sake of negotiating media exchanges via &xep0176;. <note>The protocol specified herein is functionally equivalent to the protocol currently used in the Google Talk service for discovery of STUN servers, as documented at &lt;<link url='http://code.google.com/apis/talk/jep_extensions/jingleinfo.html'>http://code.google.com/apis/talk/jep_extensions/jingleinfo.html</link>&gt;, but has been broadened in scope to address additional use cases if desired.</note> An XMPP client can already discover such external services in several ways, including:</p>
   <ol>
-    <li>The server is specified in the client's default settings.</li>
-    <li>The server is manually added into the client's configuration by a human user.</li>
-    <li>The server is discovered via DNS SRV records (see &rfc2782;) as specified in Section 9.1 of <cite>RFC 3489</cite>.</li>
+    <li>The service is specified in the client's default settings.</li>
+    <li>The service is manually added into the client's configuration by a human user.</li>
+    <li>The service is discovered via non-XMPP service discovery protocols, such as:
+      <ul>
+        <li>DNS SRV records (&rfc2782;)</li>
+        <li>Service Location Protocol (SLP; &rfc2608;)</li>
+        <li>The Dynamic Delegation Discovery System (DDDS; &rfc3401;)</li>
+        <li>The NAPTR profile of DDDS (&rfc3403;)</li>
+        <li>The S-NAPTR profile of DDDS (&rfc3958;)</li>
+        <li>The U-NAPTR profile of DDDS (&rfc4848;)</li>
+      </ul>
+    </li>
   </ol>
-  <p>Unfortunately, the foregoing methods are subject to human error or cannot be deployed in wide range of scenarios. Therefore, this document defines a way for an XMPP server to advertise a list of STUN servers and provide credentials for use by an XMPP client at a STUN server. This method should be used only as a fallback when DNS SRV lookups are not possible for the client or server.</p>
-  <p>Note: The protocol specified herein is functionally equivalent to the protocol currently used in the Google Talk service and documented at &lt;<link url='http://code.google.com/apis/talk/jep_extensions/jingleinfo.html'>http://code.google.com/apis/talk/jep_extensions/jingleinfo.html</link>&gt;.</p>
+  <p>Unfortunately, some of the foregoing methods are subject to human error and others are either not widely available or cannot be deployed in wide range of scenarios (e.g., when the administrators of an XMPP service do not have access to DNS SRV records). Therefore, this document defines a way for an XMPP server to provide information about external services, which may include extended information such as temporary credentials for authentication at such services. This method should be used only as a fallback when the relevant service discovery technologies (DNS SRV, DDDS, SLP, S-NAPTR, U-NAPTR, etc.) are not available to the client or server. This method does not use &xep0030; since that technology is designed for discovery of XMPP entities, not entities outside an XMPP network.</p>
 </section1>
 
 <section1 topic='Protocol' anchor='protocol'>
-  <p>In order to learn about available STUN servers associated with or known by an XMPP server, a client sends an IQ-get containing a &lt;stun/&gt; element qualified by the "http://www.xmpp.org/extensions/xep-0215.html#ns" namespace &NSNOTE;.</p>
-  <example caption='Entity Requests STUN Server List from XMPP Server'><![CDATA[
+  <p>In order to learn about external services known to an XMPP server, a client sends an IQ-get containing an empty &lt;services/&gt; element qualified by the 'http://www.xmpp.org/extensions/xep-0215.html#ns' namespace &NSNOTE;, typically to its own server (but perhaps to a dedicated discovery service).</p>
+  <p>The XMPP server (or service) SHOULD return the list of external services it is aware of, but MAY instead return an appropriate error, such as &unavailable; if the server does not support this protocol or &forbidden; if the requesting entity does not have permission to receive the list of external services. Each service is encapsulated via a &lt;service/&gt; element.</p>
+  <p>Note: The processes by which an XMPP server discovers external services for "proxying" to XMPP entities are out of scope for this specification.</p>
+  <p>The &lt;service/&gt; element MAY be empty or MAY include extended information about the service as described in the <link url='#extended'>Extended Information</link> section of this document.</p>
+  <p>The attributes of the &lt;service/&gt; element are summarized in the following table.</p>
+  <table caption='Attributes'>
+    <tr>
+      <th>Name</th>
+      <th>Definition</th>
+      <th>Inclusion</th>
+    </tr>
+    <tr>
+      <td>host</td>
+      <td>Either a fully qualified domain name (FQDN) or an IP address (IPv4 or IPv6).</td>
+      <td>REQUIRED</td>
+    </tr>
+    <tr>
+      <td>password</td>
+      <td>A service- or server-generated password for use at the service. *</td>
+      <td>OPTIONAL</td>
+    </tr>
+    <tr>
+      <td>port</td>
+      <td>The communications port to be used at the host.</td>
+      <td>RECOMMENDED</td>
+    </tr>
+    <tr>
+      <td>transport</td>
+      <td>The underlying transport protocol to be used when communicating with the service (typically either TCP or UDP).</td>
+      <td>RECOMMENDED</td>
+    </tr>
+    <tr>
+      <td>type</td>
+      <td>The service type as registered with the &REGISTRAR;.</td>
+      <td>REQUIRED</td>
+    </tr>
+    <tr>
+      <td>username</td>
+      <td>A service- or server-generated username for use at the service. *</td>
+      <td>OPTIONAL</td>
+    </tr>
+  </table>
+  <p>* Note: The processes by which an external service might generate or an XMPP server might negotiate the username and password are outside the scope of this specification. One possible approach is for the XMPP server to generate a short-term authentication credential based on a private key shared with the external service.</p>
+</section1>
+
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Requesting All Services' anchor='all'>
+    <p>A client requests all services by sending a &lt;services/&gt; element to its server.</p>
+    <example caption='Entity Requests All External Services'><![CDATA[
 <iq type='get'
     from='bard@shakespeare.lit/globe'
     to='shakespeare.lit'
-    id='get1'>
-  <stun xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'/>
+    id='all1'>
+  <services xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'/>
 </iq>
-  ]]></example>
-  <p>The XMPP server SHOULD return the list of STUN servers, but MAY instead return an appropriate error, such as &unavailable; if the server does not support the STUN Server Discovery protocol or &forbidden; if the requesting entity does not have permission to receive the list of STUN servers.</p>
-  <example caption='XMPP Server Returns List'><![CDATA[
+    ]]></example>
+    <example caption='XMPP Server Returns List'><![CDATA[
 <iq type='result'
     from='shakespeare.lit'
     to='bard@shakespeare.lit/globe'
-    id='get1'>
-  <stun xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'>
-    <server host='stun.shakespeare.lit' port='9999'/>
-    <server host='192.0.2.1' port='10001'/>
-  </stun>
+    id='all1'>
+  <services xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'>
+    <service host='stun.shakespeare.lit' port='9998' transport='udp' type='stun'/>
+    <service host='stun.shakespeare.lit'
+             password='jj929jkj5sadjfj93v3n'
+             port='9999'
+             type='stun-relay'
+             username='nb78932lkjlskjfdb7g8'/>
+    <service host='192.0.2.1' port='8888' transport='udp' type='stun'/>
+    <service host='192.0.2.1'
+             port='8889'
+             password='93jn3bakj9s832lrjbbz'
+             type='stun-relay'
+             username='auu98sjl2wk3e9fjdsl7'/>
+    <service host='ftp.shakespeare.lit' 
+             password='guest' 
+             port='20' 
+             transport='tcp' 
+             type='ftp' 
+             username='guest'/>
+  </services>
 </iq>
-  ]]></example>
-  <p>The syntax of the &lt;server/&gt; element is as follows:</p>
-  <ul>
-    <li>The &lt;server/&gt; element SHOULD be empty.</li>
-    <li>The 'host' attribute is REQUIRED and specifies either a fully qualified domain name (FQDN) or an IP address (IPv4 or IPv6).</li>
-    <li>The 'port' attribute is REQUIRED and specifies the communications port to be used at the host. <note>The port is necessary since this specification assumes that DNS SRV lookups are not possible.</note></li>
-    <li>The 'username' and 'password' attributes are OPTIONAL and are used as described below.</li>
-  </ul>
-  <p>A STUN server may require a username and password in order to accept STUN binding requests and/or STUN allocate requests. In this case, the XMPP server would typically generate a short-term authentication credential based on a private key shared with the STUN server. <note>Other implementations are possible, and long-term credentials could be used instead; see <cite>RFC 3489</cite> and <cite>rfc3489bis</cite> for details).</note></p>
-  <example caption='XMPP Server Returns List With Credentials'><![CDATA[
+    ]]></example>
+  </section2>
+  <section2 topic='Requesting Selected Services' anchor='select'>
+    <p>A client requests selected services by sending a &lt;services/&gt; element to its server including a 'type' attribute specifying the service type of interest.</p>
+    <example caption='Entity Requests Selected Services'><![CDATA[
+<iq type='get'
+    from='bard@shakespeare.lit/globe'
+    to='shakespeare.lit'
+    id='selected1'>
+  <services xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'
+            type='stun-relay'/>
+</iq>
+    ]]></example>
+    <example caption='XMPP Server Returns List'><![CDATA[
 <iq type='result'
     from='shakespeare.lit'
     to='bard@shakespeare.lit/globe'
-    id='get1'>
-  <stun xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'>
-    <server host='stun.shakespeare.lit' 
-            port='9999' 
-            username='nb78932lkjlskjfdb7g8' 
-            password='jj929jkj5sadjfj93v3n'>
-    <server host='192.0.2.1' 
-            port='10001' 
-            username='auu98sjl2wk3e9fjdsl7' 
-            password='93jn3bakj9s832lrjbbz'/>
-  </stun>
+    id='selected1'>
+  <services xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'
+            type='stun-relay'>
+    <service host='stun.shakespeare.lit'
+             password='jj929jkj5sadjfj93v3n'
+             port='9999'
+             type='stun-relay'
+             username='nb78932lkjlskjfdb7g8'/>
+    <service host='192.0.2.1'
+             port='8889'
+             password='93jn3bakj9s832lrjbbz'
+             type='stun-relay'
+             username='auu98sjl2wk3e9fjdsl7'/>
+  </services>
 </iq>
-  ]]></example>
-  <p>An XMPP server MAY send an updated list of STUN servers by "pushing" the list to a client that has previously requested the list:</p>
-  <example caption='List Push'><![CDATA[
+    ]]></example>
+    <p>If a client requests selected services, an XMPP server MAY as needed send an updated list of the relevant services by "pushing" the list to a client that has previously requested the list:</p>
+    <example caption='Services Push'><![CDATA[
 <iq type='set'
     from='shakespeare.lit'
     to='bard@shakespeare.lit/globe'
     id='push1'>
-  <stun xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'>
+  <services xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'
+            type='stun-relay'>
     <server host='stun.shakespeare.lit' 
             port='9999' 
             username='1nas9dlm3hzl89d0b9v' 
             password='gh9023ljjdk109iajqn'>
     <server host='192.0.2.2' 
-            port='10002' 
+            port='7778' 
             username='bnsv120afg48snsdozp' 
             password='zxp023na98dsfahn1kk'/>
-  </stun>
+  </services>
 </iq>
-  ]]></example>
+    ]]></example>
+  </section2>
+</section1>
+
+<section1 topic='Extended Information' anchor='extended'>
+  <p>If a server or service needs to include extended information, it SHOULD do so by including each bit of information as the XML character data of the &lt;value/&gt; child of a distinct &lt;field/&gt; element, with the entire set of fields contained within an &lt;x/&gt; element of type "result" qualified by the 'jabber:x:data' namespace (see &xep0004;); this &lt;x/&gt; element SHOULD be a child of the &lt;service/&gt; element qualified by the 'http://www.xmpp.org/extensions/xep-0215.html#ns' namespace &NSNOTE;. Thus the IQ result SHOULD be of the following form:</p>
+  <code><![CDATA[
+<iq type='result'>
+  <services xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'>
+    <service>
+      <x type='result' xmlns='jabber:x:data'>
+        <field var='[var-name]' label='[optional]'>
+          <value>[var-value]</value>
+        </field>
+        [ ... ]
+      </x>
+    </service>
+  </services>
+</iq>]]></code>
+  <p>Note: A &lt;field/&gt; element MAY contain more than one &lt;value/&gt; child if appropriate.</p>
+  <p>If the data fields are to be used in the context of a protocol approved by the XMPP Standards Foundation, they SHOULD be registered in accordance with the rules defined in XEP-0068, resulting in the inclusion of a &lt;field/&gt; element whose 'var' attribute has a value of "FORM_TYPE" and whose 'type' attribute has a value of "hidden".</p>
+  <p>Note: Although &xep0128; specifies that an XMPP entity MUST NOT supply extended information about associated children communicated via the 'http://www.xmpp.org/extensions/xep-0215.html#ns' namespace, that rule does not apply to External Service Discovery since services external to the XMPP network cannot communicate via XMPP.</p>
 </section1>
 
 <section1 topic='Determining Support' anchor='disco'>
@@ -164,7 +269,10 @@
 
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
   <section2 topic='Protocol Namespaces' anchor='ns'>
-    <p>Until this specification advances to a status of Draft, its associated namespace shall be "http://www.xmpp.org/extensions/xep-0215.html#ns"; upon advancement of this specification, the &REGISTRAR; shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;.</p>
+    <p>Until this specification advances to a status of Draft, its associated namespace shall be "http://www.xmpp.org/extensions/xep-0215.html#ns"; upon advancement of this specification, the XMPP Registrar shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;.</p>
+  </section2>
+  <section2 topic='External Service Types Registry' anchor='registrar-services'>
+    <p>The XMPP Registrar shall maintain a registry of external service types and their associated transport protocol(s). Such service types will probably be derived from the &ianaports;, defined DNS SRV record types, defined DDDS records for NAPTR, S-NAPTR, and U-NAPTR, and &ianaslp;.  A future version of this specification shall define the relevant actions requested of the XMPP Registrar.</p>
   </section2>
 </section1>
 
@@ -178,21 +286,28 @@
     xmlns='http://www.xmpp.org/extensions/xep-0215.html#ns'
     elementFormDefault='qualified'>
 
-  <xs:element name='stun'>
+  <xs:import
+      namespace='jabber:x:data'
+      schemaLocation='http://www.xmpp.org/schemas/x-data.xsd'/>
+
+  <xs:element name='services'>
     <xs:complexType>
       <xs:sequence minOccurs='0'>
-        <xs:element ref='server'/>
+        <xs:element ref='service'/>
       </xs:sequence>
+      <xs:attribute name='type' type='xs:NCName' use='optional'/>
     </xs:complexType>
   </xs:element>
 
-  <xs:element name='server'>
+  <xs:element name='service'>
     <xs:complexType>
       <xs:simpleContent>
         <xs:extension base='empty'>
           <xs:attribute name='host' type='xs:string' use='required'/>
           <xs:attribute name='password' type='xs:string' use='optional'/>
           <xs:attribute name='port' type='xs:string' use='required'/>
+          <xs:attribute name='transport' type='xs:NCName' use='optional'/>
+          <xs:attribute name='type' type='xs:NCName' use='required'/>
           <xs:attribute name='username' type='xs:string' use='optional'/>
         </xs:extension>
       </xs:simpleContent>
