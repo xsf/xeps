@@ -306,6 +306,7 @@
       <xsl:variable name='org.count' select='count(org)'/>
       <xsl:variable name='email.count' select='count(email)'/>
       <xsl:variable name='jid.count' select='count(jid)'/>
+      <xsl:variable name='uri.count' select='count(uri)'/>
       <xsl:variable name='authornote.count' select='count(authornote)'/>
       <xsl:if test='$authornote.count &gt; 0'>
         See <a href='#authornote'>Author Note</a><br />
@@ -333,6 +334,17 @@
           </xsl:attribute>
           <xsl:value-of select='jid' />
         </a>
+        <br />
+      </xsl:if>
+      <xsl:if test='$uri.count &gt; 0'>
+        URI: 
+        <a>
+          <xsl:attribute name='href'>
+            <xsl:value-of select='uri' />
+          </xsl:attribute>
+          <xsl:value-of select='uri' />
+        </a>
+        <br />
       </xsl:if>
     </p>
   </xsl:template>
