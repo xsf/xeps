@@ -696,8 +696,7 @@
   </xsl:template>
 
   <xsl:template match='example'>
-    <p class='caption'>
-    <a><xsl:attribute name='name'><xsl:text>example-</xsl:text><xsl:number level='any' count='example'/></xsl:attribute></a>Example <xsl:number level='any' count='example'/>.<xsl:text> </xsl:text><xsl:value-of select='@caption'/></p>
+    <p class='caption'><a><xsl:attribute name='name'><xsl:text>example-</xsl:text><xsl:number level='any' count='example'/></xsl:attribute></a>Example <xsl:number level='any' count='example'/>.<xsl:text> </xsl:text><xsl:value-of select='@caption'/></p>
     <div class='indent'>
       <pre><xsl:apply-templates/></pre>
     </div>
@@ -720,7 +719,7 @@
   </xsl:template>
 
   <xsl:template match='table'>
-    <p class='caption'>Table <xsl:number level='any' count='table'/>:<xsl:text> </xsl:text><xsl:value-of select='@caption'/></p>
+    <p class='caption'><a><xsl:attribute name='name'><xsl:text>table-</xsl:text><xsl:number level='any' count='table'/></xsl:attribute></a>Table <xsl:number level='any' count='table'/>:<xsl:text> </xsl:text><xsl:value-of select='@caption'/></p>
     <table border='1' cellpadding='3' cellspacing='0'>
       <xsl:apply-templates/>
     </table>
