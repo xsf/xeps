@@ -51,7 +51,7 @@
         </meta>
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Rights</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'><xsl:value-of select='/xep/header/legal'/></xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='/xep/header/legal/copyright'/></xsl:attribute>
         </meta>
         <!-- END META TAGS FOR DUBLIN CORE -->
       </head>
@@ -350,8 +350,19 @@
   </xsl:template>
 
   <xsl:template match='legal'>
-    <h2>Legal Notice</h2>
-    <p class='indent'><xsl:apply-templates/></p>
+    <h2>Legal Notices</h2>
+    <div class='indent'>
+      <h3>IPR Conformance</h3>
+      <xsl:apply-templates select='/xep/header/legal/conformance'/>
+      <h3>Copyright</h3>
+      <xsl:apply-templates select='/xep/header/legal/copyright'/>
+      <h3>Permissions</h3>
+      <xsl:apply-templates select='/xep/header/legal/permissions'/>
+      <!--
+      h3>Warranty</h3>
+      <xsl:apply-templates select='/xep/header/legal/warranty'/>
+      -->
+    </div>
   </xsl:template>
 
   <xsl:template match='spec'>
