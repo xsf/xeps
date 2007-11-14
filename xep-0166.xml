@@ -27,6 +27,12 @@
   &seanegan;
   &hildjj;
   <revision>
+    <version>0.19</version>
+    <date>2007-11-13</date>
+    <initials>psa</initials>
+    <remark><p>Added scenario for handling of busy state, including Jingle-specific error code and modified error flow (no longer an instance of decline).</p></remark>
+  </revision>
+  <revision>
     <version>0.18</version>
     <date>2007-11-08</date>
     <initials>psa</initials>
@@ -168,7 +174,7 @@
     <version>0.0.5</version>
     <date>2005-10-21</date>
     <initials>psa/sl</initials>
-    <remark><p>Separated  methoddescription formats from signalling protocol.</p></remark>
+    <remark><p>Separated method description formats from signalling protocol.</p></remark>
   </revision>
   <revision>
     <version>0.0.4</version>
@@ -223,7 +229,7 @@ Romeo                         Juliet
   |---------------------------->|
   |                             |
   ]]></code>
-  <p>Naturally, more complex scenarios are possible (indeed, likely).</p>
+  <p>Naturally, more complex scenarios are possible; see the <link url='#scenarios'>Scenarios</link> section of this document for details.</p>
   <p>The simplest flow might happens as follows. The example is that of a voice chat (see <cite>XEP-0167</cite>) initiated by Romeo, where the transport is &xep0177;.</p>
   <example caption="Initiator sends session-initiate"><![CDATA[
 <iq from='romeo@montague.lit/orchard' to='juliet@capulet.lit/balcony' id='jingle1' type='set'>
@@ -317,7 +323,8 @@ Romeo                         Juliet
     <li><p>Procedures for mapping the Jingle signalling protocol to existing signalling standards such as the IETF's Session Initiation Protocol (SIP) and the ITU's H.323 protocol (see &h323;); these documents are forthcoming.</p></li>
   </ul>
 </section1>
-<section1 topic='Glossary' anchor='glossary'>
+<section1 topic='Terminology' anchor='terms'>
+  <section2 topic='Glossary' anchor='terms-glossary'>
   <table caption='Glossary'>
     <tr>
       <th>Term</th>
@@ -344,6 +351,14 @@ Romeo                         Juliet
       <td>A component is a numbered stream of data which needs to be transmitted between the endpoints for a given content type in the context of a given session. It is up to the transport to negotiate the details of each component. Depending on the content type and the content description, one content description may require multiple components to be communicated (e.g., the audio content type might use two components: one to transmit an RTP stream and another to transmit RTCP timing information).</td>
     </tr>
   </table>
+  </section2>
+  <section2 topic='Conventions' anchor='terms-conventions'>
+    <p>In diagrams, the following conventions are used:</p>
+    <ul>
+      <li>Dashed lines (---) represent Jingle stanzas that are sent via the XMPP signalling channel.</li>
+      <li>Double-dashed lines (===) represent media packets that are sent via the non-XMPP media channel.</li>
+    </ul>
+  </section2>
 </section1>
 <section1 topic='Concepts and Approach' anchor='concepts'>
   <p>Jingle consists of three parts, each with its own syntax, semantics, and state machine:</p>
@@ -473,6 +488,7 @@ PENDING  o---------------------+   |
       <li>The initiator is unknown to the receiver (e.g., via presence subscription) and the receiver does not communicate with unknown entities.</li>
       <li>The receiver wishes to redirect to another address.</li>
       <li>The receiver does not support Jingle.</li>
+      <li>The receiver is busy and therefore cannot participate in a session.</li>
       <li>The receiver does not support any of the specified content description formats.</li>
       <li>The receiver does not support any of the specified content transport methods.</li>
       <li>The initiation request was malformed.</li>
@@ -498,6 +514,15 @@ PENDING  o---------------------+   |
 <iq type='error' from='juliet@capulet.lit/balcony' to='romeo@montague.lit/orchard' id='jingle1'>
   <error type='cancel'>
     <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>If the receiver is busy, it SHOULD return a &recipient; error along with a Jingle-specific error condition of &lt;busy/&gt;.</p>
+    <example caption="Receiver Is Busy"><![CDATA[
+<iq type='error' from='juliet@capulet.lit/balcony' to='romeo@montague.lit/orchard' id='jingle1'>
+  <error type='wait'>
+    <recipient-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <busy xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns-errors'/>
   </error>
 </iq>
     ]]></example>
@@ -565,9 +590,52 @@ PENDING  o---------------------+   |
 </section1>
 
 <section1 topic='Scenarios' anchor='scenarios'>
-  <p>The very simple scenario described in the <link url='#howitworks'>How It Works</link> section of this document is just that: very simple. Typically, the session flow is more complex. The following sections show some more complex scenarios, in order of complexity.</p>
+  <p>The very simple scenario described in the <link url='#howitworks'>How It Works</link> section of this document is just that: very simple. Typically, the session flow is more complex. The following sections show some more complex scenarios, in relative order of complexity.</p>
+  <section2 topic='Receiver is Busy' anchor='scenarios-busy'>
+    <p>In this scenario, Romeo initiates a voice chat with Juliet but she is otherwise engaged.</p>
+    <p>The session flow is as follows:</p>
+    <code><![CDATA[
+Romeo                         Juliet
+  |                             |
+  |   session-initiate          |
+  |---------------------------->|
+  |   error                     |
+  |   (recipient-unavailable)   |
+    ]]></code>
+    <p>The protocol flow is as follows.</p>
+    <example caption="Initiator sends session-initiate"><![CDATA[
+<iq from='romeo@montague.lit/orchard' to='juliet@capulet.lit/balcony' id='jingle1' type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-initiate'
+          initiator='romeo@montague.lit/orchard'
+          sid='a73sjjvkla37jfea'>
+    <content creator='initiator' name='this-is-the-audio-content' profile='RTP/AVP'>
+      <description xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns'>
+        <payload-type id='96' name='speex' clockrate='16000'/>
+        <payload-type id='97' name='speex' clockrate='8000'/>
+        <payload-type id='18' name='G729'/>
+        <payload-type id='103' name='L16' clockrate='16000' channels='2'/>
+        <payload-type id='98' name='x-ISAC' clockrate='8000'/>
+      </description>
+      <transport xmlns='http://www.xmpp.org/extensions/xep-0176.html#ns-udp'/>
+    </content>
+  </jingle>
+</iq>
+    ]]></example>
+    <example caption="Receiver returns recipient-unavailable error"><![CDATA[
+<iq from='juliet@capulet.lit/balcony'
+    id='accept1'
+    to='romeo@montague.lit/orchard'
+    type='error'>
+  <error type='wait'>
+    <recipient-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <busy xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns-errors'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
   <section2 topic='Jingle Audio via RTP/AVP, Negotiated with ICE-UDP' anchor='scenarios-voicechat'>
-    <p>In this scenario, Romeo initiates a voice chat with Juliet using a transport method of ICE-UDP.</p>
+    <p>In this scenario, Romeo initiates a voice chat with Juliet using a transport method of ICE-UDP, and the parties exchange informational messages.</p>
     <p>The session flow is as follows:</p>
     <code><![CDATA[
 Romeo                         Juliet
@@ -576,6 +644,10 @@ Romeo                         Juliet
   |---------------------------->|
   |   ack                       |
   |<----------------------------|
+  |   session-info (ringing)    |
+  |<----------------------------|
+  |   ack                       |
+  |---------------------------->|
   |   transport-info (X times)  |
   |   (with acks)               |
   |<--------------------------->|
@@ -616,6 +688,25 @@ Romeo                         Juliet
     id='accept1'
     to='romeo@montague.lit/orchard'
     type='result'/>
+    ]]></example>
+    <example caption="Receiver sends ringing message"><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/orchard'
+    id='ringing1'
+    type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-info'
+          initiator='romeo@montague.net/orchard'
+          sid='a73sjjvkla37jfea'>
+    <ringing xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns-info'/>
+  </jingle>
+</iq>
+    ]]></example>
+    <example caption="Initiator acknowledges ringing message"><![CDATA[
+<iq from='romeo@montague.lit/orchard' 
+    id='ringing1'
+    to='juliet@capulet.lit/balcony' 
+    type='result'/> 
     ]]></example>
     <example caption="Initiator Sends a Candidate"><![CDATA[
 <iq from='romeo@montague.lit/orchard' 
@@ -761,7 +852,7 @@ Romeo                         Juliet
     ]]></example>
   </section2>
   <section2 topic='Jingle Audio and Video via RTP/AVP, Negotiated with ICE-UDP' anchor='scenarios-voicechat'>
-    <p>In this scenario, Romeo initiates a combined audio and video chat with Juliet using a transport method of ICE. Juliet at first refuses the video portion, then later offers to add video, which Romeo accepts.</p>
+    <p>In this scenario, Romeo initiates a combined audio and video chat with Juliet using a transport method of ICE. Juliet at first refuses the video portion, then later offers to add video, which Romeo accepts. The parties also exchange various informational messages</p>
     <p>The session flow is as follows:</p>
     <code><![CDATA[
 Romeo                         Juliet
@@ -770,6 +861,10 @@ Romeo                         Juliet
   |---------------------------->|
   |   ack                       |
   |<----------------------------|
+  |   session-info (ringing)    |
+  |<----------------------------|
+  |   ack                       |
+  |---------------------------->|
   |   content-remove            |
   |<----------------------------|
   |   ack                       |
@@ -787,6 +882,14 @@ Romeo                         Juliet
   |---------------------------->|
   |   AUDIO (RTP)               |
   |<===========================>|
+  |   session-info (hold)       |
+  |<----------------------------|
+  |   ack                       |
+  |---------------------------->|
+  |   session-info (active)     |
+  |<----------------------------|
+  |   ack                       |
+  |---------------------------->|
   |   content-add               |
   |<----------------------------|
   |   ack                       |
@@ -838,6 +941,25 @@ Romeo                         Juliet
     ]]></example>
     <example caption="Receiver Acknowledges Receipt of Initiation Request"><![CDATA[
 <iq type='result' from='juliet@capulet.lit/balcony' to='romeo@montague.lit/orchard' id='jingle1'/>
+    ]]></example>
+    <example caption="Receiver sends ringing message"><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/orchard'
+    id='ringing1'
+    type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-info'
+          initiator='romeo@montague.net/orchard'
+          sid='a73sjjvkla37jfea'>
+    <ringing xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns-info'/>
+  </jingle>
+</iq>
+    ]]></example>
+    <example caption="Initiator acknowledges ringing message"><![CDATA[
+<iq from='romeo@montague.lit/orchard' 
+    id='ringing1'
+    to='juliet@capulet.lit/balcony' 
+    type='result'/> 
     ]]></example>
     <p>However, Juliet doesn't want to do video because she is having a bad hair day, so she sends a "content-remove" request to Romeo.</p>
     <example caption="Receiver requests content-remove"><![CDATA[
@@ -902,7 +1024,48 @@ Romeo                         Juliet
 <iq type='result' to='juliet@capulet.lit/balcony' from='romeo@montague.lit/orchard' id='accept1'/>
     ]]></example>
     <p>The parties now begin to exchange media. In this case they would exchange audio using the Speex codec at a clockrate of 8000 since that is the highest-priority codec for the responder (as determined by the XML order of the &PAYLOADTYPE; children).</p>
-    <p>Once Juliet gets her hair in order, she decides that she is presentable for a video chat so she sends a content-add request to Romeo.</p>
+    <p>Juliet wants to get her hair in order so she puts Romeo on hold.</p>
+    <example caption="Receiver sends hold message"><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/orchard'
+    id='hold1'
+    type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-info'
+          initiator='romeo@montague.net/orchard'
+          sid='a73sjjvkla37jfea'>
+    <hold xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns-info'/>
+  </jingle>
+</iq>
+    ]]></example>
+    <example caption="Initiator acknowledges hold message"><![CDATA[
+<iq from='romeo@montague.lit/orchard' 
+    id='hold1'
+    to='juliet@capulet.lit/balcony' 
+    type='result'/> 
+    ]]></example>
+    <p>Juliet returns so she informs Romeo that she is actively engaged in the call again.</p>
+    <example caption="Receiver sends active message"><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/orchard'
+    id='active1'
+    type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-info'
+          initiator='romeo@montague.net/orchard'
+          sid='a73sjjvkla37jfea'>
+    <active xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns-info'/>
+  </jingle>
+</iq>
+    ]]></example>
+    <example caption="Initiator acknowledges active message"><![CDATA[
+<iq from='romeo@montague.lit/orchard' 
+    id='active1'
+    to='juliet@capulet.lit/balcony' 
+    type='result'/> 
+    ]]></example>
+    <p>The parties now continue the audio chat.</p>
+    <p>Finally Juliet decides that she is presentable for a video chat so she sends a content-add request to Romeo.</p>
     <example caption="Receiver sends a content-add"><![CDATA[
 <iq from='juliet@capulet.lit/balcony' to='romeo@montague.lit/orchard' id='add1' type='set'>
   <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
@@ -985,6 +1148,10 @@ Romeo                         Juliet
   |---------------------------->|
   |   ack                       |
   |<----------------------------|
+  |   session-info (ringing)    |
+  |<----------------------------|
+  |   ack                       |
+  |---------------------------->|
   |   content-modify            |
   |<----------------------------|
   |   ack                       |
@@ -1033,6 +1200,25 @@ Romeo                         Juliet
     id='accept1'
     to='romeo@montague.lit/orchard'
     type='result'/>
+    ]]></example>
+    <example caption="Receiver sends ringing message"><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/orchard'
+    id='ringing1'
+    type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-info'
+          initiator='romeo@montague.net/orchard'
+          sid='a73sjjvkla37jfea'>
+    <ringing xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns-info'/>
+  </jingle>
+</iq>
+    ]]></example>
+    <example caption="Initiator acknowledges ringing message"><![CDATA[
+<iq from='romeo@montague.lit/orchard' 
+    id='ringing1'
+    to='juliet@capulet.lit/balcony' 
+    type='result'/> 
     ]]></example>
     <p>However, Juliet wants to make sure that the communications are encrypted, so she sends a "content-modify" request to Romeo.</p>
     <example caption="Receiver requests content-modify"><![CDATA[
@@ -1199,6 +1385,11 @@ Romeo                         Juliet
       <th>Jingle Condition</th>
       <th>XMPP Condition</th>
       <th>Description</th>
+    </tr>
+    <tr>
+      <td>&lt;busy/&gt;</td>
+      <td>&recipient;</td>
+      <td>The session-initiate is declined because the recipient is online but unavailable to participate in a session (this maps to error code 486 in SIP).</td>
     </tr>
     <tr>
       <td>&lt;out-of-order/&gt;</td>
@@ -1438,6 +1629,7 @@ Romeo                         Juliet
     xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns-errors'
     elementFormDefault='qualified'>
 
+  <xs:element name='busy' type='empty'/>
   <xs:element name='out-of-order' type='empty'/>
   <xs:element name='unknown-session' type='empty'/>
   <xs:element name='unsupported-content' type='empty'/>
