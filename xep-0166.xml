@@ -27,6 +27,12 @@
   &seanegan;
   &hildjj;
   <revision>
+    <version>0.22pre1</version>
+    <date>in progress, last updated 2007-12-04</date>
+    <initials>psa</initials>
+    <remark><p>Modified flows for busy, unsupported application formats, and unsupported transport methods to enable separation between Jingle core and distinct modules for applications and transports; moved resource determination recommendations to XEP-208.</p></remark>
+  </revision>
+  <revision>
     <version>0.21</version>
     <date>2007-11-27</date>
     <initials>psa</initials>
@@ -319,12 +325,13 @@ Romeo                         Juliet
   <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
           action='session-terminate'
           initiator='romeo@montague.lit/orchard'
+          reasoncode='no-error'
           reason='Sorry, gotta go!'
           sid='a73sjjvkla37jfea'/>
 </iq>
   ]]></example>
   <p>The other party MUST then acknowledge termination of the session.</p>
-  <example caption="Initiator Acknowledges Termination"><![CDATA[
+  <example caption="Initiator acknowledges termination"><![CDATA[
 <iq from='romeo@montague.lit/orchard'
     id='term1'
     to='juliet@capulet.lit/balcony'
@@ -493,35 +500,36 @@ PENDING  o---------------------+   |
 <section1 topic='Session Flow' anchor='session'>
   <p>This section defines the high-level flow of a Jingle session. More detailed descriptions are provided in the specifications for Jingle application formats and transport methods.</p>
   <section2 topic='Resource Determination' anchor='session-resource'>
-    <p>In order to initiate a Jingle session, the initiator must determine which of the responder's XMPP resources is best for the desired application format. There are several possible scenarios:</p>
-    <ol>
-      <li><p>If the intended responder shares presence with the initiator (see &xmppim;) and has only one available resource, the initiator SHOULD attempt to negotiate a Jingle session with that resource unless the initiator knows via &xep0030; or &xep0115; that the resource does not support Jingle and the desired application format. <note>Naturally, instead of sending service discovery requests to every contact in a user's roster, it is more efficient to use <cite>Entity Capabilities</cite>, whereby support for Jingle and various Jingle application formats and transport methods is determined for a client version in general (rather than on a per-JID basis) and then cached. Refer to <cite>XEP-0115</cite> for details.</note></p></li>
-      <li><p>If the intended responder shares presence with the initiator and has more than one available resource but only one of the resources supports Jingle and the desired application format, the initiator SHOULD initiate the Jingle session with that resource.</p></li>
-      <li><p>If the intended responder shares presence with the initiator and has more than one available resource but more than one of the resources supports Jingle and the desired application format, the initiator SHOULD use &xep0168; in order to determine which is the best resource with which to initiate the desired Jingle session.</p></li>
-      <li><p>If the intended responder does not share presence with the initiator, the initiator SHOULD first send a &xep0155; request to the responder in order to initiate the exchange of XMPP stanzas. The request SHOULD include a RAP routing hint as specified in <cite>XEP-0168</cite> and the &MESSAGE; stanza containing the request SHOULD be of type "headline" so that (typically) it is not stored offline for later delivery. The stanza session negotiation SHOULD result in temporary sharing of presence between the parties via the "presence" field as described in <cite>XEP-0155</cite>.</p></li>
-    </ol>
+    <p>In order to initiate a Jingle session, the initiator must determine which of the responder's XMPP resources is best for the desired application format. Methods for doing so are out of scope for this specification. However, see the <link url='#support'>Determining Support</link> section of this document (and associated specifications) for relevant information.</p>
   </section2>
   <section2 topic='Initiation' anchor='protocol-initiate'>
     <p>Once the initiator has discovered which of the responder's XMPP resources is ideal for the desired application format, it sends a session initiation request to the responder. This request is an IQ-set containing a &JINGLE; element qualified by the 'http://www.xmpp.org/extensions/xep-0166.html#ns' namespace &NSNOTE;, where the value of the 'action' attribute is "session-initiate" and where the &JINGLE; element contains one or more &CONTENT; elements. Each &CONTENT; element defines a content type to be transferred during the session, and each &CONTENT; element in turn contains one &DESCRIPTION; child element that specifies a desired application format and one &TRANSPORT; child element that specifies a potential transport method. If either party wishes to propose the use of multiple transport methods for the same application format, it must send multiple &CONTENT; elements.</p>
     <p>Note: The syntax and semantics of the &DESCRIPTION; and &TRANSPORT; elements are out of scope for this specification, since they are defined in related specifications. The syntax and semantics of the &JINGLE; and &CONTENT; elements are specified in this document under <link url='#def'>Formal Definition</link>.</p>
-
     <p>Note: In order to expedite session establishment, the initiator MAY send transport candidates (e.g., for negotiation of the ICE transport) immediately after sending the "session-initiate" message and before receiving acknowledgement from the responder (i.e., the initiator MUST consider the session to be PENDING even before receiving acknowledgement). Given in-order delivery, the responder should receive such "transport-info" messages after receiving the "session-initiate" message (if not, it is appropriate for the responder to return &lt;unknown-session/&gt; errors since according to its state machine the session does not exist).</p>
   </section2>
   <section2 topic='Receiver Response' anchor='protocol-response'>
-    <p>Unless an error occurs, the responder MUST acknowledge receipt of the initiation request.</p>
-    <p>If the responder acknowledges receipt of the initation request, both parties must consider the session to be in the PENDING state.</p>
-    <p>There are several reasons why the responder might return an error instead of acknowledging receipt of the initiation request:</p>
-    <ul>
-      <li>The initiator is unknown to the responder (e.g., via presence subscription or stanza session negotiation) and the responder does not communicate with unknown entities.</li>
-      <li>The responder does not support Jingle.</li>
-      <li>The responder wishes to redirect the request to another address.</li>
-      <li>The responder is busy and therefore cannot participate in a session.</li>
-      <li>The responder does not support any of the specified application formats.</li>
-      <li>The responder does not support any of the specified transport methods.</li>
-      <li>The initiation request was malformed.</li>
-    </ul>
-    <p>If the initiator is unknown to the responder (e.g., via presence subscription or stanza session negotiation) and the responder has a policy of not communicating via Jingle with unknown entities, it SHOULD return a &unavailable; error.</p>
-    <example caption="Initiator is unknown to responder"><![CDATA[
+    <section3 topic='Acknowledgement' anchor='protocol-response-ack'>
+      <p>Unless one of the following errors occurs, the responder SHOULD acknowledge receipt of the initiation request.</p>
+      <example caption="Receiver acknowledges session-initiate"><![CDATA[
+<iq from='juliet@capulet.lit/balcony'
+    id='jingle1'
+    to='romeo@montague.lit/orchard'
+    type='result'/>
+      ]]></example>
+      <p>However, after acknowledging the session initiation request, the responder may subsequently determine that it cannot proceed with negotiation of the session (e.g., because it does not support any of the offered application formats or transport methods, because a human user is busy or unable to accept the session, because a human user wishes to formally decline the session, etc.). In these cases, the responder MUST immediately acknowledge the session initiation request but then terminate the session with an appropriate reasoncode as described in the <link url='#session-terminate'>Termination</link> section of this document.</p>
+      <p>If the responder acknowledges receipt of the initation request, both parties must consider the session to be in the PENDING state.</p>
+    </section3>
+    <section3 topic='Errors' anchor='protocol-response-errors'>
+      <p>There are several reasons why the responder might immediately return an error instead of acknowledging receipt of the initiation request:</p>
+      <ul>
+        <li>The initiator is unknown to the responder (e.g., via presence subscription or stanza session negotiation) and the responder does not communicate with unknown entities.</li>
+        <li>The responder does not support Jingle.</li>
+        <li>The responder wishes to redirect the request to another address.</li>
+        <li>The responder does not have sufficient resources to participate in a session.</li>
+        <li>The initiation request was malformed.</li>
+      </ul>
+      <p>If the initiator is unknown to the responder (e.g., via presence subscription or stanza session negotiation) and the responder has a policy of not communicating via Jingle with unknown entities, it SHOULD return a &unavailable; error.</p>
+      <example caption="Initiator is unknown to responder"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
     id='jingle1'
     to='romeo@montague.lit/orchard'
@@ -530,9 +538,9 @@ PENDING  o---------------------+   |
     <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
   </error>
 </iq>
-    ]]></example>
-    <p>If the responder does not support Jingle, it MUST return a &unavailable; error.</p>
-    <example caption="Receiver does not support Jingle"><![CDATA[
+      ]]></example>
+      <p>If the responder does not support Jingle, it MUST return a &unavailable; error.</p>
+      <example caption="Receiver does not support Jingle"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
     id='jingle1'
     to='romeo@montague.lit/orchard'
@@ -541,9 +549,9 @@ PENDING  o---------------------+   |
     <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
   </error>
 </iq>
-    ]]></example>
-    <p>If the responder wishes to redirect the request to another address, it SHOULD return a &redirect; error.</p>
-    <example caption="Receiver redirection"><![CDATA[
+      ]]></example>
+      <p>If the responder wishes to redirect the request to another address, it SHOULD return a &redirect; error.</p>
+      <example caption="Receiver redirection"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
     id='jingle1'
     to='romeo@montague.lit/orchard'
@@ -552,45 +560,20 @@ PENDING  o---------------------+   |
     <redirect xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>voicemail@capulet.lit</redirect>
   </error>
 </iq>
-    ]]></example>
-    <p>If the responder is busy, it SHOULD return a &recipient; error along with a Jingle-specific error condition of &lt;busy/&gt;.</p>
-    <example caption="Receiver is busy"><![CDATA[
+      ]]></example>
+      <p>If the responder does not have sufficient resources to participate in a session, it SHOULD return a &constraint; error.</p>
+      <example caption="Receiver has insufficent resources"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
     id='jingle1'
     to='romeo@montague.lit/orchard'
     type='error'>
   <error type='wait'>
-    <recipient-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-    <busy xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns-errors'/>
+    <resource-constraint xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
   </error>
 </iq>
-    ]]></example>
-    <p>If the responder does not support any of the specified application formats, it MUST return a &feature; error with a Jingle-specific error condition of &lt;unsupported-content/&gt;.</p>
-    <example caption="Receiver does not support any content description formats"><![CDATA[
-<iq from='juliet@capulet.lit/balcony'
-    id='jingle1'
-    to='romeo@montague.lit/orchard'
-    type='error'>
-  <error type='cancel'>
-    <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-    <unsupported-content xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns-errors'/>
-  </error>
-</iq>
-    ]]></example>
-    <p>If the responder does not support any of the specified transport methods, it MUST return a &feature; error with a Jingle-specific error condition of &lt;unsupported-transports/&gt;.</p>
-    <example caption="Receiver does not support any transport methods"><![CDATA[
-<iq from='juliet@capulet.lit/balcony'
-    id='jingle1'
-    to='romeo@montague.lit/orchard'
-    type='error'>
-  <error type='cancel'>
-    <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-    <unsupported-transports xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns-errors'/>
-  </error>
-</iq>
-    ]]></example>
-    <p>If the initiation request was malformed, the responder MUST return a &badrequest; error.</p>
-    <example caption="Initiation request malformed"><![CDATA[
+      ]]></example>
+      <p>If the initiation request was malformed, the responder MUST return a &badrequest; error.</p>
+      <example caption="Initiation request malformed"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
     id='jingle1'
     to='romeo@montague.lit/orchard'
@@ -599,10 +582,8 @@ PENDING  o---------------------+   |
     <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
   </error>
 </iq>
-    ]]></example>
-  </section2>
-  <section2 topic='Decline' anchor='protocol-decline'>
-    <p>In order to formally decline the session initiation request, the responder MUST acknowledge receipt of the session initiation request, then terminate the session as described under <link url='#session-terminate'>Termination</link>.</p>
+      ]]></example>
+    </section3>
   </section2>
   <section2 topic='Negotiation' anchor='session-negotiation'>
     <p>In general, negotiation will be necessary before the parties can agree on an acceptable set of application formats and transport methods. There are many potential parameter combinations, as defined in the relevant specifications for various application formats and transport methods.</p>
@@ -625,7 +606,66 @@ PENDING  o---------------------+   |
   </section2>
   <section2 topic='Termination' anchor='session-terminate'>
     <p>In order to gracefully end the session (which MAY be done at any point after acknowledging receipt of the initiation request, including immediately thereafter in order to decline the request), either the responder or the initiator MUST send a "terminate" action to the other party.</p>
-    <p>The other party MUST then acknowledge termination of the session:</p>
+    <p>The party that terminates the session SHOULD include a 'reasoncode' attribute that specifies why the session is being terminated. Examples follow.</p>
+    <p>One reason for terminating the session is that the terminating party is busy; in this case, the recommended reasoncode is "busy".</p>
+    <example caption="Terminating the session (busy)"><![CDATA[
+<iq from='juliet@capulet.lit/balcony'
+    id='term1'
+    to='romeo@montague.lit/orchard'
+    type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-terminate'
+          initiator='romeo@montague.lit/orchard'
+          reasoncode='busy'
+          sid='a73sjjvkla37jfea'/>
+</iq>
+    ]]></example>
+    <p>Another reason for terminating the session is that the terminating party wishes to formally decline the session; in this case, the recommended reasoncode is "decline".</p>
+    <example caption="Terminating the session (session formally declined)"><![CDATA[
+<iq from='juliet@capulet.lit/balcony'
+    id='term1'
+    to='romeo@montague.lit/orchard'
+    type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-terminate'
+          initiator='romeo@montague.lit/orchard'
+          reasoncode='decline'
+          sid='a73sjjvkla37jfea'/>
+</iq>
+    ]]></example>
+    <p>Another reason for terminating the session is that the terminating party does not support any of the offered application formats; in this case, the recommended reasoncode is "unsupported-applications".</p>
+    <example caption="Terminating the session (no application format supported)"><![CDATA[
+<iq from='juliet@capulet.lit/balcony'
+    id='term1'
+    to='romeo@montague.lit/orchard'
+    type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-terminate'
+          initiator='romeo@montague.lit/orchard'
+          reasoncode='unsupported-applications'
+          sid='a73sjjvkla37jfea'/>
+</iq>
+    ]]></example>
+    <p>Another reason for terminating the session is that the terminating party does not support any of the offered transport methods; in this case, the recommended reasoncode is "unsupported-transports".</p>
+    <example caption="Terminating the session (no supported transport method supported)"><![CDATA[
+<iq from='juliet@capulet.lit/balcony'
+    id='term1'
+    to='romeo@montague.lit/orchard'
+    type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='session-terminate'
+          initiator='romeo@montague.lit/orchard'
+          reasoncode='unsupported-transports'
+          sid='a73sjjvkla37jfea'/>
+</iq>
+    ]]></example>
+    <p>Upon receiving an action of "session-terminate", the other party MUST then acknowledge termination of the session:</p>
+    <example caption="Acknowledging termination"><![CDATA[
+<iq from='romeo@montague.lit/orchard'
+    id='term1'
+    to='juliet@capulet.lit/balcony'
+    type='result'/>
+    ]]></example>
     <p>Note: As soon as an entity sends a "session-terminate" action, it MUST consider the session to be in the ENDED state (even before receiving acknowledgement from the other party). If the terminating entity receives additional Jingle-related IQ-sets from the other party after sending the "session-terminate" action, it MUST reply with an &lt;unknown-session/&gt; error.</p>
     <p>Unfortunately, not all sessions end gracefully. In applications of Jingle that also involve the exchange of presence information, receipt of &UNAVAILABLE; from the other party MAY be considered a session-ending event. However, in this case there is nothing for the party to acknowledge.</p>
   </section2>
@@ -718,11 +758,6 @@ PENDING  o---------------------+   |
       <th>Jingle Condition</th>
       <th>XMPP Condition</th>
       <th>Description</th>
-    </tr>
-    <tr>
-      <td>&lt;busy/&gt;</td>
-      <td>&recipient;</td>
-      <td>The session-initiate is declined because the recipient is online but unavailable to participate in a session (this maps to error code 486 in SIP).</td>
     </tr>
     <tr>
       <td>&lt;out-of-order/&gt;</td>
@@ -871,6 +906,18 @@ PENDING  o---------------------+   |
       <p>The following submission registers reasoncodes currently in use. Refer to the registry itself for a complete and current list of reasoncodes.</p>
       <code><![CDATA[
 <reason>
+  <code>busy</code>
+  <desc>the party is busy</desc>
+  <doc>XEP-0166</doc>
+</reason>
+
+<reason>
+  <code>decline</code>
+  <desc>the party wishes to formally decline the session</desc>
+  <doc>XEP-0166</doc>
+</reason>
+
+<reason>
   <code>connectivity-error</code>
   <desc>the action is related to connectivity problems</desc>
   <doc>XEP-0166</doc>
@@ -891,6 +938,18 @@ PENDING  o---------------------+   |
 <reason>
   <code>no-error</code>
   <desc>the action is generated during the normal course of state management</desc>
+  <doc>XEP-0166</doc>
+</reason>
+
+<reason>
+  <code>unsupported-applications</code>
+  <desc>the party supports none of the offered application formats</desc>
+  <doc>XEP-0166</doc>
+</reason>
+
+<reason>
+  <code>unsupported-transports</code>
+  <desc>the party supports none of the offered transport methods</desc>
   <doc>XEP-0166</doc>
 </reason>
       ]]></code>
@@ -976,11 +1035,8 @@ PENDING  o---------------------+   |
     xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns-errors'
     elementFormDefault='qualified'>
 
-  <xs:element name='busy' type='empty'/>
   <xs:element name='out-of-order' type='empty'/>
   <xs:element name='unknown-session' type='empty'/>
-  <xs:element name='unsupported-content' type='empty'/>
-  <xs:element name='unsupported-transports' type='empty'/>
 
   <xs:simpleType name='empty'>
     <xs:restriction base='xs:string'>
