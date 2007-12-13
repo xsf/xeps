@@ -29,6 +29,12 @@
       <jid>legoscia@jabber.cd.chalmers.se</jid>
     </author>
     <revision>
+      <version>0.2</version>
+      <date>2007-12-13</date>
+      <initials>mh</initials>
+      <remark><p>Use XInclude.</p></remark>
+    </revision>
+    <revision>
       <version>0.1</version>
       <date>2007-08-08</date>
       <initials>psa</initials>
@@ -50,12 +56,12 @@
   <p>The following constraints are imposed on this standard:</p>
   <ul>
     <li>
-      <p>The data is stored in a single file.</p>
-      <p>For the convenience of server administrators, a single file holds all relevant data.</p>
-    </li>
-    <li>
       <p>The file format is XML-based.</p>
       <p>XMPP-IM servers already have tools to process XML data.  This also allows extension of the format using namespaces.  Furthermore, some of the data that needs to be stored is by definition already in XML form.</p>
+    </li>
+    <li>
+      <p>The data layout is flexible.</p>
+      <p>The data is contained in a single XML document; however, it can be split into several files using &w3xinclude;.</p>
     </li>
     <li>
       <p>All user data is stored, but no server configuration data.</p>
@@ -72,16 +78,16 @@
 <section1 topic='Glossary' anchor='glossary'>
 <ul>
   <li><p>Exporting server.</p>
-  <p>The XMPP-IM server writing its user data into a file, following this specification.</p>
+  <p>The XMPP-IM server writing its user data to files, following this specification.</p>
   </li>
   <li><p>Importing server.</p>
-  <p>The XMPP-IM server reading data from such a file.</p>
+  <p>The XMPP-IM server reading data from such files.</p>
   </li>
 </ul>
 </section1>
 
 <section1 topic='File format' anchor='fileformat'>
-  <p>Data is contained in a single XML file, whose root element is &lt;server-data/&gt; qualified by the 'http://www.xmpp.org/extensions/xep-0227.html#ns' namespace &NSNOTE;.</p>
+  <p>Data is contained in an XML document, whose root element is &lt;server-data/&gt; qualified by the 'http://www.xmpp.org/extensions/xep-0227.html#ns' namespace &NSNOTE;.</p>
 
 <example caption='The root element'><![CDATA[
 <?xml version='1.0' encoding='UTF-8'?>
@@ -92,6 +98,8 @@
 </example>
 
   <p>At any point in the file, an exporting server may put elements qualified by a namespace not mentioned in this specification.  The exported data SHOULD be meaningful without the extensions.  An importing server that encounters a namespace that it doesn't understand, or otherwise is unable to import all given data, SHOULD ignore the unknown data, SHOULD notify the operator, and MAY offer to terminate the process.</p>
+
+  <p>At any point in the file, an exporting server may put an XInclude &lt;include/&gt; element; see <link url='#xinclude'>Use of XInclude</link>.</p>
 
 <section2 topic='Hosts' anchor='hosts'>
   <p>The child elements of the &lt;server-data/&gt; elements are &lt;host/&gt; elements.  Each &lt;host/&gt; element describes a virtual host, and has a 'jid' attribute that contains its JID.</p>
@@ -214,6 +222,77 @@
 </server-data> ]]>
 </example>
 </section2>
+</section1>
+
+<section1 topic='Use of XInclude' anchor='xinclude'>
+
+  <p>At any point in the file, an exporting server may put an XInclude &lt;include/&gt; element, to split the data into several files.  An importing server MUST support &lt;include/&gt; elements having an 'href' attribute containing a relative URI, having no 'parse' attribute, and having no 'xpointer' attribute; it MAY support other kinds of &lt;include/&gt; elements.</p>
+
+<section2 topic='File and Directory Layout' anchor='xinclude-layout'>
+  <p>If an exporting server chooses to split the data into several files, it SHOULD use the following scheme:</p>
+
+<p>The main file contains the &lt;server-data/&gt; element, which contains nothing but one &lt;include/&gt; element for each host.  The file included for a certain host is placed in the same directory as the main file, and is named by appending ".xml" to the JID of the host, e.g. "capulet.com.xml".</p>
+
+<example caption='The main file, which includes host files'><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+<server-data xmlns='http://www.xmpp.org/extensions/xep-0227.html#ns'
+             xmlns:xi='http://www.w3.org/2001/XInclude'>
+  <xi:include href='capulet.com.xml'/>
+  <xi:include href='montague.net.xml'/>
+</server-data>
+]]>
+</example>
+
+<p>Each host file contains a &lt;host/&gt; element, which contains nothing but one &lt;include/&gt; element for each user of the host.  The file included for a certain user is placed in a subdirectory whose name is the JID of the host, and is named by appending ".xml" to the node part of the user's JID, e.g. "capulet.com/juliet.xml".</p>
+
+<example caption='The host file, which includes user files'><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+<host xmlns='http://www.xmpp.org/extensions/xep-0227.html#ns'
+      xmlns:xi='http://www.w3.org/2001/XInclude'
+      jid='capulet.com'>
+  <xi:include href='capulet.com/juliet.xml'/>
+  <xi:include href='capulet.com/mercutio.xml'/>
+</host>
+]]>
+</example>
+
+
+<p>Each user file contains a &lt;user/&gt; element, and includes all data relating to that user.</p>
+
+<example caption='The user file'><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+<user xmlns='http://www.xmpp.org/extensions/xep-0227.html#ns'
+      name='juliet' password='s3crEt'>
+  <query xmlns='jabber:iq:roster'>
+    <item jid='romeo@montague.net'
+	  name='Romeo'
+	  subscription='both'>
+      <group>Friends</group>
+    </item>
+  </query>
+  <vCard xmlns='vcard-temp'>
+    <FN>Juliet Capulet</FN>
+  <vCard>
+  <offline-messages>
+    <message xmlns='jabber:client'
+	     from='romeo@montague.net/orchard'
+	     to='juliet@capulet.com/balcony'
+	     type='chat'>
+      <body>Neither, fair saint, if either thee dislike.</body>
+      <delay xmlns='urn:xmpp:delay'
+	     from='capulet.com'
+	     stamp='1469-07-21T00:32:29Z'>
+	Offline Storage
+      </delay>
+    </message>
+  </offline-messages>
+</user>
+]]>
+</example>
+
+<p>The definition of JIDs ensures that this generates valid file names on traditional Unix-like file systems, except for possible length constraints.  However, various constraints may force an exporting server to alter this scheme.  In any case, the importing server MUST NOT rely on this layout, but MUST do proper XInclude processing.</p>
+</section2>
+
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
