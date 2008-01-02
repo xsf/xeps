@@ -28,6 +28,12 @@
   &hildjj;
   &seanegan;
   <revision>
+    <version>0.14</version>
+    <date>2008-01-02</date>
+    <initials>psa</initials>
+    <remark><p>Modified flow for ICE completion to require content-modify from initiator to responder, thus mapping to sending of revised offer in SIP; added rem-addr and rem-port attributes to map to a=remote-candidates information in SDP; changed raddr and rport attributes to rel-addr and rel-port to prevent confusion with rem-addr and rem-port attributes.</p></remark>
+  </revision>
+  <revision>
     <version>0.13</version>
     <date>2007-12-28</date>
     <initials>psa</initials>
@@ -173,10 +179,10 @@ INITIATOR                     RESPONDER
     |<-----------------------------------|
     |  STUN Binding Result               |
     |----------------------------------->|
-    |  Jingle content-accept             |
-    |<-----------------------------------|
-    |  Jingle ack (XMPP IQ-result)       |
+    |  Jingle content-modify             |
     |----------------------------------->|
+    |  Jingle ack (XMPP IQ-result)       |
+    |<-----------------------------------|
     |  Jingle session-accept             |
     |<-----------------------------------|
     |  Jingle ack (XMPP IQ-result)       |
@@ -298,16 +304,28 @@ INITIATOR                     RESPONDER
           <td>asd88fgpdd777uzjYhagZg</td>
         </tr>
         <tr>
-          <td>raddr</td>
+          <td>rel-addr</td>
           <td>A related address as defined in &icecore;.</td>
-          <td>Raddr value in a=candidate line</td>
+          <td>raddr value in a=candidate line</td>
           <td>10.0.1.1</td>
         </tr>
         <tr>
-          <td>rport</td>
+          <td>rel-port</td>
           <td>A related port as defined in &icecore;.</td>
-          <td>Rport value in a=candidate line</td>
+          <td>rport value in a=candidate line</td>
           <td>8998</td>
+        </tr>
+        <tr>
+          <td>rem-addr</td>
+          <td>A IP address for a remote address as defined in &icecore;.</td>
+          <td>connection-address value in a=remote-candidates line</td>
+          <td>192.0.2.1</td>
+        </tr>
+        <tr>
+          <td>rem-port</td>
+          <td>The port for a remote address as defined in &icecore;.</td>
+          <td>port value in a=remote-candidates line</td>
+          <td>3478</td>
         </tr>
         <tr>
           <td>type</td>
@@ -497,7 +515,56 @@ INITIATOR                  NAT                  RESPONDER
     <p>Note: The initiator (controlling agent) is using "aggressive nomination" as described in Section 8.1.1.2 of &icecore; and therefore includes the USE-CANDIDATE attribute in the STUN Binding Requests it sends.</p>
   </section2>
   <section2 topic='Acceptance of Successful Candidate' anchor='protocol-acceptance'>
-    <p>If, based on STUN connectivity checks, the parties determine that they will be able to exchange media a given candidate, the responder sends a &JINGLE; element with an action of 'content-accept' (or 'session-accept') to the initiator, specifying the candidate that succeeded.</p>
+    <p>If, based on STUN connectivity checks, the parties determine that they will be able to exchange media between a given pair of local candidates and remote candidates (i.e., the pair is "nominated" and ICE processing is "completed"), the parties shall proceed as follows:</p>
+    <ol>
+      <li>The initiator sends a Jingle content-modify action to the responder.</li>
+      <li>The responder acknowledges receipt of the content-modify.</li>
+      <li>The responder sends a Jingle content-accept or session-accept action to the initiator.</li>
+      <li>The initiator acknowledges receipt of the content-accept.</li>
+    </ol>
+    <p>First the initiator sends a Jingle content-modify action to the responder. The content-modify MUST contain information about the nominated pair, including the "rem-addr" and "rem-port" attributes (which specify the IP address and port for the responder's end of the pair, which is a "remote address" according to the initiator).</p>
+    <example caption="Responder requests content-modify"><![CDATA[
+<iq from='romeo@montague.lit/orchard'
+    id='mod1'
+    to='juliet@capulet.lit/balcony'
+    type='set'>
+  <jingle xmlns='http://www.xmpp.org/extensions/xep-0166.html#ns'
+          action='content-modify'
+          initiator='romeo@montague.lit/orchard'
+          sid='a73sjjvkla37jfea'>
+    <content creator='initiator' name='this-is-the-audio-content' profile='RTP/AVP'>
+      <description xmlns='http://www.xmpp.org/extensions/xep-0167.html#ns'>
+        [ ... ]
+      </description>
+      <transport xmlns='http://www.xmpp.org/extensions/xep-0176.html#ns'>
+        <candidate component='1'
+                   foundation='1'
+                   generation='0'
+                   ip='192.0.2.3'
+                   network='1'
+                   port='45664'
+                   priority='1694498815'
+                   protocol='udp'
+                   pwd='asd88fgpdd777uzjYhagZg'
+                   rel-addr='10.0.1.1'
+                   rel-port='8998'
+                   rem-addr='192.0.2.1'
+                   rem-port='3478'
+                   type='srflx'
+                   ufrag='8hhy'/>
+      </transport>
+    </content>
+  </jingle>
+</iq>
+    ]]></example>
+    <p>The responder then acknowledges the content-modify action.</p>
+    <example caption="Responder acknowledges content-modify"><![CDATA[
+<iq from='juliet@capulet.lit/balcony'
+    id='mod1'
+    to='romeo@montague.lit/orchard'
+    type='result'/>
+    ]]></example>
+    <p>The responder then sends a &JINGLE; element with an action of 'content-accept' (or 'session-accept') to the initiator, specifying the candidate that succeeded.</p>
     <example caption="Responder definitively accepts the successful candidate"><![CDATA[
 <iq from='juliet@capulet.com/balcony'
     id='accept1'
@@ -522,8 +589,10 @@ INITIATOR                  NAT                  RESPONDER
                    priority='1694498815'
                    protocol='udp'
                    pwd='asd88fgpdd777uzjYhagZg'
-                   raddr='10.0.1.1'
-                   rport='8998'
+                   rel-addr='10.0.1.1'
+                   rel-port='8998'
+                   rem-addr='192.0.2.1'
+                   rem-port='3478'
                    type='srflx'
                    ufrag='8hhy'/>
       </transport>
