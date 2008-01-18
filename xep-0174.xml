@@ -27,10 +27,10 @@
   <registry/>
   &stpeter;
   <revision>
-    <version>1.1pre2</version>
-    <date>in progress, last updated 2007-12-20</date>
+    <version>1.1pre3</version>
+    <date>in progress, last updated 2008-01-17</date>
     <initials>psa</initials>
-    <remark><p>Corrected several DNS errors in the text and examples; added friendly How It Works section; updated to reflect version 1.5 of XEP-0115; added implementation note about port choice; updated registry.</p></remark>
+    <remark><p>Clarified order of publishing and querying DNS records; corrected several DNS errors in the text and examples; added friendly How It Works section; added implementation note about port choice; updated TXT records to reflect version 1.5 of XEP-0115; updated registry.</p></remark>
   </revision>
   <revision>
     <version>1.0</version>
@@ -153,17 +153,17 @@
     <p>This section provides a friendly introduction to link-local messaging.</p>
     <p>Imagine that you are a Shakespearean character named Juliet. You are are using your laptop computer (a machine named "pronto") at a wifi hotspot in downtown Verona and you want to find other people to chat with on an ad-hoc basis (i.e., not people in your normal XMPP roster). Therefore your chat client advertises a link-local address of "juliet@pronto" so that other people can dynamically find you at the hotspot. Your client does this by invoking a daemon on your machine that supports DNS-based Service Discovery ("DNS-SD") as defined in &dnssd; and Multicast DNS ("mDNS") as defined in &mdns;. As a result, the daemon stores the following DNS records and listens for multicast DNS queries asking for them:</p>
     <code><![CDATA[
-_presence._tcp.local. PTR juliet@pronto._presence._tcp.local.
+pronto.local. A 10.2.1.187
 
 juliet@pronto._presence._tcp.local. SRV 5562 pronto.local. 
 
-pronto.local. A 10.2.1.187
+_presence._tcp.local. PTR juliet@pronto._presence._tcp.local.
     ]]></code>
     <p>The meaning of these records is as follows:</p>
     <ul>
-      <li>The PTR ("pointer") record (see &rfc2317; and &rfc1886;) says that there is a service of type "presence" on the local subnet (".local.") called "juliet@pronto" and that the service communicates over TCP.</li>
-      <li>The SRV record (see &rfc2782;) maps the service instance "juliet@pronto" to the machine "pronto.local." on port 5562.</li>
       <li>The A record specifies the IP address 10.2.1.187 at which the "pronto" machine will listen for connections.</li>
+      <li>The SRV record (see &rfc2782;) maps the presence service instance "juliet@pronto" to the machine "pronto.local." on port 5562.</li>
+      <li>The PTR ("pointer") record (see &rfc2317; and &rfc1886;) says that there is a service of type "presence" on the local subnet (".local.") called "juliet@pronto" and that the service communicates over TCP.</li>
     </ul>
     <p>Your chat client also wants to advertise some information about you (subject to your control so that you don't divulge private information). Therefore it invokes the mDNS daemon to also store some DNS TXT records (see &rfc1464;):</p>
     <code><![CDATA[
@@ -174,8 +174,10 @@ juliet IN TXT "hash=sha-1"
 juliet IN TXT "jid=juliet@capulet.lit"
 juliet IN TXT "last=Capulet"
 juliet IN TXT "msg=Hanging out downtown"
+juliet IN TXT "n=Adium"
 juliet IN TXT "nick=JuliC"
 juliet IN TXT "node=http://www.adiumx.com"
+juliet IN TXT "os=PPC Mac OS X Mach-O"
 juliet IN TXT "phsh=a3839614e1a382bcfebbcf20464f519e81770813"
 juliet IN TXT "port.p2pj=5562"
 juliet IN TXT "status=avail"
@@ -184,16 +186,7 @@ juliet IN TXT "vc=CA!"
 juliet IN TXT "ver=66/0NaeaBKkwk85efJTGmU47vXI="
     ]]></code>
     <p>Other people at the hotspot may also advertise similar DNS records for use on the local link. Essentially, the mDNS daemons running on all of the machines at the hotspot collectively manage the ".local." domain, which has meaning only at the hotspot (not across the broader Internet). Queries and responses for services on the local link occur via link-local multicast over UDP port 5353 instead of via normal DNS unicast over UDP port 53. When a new machine joins the local link, it can send out queries for any number of service types, to which the other machines will reply. For the purpose of link-local messaging we are interested only in the "presence" service, but many other services could exist on the local link (see <link url='http://www.dns-sd.org/'>dns-sd.org</link> for a complete list).</p>
-    <p>Now let us imagine that a fine young gentleman named Romeo joins the hotspot and that his chat client (actually his mDNS daemon) sends out link-local multicast queries for link-local services of type "presence" (i.e., PTR records that match "_presence._tcp.local.", followed by appropriate SRV, A, and TXT record queries to discover detailed information about those services). His client will then discover (among others) a service named "juliet@pronto" at IP address 10.2.1.187 and port 5562, with some intriguing TXT records. Being a romantic fellow, he then initiates a chat with you by opening an XML stream to the advertised IP address and port.</p>
-    <code><![CDATA[
-<stream:stream 
-        xmlns='jabber:client' 
-        xmlns:stream='http://etherx.jabber.org/streams'
-        from='juliet@pronto'
-        to='romeo@forza'
-        version='1.0'>
-    ]]></code>
-    <p>Your client then responds with a response stream header (perhaps subject to user approval -- it's not always safe to chat with strangers!).</p>
+    <p>Now let us imagine that a fine young gentleman named Romeo joins the hotspot and that his chat client (actually his mDNS daemon) sends out link-local multicast queries for link-local services of type "presence". To do this, his client essentially reverses the order of DNS record publication (explained above) by asking for pointers to presence services (i.e., PTR records that match "_presence._tcp.local."), querying each service for its service instance and port (i.e., SRV record), mapping each service instance to an IP address (i.e., A record), and finding out additional information about the entity using the service (i.e., TXT records). As a result, Romeo's client will discover any number of local presence services, among them a service named "juliet@pronto" (with some intriguing TXT records) at IP address 10.2.1.187 and port 5562. Being a romantic fellow, he then initiates a chat with you by opening an XML stream to the advertised IP address and port.</p>
     <code><![CDATA[
 <stream:stream 
         xmlns='jabber:client' 
@@ -202,10 +195,25 @@ juliet IN TXT "ver=66/0NaeaBKkwk85efJTGmU47vXI="
         to='juliet@pronto'
         version='1.0'>
     ]]></code>
+    <p>Your client then responds with a response stream header (perhaps subject to user approval -- it's not always safe to chat with strangers!).</p>
+    <code><![CDATA[
+<stream:stream 
+        xmlns='jabber:client' 
+        xmlns:stream='http://etherx.jabber.org/streams'
+        from='juliet@pronto'
+        to='romeo@forza'
+        version='1.0'>
+    ]]></code>
     <p>Romeo then sends you an XMPP message.</p>
     <code><![CDATA[
-<message to='romeo@forza' from='juliet@pronto'>
-  <body>Hey, just saying hi!</body>
+<message from='romeo@forza' to='juliet@pronto'>
+  <body>M'lady, I would be pleased to make your acquaintance.</body>
+</message>
+    ]]></code>
+    <p>And you reply.</p>
+    <code><![CDATA[
+<message from='juliet@pronto' to='romeo@forza'>
+  <body>Art thou not Romeo, and a Montague?</body>
 </message>
     ]]></code>
     <p>You chat with Romeo for a while, then your client closes the stream.</p>
@@ -216,7 +224,7 @@ juliet IN TXT "ver=66/0NaeaBKkwk85efJTGmU47vXI="
     <code><![CDATA[
 </stream:stream>
     ]]></code>
-    <p>Finally you decide to head home so your mDNS daemon sends a Multicast DNS "Goodbye" packet for your PTR record. As a result, everyone else at the hotspot receives a Multicast DNS "Remove" event, at which point they cancel any outstanding A, SRV, TXT, or NULL record queries related to your presence service.</p>
+    <p>Finally you decide to head home, so your mDNS daemon sends a Multicast DNS "Goodbye" packet for your PTR record. As a result, everyone else at the hotspot receives a Multicast DNS "Remove" event, at which point they cancel any outstanding A, SRV, TXT, or NULL record queries related to your presence service.</p>
   </section2>
 </section1>
 
@@ -280,12 +288,14 @@ _presence._tcp <ttl> SRV <priority> <weight> port-number machine-name.local.
 <owner> IN <ttl> TXT "jid=user-jabber-id"
 <owner> IN <ttl> TXT "last=user-last-name"
 <owner> IN <ttl> TXT "msg=freeform-availability-status"
+<owner> IN <ttl> TXT "n=entity-capabilities-application-name"
 <owner> IN <ttl> TXT "nick=user-nickname"
 <owner> IN <ttl> TXT "node=application-identifier"
+<owner> IN <ttl> TXT "n=entity-capabilities-operating-system"
 <owner> IN <ttl> TXT "phsh=sha1-hash-of-avatar"
 <owner> IN <ttl> TXT "port.p2pj=5562"
 <owner> IN <ttl> TXT "status=avail-away-or-dnd"
-<owner> IN <ttl> TXT "v=entity-capabilities-version"
+<owner> IN <ttl> TXT "v=entity-capabilities-software-version"
 <owner> IN <ttl> TXT "vc=capabilities-string"
 <owner> IN <ttl> TXT "ver=entity-capabilities-identity"
       ]]></code>
@@ -308,8 +318,10 @@ juliet IN TXT "hash=sha-1"
 juliet IN TXT "jid=juliet@capulet.lit"
 juliet IN TXT "last=Capulet"
 juliet IN TXT "msg=Hanging out downtown"
+juliet IN TXT "n=Adium"
 juliet IN TXT "nick=JuliC"
 juliet IN TXT "node=http://www.adiumx.com"
+juliet IN TXT "os=PPC Mac OS X Mach-O"
 juliet IN TXT "phsh=a3839614e1a382bcfebbcf20464f519e81770813"
 juliet IN TXT "port.p2pj=5562"
 juliet IN TXT "status=avail"
@@ -338,7 +350,7 @@ juliet IN TXT "ver=66/0NaeaBKkwk85efJTGmU47vXI="
 </section1>
 
 <section1 topic='Discovering Capabilities' anchor='caps'>
-  <p>Because link-local communication does not involve the exchange of XMPP presence, it is not possible to use &xep0115; for capabilities discovery. Therefore, it is RECOMMENDED to instead include the node, hash, and ver TXT records (and OPTIONAL to include the ext and v TXT records). The values of these records MUST be the same as the values for the 'node', 'hash', 'ver', 'ext', and 'v' attributes that are advertised for the application in normal XMPP presence (if any) via the Entity Capabilities protocol as described in <cite>XEP-0115</cite>.</p>
+  <p>Because link-local communication does not involve the exchange of XMPP presence, it is not possible to use &xep0115; for capabilities discovery. Therefore, it is RECOMMENDED to instead include the node, hash, and ver TXT records (and OPTIONAL to include the ext and v TXT records). The values of these records MUST be the same as the values for the 'node', 'hash', 'ver', 'ext', 'n', 'os', and 'v' attributes that are advertised for the application in normal XMPP presence (if any) via the Entity Capabilities protocol as described in <cite>XEP-0115</cite>.</p>
 </section1>
 
 <section1 topic='Initiating a Messaging Session' anchor='initiate'>
@@ -348,8 +360,8 @@ juliet IN TXT "ver=66/0NaeaBKkwk85efJTGmU47vXI="
 <stream:stream 
         xmlns='jabber:client' 
         xmlns:stream='http://etherx.jabber.org/streams'
-        from='juliet@pronto'
-        to='romeo@forza'
+        from='romeo@forza'
+        to='juliet@pronto'
         version='1.0'>
   ]]></example>
   <p>Note: If the initiator supports stream features and the other stream-related aspects of XMPP 1.0 as specified in <cite>RFC 3920</cite>, then it SHOULD include the version='1.0' flag as shown in the previous example.</p>
@@ -358,8 +370,8 @@ juliet IN TXT "ver=66/0NaeaBKkwk85efJTGmU47vXI="
 <stream:stream 
         xmlns='jabber:client' 
         xmlns:stream='http://etherx.jabber.org/streams'
-        from='romeo@forza'
-        to='juliet@pronto'
+        from='juliet@pronto'
+        to='romeo@forza'
         version='1.0'>
   ]]></example>
   <p>If both the initiator and recipient included the version='1.0' flag, the recipient SHOULD also send stream features as specified in <cite>RFC 3920</cite>:</p>
@@ -374,8 +386,13 @@ juliet IN TXT "ver=66/0NaeaBKkwk85efJTGmU47vXI="
 <section1 topic='Exchanging Messages' anchor='exchange'>
   <p>Once the streams are established, either entity then can send XMPP message or IQ stanzas by specifying 'to' and 'from' addresses using the logical local addresses: <note>The to and from addresses MUST be of the form "username@machine-name" as discovered via SRV (this is the &lt;Instance&gt; portion of the Service Instance Name).</note></p>
   <example caption="Sending a Message"><![CDATA[
-<message to='romeo@forza' from='juliet@pronto'>
-  <body>Hey, just saying hi!</body>
+<message from='romeo@forza' to='juliet@pronto'>
+  <body>M'lady, I would be pleased to make your acquaintance.</body>
+</message>
+  ]]></example>
+  <example caption="A Reply"><![CDATA[
+<message from='juliet@pronto' to='romeo@forza'>
+  <body>Art thou not Romeo, and a Montague?</body>
 </message>
   ]]></example>
 </section1>
@@ -550,6 +567,16 @@ _presence._tcp.local. IN NULL raw-binary-data-here
 </record>
 
 <record>
+  <name>n</name>
+  <desc>
+    The application name; the value of this record MUST be the same 
+    as that provided via normal XMPP presence (if applicable) in the 
+    'n' attribute specified in Entity Capabilities (XEP-0115).
+  </desc>
+  <status>optional</status>
+</record>
+
+<record>
   <name>nick</name>
   <desc>A friendly or informal name for the user.</desc>
   <status>recommended</status>
@@ -563,6 +590,16 @@ _presence._tcp.local. IN NULL raw-binary-data-here
     in the 'node' attribute specified in Entity Capabilities (XEP-0115).
   </desc>
   <status>recommended</status>
+</record>
+
+<record>
+  <name>os</name>
+  <desc>
+    The operating system; the value of this record MUST be the same 
+    as that provided via normal XMPP presence (if applicable) in the 
+    'os' attribute specified in Entity Capabilities (XEP-0115).
+  </desc>
+  <status>optional</status>
 </record>
 
 <record>
