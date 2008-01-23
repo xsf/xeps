@@ -215,13 +215,16 @@
               Wiki Page: &lt;<a href='{$wikiURL}'><xsl:value-of select='$wikiURL'/></a>&gt;
             </xsl:if>
           </p>
+        <hr />
         <!-- AUTHOR INFO -->
         <h2>Author Information</h2>
         <div class='indent'>
           <xsl:apply-templates select='/xep/header/author'/>
         </div>
-        <!-- LEGAL NOTICE -->
+        <hr />
+        <!-- LEGAL NOTICES -->
         <xsl:apply-templates select='/xep/header/legal'/>
+        <hr />
         <!-- DISCUSSION VENUE -->
         <h2>Discussion Venue</h2>
         <xsl:variable name='Approver' select='/xep/header/approver'/>
@@ -237,6 +240,7 @@
             </xsl:if>
           </xsl:otherwise>
         </xsl:choose>
+        <p>Errata may be sent to &lt;<a href='mailto:editor@xmpp.org'>editor@xmpp.org</a>&gt;.</p>
         <!-- XMPP NOTICE AND CONFORMANCE TERMS-->
         <!-- (we don't put these on Procedural XEPs) -->
         <xsl:if test='$thetype = "Standards Track" or $thetype = "Historical" or $thetype = "Informational"'>
@@ -352,16 +356,18 @@
   <xsl:template match='legal'>
     <h2>Legal Notices</h2>
     <div class='indent'>
-      <h3>IPR Conformance</h3>
-      <xsl:apply-templates select='/xep/header/legal/conformance'/>
       <h3>Copyright</h3>
       <xsl:apply-templates select='/xep/header/legal/copyright'/>
       <h3>Permissions</h3>
       <xsl:apply-templates select='/xep/header/legal/permissions'/>
-      <!--
-      h3>Warranty</h3>
-      <xsl:apply-templates select='/xep/header/legal/warranty'/>
-      -->
+      <h3>Disclaimer of Warranty</h3>
+      <span style='font-weight: bold'>
+        <xsl:apply-templates select='/xep/header/legal/warranty'/>
+      </span>
+      <h3>Limitation of Liability</h3>
+      <xsl:apply-templates select='/xep/header/legal/liability'/>
+      <h3>IPR Conformance</h3>
+      <xsl:apply-templates select='/xep/header/legal/conformance'/>
     </div>
   </xsl:template>
 
