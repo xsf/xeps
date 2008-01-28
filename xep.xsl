@@ -240,7 +240,7 @@
             </xsl:if>
           </xsl:otherwise>
         </xsl:choose>
-        <p>Errata may be sent to &lt;<a href='mailto:editor@xmpp.org'>editor@xmpp.org</a>&gt;.</p>
+        <p class='indent'>Errata may be sent to &lt;<a href='mailto:editor@xmpp.org'>editor@xmpp.org</a>&gt;.</p>
         <!-- XMPP NOTICE AND CONFORMANCE TERMS-->
         <!-- (we don't put these on Procedural XEPs) -->
         <xsl:if test='$thetype = "Standards Track" or $thetype = "Historical" or $thetype = "Informational"'>
