@@ -34,8 +34,8 @@
       <jid>jajcus@jabber.bnet.pl</jid>
     </author>
     <revision>
-      <version>1.5pre16</version>
-      <date>in progress, last updated 2008-01-21</date>
+      <version>1.5pre17</version>
+      <date>in progress, last updated 2008-01-28</date>
       <initials>jjh/psa</initials>
       <remark>
         <ul>
@@ -44,6 +44,7 @@
           <li>Defined the nature of possible preimage attacks</li>
           <li>More clearly specified security considerations</li>
           <li>More clearly specified implementation notes</li>
+          <li>Modified generation method to incorporate service discovery extensions</li>
           <li>Clarified meaning and construction of caps node attribute and disco node attribute</li>
           <li>Specified that node attribute shall be included in disco#info request for backwards-compatibility</li>
           <li>Clarified handling of the legacy format to assist developers</li>
@@ -134,7 +135,7 @@
         <li>Not showing a "Send a File" button if another user's client does not support &xep0096;.</li>
         <li>Filtering &xep0060; notifications based on advertised subscriber interests.</li>
       </ul>
-      <p>In the past, after logging in some Jabber clients sent one &xep0030; and one &xep0092; request to each entity from which they received presence. That "disco/version flood" resulted in an excessive use of bandwidth and was impractical on a larger scale, particularly for users with large rosters. Therefore this document defines a more robust and scalable solution: namely, a presence-based mechanism <note>This proposal is not limited to clients, and can be used by any entity that exchanges presence with another entity, e.g., a gateway. However, this document uses the example of clients throughout.</note> for exchanging information about entity capabilities. Clients should not engage in the older "disco/version flood" behavior and instead should use Entity Capabilities as specified herein.</p>
+      <p>In the past, after logging in some Jabber clients sent one &xep0030; and one &xep0092; request to each entity from which they received presence. That "disco/version flood" resulted in an excessive use of bandwidth and was impractical on a larger scale, particularly for users with large rosters. Therefore this document defines a more robust and scalable solution: namely, a presence-based mechanism <note>Entity capabilities is not limited to clients, and can be used by any entity that exchanges presence with another entity, e.g., a gateway. However, this specification mainly uses the example of clients.</note> for exchanging information about entity capabilities. Clients should not engage in the older "disco/version flood" behavior and instead should use Entity Capabilities as specified herein.</p>
     </section2>
     <section2 topic='How It Works' anchor='howitworks'>
       <p>This section provides a friendly introduction to entity capabilities ("caps").</p>
@@ -147,7 +148,7 @@
      ver='SrFo9ar2CCk2EnOH4q4QANeuxLQ='/>
 </presence>
       ]]></code>
-      <p>The 'node' attribute represents the client software Romeo is using. The 'ver' attribute is a specially-constructed string that represents the entity's service discovery identity (category and type as registered at &DISCOCATEGORIES; as well as, optionally, the service discovery name) and supported features (as registered at &DISCOFEATURES; as well as, optionally, &xep0128; data registered at &FORMTYPES;).</p>
+      <p>The 'node' attribute represents the client software Romeo is using. The 'ver' attribute is a specially-constructed string (called a "verification string") that represents the entity's service discovery identity (category and type as registered at &DISCOCATEGORIES;, as well as, optionally, xml:lang and name) and supported features (as registered at &DISCOFEATURES; as well as, optionally, extended service discovery information data registered at &FORMTYPES;).</p>
       <p>At this point, your client has no idea what the capabilities are of someone with a version string 'SrFo9ar2CCk2EnOH4q4QANeuxLQ='. Your client therefore sends a service discovery query to Romeo, asking what his client can do.</p>
       <code><![CDATA[
 <iq from='juliet@capulet.lit/chamber' 
@@ -189,7 +190,7 @@
   <c xmlns='http://jabber.org/protocol/caps' 
      hash='sha-1'
      node='http://psi-im.org'
-     ver='P0wEGAHIj5lRBc5Oa872bmRB8Bg='/>
+     ver='OSkaDqG4Q46zrXf5G6WSjfzgzGo='/>
 </presence>
       ]]></code>
       <p>... or the following presence ...</p>
@@ -220,7 +221,7 @@
     <p>The protocol defined herein addresses the following requirements:</p>
     <ol>
       <li>Clients must be able to participate even if they support only &xmppcore;, &xmppim;, and <cite>XEP-0030</cite>.</li>
-      <li>Clients must be able to participate even if they are on networks without connectivity to other XMPP servers, services offering specialized XMPP extensions, or HTTP servers.<note>These first two requirements effectively eliminated &xep0060; as a possible implementation of entity capabilities.</note></li>
+      <li>Clients must be able to participate even if they are on networks without connectivity to other XMPP servers, services offering specialized XMPP extensions, or HTTP servers.<note>These first two requirements effectively eliminated <cite>XEP-0060</cite> as a possible implementation of entity capabilities.</note></li>
       <li>Clients must be able to retrieve information without querying every entity with which they communicate.</li>
       <li>Since presence is normally broadcasted to many contacts, the byte size of the proposed extension must be as small as possible.</li>
       <li>It must be possible to write a XEP-0045 server implementation that passes the given information along.</li>
@@ -245,7 +246,7 @@
       </tr>
       <tr>
         <td>hash</td>
-        <td>The hashing algorithm used to generate the 'ver' attribute; see <link url='#security-mti'>Mandatory-to-Implement Technologies</link> regarding supported hashing algorithms.</td>
+        <td>The hashing algorithm used to generate the verification string; see <link url='#security-mti'>Mandatory-to-Implement Technologies</link> regarding supported hashing algorithms.</td>
         <td>REQUIRED</td>
       </tr>
       <tr>
@@ -255,7 +256,7 @@
       </tr>
       <tr>
         <td>ver</td>
-        <td>A string that specifies the identity and supported features of the entity. **</td>
+        <td>A string that is used to verify the identity and supported features of the entity. **</td>
         <td>REQUIRED</td>
       </tr>
     </table>
@@ -263,50 +264,61 @@
     <p>**  Note: Before version 1.4 of this specification, the 'ver' attribute was used to specify the released version of the software; while the values of the 'ver' attribute that result from use of the algorithm specified herein are backwards-compatible, applications SHOULD appropriately handle the <link url='#legacy'>Legacy Format</link>.</p>
   </section1>
 
-  <section1 topic='Generation of the ver Attribute' anchor='ver'>
-    <p>In order to help prevent poisoning of entity capabilities information, the value of the 'ver' attribute MUST be generated according to the following method.</p>
-    <p>Note: All sorting operations MUST be performed using "i;octet" collation as specified in Section 9.3 of &rfc4790;.</p>
-    <ol>
-      <li>Initialize an empty string S.</li>
-      <li>Sort the service discovery identities <note>A registry of service discovery identities is located at &DISCOCATEGORIES;.</note> by category and then by type (if it exists) and then by xml:lang (if it exists), formatted as CATEGORY '/' [TYPE] '/' [LANG] '/' [NAME]. Note that each slash is included even if the TYPE, LANG, or NAME is not included.</li>
-      <li>For each identity, append the 'category/type/lang/name' to S, followed by the '&lt;' character.</li>
-      <li>Sort the supported service discovery features. <note>A registry of service discovery features is located at &DISCOFEATURES;.</note></li>
-      <li>For each feature, append the feature to S, followed by the '&lt;' character.</li>
-      <li>If the service discovery information response includes <cite>XEP-0128</cite> data, sort the fields by the value of the "var" attribute.</li>
-      <li>For each "var":
-        <ol>
-          <li>Append the var name and the '&lt;' character.</li>
-          <li>Sort values by the XML character data of the &lt;value/&gt; element.</li>
-          <li>For each value, append the value and the '&lt;' character.</li>
-        </ol>
-      </li>
-      <li>Compute ver by hashing S using the algorithm specified in the 'hash' attribute (e.g., SHA-1 as defined in &rfc3174;). The hashed data MUST be generated with binary output and encoded using Base64 as specified in Section 4 of &rfc4648; (note: the Base64 output MUST NOT include whitespace and MUST set padding bits to zero). <note>The OpenSSL command for producing such output with SHA-1 is is "echo -n 'S' | openssl dgst -binary -sha1 | openssl enc -nopad -base64".</note></li>
-    </ol>
-    <p>Consider an entity whose category is "client", whose service discovery type is "pc", whose service discovery name is "Exodus 0.9.1", and whose supported features are "http://jabber.org/protocol/disco#info", "http://jabber.org/protocol/disco#items", and "http://jabber.org/protocol/muc". Using the SHA-1 algorithm, the value of the 'ver' attribute would be generated as follows:</p>
-    <ol>
-      <li>S = ''</li>
-      <li>Only one identity: "client/pc"</li>
-      <li>S = 'client/pc//Exodus 0.9.1&lt;'</li>
-      <li>Sort the features: "http://jabber.org/protocol/disco#info", "http://jabber.org/protocol/disco#items", "http://jabber.org/protocol/muc".</li>
-      <li>S = 'client/pc//Exodus 0.9.1&lt;http://jabber.org/protocol/disco#info&lt;http://jabber.org/protocol/disco#items&lt;http://jabber.org/protocol/muc&lt;'</li>
-      <li>ver = SrFo9ar2CCk2EnOH4q4QANeuxLQ=</li>
-    </ol>
-    <p>Consider a more complex example, where the entity includes several identities (with the service discovery name in different languages) as well as extended information formatted according to <cite>XEP-0128</cite>.</p>
-    <code>
+  <section1 topic='Verification String' anchor='ver'>
+    <section2 topic='Generation Method' anchor='ver-gen'>
+      <p>In order to help prevent poisoning of entity capabilities information, the value of the verification string MUST be generated according to the following method.</p>
+      <p>Note: All sorting operations MUST be performed using "i;octet" collation as specified in Section 9.3 of &rfc4790;.</p>
+      <ol>
+        <li>Initialize an empty string S.</li>
+        <li>Sort the service discovery identities <note>A registry of service discovery identities is located at &DISCOCATEGORIES;.</note> by category and then by type (if it exists) and then by xml:lang (if it exists), formatted as CATEGORY '/' [TYPE] '/' [LANG] '/' [NAME]. Note that each slash is included even if the TYPE, LANG, or NAME is not included.</li>
+        <li>For each identity, append the 'category/type/lang/name' to S, followed by the '&lt;' character.</li>
+        <li>Sort the supported service discovery features. <note>A registry of service discovery features is located at &DISCOFEATURES;.</note></li>
+        <li>For each feature, append the feature to S, followed by the '&lt;' character.</li>
+        <li>If the service discovery information response includes <cite>XEP-0128</cite> data forms, sort the forms by the FORM_TYPE field.</li>
+        <li>For each extended service discovery information form:
+          <ol>
+            <li>Append the value of the FORM_TYPE field, followed by the '&lt;' character.</li>
+            <li>Sort the fields by the value of the "var" attribute.</li>
+            <li>For each field:
+              <ol>
+                <li>Append the value of the "var" attribute, followed by the '&lt;' character.</li>
+                <li>Sort values by the XML character data of the &lt;value/&gt; element.</li>
+                <li>For each &lt;value/&gt; element, append the XML character data, followed by the '&lt;' character.</li>
+              </ol>
+            </li>
+          </ol>
+        </li>
+        <li>Compute ver by hashing S using the algorithm specified in the 'hash' attribute (e.g., SHA-1 as defined in &rfc3174;). The hashed data MUST be generated with binary output and encoded using Base64 as specified in Section 4 of &rfc4648; (note: the Base64 output MUST NOT include whitespace and MUST set padding bits to zero). <note>The OpenSSL command for producing such output with SHA-1 is "echo -n 'S' | openssl dgst -binary -sha1 | openssl enc -nopad -base64".</note></li>
+      </ol>
+    </section2>
+    <section2 topic='Simple Generation Example' anchor='ver-gen-simple'>
+      <p>Consider an entity whose category is "client", whose service discovery type is "pc", whose service discovery name is "Exodus 0.9.1", and whose supported features are "http://jabber.org/protocol/disco#info", "http://jabber.org/protocol/disco#items", and "http://jabber.org/protocol/muc". Using the SHA-1 algorithm, the verification string would be generated as follows:</p>
+      <ol>
+        <li>S = ''</li>
+        <li>Only one identity: "client/pc"</li>
+        <li>S = 'client/pc//Exodus 0.9.1&lt;'</li>
+        <li>Sort the features: "http://jabber.org/protocol/disco#info", "http://jabber.org/protocol/disco#items", "http://jabber.org/protocol/muc".</li>
+        <li>S = 'client/pc//Exodus 0.9.1&lt;http://jabber.org/protocol/disco#info&lt;http://jabber.org/protocol/disco#items&lt;http://jabber.org/protocol/muc&lt;'</li>
+        <li>ver = SrFo9ar2CCk2EnOH4q4QANeuxLQ=</li>
+      </ol>
+    </section2>
+    <section2 topic='Complex Generation Example' anchor='ver-gen-complex'>
+      <p>Consider a more complex example, where the entity includes several identities (with the service discovery name in different languages) as well as extended information formatted according to <cite>XEP-0128</cite>.</p>
+      <code>
 &lt;iq from='benvolio@capulet.lit/230193'&gt;
     id='disco1'
     to='juliet@capulet.lit/chamber' 
     type='result'&gt;
   &lt;query xmlns='http://jabber.org/protocol/disco#info'
-         node='http://psi-im.org#P0wEGAHIj5lRBc5Oa872bmRB8Bg='&gt;
-    &lt;identity xml:lang='en' category='client' name='Psi' type='pc'/&gt;
-    &lt;identity xml:lang='el' category='client' name='&#936;' type='pc'/&gt;
+         node='http://psi-im.org#OSkaDqG4Q46zrXf5G6WSjfzgzGo='&gt;
+    &lt;identity xml:lang='en' category='client' name='Psi 0.9.1' type='pc'/&gt;
+    &lt;identity xml:lang='el' category='client' name='&#936; 0.9.1' type='pc'/&gt;
     &lt;feature var='http://jabber.org/protocol/disco#info'/&gt;
     &lt;feature var='http://jabber.org/protocol/disco#items'/&gt;
     &lt;feature var='http://jabber.org/protocol/muc'/&gt;
     &lt;x xmlns='jabber:x:data' type='result'&gt;
       &lt;field var='FORM_TYPE' type='hidden'&gt;
-        &lt;value&gt;urn:xmpp:dataforms:clientinfo&lt;/value&gt;
+        &lt;value&gt;urn:xmpp:dataforms:softwareinfo&lt;/value&gt;
       &lt;/field&gt;
       &lt;field var='ip_version'&gt;
         &lt;value&gt;ipv4&lt;/value&gt;
@@ -316,7 +328,10 @@
         &lt;value&gt;Mac&lt;/value&gt;
       &lt;/field&gt;
       &lt;field var='os_version'&gt;
-        &lt;value&gt;OS X Mach-O&lt;/value&gt;
+        &lt;value&gt;10.5.1&lt;/value&gt;
+      &lt;/field&gt;
+      &lt;field var='software'&gt;
+        &lt;value&gt;Psi&lt;/value&gt;
       &lt;/field&gt;
       &lt;field var='software_version'&gt;
         &lt;value&gt;0.11&lt;/value&gt;
@@ -324,18 +339,51 @@
     &lt;/x&gt;
   &lt;/query&gt;
 &lt;/iq&gt;
-    </code>
-    <p>Using the SHA-1 algorithm, the value of the 'ver' attribute would be generated as follows:</p>
-    <ol>
-      <li>S = ''</li>
-      <li>Two identities: "client/pc/Psi" and "client/pc/&#936;"</li>
-      <li>S = 'client/pc/el/&#936;&lt;client/pc/en/Psi&lt;'</li>
-      <li>Sort the features: "http://jabber.org/protocol/disco#info", "http://jabber.org/protocol/disco#items", "http://jabber.org/protocol/muc".</li>
-      <li>Sort and append the extended information: "ip_version&lt;ipv4&lt;ipv6", "os&lt;Mac", "os_version&lt;OS X 10.5.1", "software_version&lt;0.11".</li>
-      <li>S = 'client/pc/el/&#936;&lt;client/pc/en/Psi&lt;http://jabber.org/protocol/disco#info&lt;http://jabber.org/protocol/disco#items&lt;http://jabber.org/protocol/muc&lt;<br />
-      ip_version&lt;ipv4&lt;ipv6&lt;os&lt;Mac&lt;os_version&lt;OS X 10.5.1&lt;software_version&lt;0.11&lt;'</li>
-      <li>ver = P0wEGAHIj5lRBc5Oa872bmRB8Bg=</li>
-    </ol>
+      </code>
+      <p>Using the SHA-1 algorithm, the verification string would be generated as follows (note: line breaks in the verification string are included only for the purposes of readability):</p>
+      <ol>
+        <li>S = ''</li>
+        <li>Two identities: "client/pc/Psi" and "client/pc/&#936;"</li>
+        <li>S = 'client/pc/el/&#936;&nbsp;0.9.1&lt;client/pc/en/Psi&nbsp;0.9.1&lt;'</li>
+        <li>Sort the features: "http://jabber.org/protocol/caps", http://jabber.org/protocol/disco#info", "http://jabber.org/protocol/disco#items", "http://jabber.org/protocol/muc".</li>
+        <li>S = 'client/pc/el/&#936;&nbsp;0.9.1&lt;client/pc/en/Psi&nbsp;0.9.1&lt;http://jabber.org/protocol/caps&lt;http://jabber.org/protocol/disco#info
+        <br />&lt;http://jabber.org/protocol/disco#items&lt;http://jabber.org/protocol/muc'.</li>
+        <li>Sort the extended service discovery forms by FORM_TYPE (there is only one: "urn:xmpp:dataforms:softwareinfo").</li>
+        <li>S = 'client/pc/el/&#936;&nbsp;0.9.1&lt;client/pc/en/Psi&nbsp;0.9.1&lt;http://jabber.org/protocol/caps&lt;http://jabber.org/protocol/disco#info
+        <br />&lt;http://jabber.org/protocol/disco#items&lt;http://jabber.org/protocol/muc&lt;urn:xmpp:dataforms:softwareinfo&lt;'</li>
+        <li>Sort the fields by var and append the value(s): "ip_version&lt;ipv4&lt;ipv6", "os&lt;Mac", "os_version&lt;OS X 10.5.1", "software&lt;Psi", "software_version&lt;0.11".</li>
+        <li>S = 'client/pc/el/&#936;&nbsp;0.9.1&lt;client/pc/en/Psi&nbsp;0.9.1&lt;http://jabber.org/protocol/caps
+        <br/>&lt;http://jabber.org/protocol/disco#info&lt;http://jabber.org/protocol/disco#items&lt;http://jabber.org/protocol/muc
+        <br/>&lt;urn:xmpp:dataforms:softwareinfo&lt;ip_version&lt;ipv4&lt;ipv6&lt;os&lt;Mac&lt;os_version&lt;OS X 10.5.1&lt;software&lt;Psi&lt;software_version&lt;0.11&lt;'</li>
+        <li>ver = OSkaDqG4Q46zrXf5G6WSjfzgzGo=</li>
+      </ol>
+    </section2>
+    <section2 topic='Processing Method' anchor='ver-proc'>
+      <p>When an entity receives a value of the 'ver' attribute that appears to be a verification string generated in accordance with the generation method defined in this specification, it MUST process the 'ver' according to the following method.</p>
+      <ol>
+        <li>Verify that the &lt;c/&gt; element includes a 'hash' attribute. If it does not, ignore the 'ver' or treat it as generated in accordance with the <link url='#legacy'>Legacy Format</link> (if supported).</li>
+        <li>If the value of the 'hash' attribute does not match one of the processing application's supported hash functions, do the following:
+          <ol>
+            <li>Send a service discovery information request to the generating entity.</li>
+            <li>Receive a service discovery information response from the generating entity.</li>
+            <li>Do not validate or globally cache the verification string as described below; instead, the processing application SHOULD associate the discovered identity+features <em>only</em> with the JabberID of the generating entity.</li>
+          </ol>
+        </li>
+        <li>If the value of the 'hash' attribute matches one of the processing application's supported hash functions, validate the verification string by doing the following:
+          <ol>
+            <li>Send a service discovery information request to the generating entity.</li>
+            <li>Receive a service discovery information response from the generating entity.</li>
+            <li>If the response includes more than one service discovery identity with the same category/type/lang/name, consider the entire response to be ill-formed.</li>
+            <li>If the response includes more than one service discovery feature with the same XML character data, consider the entire response to be ill-formed.</li>
+            <li>If the response includes more than one extended service discovery information form with the same FORM_TYPE, consider the entire response to be ill-formed.</li>
+            <li>If the response includes an extended service discovery information form where the FORM_TYPE field is not of type "hidden" or the form does not include a FORM_TYPE field, ignore the form but continue processing.</li>
+            <li>If the response is considered well-formed, reconstruct the hash by using the service discovery information response to generate a local hash in accordance with the <link url='#ver-gen'>Generation Method</link>).</li>
+            <li>If the values of the received and reconstructed hashes match, the processing application MUST consider the result to be valid and SHOULD globally cache the result for all JabberIDs with which it communicates.</li>
+            <li>If the values of the received and reconstructed hashes do not match, the processing application MUST consider the result to be invalid and MUST NOT globally cache the verification string; however, it SHOULD check the service discovery identity and supported features of another generating entity who advertises that value.</li>
+          </ol>
+        </li>
+      </ol>
+    </section2>
   </section1>
 
   <section1 topic='Use Cases' anchor='usecases'>
@@ -349,7 +397,7 @@
      ver='SrFo9ar2CCk2EnOH4q4QANeuxLQ='/>
 </presence>
       ]]></example>
-       <p>If the supported features change during a generating entity's presence session (e.g., a user installs an updated version of a client plugin), the application MUST recompute the 'ver' attribute and SHOULD send a new presence broadcast.</p>
+       <p>If the supported features change during a generating entity's presence session (e.g., a user installs an updated version of a client plugin), the application MUST recompute the verification string and SHOULD send a new presence broadcast.</p>
       <example caption='Presence with recomputed ver attribute'><![CDATA[
 <presence>
   <c xmlns='http://jabber.org/protocol/caps'
@@ -394,7 +442,7 @@
 </iq>
       ]]></example>
 
-      <p>The requesting entity MUST check the identities and supported features against the 'ver' value by calculating the hash as described under <link url='#ver'>Generation of the ver Attribute</link> and making sure that the values match. If the values do not match, the requesting entity MUST NOT accept or cache the 'ver' value as reliable and SHOULD check the service discovery identity and supported features of another generating entity who advertises that value (if any). This helps to prevent poisoning of entity capabilities information.</p>
+      <p>Note: If the generating entity incorporated multiple identities with different xml:lang values in its verification string, it MUST return all of the identities even if the request specified a particular xml:lang.</p>
 
     </section2>
 
@@ -408,7 +456,7 @@
      ver='ItBTI0XLDFvVxZ72NQElAzKS9sU='>
 </stream:features>
       ]]></example>
-      <p>When a connected client or peer server sends a service discovery information request to determine the entity capabilities of a server that advertises capabilities via the stream feature, the requesting entity MUST send the disco#info request to the server's JID as provided in the 'from' attribute of the response stream header (the 'from' attribute was recommended by &rfc3920; and is required by &rfc3920bis;). To enable this functionality, a server that advertises support for entity capabilities MUST provide a 'from' address in its response stream headers, in accordance with <cite>rfc3921bis</cite>.</p>
+      <p>When a connected client or peer server sends a service discovery information request to determine the entity capabilities of a server that advertises capabilities via the stream feature, the requesting entity MUST send the disco#info request to the server's JID as provided in the 'from' attribute of the response stream header (the 'from' attribute was recommended by &rfc3920; and is required by &rfc3920bis;). To enable this functionality, a server that advertises support for entity capabilities MUST provide a 'from' address in its response stream headers, in accordance with <cite>rfc3920bis</cite>.</p>
     </section2>
   </section1>
 
@@ -459,10 +507,10 @@
 
   <section1 topic='Implementation Notes' anchor='impl'>
     <section2 topic='Hashing Algorithm Support' anchor='impl-hash'>
-      <p>An application should maintain a list of hashing algorithms it supports, which MUST include the <link url='#security-mti'>Mandatory-to-Implement Technologies</link>. If the application receives a caps notification that was generated using one of its supported hashing algorithms, then it SHOULD verify the hash and cache the value globally. If the application receives a caps notification generated using a hash it does not support, then it SHOULD NOT attempt to verify the hash but SHOULD cache it on a per-JID basis (i.e., it SHOULD send a service discovery information request to the JID and cache the results for that JID only).</p>
+      <p>An application SHOULD maintain a list of hashing algorithms it supports, which MUST include the algorithm or algorithms listed in the <link url='#security-mti'>Mandatory-to-Implement Technologies</link> section of this document.</p>
     </section2>
     <section2 topic='Caching' anchor='impl-cache'>
-      <p>It is RECOMMENDED for an application that processes entity capabilities information to cache associations between the 'ver' attribute and discovered features within the scope of one presence session. This obviates the need for extensive service discovery requests within a session.</p>
+      <p>It is RECOMMENDED for an application that processes entity capabilities information to cache associations between the verification string and discovered identity+features within the scope of one presence session. This obviates the need for extensive service discovery requests within a session.</p>
       <p>It is OPTIONAL for an application to cache associates across presence sessions. However, since this obviates the need for extensive service discovery requests at the beginning of a session, such caching is strongly encouraged, especially in bandwidth-constrained environments.</p>
     </section2>
     <section2 topic='Directed Presence' anchor='impl-presence'>
@@ -492,15 +540,15 @@
       <ol>
         <li>The hashing algorithm used would need to be found not only theoretically but practically vulnerable to first or second preimage attacks (e.g., this is not yet true of the MD5 or SHA-1 algorithms, but may become true in the future).</li>
         <li>An attacker would need to find an input message X or S' that matches the hash V for a particular value of V or S, which may not be practical given that (a) the values of S used as input to the hash function in entity capabilities are relatively short and (b) cryptanalysis to date indicates that existing hash functions may not be vulnerable to preimage attacks except in the case of relatively long input messages (on the order of 2<span class='super'>55</span> blocks).</li>
-        <li>The input message X or S' would need to conform to the structure of S as specified under <link url='#ver'>Generation of the ver Attribute</link>, including the order of service discovery identity or identities followed by service discovery features, delimited by the '&lt;' character and sorted using "i;octet" collation.</li>
+        <li>The input message X or S' would need to conform to the structure of S as specified under <link url='#ver'>Verification String</link>, including the order of service discovery identity or identities followed by service discovery features, delimited by the '&lt;' character and sorted using "i;octet" collation.</li>
         <li>The input messsage X or S' would need to make it seem as if a desirable feature (e.g., end-to-end encryption) is not supported by other entities that advertise the same hash V even though the feature is indeed supported (i.e., the attacker would need to return a set of service discovery identities and features that match X or S', and have that set be plausible for an entity that communicates via XMPP), or make it seem as if an undesirable feature is supported even though the feature is not supported.</li>
         <li>The attacker would need to propagate the hash V before some other entity with the true input message S could broadcast presence with the relevant entity capabilities data and provide the true service discovery response (thus the attacker might need to subvert the development process of a particular software project or subvert the namespace issuance process of the &REGISTRAR;, or both).</li>
       </ol>
       <p>It currently seems extremely unlikely that an attacker could meet all of the foregoing conditions in the foreseeable future. However, the XMPP Council shall continue to monitor the state of cryptanalysis regarding the mandatory-to-implement hash function as well as the possibility that any vulnerabilities in that function might lead to practical threats against the entity capabilities protocol. If and when it becomes practical (or even possible) to launch effective preimage attacks against the entity capabilities protocol, the XMPP Council shall consider updating this specification to change the mandatory-to-implement hashing algorithm to a safer technology.</p>
     </section2>
     <section2 topic='Caps Poisoning' anchor='security-poisoning'>
-      <p>Adherence to the method defined in the <link url='#ver'>Generation of the ver Attribute</link> section of this document for both generation and checking of the 'ver' attribute helps to guard against poisoning of entity capabilities information by malicious or improperly implemented entities.</p>
-      <p>If the value of the 'ver' attribute is a hash as defined herein (i.e., if the 'ver' attribute is not generated according to the <link url='#legacy'>Legacy Format</link>), inclusion of the 'hash' attribute is REQUIRED. Knowing explicitly that the value of the 'ver' attribute is a hash enables the recipient to avoid spurious notification of invalid or poisoned hashes.</p>
+      <p>Adherence to the method defined in the <link url='#ver'>Verification String</link> section of this document for both generation and processing of the 'ver' attribute helps to guard against poisoning of entity capabilities information by malicious or improperly implemented entities.</p>
+      <p>If the value of the 'ver' attribute is a verification string as defined herein (i.e., if the 'ver' attribute is not generated according to the <link url='#legacy'>Legacy Format</link>), inclusion of the 'hash' attribute is REQUIRED. Knowing explicitly that the value of the 'ver' attribute is a verification string enables the recipient to avoid spurious notification of invalid or poisoned hashes.</p>
     </section2>
     <section2 topic='Information Exposure' anchor='security-exposure'>
       <p>Use of entity capabilities might make it easier for an attacker to launch certain application-specific attacks, since the attacker could more easily determine the type of client being used as well as its capabilities. However, since most clients respond to Service Discovery and Software Version requests without performing access control checks, there is no new vulnerability. Entities that wish to restrict access to capabilities information SHOULD use &xep0016; to define appropriate communications blocking (e.g., an entity MAY choose to allow IQ requests only from "trusted" entities, such as those with whom it has a presence subscription of "both"); note, however, that such restrictions may be incompatible with the recommendation regarding <link url='#directed'>Directed Presence</link>.</p>
