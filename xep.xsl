@@ -137,7 +137,7 @@
             Version: <xsl:value-of select='/xep/header/revision[position()=1]/version'/><br />
             Last Updated: <xsl:value-of select='/xep/header/revision[position()=1]/date'/><br />
             <xsl:variable name='expires.count' select='count(/xep/header/expires)'/>
-            <xsl:if test='$expires.count &gt; 0'>
+            <xsl:if test='$expires.count=1'>
               Expires: <xsl:value-of select='/xep/header/expires'/><br />
             </xsl:if>
             <xsl:variable name='ApprovingBody' select='/xep/header/approver'/>
@@ -194,7 +194,7 @@
               <xsl:apply-templates select='/xep/header/schemaloc'/>
             </xsl:if>
             <xsl:variable name='reg.count' select='count(/xep/header/registry)'/>
-            <xsl:if test='$reg.count &gt; 0'>
+            <xsl:if test='$reg.count=1'>
               Registry: 
               <xsl:variable name='registryURL'>
                 <xsl:text>http://www.xmpp.org/registrar/</xsl:text>
@@ -315,10 +315,10 @@
       <xsl:if test='$authornote.count &gt; 0'>
         See <a href='#authornote'>Author Note</a><br />
       </xsl:if>
-      <xsl:if test='$org.count &gt; 0'>
+      <xsl:if test='$org.count=1'>
         Organization: <xsl:value-of select='org'/><br />
       </xsl:if>
-      <xsl:if test='$email.count &gt; 0'>
+      <xsl:if test='$email.count=1'>
         Email:
         <a>
           <xsl:attribute name='href'>
@@ -329,7 +329,7 @@
         </a>
         <br />
       </xsl:if>
-      <xsl:if test='$jid.count &gt; 0'>
+      <xsl:if test='$jid.count=1'>
         JabberID: 
         <a>
           <xsl:attribute name='href'>
@@ -340,7 +340,7 @@
         </a>
         <br />
       </xsl:if>
-      <xsl:if test='$uri.count &gt; 0'>
+      <xsl:if test='$uri.count=1'>
         URI: 
         <a>
           <xsl:attribute name='href'>
@@ -388,7 +388,7 @@
     <xsl:variable name='this.url' select='url'/>
     <xsl:variable name='ns.count' select='count(ns)'/>
     <xsl:choose>
-      <xsl:when test="$ns.count &gt; 0">
+      <xsl:when test="$ns.count=1">
         XML Schema for <xsl:value-of select='ns'/> namespace: &lt;<a href='{$this.url}'><xsl:value-of select='url'/></a>&gt;<br />
       </xsl:when>
       <xsl:otherwise>
@@ -660,11 +660,11 @@
   <xsl:template match='p'>
     <p>
       <xsl:variable name='class.count' select='count(@class)'/>
-      <xsl:if test='$class.count &gt; 0'>
+      <xsl:if test='$class.count=1'>
         <xsl:attribute name='class'><xsl:value-of select='@class'/></xsl:attribute>
       </xsl:if>
       <xsl:variable name='style.count' select='count(@style)'/>
-      <xsl:if test='$style.count &gt; 0'>
+      <xsl:if test='$style.count=1'>
         <xsl:attribute name='style'><xsl:value-of select='@style'/></xsl:attribute>
       </xsl:if>
       <xsl:apply-templates/>
@@ -674,11 +674,11 @@
   <xsl:template match='ul'>
     <ul>
       <xsl:variable name='class.count' select='count(@class)'/>
-      <xsl:if test='$class.count &gt; 0'>
+      <xsl:if test='$class.count=1'>
         <xsl:attribute name='class'><xsl:value-of select='@class'/></xsl:attribute>
       </xsl:if>
       <xsl:variable name='style.count' select='count(@style)'/>
-      <xsl:if test='$style.count &gt; 0'>
+      <xsl:if test='$style.count=1'>
         <xsl:attribute name='style'><xsl:value-of select='@style'/></xsl:attribute>
       </xsl:if>
       <xsl:apply-templates/>
@@ -688,15 +688,15 @@
   <xsl:template match='ol'>
     <ol>
       <xsl:variable name='start.count' select='count(@start)'/>
-      <xsl:if test='$start.count &gt; 0'>
+      <xsl:if test='$start.count=1'>
         <xsl:attribute name='start'><xsl:value-of select='@start'/></xsl:attribute>
       </xsl:if>
       <xsl:variable name='class.count' select='count(@class)'/>
-      <xsl:if test='$class.count &gt; 0'>
+      <xsl:if test='$class.count=1'>
         <xsl:attribute name='class'><xsl:value-of select='@class'/></xsl:attribute>
       </xsl:if>
       <xsl:variable name='style.count' select='count(@style)'/>
-      <xsl:if test='$style.count &gt; 0'>
+      <xsl:if test='$style.count=1'>
         <xsl:attribute name='style'><xsl:value-of select='@style'/></xsl:attribute>
       </xsl:if>
       <xsl:apply-templates/>
@@ -706,11 +706,11 @@
   <xsl:template match='li'>
     <li>
       <xsl:variable name='class.count' select='count(@class)'/>
-      <xsl:if test='$class.count &gt; 0'>
+      <xsl:if test='$class.count=1'>
         <xsl:attribute name='class'><xsl:value-of select='@class'/></xsl:attribute>
       </xsl:if>
       <xsl:variable name='style.count' select='count(@style)'/>
-      <xsl:if test='$style.count &gt; 0'>
+      <xsl:if test='$style.count=1'>
         <xsl:attribute name='style'><xsl:value-of select='@style'/></xsl:attribute>
       </xsl:if>
       <xsl:apply-templates/>
@@ -764,10 +764,10 @@
     <th>
       <xsl:variable name='colspan.count' select='count(@colspan)'/>
       <xsl:variable name='rowspan.count' select='count(@rowspan)'/>
-      <xsl:if test='$colspan.count &gt; 0'>
+      <xsl:if test='$colspan.count=1'>
         <xsl:attribute name='colspan'><xsl:value-of select='@colspan'/></xsl:attribute>
       </xsl:if>
-      <xsl:if test='$colspan.count &gt; 0'>
+      <xsl:if test='$rowspan.count=1'>
         <xsl:attribute name='rowspan'><xsl:value-of select='@rowspan'/></xsl:attribute>
       </xsl:if>
       <xsl:apply-templates/>
@@ -779,13 +779,13 @@
       <xsl:variable name='align.count' select='count(@align)'/>
       <xsl:variable name='colspan.count' select='count(@colspan)'/>
       <xsl:variable name='rowspan.count' select='count(@rowspan)'/>
-      <xsl:if test='$align.count &gt; 0'>
+      <xsl:if test='$align.count=1'>
         <xsl:attribute name='align'><xsl:value-of select='@align'/></xsl:attribute>
       </xsl:if>
-      <xsl:if test='$colspan.count &gt; 0'>
+      <xsl:if test='$colspan.count=1'>
         <xsl:attribute name='colspan'><xsl:value-of select='@colspan'/></xsl:attribute>
       </xsl:if>
-      <xsl:if test='$colspan.count &gt; 0'>
+      <xsl:if test='$rowspan.count=1'>
         <xsl:attribute name='rowspan'><xsl:value-of select='@rowspan'/></xsl:attribute>
       </xsl:if>
       <xsl:apply-templates/>
@@ -832,11 +832,11 @@
   <xsl:template match='div'>
     <div>
       <xsl:variable name='class.count' select='count(@class)'/>
-      <xsl:if test='$class.count &gt; 0'>
+      <xsl:if test='$class.count=1'>
         <xsl:attribute name='class'><xsl:value-of select='@class'/></xsl:attribute>
       </xsl:if>
       <xsl:variable name='style.count' select='count(@style)'/>
-      <xsl:if test='$style.count &gt; 0'>
+      <xsl:if test='$style.count=1'>
         <xsl:attribute name='style'><xsl:value-of select='@style'/></xsl:attribute>
       </xsl:if>
       <xsl:apply-templates/>
@@ -856,11 +856,11 @@
   <xsl:template match='span'>
     <span>
       <xsl:variable name='class.count' select='count(@class)'/>
-      <xsl:if test='$class.count &gt; 0'>
+      <xsl:if test='$class.count=1'>
         <xsl:attribute name='class'><xsl:value-of select='@class'/></xsl:attribute>
       </xsl:if>
       <xsl:variable name='style.count' select='count(@style)'/>
-      <xsl:if test='$style.count &gt; 0'>
+      <xsl:if test='$style.count=1'>
         <xsl:attribute name='style'><xsl:value-of select='@style'/></xsl:attribute>
       </xsl:if>
       <xsl:apply-templates/>
