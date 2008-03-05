@@ -1,0 +1,342 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Abuse Reporting</title>
+  <abstract>This specification defines an XMPP protocol extension for reporting abusive traffic between two XMPP servers.</abstract>
+  &LEGALNOTICE;
+  <number>0236</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0030</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT YET ASSIGNED</shortname>
+  &stpeter;
+  <revision>
+    <version>0.1</version>
+    <date>2008-03-05</date>
+    <initials>psa</initials>
+    <remark><p>Initial published version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.3</version>
+    <date>2008-02-29</date>
+    <initials>psa</initials>
+    <remark><p>Added reason element containing machine-readable conditions and optional human-readable text; added note about forwarding of abuse reports.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2008-02-26</date>
+    <initials>psa</initials>
+    <remark><p>Limited scope to reporting between two servers; more clearly defined what is abusive; changed protocol to use IQ request-response exchange; limited use of error condition to stream termination.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2008-02-19</date>
+    <initials>psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>Unfortunately, not all XMPP entities are well-behaved. Currently, if an XMPP entity sends abusive stanzas over a server-to-server connection, there is no way for the receiving server to inform the sending server that the sender is generating abusive traffic. In practice, the receiving server may need to terminate the server-to-server connection (again without explicitly informing the sending server about the reason for the termination) rather than continue to accept the abusive traffic.</p>
+  <p>This situation is far from desirable. Therefore, this specification defines three small XMPP protocol functions that can help to improve the reliability of server-to-server connections:</p>
+  <ol>
+    <li>A method by which the receiving server can send an abuse report to the sending server, including the JID(s) of the sender(s).</li>
+    <li>An application-specific stanza error condition that can be combined with the standard &notacceptable; stanza error condition to inform the sending server that a particular XMPP stanza is considered abusive.</li>
+    <li>An application-specific stream error condition that can be combined with the standard &policy; stream error condition to inform the sending server about the reason for termination of an XML stream.</li>
+  </ol>
+</section1>
+
+<section1 topic='Syntax' anchor='syntax'>
+  <p>An abuse report MUST be sent in an IQ stanza of type "set" containing an &lt;abuse/&gt; element qualified by the 'urn:xmpp:tmp:abuse' namespace &NSNOTE;. The allowable children of the &lt;abuse/&gt; element are:</p>
+  <ul>
+    <li>One or more &lt;jid/&gt; elements whose XML character data specifies the JID(s) of the abusive sender(s)</li>
+    <li>An optional &lt;reason/&gt; element that specifies the reason for the abuse report, via a machine-readable abuse condition defined in this specification, (optionally) human-readable text about the report, and (optionally) an application-specific condition defined outside this specification.</li>
+  </ul>
+  <p>This specification intentionally does not define exactly what constitutes abuse, since "abuse is in the eye of the beholder". However, the following machine-readable conditions are defined as children of the &lt;reason/&gt; element.</p>
+  <table caption='Abuse Conditions'>
+    <tr>
+      <th>Condition</th>
+      <th>Definition</th>
+    </tr>
+    <tr>
+      <td>&lt;gateway/&gt;</td>
+      <td>Attempting to inappropriately use a gateway on the receiving server (see &xep0100;)</td>
+    </tr>
+    <tr>
+      <td>&lt;muc/&gt;</td>
+      <td>Attempting to take over or otherwise abuse &xep0045; rooms on the receiving server</td>
+    </tr>
+    <tr>
+      <td>&lt;proxy/&gt;</td>
+      <td>Attempting to inappropriately use a &xep0065; proxy, TURN server, or other proxy on the receiving server</td>
+    </tr>
+    <tr>
+      <td>&lt;pubsub/&gt;</td>
+      <td>Attempting to inappropriately use a &xep0060; service on the receiving server</td>
+    </tr>
+    <tr>
+      <td>&lt;service/&gt;</td>
+      <td>Attempting to inappropriately use any other kind of service on the receiving server</td>
+    </tr>
+    <tr>
+      <td>&lt;spam/&gt;</td>
+      <td>Sending spam (unsolicited bulk messages)</td>
+    </tr>
+    <tr>
+      <td>&lt;stanza-too-big/&gt;</td>
+      <td>Sending extremely large stanzas</td>
+    </tr>
+    <tr>
+      <td>&lt;too-many-recipients/&gt;</td>
+      <td>Sending messages that contain too many recipients (see &xep0033;)</td>
+    </tr>
+    <tr>
+      <td>&lt;too-many-stanzas/&gt;</td>
+      <td>Sending an extremely large number of stanzas</td>
+    </tr>
+    <tr>
+      <td>&lt;unacceptable-payload/&gt;</td>
+      <td>Sending messages that contain unacceptable payloads such as malicious executables</td>
+    </tr>
+    <tr>
+      <td>&lt;unacceptable-text/&gt;</td>
+      <td>Sending messages that contain unacceptable human-readable text</td>
+    </tr>
+    <tr>
+      <td>&lt;undefined-abuse/&gt;</td>
+      <td>The abuse condition is undefined (should be used with an application-specific condition)</td>
+    </tr>
+  </table>
+  <p>Note: The foregoing list of conditions is not exhaustive. The list may be augmented or otherwise modified in a future version of this specification as a result of implementation and deployment experience.</p>
+</section1>
+
+<section1 topic='Abuse Report' anchor='report'>
+  <section2 topic='Generation' anchor='generation'>
+    <p>If an XMPP server receives abusive stanzas over a server-to-server connection, the receiving server SHOULD send an abuse report to the sending server.</p>
+    <example caption='Abuse Report'><![CDATA[
+<iq from='example.org'
+    id='rep1'
+    to='example.com'
+    type='set'>
+  <abuse xmlns='urn:xmpp:tmp:abuse'>
+    <jid>abuser@example.com/foo</jid>
+    <reason>
+      <condition>
+        <muc/>
+      </condition>
+    </reason>
+  </abuse>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Processing' anchor='processing'>
+    <p>Upon receiving the abuse report, the sending server MUST proceed as follows.</p>
+    <section3 topic='Abuse Reporting Not Supported' anchor='processing-notsupported'>
+      <p>If the sending server does not understand the abuse reporting protocol, it MUST return a &unavailable; error to the receiving server.</p>
+      <example caption='Abuse reporting not supported'><![CDATA[
+<iq from='example.com'
+    id='rep1'
+    to='example.org'
+    type='error'>
+  <error type='cancel'>
+    <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+      ]]></example>
+    </section3>
+    <section3 topic='Sender(s) Not Found' anchor='processing-notfound'>
+      <p>If none of the JIDs contained in the abuse report exist at the sending server, the sending server MUST return an &notfound; error to the receiving server.</p>
+      <example caption='Senders not found'><![CDATA[
+<iq from='example.com'
+    id='rep1'
+    to='example.org'
+    type='error'>
+  <error type='cancel'>
+    <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+      ]]></example>
+    </section3>
+    <section3 topic='Abuse Report Accepted' anchor='processing-accept'>
+      <p>If the sending server accepts the abuse report for one or more JIDs, it MUST return an IQ stanza of type "result" to the receiving server.</p>
+      <example caption='Abuse report accepted'><![CDATA[
+<iq from='example.com'
+    id='rep1'
+    to='example.org'
+    type='result'/>
+      ]]></example>
+      <p>This specification does not define how a sending server shall behave when it receives an abuse report. In general it is expected that the sending server (1) will notify the human administrators of the server in some implementation-specific or deployment-specific fashion, and (2) may use the abuse report in an automated fashion (e.g., as input to a rate-limiting algorithm, reputation system, or decision about temporarily suspending the privileges of the sending entity or entities). In addition, the sending server MAY the report to trusted parties such as third-party reporting services.</p>
+    </section3>
+  </section2>
+</section1>
+
+<section1 topic='Stanza Error' anchor='stanza'>
+  <p>The receiving server MAY report that a particular stanza is considered abusive. The stanza error condition MUST be &notacceptable; and the error stanza MUST include an application-specific error condition of &lt;abuse/&gt; qualified by the 'urn:xmpp:tmp:abuse' &NSNOTE;. The &lt;abuse/&gt; element MUST include one or more &lt;jid/&gt; elements whose XML character data specifies the JID(s) of the abusive sender(s).</p>
+  <example caption='Abusive stanza'><![CDATA[
+<message from='abuser@example.org/foo'
+         to='victim@example.org'>
+  [ ... some abusive payload here ... ]
+</message>
+  ]]></example>
+  <example caption='Stanza error'><![CDATA[
+<message from='example.com'
+         to='example.org'>
+  <error type='cancel'>
+    <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+  <abuse xmlns='urn:xmpp:tmp:abuse'>
+    <jid>abuser@example.com/foo</jid>
+    <reason>
+      <condition>
+        <unacceptable-payload/>
+      </condition>
+    </reason>
+  </abuse>
+</message>
+  ]]></example>
+</section1>
+
+<section1 topic='Stream Error' anchor='stream'>
+  <p>If the sending entity continues to generate abusive stanzas via the sending server, the receiving server MAY close the stream between the receiving server and the sending server. The stream error condition MUST be &policy; and the stream error MUST include an application-specific error condition of &lt;abuse/&gt; qualified by the 'urn:xmpp:tmp:abuse'. The &lt;abuse/&gt; element MUST include one or more &lt;jid/&gt; elements whose XML character data specifies the JID(s) of the abusive sender(s).</p>
+  <example caption='Stream Error'><![CDATA[
+<stream:error>
+  <policy-violation xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
+  <abuse xmlns='urn:xmpp:tmp:abuse'>
+    <jid>abuser@example.com/foo</jid>
+    <reason>
+      <condition>
+        <too-many-stanzas/>
+      </condition>
+    </reason>
+  </abuse>
+</stream:error>
+</stream:stream>
+  ]]></example>
+  <p>The receiving entity then SHOULD terminate the TCP connection between the receiving server and the sending server.</p>
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>If a server supports the abuse reporting protocol, it MUST report that fact by including a service discovery feature of "urn:xmpp:tmp:abuse" &NSNOTE; in response to a &xep0030; information request:</p>
+  <example caption="Service Discovery information request"><![CDATA[
+<iq from='example.org'
+    id='disco1'
+    to='example.com'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+  ]]></example>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq from='example.com'
+    id='disco1'
+    to='example.org'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:tmp:abuse'/>
+    ...
+  </query>
+</iq>
+  ]]></example>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <section2 topic='Denial of Service Attacks' anchor='security-dos'>
+    <p>It is possible for an abusive sender to launch a denial of service attack against legitimate users of the sending server by generating abusive traffic over the server-to-server connection (in fact such attacks have already been observed on XMPP networks). Although use of the abuse reporting protocol does not completely prevent such attacks, it may at least enable sending servers to react to abusive traffic in close to real time, thus helping to "heal" the network when denial of service attacks are launched.</p>
+  </section2>
+  <section2 topic='Man in the Middle Attacks' anchor='security-mitm'>
+    <p>If a malicious entity can inject information into the server-to-server connection, it can falsely send abuse reports to the sending server. Therefore the connection SHOULD be encrypted using Transport Layer Security as specified in &xmppcore;.</p>
+  </section2>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>Until this specification advances to a status of Draft, its associated namespace shall be "urn:xmpp:tmp:abuse"; upon advancement of this specification, the &REGISTRAR; shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;.</p>
+  </section2>
+  <section2 topic='Application-Specific Errors' anchor='registrar-apperror'>
+    <p>The XMPP Registrar shall add &lt;abuse/&gt; to its registry of application-specific error conditions (see &APPERRORS;), where the element is qualified by the 'urn:xmpp:tmp:abuse' namespace &NSNOTE;.</p>
+    <p>The registry submission is as follows:</p>
+    <code><![CDATA[
+<condition>
+  <ns>urn:xmpp:tmp:abuse</ns>
+  <element>abuse</element>
+  <desc>the sending entity has generated traffic that the receiving server considers abusive</desc>
+  <doc>XEP-xxxx</doc>
+</condition>
+    ]]></code>
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:tmp:abuse'
+    xmlns='urn:xmpp:tmp:abuse'
+    elementFormDefault='qualified'>
+
+  <xs:element name='abuse'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='jid' type='xs:string' minOccurs='1' maxOccurs='unbounded'/>
+        <xs:element ref='reason' minOccurs='0'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='reason'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='condition' minOccurs='0' maxOccurs='1'/>
+        <xs:element name='text' type='xs:string' minOccurs='0' maxOccurs='1'/>
+        <xs:any namespace='##other' minOccurs='0' maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='condition'>
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name='gateway' type='empty'/>
+        <xs:element name='muc' type='empty'/>
+        <xs:element name='proxy' type='empty'/>
+        <xs:element name='pubsub' type='empty'/>
+        <xs:element name='service' type='empty'/>
+        <xs:element name='spam' type='empty'/>
+        <xs:element name='stanza-too-big' type='empty'/>
+        <xs:element name='too-many-recipients' type='empty'/>
+        <xs:element name='too-many-stanzas' type='empty'/>
+        <xs:element name='unacceptable-payload' type='empty'/>
+        <xs:element name='unacceptable-text' type='empty'/>
+        <xs:element name='undefined-abuse' type='empty'/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+  ]]></code>
+</section1>
+</xep>

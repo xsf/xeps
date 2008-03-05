@@ -1,0 +1,213 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Roster Versioning</title>
+  <abstract>This specification proposes a modification to the XMPP roster management protocol to support versioning of rosters for more efficient downloading of the roster information.</abstract>
+  &LEGALNOTICE;
+  <number>0237</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT YET ASSIGNED</shortname>
+  &stpeter;
+  <revision>
+    <version>0.1</version>
+    <date>2008-03-05</date>
+    <initials>psa</initials>
+    <remark><p>Initial published version; per Council consensus, removed optionality regarding semantics of the version attribute.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.3</version>
+    <date>2008-03-05</date>
+    <initials>psa</initials>
+    <remark><p>Corrected semantics of version attribute (should be a strictly increasing sequence number but may be any unique identifier).</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2008-03-04</date>
+    <initials>psa</initials>
+    <remark><p>Clarified description of roster diff; added diff attribute and specified its use in roster results; specified use of version attribute in roster pushes.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2008-03-04</date>
+    <initials>psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  &RFC3921BISNOTE;
+  <p><cite>RFC 3921</cite> specifies that an XMPP client must retrieve the entire roster on login. However, XMPP rosters can be quite large and often the roster has not changed since it was last retrieved. If the client could cache the roster and retrieve only changes to the roster, the login process could be significantly streamlined, which could be especially valuable over low-bandwidth connections such as those common in mobile environments. This document defines a method for such streamlining, via the concept of roster versioning.</p>
+  <p>Note: This document is provided for discussion purposes in order to improve roster management in XMPP systems. It is not meant to supersede the text in <cite>RFC 3921</cite>. However, the recommendations in this document may be folded into <cite>rfc3921bis</cite>.</p>
+</section1>
+<section1 topic='Protocol' anchor='proto'>
+  <p>This document specifies the addition of a 'version' attribute to the &QUERY; element qualified by the 'jabber:iq:roster' namespace, as well as a 'diff' attribute for use in roster results.</p>
+  <p>The value of the 'version' attribute MUST be a non-negative integer representing a strictly increasing sequence number that is increased with any change to the roster (whether or not the client supports this extension) but MAY be a unique identifer that is opaque to the client but understood by the server. In any case, the 'version' attribute contained in <link url='#push'>roster pushes</link> MUST be unique. A "change to the roster" is any addition, update, or removal of a roster item that would result in a roster push, including changes in subscription states, as described in <cite>RFC 3921</cite> or <cite>rfc3921bis</cite>.</p> 
+  <p>The attribute is used as described in the following sections.</p>
+  <section2 topic='Advertising Support' anchor='feature'>
+    <p>If a server supports roster versioning, it MUST inform the client when returning stream features during the stream setup process, at the latest when informing the client that resource binding is required. This is done by including a &lt;roster-versioning/&gt; element qualified by the 'urn:xmpp:tmp:roster-versioning' namespace &NSNOTE;.</p>
+    <example caption="Stream features"><![CDATA[
+<stream:features>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+    <required/>
+  </bind>
+  <roster-versioning xmlns='urn:xmpp:tmp:roster-versioning'>
+</stream:features>
+    ]]></example>
+  </section2>
+  <section2 topic='Roster Get' anchor='get'>
+    <p>If a client supports roster versioning and knows that the server does so, it SHOULD include the 'version' attribute in its request for the roster, set to the last version it has cached.</p>
+    <example caption="Roster get with version number"><![CDATA[
+<iq id='r1' type='get'>
+  <query xmlns='jabber:iq:roster' version='305'/>
+</iq>
+    ]]></example>
+    <p>If the client has not yet cached the roster or the cache is lost or corrupted, but the client wishes to bootstrap the use of roster versioning, it SHOULD include the 'version' attribute set to a value of zero (0).</p>
+  </section2>
+  <section2 topic='Roster Result (Unchanged)' anchor='result-unchanged'>
+    <p>If the roster has not changed since the version enumerated by the client, the server MUST return an empty IQ-result.</p>
+    <example caption="Roster result (unchanged)"><![CDATA[
+<iq id='r1' type='result'/>
+    ]]></example>
+  </section2>
+  <section2 topic='Roster Result (Changed)' anchor='result-changed'>
+    <p>If the roster version has increased since the version enumerated by the client, the server MUST return a &QUERY; element that includes the latest version number.</p>
+    <p>The &QUERY; element SHOULD include the effective "diff" since the roster version enumerated by the client (including the complete roster item with name, group, and subscription state). If the roster result is a diff and not the complete roster, the server MUST include a 'diff' attribute set to a value of "true" or "1" &BOOLEANNOTE;. If the roster result is the complete roster and not a diff, the server SHOULD NOT include the 'diff' attribute (which defaults to "false" or "0").</p>
+    <example caption="Roster result (changed)"><![CDATA[
+<iq id='r1' type='result'>
+  <query xmlns='jabber:iq:roster' version='317'>
+    <item jid='bill@shakespeare.lit' subscription='both'/>
+    <item jid='nurse@capulet.lit' name='Nurse' subscription='both'>
+      <group>Servants</group>
+    </item
+    <item jid='shylock@shakespeare.lit' subscription='remove'/>
+  </query>
+</iq>
+    ]]></example>
+    <p>The "roster diff" can be understood as follows:</p>
+    <ol>
+      <li>Imagine that the client had an active presence session for the entire time between its cached roster version (in this case, 305) and the new roster version (317).</li>
+      <li>During that time, the client would have received roster pushes related to roster versions 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, and 317.</li>
+      <li>However, some of those roster pushes might have contained intermediate updates to the same roster item (e.g., changes in the subscription state for bill@shakespeare.lit from "none" to "to" and from "to" to "both").</li>
+      <li>The roster result would not include all of the intermediate steps, only the final result of all changes applied while the client was in fact offline.</li>
+    </ol>
+  </section2>
+  <section2 topic='Roster Pushes' anchor='push'>
+    <p>When the server sends subsequent roster pushes to the client, it MUST include the updated roster version number.</p>
+    <example caption="Roster push"><![CDATA[
+<iq id='p1' type='set'>
+  <query xmlns='jabber:iq:roster' version='318'>
+    <item jid='bill@shakespeare.lit' name='The Bard' subscription='both'/>
+  </query>
+</iq>
+    ]]></example>
+  </section2>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>It is possible that caching of the roster (rather than holding it in memory only for the life of the session) could introduce new vulnerabilities. Client implementations should take care to appropriately protect the cached roster information.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p> 
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>Until this specification advances to a status of Draft, the associated namespace for its stream feature shall be "urn:xmpp:tmp:roster-versioning"; upon advancement of this specification, the &REGISTRAR; shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;.</p>
+  </section2>
+</section1>
+<section1 topic='XML Schemas' anchor='schemas'>
+  <section2 topic='Roster Management' anchor='schemas-roster'>
+    <p>If this modification to the roster management protocol is added to rfc3921bis and approved by the IESG in the speficiation that supersedes RFC 3921, the schema for the roster management namespace would be changed as follows.</p>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='jabber:iq:roster'
+    xmlns='jabber:iq:roster'
+    elementFormDefault='qualified'>
+
+  <xs:element name='query'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='item'
+                    minOccurs='0'
+                    maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='diff' use='optional' type='xs:boolean' default='false'>
+      <xs:attribute name='version' use='optional' type='xs:nonNegativeInteger'>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='item'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='group'
+                    minOccurs='0'
+                    maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='ask' use='optional'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='subscribe'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name='jid' type='xs:string' use='required'/>
+      <xs:attribute name='name' type='xs:string' use='optional'/>
+      <xs:attribute name='subscription' use='optional'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='both'/>
+            <xs:enumeration value='from'/>
+            <xs:enumeration value='none'/>
+            <xs:enumeration value='remove'/>
+            <xs:enumeration value='to'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='group' type='xs:string'/>
+
+</xs:schema>
+    ]]></code>
+  </section2>
+  <section2 topic='Stream Feature' anchor='schemas-feature'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:tmp:roster-versioning'
+    xmlns='urn:xmpp:tmp:roster-versioning'
+    elementFormDefault='qualified'>
+
+  <xs:element name='roster-versioning' type='empty'>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+    ]]></code>
+  </section2>
+</section1>
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>Thanks to Dave Cridland, Richard Dobson, Alexander Gnauck, and Pedro Melo for their comments.</p>
+</section1>
+</xep>
