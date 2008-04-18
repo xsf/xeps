@@ -725,7 +725,7 @@ And by opposing end them?
     <p>If a service implements a hierarchy of nodes (by means of <link url='#collections'>Collection Nodes</link>), it MUST also enable entities to discover the nodes in that hierarchy by means of the <strong>Service Discovery</strong> protocol, subject to the recommendations in <cite>XEP-0030</cite> regarding large result sets (for which &xep0055; or some other protocol SHOULD be used). The following examples show the use of service discovery in discovering the nodes available at a hierarchical pubsub service.</p>
     <p>Note: Node hierarchies and collection nodes are OPTIONAL. For details, refer to the <link url='#impl-semantics'>NodeID Semantics</link> and <link url='#collections'>Collection Nodes</link> sections of this document.</p>
     <p>In the first example, an entity sends a service discovery items ("disco#items") request to the root node (i.e., the service itself), which is a <link url='#collections'>Collection Node</link>:</p>
-    <example caption='Entity requests all first-level nodes'><![CDATA[
+    <example caption='Entity asks service for all first-level nodes'><![CDATA[
 <iq type='get'
     from='francisco@denmark.lit/barracks'
     to='pubsub.shakespeare.lit'
@@ -981,6 +981,31 @@ And by opposing end them?
   </error>
 </iq>
     ]]></example>
+    <p>An entity MAY also request its subscriptions at a specific node (e.g., if it has subscriptions with multiple SubIDs) by including a 'node' attribute on the &lt;subscriptions/&gt; element.</p>
+    <example caption='Entity requests current subscriptions from a specific node'><![CDATA[
+<iq type='get'
+    from='francisco@denmark.lit/barracks'
+    to='pubsub.shakespeare.lit'
+    id='subscriptions2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscriptions node='princely_musings'/>
+  </pubsub>
+</iq>
+    ]]></example>
+    <p>The service would then return only the subscriptions to that node.</p>
+    <example caption='Service returns all current subscriptions'><![CDATA[
+<iq type='result'
+    from='pubsub.shakespeare.lit'
+    to='francisco@denmark.lit'
+    id='subscriptions1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscriptions node='princely_musings'>
+      <subscription jid='bernardo@denmark.lit' subscription='subscribed' subid='123-abc'/>
+      <subscription jid='bernardo@denmark.lit' subscription='subscribed' subid='004-yyy'/>
+    </subscriptions>
+  </pubsub>
+</iq>
+    ]]></example>
   </section2>
   <section2 topic='Retrieve Affiliations' anchor='entity-affiliations'>
     <p>An entity may want to query the service to retrieve its affiliations for all nodes at the service. Support for this feature ("retrieve-affiliations") is RECOMMENDED.</p>
@@ -1092,6 +1117,7 @@ And by opposing end them?
         <li>The requesting entity has a pending subscription.</li>
         <li>The requesting entity is blocked from subscribing (e.g., because having an affiliation of outcast).</li>
         <li>The node does not support subscriptions.</li>
+        <li>The node has moved.</li>
         <li>The node does not exist.</li>
       </ol>
       <p>These error cases are described more fully in the following sections.</p>
@@ -1262,6 +1288,26 @@ And by opposing end them?
     <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
     <unsupported xmlns='http://jabber.org/protocol/pubsub#errors'
                  feature='subscribe'/>
+  </error>
+</iq>
+        ]]></example>
+      </section4>
+      <section4 topic='Node Has Moved' anchor='subscriber-subscribe-error-redirect'>
+        <p>If the node has, the service SHOULD return a &gone; error (if the node has moved permanently) or a &redirect; error (if the node has moved temporarily).</p>
+        <example caption='Node has moved'><![CDATA[
+<iq type='error'
+    from='pubsub.shakespeare.lit'
+    to='francisco@denmark.lit/barracks'
+    id='sub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscribe
+        node='princely_musings'
+        jid='francisco@denmark.lit'/>
+  </pubsub>
+  <error type='modify'>
+    <gone xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>
+      xmpp:pubsub.shakespeare.lit?;node=some-other-node
+    </gone>
   </error>
 </iq>
         ]]></example>
@@ -1790,7 +1836,7 @@ And by opposing end them?
     id='options2'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <options node='princely_musings' jid='francisco@denmark.lit'>
-      <x xmlns='jabber:x:data'>
+      <x xmlns='jabber:x:data' type='submit'>
         <field var='FORM_TYPE' type='hidden'>
           <value>http://jabber.org/protocol/pubsub#subscribe_options</value>
         </field>
@@ -1825,7 +1871,37 @@ And by opposing end them?
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <subscribe node='princely_musings' jid='francisco@denmark.lit'/>
     <options>
-      <x xmlns='jabber:x:data'>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#subscribe_options</value>
+        </field>
+        <field var='pubsub#deliver'><value>1</value></field>
+        <field var='pubsub#digest'><value>0</value></field>
+        <field var='pubsub#include_body'><value>false</value></field>
+        <field var='pubsub#show-values'>
+          <value>chat</value>
+          <value>online</value>
+          <value>away</value>
+        </field>
+      </x>
+    </options>
+  </pubsub>
+</iq>
+      ]]></example>
+      <p>When the service informs the client of success, it SHOULD include a data form of type "result" informing the client of the resulting configuration options.</p>
+      <example caption='Service replies with success (including configuration options)'><![CDATA[
+<iq type='result'
+    from='pubsub.shakespeare.lit'
+    to='francisco@denmark.lit/barracks'
+    id='sub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscription
+        node='princely_musings'
+        jid='francisco@denmark.lit'
+        subid='ba49252aaa4f5d320c24d3766f0bdcade78c78d3'
+        subscription='subscribed'/>
+    <options>
+      <x xmlns='jabber:x:data' type='result'>
         <field var='FORM_TYPE' type='hidden'>
           <value>http://jabber.org/protocol/pubsub#subscribe_options</value>
         </field>
@@ -2338,8 +2414,10 @@ And by opposing end them?
     to='hamlet@denmark.lit/blogbot'
     id='publish1'/>
       ]]></example>
-      <p>The pubsub service MUST send then one &MESSAGE; stanza containing a pubsub event notification to each entity that meets the criteria for receiving a notification (typically to each approved subscriber, although there are other contexts in which an entity may receive a notification as summarized under <link url='#impl-notify'>Notification Triggers</link>). Each &MESSAGE; stanza generated by a pubsub service SHOULD possess an 'id' attribute with a unique value so that the service can properly track any notification-related errors that may occur (see the <link url='#impl-errors'>Handling Notification-Related Errors</link> section of this document). Depending on the node configuration, the event notification either will or will not contain the payload, as shown below.</p>
+      <p>Note: If the publisher previously published an item with the same ItemID, successfully processing the request means that the service MUST overwrite the old item with the new item and then proceed as follows.</p>
+      <p>The pubsub service MUST then send one &MESSAGE; stanza containing a pubsub event notification to each entity that meets the criteria for receiving a notification (typically to each approved subscriber, although there are other contexts in which an entity may receive a notification as summarized under <link url='#impl-notify'>Notification Triggers</link>). Each &MESSAGE; stanza generated by a pubsub service SHOULD possess an 'id' attribute with a unique value so that the service can properly track any notification-related errors that may occur (see the <link url='#impl-errors'>Handling Notification-Related Errors</link> section of this document). Depending on the node configuration, the event notification either will or will not contain the payload, as shown below.</p>
       <p>Note: In order to facilitate authorization for item removal as described in the <link url='#publisher-delete'>Delete an Item from a Node</link> section of this document, implementations that support persistent items SHOULD store the item (if the node is so configured) and maintain a record of the publisher.</p>
+      <p>Note: If the service or node is configured so that there is a maximum number of items cached at the node and the maximum is reached when an item is published, the service MUST delete one of the existing items. It is RECOMMENDED for the service to follow the "first in, first out" rule and delete the oldest item. Depending on node configuration, deletion of an existing item MAY result in sending of a delete notification to the subscribers.</p>
       <section4 topic='Notification With Payload' anchor='publisher-publish-success-withpayload'>
         <p>If the node is configured to include payloads, the subscribers will receive payloads with the event notifications.</p>
         <example caption='Subscribers receive event notifications with payloads'><![CDATA[
@@ -3156,7 +3234,7 @@ And by opposing end them?
       ]]></example>
     </section3>
     <section3 topic='Success Case' anchor='owner-configure-success'>
-      <p>If no error occurs, the server MUST return an empty configuration form to the node owner.</p>
+      <p>If no error occurs, the server MUST return a configuration form to the node owner, which SHOULD contain the current node configuration as the default values.</p>
       <p>Note: The following example shows some of the possible configuration options that MAY be provided. If an implementation implements these features using the <strong>Data Forms</strong> protocol, that implementation MUST use the fields that are registered with the XMPP Registrar in association with the 'http://jabber.org/protocol/pubsub' namespace (a preliminary representation of those field variables is shown below and in the <link url='#registrar-formtypes-config'>pubsub#node_config FORM_TYPE</link> section of this document, but MUST NOT be construed as canonical, since the XMPP Registrar may standardize additional fields at a later date without changes to this document). An implementation MAY choose to specify different labels, values, and even field types, but MUST conform to the defined variable naming scheme.</p>
     <example caption='Service responds with configuration form'><![CDATA[
 <iq type='result'
@@ -4629,7 +4707,7 @@ And by opposing end them?
     <subscribe jid='francisco@denmark.lit'
                node='blogs'/>
     <options>
-      <x xmlns='jabber:x:data'>
+      <x xmlns='jabber:x:data' type='submit'>
         <field var='FORM_TYPE' type='hidden'>
           <value>http://jabber.org/protocol/pubsub#subscribe_options</value>
         </field>
@@ -5121,10 +5199,11 @@ And by opposing end them?
         <li>The node has an access model of "presence".</li>
         <li>The node has an access model of "roster" and the contact is in the specified roster group.</li>
       </ol>
+      <p>If the contact does not have permission to receive information from any of the account owner's particular nodes below the level of the root collection node (e.g., because a particular node has an access model of "roster" but the contact is not in the specified roster group), the service MUST NOT send notifications regarding that node to the contact and also MUST NOT return any errors to the contact regarding a potential implicit subscription to that node (e.g., the service MUST NOT return a pubsub subscription error to the contact when the contact sends presence to the account owner).</p>
       <p>Note: When an IM contact has a subscription to the account owner's presence, the automated pubsub subscription MUST be based on the JID contained in the 'from' address of the presence subscription request, which for an IM contact will be a bare JID &BAREJID;.</p>
     </section3>
     <section3 topic='Presence Sharer' anchor='auto-subscribe-directed'>
-      <p>If the node has an open access model, the pubsub service SHOULD also consider an entity to be (temporarily) subscribed to the node if the entity sends presence to the account owner in the absence of a presence subscription. In this case, the subscription SHOULD be based on the 'from' address of the presence stanza, which will be a full JID &FULLJID;. When the service receives unavailable presence from the full JID, it MUST consider cancel the (temporary) subscription.</p>
+      <p>If the node has an open access model, the pubsub service SHOULD also consider an entity to be temporarily and implicitly subscribed to the node if the entity sends presence to the account owner in the absence of a presence subscription. In this case, the subscription SHOULD be based on the 'from' address of the presence stanza, which will be a full JID &FULLJID;. When the service receives unavailable presence from the full JID, it MUST consider cancel the temporary subscription.</p>
     </section3>
   </section2>
   <section2 topic='Filtered Notifications' anchor='filtered-notifications'>
@@ -6851,7 +6930,10 @@ xmpp:pubsub.shakespeare.lit?pubsub;action=unsubscribe;node=princely_musings
 
   <xs:element name='subscriptions'>
     <xs:complexType>
-      <xs:element ref='subscription' minOccurs='0' maxOccurs='unbounded'/>
+      <xs:sequence>
+        <xs:element ref='subscription' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='node' type='xs:string' use='optional'/>
     </xs:complexType>
   </xs:element>
 
@@ -7104,16 +7186,6 @@ xmpp:pubsub.shakespeare.lit?pubsub;action=unsubscribe;node=princely_musings
       </xs:choice>
       <xs:attribute name='id' type='xs:string' use='optional'/>
       <xs:attribute name='node' type='xs:string' use='optional'/>
-    </xs:complexType>
-  </xs:element>
-
-  <xs:element name='node'>
-    <xs:complexType>
-      <xs:simpleContent>
-        <xs:extension base='empty'>
-          <xs:attribute name='id' type='xs:string' use='required'/>
-        </xs:extension>
-      </xs:simpleContent>
     </xs:complexType>
   </xs:element>
 
