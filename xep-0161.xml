@@ -6,8 +6,8 @@
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 <xep>
 <header>
-  <title>SPIM Reporting</title>
-  <abstract>This document specifies an XMPP protocol extension for reporting unsolicited bulk instant messages (SPIM).</abstract>
+  <title>Abuse Reporting</title>
+  <abstract>This document specifies an XMPP protocol extension for reporting abusive XMPP stanzas.</abstract>
   &LEGALNOTICE;
   <number>0161</number>
   <status>Experimental</status>
@@ -21,13 +21,19 @@
   </dependencies>
   <supersedes/>
   <supersededby/>
-  <shortname>NOT YET ASSIGNED</shortname>
+  <shortname>NOT_YET_ASSIGNED</shortname>
   &stpeter;
+  <revision>
+    <version>0.4</version>
+    <date>2007-05-06</date>
+    <initials>psa</initials>
+    <remark><p>Generalized text and protocol to handle all kinds of abuse and folded in content from XEP-0236.</p></remark>
+  </revision>
   <revision>
     <version>0.3</version>
     <date>2007-01-31</date>
     <initials>psa</initials>
-    <remark><p>Specified that client recipient should not send a report to the server of a suspected spimmer; modified XML namespace name to conform to XEP-0053 processes; corrected several examples.</p></remark>
+    <remark><p>Specified that client recipient should not send a report to the server of a suspected abuser; modified XML namespace name to conform to XEP-0053 processes; corrected several examples.</p></remark>
   </revision>
   <revision>
     <version>0.2</version>
@@ -48,177 +54,377 @@
     <remark><p>First draft.</p></remark>
   </revision>
 </header>
+
 <section1 topic='Introduction' anchor='intro'>
-  <p>Unsolicited bulk email, commonly called "spam", is a widespread problem on today's email network. We want to make sure that unsolicited bulk instant messaging, commonly called "SPIM" (short for "spam over IM"), does not become a widespread problem on the XMPP instant messaging network. To that end, this document specifies an XMPP protocol extension for reporting particular instances of SPIM.</p>
+  <p>Unfortunately, not all XMPP entities are well-behaved -- they may send spam of various kinds, harrass chat rooms, generate large amounts of traffic, etc. Currently, if an XMPP entity (the "attacker") sends abusive stanzas to another XMPP entity (the "victim"), there is no way for the victim or the victim's server to inform the attacker's server that the attacker is generating abusive traffic. In current practice, the victim's server may have no choice but to terminate the server-to-server connection rather than continue to accept the abusive traffic.</p>
+  <p>This situation is far from desirable. Therefore, this specification defines several protocol functions that can help to discourage abuse on the XMPP network:</p>
+  <ol>
+    <li>A method by which a victim or the victim's server can send an abuse report to the attacker's server.</li>
+    <li>A method by which the attacker's server can inform other servers (or dedicated reporting services) that the IP address from which the attacker connected may be compromised.</li>
+    <li>A method by which the victim's server can inform other servers (or dedicated reporting services) that the attacker's server may be a rogue server.</li>
+    <li>An application-specific stanza error condition that can be combined with the standard &notacceptable; stanza error condition to inform the attacker's server that a particular XMPP stanza is considered abusive.</li>
+    <li>An application-specific stream error condition that can be combined with the standard &policy; stream error condition to inform the attacker's server about the reason for termination of an XML stream (if necessary).</li>
+  </ol>
 </section1>
-<section1 topic='Protocol' anchor='proto'>
-  <section2 topic='Reporting a SPIM Stanza' anchor='proto-stanza'>
-    <p>The protocol for SPIM reporting is quite simple: wrap the complete SPIM stanza in a &lt;spim/&gt; element qualified by the 'http://www.xmpp.org/extensions/xep-0161.html#ns' namespace and send an IQ stanza of type "set" to the entity that shall receive the report. This protocol is intended to be used by recipients of SPIM stanzas and by other entities (e.g., servers or services) that wish to pass around SPIM reports. The following is an example:</p>
-    <example caption='Unsuspecting User Receives SPIM from Evil Bot'><![CDATA[
-<presence from='makemoney@spimmersheaven.info' 
-          to='unsuspectinguser@example.net'
+
+<section1 topic='Reporting Abuse' anchor='abuse'>
+  <p>An abuse report shall be sent in an IQ stanza of type "set" containing an &lt;abuse/&gt; element qualified by the 'urn:xmpp:tmp:abuse' namespace &NSNOTE;.</p>
+  <example caption='Abuse report'><![CDATA[
+<iq from='example.org'
+    id='rep1'
+    to='example.com'
+    type='set'>
+  <abuse xmlns='urn:xmpp:tmp:abuse'>
+    <condition>
+      <muc/>
+    </condition>
+    <description xml:lang='en'>This is a test.</description>
+    <jid>abuser@example.com/foo</jid>
+    <pointer>http://pastebin.ca/1006003</pointer>
+    <stanzas>
+    </stanzas>
+  </abuse>
+</iq>
+  ]]></example>
+  <p>The children of the &lt;abuse/&gt; element are as follows:</p>
+  <ul>
+    <li>A &lt;condition/&gt; element containing a child element that specifies the abuse condition (see list of conditions).</li>
+    <li>Optionally a &lt;description/&gt; that provides a natural-language description of the abusive incident(s).</li>
+    <li>A &lt;jid/&gt; element that specifies the JID of the abusive sender.</li>
+    <li>Optionally a &lt;pointer/&gt; element that specifies a URI at which further information can be found (e.g., a web page that contains a server log).</li>
+    <li>Optionally a &lt;stanzas/&gt; element that contains one or more XMPP &PRESENCE;, &IQ;, or &MESSAGE; stanzas.</li>
+  </ul>
+  <p>This specification intentionally does not define exactly what constitutes abuse, since "abuse is in the eye of the beholder". However, the following machine-readable conditions are defined as children of the &lt;reason/&gt; element.</p>
+  <table caption='Abuse Conditions'>
+    <tr>
+      <th>Condition</th>
+      <th>Definition</th>
+    </tr>
+    <tr>
+      <td>&lt;gateway/&gt;</td>
+      <td>Attempting to inappropriately use a gateway on the receiving server (see &xep0100;)</td>
+    </tr>
+    <tr>
+      <td>&lt;muc/&gt;</td>
+      <td>Attempting to take over or otherwise abuse &xep0045; rooms on the receiving server</td>
+    </tr>
+    <tr>
+      <td>&lt;proxy/&gt;</td>
+      <td>Attempting to inappropriately use a &xep0065; proxy, TURN server, or other proxy on the receiving server</td>
+    </tr>
+    <tr>
+      <td>&lt;pubsub/&gt;</td>
+      <td>Attempting to inappropriately use a &xep0060; service on the receiving server</td>
+    </tr>
+    <tr>
+      <td>&lt;service/&gt;</td>
+      <td>Attempting to inappropriately use any other kind of service on the receiving server</td>
+    </tr>
+    <tr>
+      <td>&lt;spam/&gt;</td>
+      <td>Sending spam (unsolicited bulk messages)</td>
+    </tr>
+    <tr>
+      <td>&lt;stanza-too-big/&gt;</td>
+      <td>Sending extremely large stanzas</td>
+    </tr>
+    <tr>
+      <td>&lt;too-many-recipients/&gt;</td>
+      <td>Sending messages that contain too many recipients (see &xep0033;)</td>
+    </tr>
+    <tr>
+      <td>&lt;too-many-stanzas/&gt;</td>
+      <td>Sending an extremely large number of stanzas</td>
+    </tr>
+    <tr>
+      <td>&lt;unacceptable-payload/&gt;</td>
+      <td>Sending messages that contain unacceptable payloads such as malicious executables</td>
+    </tr>
+    <tr>
+      <td>&lt;unacceptable-text/&gt;</td>
+      <td>Sending messages that contain unacceptable human-readable text</td>
+    </tr>
+    <tr>
+      <td>&lt;undefined-abuse/&gt;</td>
+      <td>The abuse condition is undefined (should be used with an application-specific condition)</td>
+    </tr>
+  </table>
+  <p>Note: The foregoing list of conditions is not exhaustive. The list may be augmented or otherwise modified in a future version of this specification as a result of implementation and deployment experience.</p>
+  <p>An abuse report can be generated by the victim or the victim's server. If the report is generated by the victim's server, the report MUST be sent to the attacker's server. If the report is generated by the victim, the report MUST be sent to the attacker's server and SHOULD also be sent to the victim's server as well (since the victim may not know if the attacker's server is a rogue server).</p>
+  <p>The following rules and guidelines apply to the act of reporting abuse.</p>
+  <ol start='1'>
+    <li><p>The recipient SHOULD NOT report the abuse stanza to a server or service until it determines that the server or service supports the Abuse Reporting protocol (see the <link url='#disco'>Discovering Support</link> section of this document).</p></li>
+    <li><p>The recipient SHOULD report the abuse to the suspected abuser's server.</p></li>
+    <li><p>If the recipient's home server (i.e., the server with which it has a registered account or other trust relationship) supports the abuse Reporting protocol, the recipient SHOULD also report the offending stanza to its own server.</p></li>
+    <li><p>If the recipient's home server does not support the Abuse Reporting protocol, the recipient SHOULD report the abuse stanza to one or more dedicated abuse reporting services if available.</p></li>
+    <li><p>The recipient SHOULD NOT report the abuse stanza to the suspected abuser.</p></li>
+  </ol>
+  <example caption='Unsuspecting User Receives Abuse from Evil Bot'><![CDATA[
+<presence from='abuser@example.com' 
+          to='victim@example.org'
           type='subscribe'>
   <status>
     You too can be rich! Find out how at 
-    http://spimmersheaven.info/makemoney
+    http://clickhere.info/makemoney
     Let&apos;s chat to make your dreams
     come true!
   </status>
 </presence>
     ]]></example>
-    <example caption='Unsuspecting User Reports SPIM'><![CDATA[
-<iq from='unsuspectinguser@example.net/foo'
+    <example caption='Unsuspecting User Reports Abuse'><![CDATA[
+<iq from='unsuspectinguser@example.org/foo'
     to='example.net'
     type='set'
     id='report1'>
-  <spim xmlns='http://www.xmpp.org/extensions/xep-0161.html#ns'>
-    <presence from='makemoney@spimmersheaven.info' 
-              to='unsuspectinguser@example.net'
+  <spim xmlns='urn:xmpp:tmp:abuse'>
+    <presence from='abuser@example.com' 
+              to='victim@example.net'
               type='subscribe'
               xmlns='jabber:client'>
       <status>
         You too can be rich! Find out how at 
-        http://spimmersheaven.info/makemoney
+        http://clickhere.info/makemoney
         Let&apos;s chat to make your dreams
         come true!
       </status>
     </presence>
   </spim>
 </iq>
-    ]]></example>
-    <p>If the entity that receives the report does not support the SPIM Reporting protocol, it MUST return a &unavailable; error to the reporting entity:</p>
-    <example caption='Service Unavailable'><![CDATA[
-<iq from='example.net'
-    to='unsuspectinguser@example.net/foo'
-    type='error'
-    id='report1'>
-  <spim xmlns='http://www.xmpp.org/extensions/xep-0161.html#ns'>
-    <presence from='makemoney@spimmersheaven.info' 
-              to='unsuspectinguser@example.net'
-              type='subscribe'
-              xmlns='jabber:client'>
-      <status>
-        You too can be rich! Find out how at 
-        http://spimmersheaven.info/makemoney
-        Let&apos;s chat to make your dreams
-        come true!
-      </status>
-    </presence>
-  </spim>
+  ]]></example>
+  <p>Upon receiving the abuse report, the attacker's server MUST proceed as follows.</p>
+  <p>If the sending server does not understand the abuse reporting protocol, it MUST return a &unavailable; error.</p>
+  <example caption='Abuse reporting not supported'><![CDATA[
+<iq from='example.com'
+    id='rep1'
+    to='example.org'
+    type='error'>
   <error type='cancel'>
     <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
   </error>
 </iq>
-    ]]></example>
-    <p>If the entity that receives the report is able to process the report, it MUST return an IQ-result to the reporting entity:</p>
-    <example caption='Report Processed'><![CDATA[
-<iq from='example.net'
-    to='unsuspectinguser@example.net'
-    type='result'
-    id='report1'/>
-    ]]></example>
-  </section2>
-  <section2 topic='Reporting a Spimmer' anchor='proto-spimmer'>
-    <p>If an entity that processes SPIM reports determines that the suspected spimmer is indeed an actual spimmer, it SHOULD report its conclusions to appropriate other entities (e.g., the spimmer's server or dedicated SPIM reporting services). Here again, the protocol is quite simple: wrap the spimmer's JID in a &lt;spimmer/&gt; element qualified by the 'http://www.xmpp.org/extensions/xep-0161.html#ns' namespace and send an IQ stanza of type "set" to the entity that shall receive the report. This protocol SHOULD NOT be used by recipients of SPIM stanzas. The following is an example:</p>
-    <example caption='Server Reports Spimmer'><![CDATA[
-<iq from='example.net'
-    to='spim.xmpp.net'
-    type='set'
-    id='spimmer1'>
-  <spimmer xmlns='http://www.xmpp.org/extensions/xep-0161.html#ns'>makemoney@spimmersheaven.info</spimmer>
+  ]]></example>
+  <p>If the JID contained in the abuse report does not exist at the attacker's server, it MUST return an &notfound; error.</p>
+  <example caption='Attacker not found'><![CDATA[
+<iq from='example.com'
+    id='rep1'
+    to='example.org'
+    type='error'>
+  <error type='cancel'>
+    <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
 </iq>
-    ]]></example>
-  </section2>
-</section1>
-<section1 topic='Reporting SPIM' anchor='reporting'>
-  <p>The following rules and guidelines apply to the act of reporting SPIM.</p>
-  <ol start='1'>
-    <li><p>The recipient SHOULD NOT report the SPIM stanza to a server or service until it determines that the server or service supports the SPIM Reporting protocol (see the <link url='#disco'>Discovering Support</link> section of this document).</p></li>
-    <li><p>If the recipient's home server (i.e., the server with which it has a registered account or other trust relationship) supports the SPIM Reporting protocol, the recipient SHOULD report the offending stanza only to its own server.</p></li>
-    <li><p>If the recipient's home server does not support the SPIM Reporting protocol, the recipient SHOULD report the SPIM stanza to one or more dedicated SPIM reporting services if available.</p></li>
-    <li><p>The recipient SHOULD NOT report the SPIM stanza to the suspected spimmer's server.</p></li>
-    <li><p>The recipient SHOULD NOT report the SPIM stanza to the suspected spimmer.</p></li>
+  ]]></example>
+  <p>Otherwise, if the sending server accepts the abuse report, it MUST return an IQ stanza of type "result".</p>
+  <example caption='Abuse report accepted'><![CDATA[
+<iq from='example.com'
+    id='rep1'
+    to='example.org'
+    type='result'/>
+  ]]></example>
+  <p>This specification does not define how a sending server shall behave when it receives an abuse report. In general it is expected that the sending server (1) will notify the human administrators of the server in some implementation-specific or deployment-specific fashion, and (2) may employ the abuse report in an automated fashion (e.g., as input to a rate-limiting algorithm, reputation system, or decision about temporarily suspending the privileges of the sending entity based on JabberID or IP address).</p>
+  <p>The following rules and guidelines apply to the processing of an abuse report:</p>
+  <ol>
+    <li>Before processing the report, the processor MAY respond to the report by sending a challenge to the sender (e.g., using &xep0158;) in order to make sure that the sender is not sending spurious reports or otherwise abusing the abuse reporting system.</li>
+    <li>The processor MUST add the report to a list or database of pending abuse reports.</li>
+    <li>If the suspected abuser is not already on the processor's list of known abusers, the processor SHOULD use the report in determining whether the suspected abuser is an actual abuser (see next section).</li>
+    <li>The processor MAY report the abuse stanza to one or more dedicated abuse reporting services if available.</li>
+    <li>The processor MAY report the abuse stanza to other servers it trusts.</li>
+    <li>The processor MAY report the abuse stanza to the suspected abuser's server (if the server is otherwise trusted, i.e., is not considered a rogue server).</li>
+    <li>The processor SHOULD NOT report the abuse stanza to the suspected abuser.</li>
+  </ol>
+  <p>Not all abuse reports are valid, and not all JIDs that send stanzas reported as abuse are abusers. Care must be taken in correctly determining if a suspected abuser is an actual abuser. The following rules apply:</p>
+  <ol>
+    <li><p>The processor SHOULD NOT add a suspected abuser to its list of known abusers until it has received at least three (3) valid abuse reports with regard to that suspected abuser, or until it has independently verified the veracity of the report.</p></li>
+    <li><p>If the processor determines that the suspected abuser is an actual abuser, the processor:</p>
+      <ol>
+        <li>MUST add that JID to its list of known abusers.</li>
+        <li>SHOULD add the abuser's IP address to its list of known bad IPs.</li>
+        <li>MAY send an abuser report to abuse reporting services or reputation services.</li>
+        <li>MAY send an abuser report to other servers it trusts.</li>
+        <li>SHOULD NOT send an abuser report to the abuser.</li>
+      </ol>
+    </li>
   </ol>
 </section1>
-<section1 topic='Processing SPIM Reports' anchor='processing'>
-  <section2 topic='Initial Processing' anchor='processing-initial'>
-    <p>The following rules and guidelines apply to initial processing of a SPIM report:</p>
-    <ol>
-      <li>Before processing the report, the processor MAY respond to the report by sending a challenge to the sender (e.g., using &xep0158;) in order to make sure that the sender is not sending spurious reports or otherwise abusing the SPIM reporting system.</li>
-      <li>The processor MUST add the report to a list or database of pending SPIM reports.</li>
-      <li>If the suspected spimmer is not already on the processor's list of known spimmers, the processor SHOULD use the report in determining whether the suspected spimmer is an actual spimmer (see next section).</li>
-      <li>The processor MAY report the SPIM stanza to one or more dedicated SPIM reporting services if available.</li>
-      <li>The processor MAY report the SPIM stanza to other servers it trusts.</li>
-      <li>The processor MAY report the SPIM stanza to the suspected spimmer's server (if the server is otherwise trusted, i.e., is not considered a rogue server).</li>
-      <li>The processor SHOULD NOT report the SPIM stanza to the suspected spimmer.</li>
-    </ol>
-  </section2>
-  <section2 topic='Determining Spimmer Status' anchor='processing-spimmer'>
-    <p>Not all SPIM reports are valid, and not all JIDs that send stanzas reported as SPIM are spimmers. Care must be taken in correctly determining if a suspected spimmer is an actual spimmer. The following rules apply:</p>
-    <ol>
-      <li><p>The processor SHOULD NOT add a suspected spimmer to its list of known spimmers until it has received at least three (3) valid SPIM reports with regard to that suspected spimmer.</p></li>
-      <li><p>If the processor determines that the suspected spimmer is an actual spimmer, the processor:</p>
-        <ol>
-          <li>MUST add that JID to its list of known spimmers.</li>
-          <li>SHOULD send a spimmer report to the spimmer's server.</li>
-          <li>MAY send a spimmer report to SPIM reporting services or reputation services.</li>
-          <li>MAY send a spimmer report to other servers it trusts.</li>
-          <li>SHOULD NOT send a spimmer report to the spimmer.</li>
-        </ol>
-      </li>
-    </ol>
-  </section2>
+
+<section1 topic='Reporting an Abuser' anchor='abuser'>
+  <p>If the attacker's server determines that the suspected attacker is an actual attacker, it might decide that both the JabberID and the IP address associated with the attacker's JabberID are compromised. If it does so, it SHOULD report its conclusions to appropriate other entities (e.g., trusted peer servers or dedicated abuse reporting services). The protocol is quite simple: include the JabberID and IP address as children of an &lt;abuser/&gt; element qualified by the 'urn:xmpp:tmp:abuse' namespace and send an IQ stanza of type "set" to the entity that shall receive the report. This protocol SHOULD NOT be used directly by victims of abusive stanzas and if an entity receives such a report from an end user it SHOULD ignore it. The following is an example:</p>
+  <example caption='Entity Reports Abuser'><![CDATA[
+<iq from='example.net'
+    to='abuse.xmpp.net'
+    type='set'
+    id='abuser1'>
+  <abuser xmlns='urn:xmpp:tmp:abuse'>
+    <jid>abuser@example.net</jid>
+    <ip>204.8.219.178</ip>
+  </abuser>
+</iq>
+  ]]></example>
 </section1>
+
+<section1 topic='Reporting a Rogue Server' anchor='rogue'>
+  <p>If the victim's server determines that the attacker's server is a bad actor on the network (i.e., a rogue server), it SHOULD report its conclusions to appropriate other entities (e.g., trusted peer servers or dedicated abuse reporting services). This is done by including the domain name (and optionally IP address) of the rogue server in a &lt;rogue/&gt; element qualified by the 'urn:xmpp:tmp:abuse' namespace and send an IQ stanza of type "set" to the entity that shall receive the report. This protocol SHOULD NOT be used directly by victims of abusive stanzas and if an entity receives such a report from an end user it SHOULD ignore it. The following is an example:</p>
+  <example caption='Entity Reports Rogue Server'><![CDATA[
+<iq from='example.net'
+    to='abuse.xmpp.net'
+    type='set'
+    id='rogue'>
+  <rogue xmlns='urn:xmpp:tmp:abuse'>
+    <jid>rogueserver.example.org</jid>
+    <ip>204.8.219.178</ip>
+  </rogue>
+</iq>
+  ]]></example>
+</section1>
+
+<section1 topic='Stanza Error' anchor='stanza'>
+  <p>The receiving server MAY report that a particular stanza is considered abusive. The stanza error condition MUST be &notacceptable; and the error stanza MUST include an application-specific error condition of &lt;abuse/&gt; qualified by the 'urn:xmpp:tmp:abuse' &NSNOTE;. The &lt;abuse/&gt; element MUST include one or more &lt;jid/&gt; elements whose XML character data specifies the JID(s) of the abusive sender(s).</p>
+  <example caption='Abusive stanza'><![CDATA[
+<message from='abuser@example.org/foo'
+         to='victim@example.org'>
+  [ ... some abusive payload here ... ]
+</message>
+  ]]></example>
+  <example caption='Stanza error'><![CDATA[
+<message from='example.com'
+         to='example.org'>
+  <error type='cancel'>
+    <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+  <abuse xmlns='urn:xmpp:tmp:abuse'>
+    <condition>
+      <unacceptable-payload/>
+    </condition>
+    <jid>abuser@example.com/foo</jid>
+  </abuse>
+</message>
+  ]]></example>
+</section1>
+
+<section1 topic='Stream Error' anchor='stream'>
+  <p>If the sending entity continues to generate abusive stanzas via the sending server, the receiving server MAY close the stream between the receiving server and the sending server. The stream error condition MUST be &policy; and the stream error MUST include an application-specific error condition of &lt;abuse/&gt; qualified by the 'urn:xmpp:tmp:abuse'. The &lt;abuse/&gt; element MUST include one or more &lt;jid/&gt; elements whose XML character data specifies the JID(s) of the abusive sender(s).</p>
+  <example caption='Stream Error'><![CDATA[
+<stream:error>
+  <policy-violation xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
+  <abuse xmlns='urn:xmpp:tmp:abuse'>
+    <condition>
+      <too-many-stanzas/>
+    </condition>
+    <jid>abuser@example.com/foo</jid>
+  </abuse>
+</stream:error>
+</stream:stream>
+  ]]></example>
+  <p>The receiving entity then SHOULD terminate the TCP connection between the receiving server and the sending server.</p>
+</section1>
+
 <section1 topic='Discovering Support' anchor='disco'>
-  <p>In order to discover whether another entity supports SPIM reporting, &xep0030; SHOULD be used. If an entity supports SPIM reporting, it MUST return a feature of "http://www.xmpp.org/extensions/xep-0161.html#ns" in responses to service discovery information requests, as shown in the following examples:</p>
-  <example caption='User Queries Server Regarding Protocol Support'><![CDATA[
-<iq from='unsuspectinguser@example.net/foo'
-    to='example.net'
-    type='get'
-    id='disco1'>
+  <p>If a server supports the abuse reporting protocol, it MUST report that fact by including a service discovery feature of "urn:xmpp:tmp:abuse" &NSNOTE; in response to a &xep0030; information request:</p>
+  <example caption="Service Discovery information request"><![CDATA[
+<iq from='example.org'
+    id='disco1'
+    to='example.com'
+    type='get'>
   <query xmlns='http://jabber.org/protocol/disco#info'/>
 </iq>
   ]]></example>
-  <example caption='Server Replies Regarding Protocol Support'><![CDATA[
-<iq from='example.net'
-    to='unsuspectinguser@example.net/foo'
-    type='result'
-    id='disco1'>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq from='example.com'
+    id='disco1'
+    to='example.org'
+    type='result'>
   <query xmlns='http://jabber.org/protocol/disco#info'>
     ...
-    <feature var='http://www.xmpp.org/extensions/xep-0161.html#ns'/>
+    <feature var='urn:xmpp:tmp:abuse'/>
     ...
   </query>
 </iq>
   ]]></example>
 </section1>
+
 <section1 topic='Security Considerations' anchor='security'>
-  <p>Not all reported SPIM is actual SPIM, and not all reported spimmers are actual spimmers. Processors must take care to ensure that processing of one or a few reports does not result in branding of a legitimate sender as a spimmer, since otherwise the sender could effectively be the subject of a denial of service attack.</p>
-  <p>It is NOT RECOMMENDED for client recipients to send SPIM reports to the server of a suspected spimmer, since that server could be a rogue domain capable of sending SPIM from any JID at that domain.</p>
+  <section2 topic='False Reports' anchor='security-false'>
+    <p>Not all reported abuse is actual abuse, and not all reported abusers are actual abusers. Processors must take care to ensure that processing of one or a few reports does not result in branding of a legitimate sender as an abuser, since otherwise the sender could effectively be the subject of a denial of service attack.</p>
+  </section2>
+  <section2 topic='Rogue Servers' anchor='security-rogue'>
+    <p>It is NOT RECOMMENDED for victims to send abuse reports to the server of a suspected abuser, since that server could be a rogue domain capable of sending abuse from any JID at that domain.</p>
+  </section2>
+  <section2 topic='Denial of Service Attacks' anchor='security-dos'>
+    <p>It is possible for an abusive sender to launch a denial of service attack against legitimate users of the sending server by generating abusive traffic over the server-to-server connection (in fact such attacks have already been observed on XMPP networks). Although use of the abuse reporting protocol does not completely prevent such attacks, it may at least enable sending servers to react to abusive traffic in close to real time, thus helping to "heal" the network when denial of service attacks are launched.</p>
+  </section2>
+  <section2 topic='Man in the Middle Attacks' anchor='security-mitm'>
+    <p>If a malicious entity can inject information into the server-to-server connection, it can falsely send abuse reports to the sending server. Therefore the connection SHOULD be encrypted using Transport Layer Security as specified in &xmppcore;.</p>
+  </section2>
 </section1>
+
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with &IANA;.</p>
 </section1>
+
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
   <section2 topic='Protocol Namespaces' anchor='ns'>
-    <p>Until this specification advances to a status of Draft, its associated namespace shall be "http://www.xmpp.org/extensions/xep-00161.html#ns"; upon advancement of this specification, the &REGISTRAR; shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;.</p>
+    <p>Until this specification advances to a status of Draft, its associated namespace shall be "urn:xmpp:tmp:abuse"; upon advancement of this specification, the &REGISTRAR; shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;.</p>
+  </section2>
+  <section2 topic='Application-Specific Errors' anchor='registrar-apperror'>
+    <p>The XMPP Registrar shall add &lt;abuse/&gt; to its registry of application-specific error conditions (see &APPERRORS;), where the element is qualified by the 'urn:xmpp:tmp:abuse' namespace &NSNOTE;.</p>
+    <p>The registry submission is as follows:</p>
+    <code><![CDATA[
+<condition>
+  <ns>urn:xmpp:tmp:abuse</ns>
+  <element>abuse</element>
+  <desc>the sending entity has generated traffic that the receiving server considers abusive</desc>
+  <doc>XEP-xxxx</doc>
+</condition>
+    ]]></code>
   </section2>
 </section1>
+
 <section1 topic='XML Schema' anchor='schema'>
   <code><![CDATA[
 <?xml version='1.0' encoding='UTF-8'?>
 
 <xs:schema
     xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='http://www.xmpp.org/extensions/xep-0161.html#ns'
-    xmlns='http://www.xmpp.org/extensions/xep-0161.html#ns'
+    targetNamespace='urn:xmpp:tmp:abuse'
+    xmlns='urn:xmpp:tmp:abuse'
     elementFormDefault='qualified'>
 
   <xs:import 
       namespace='jabber:client'
       schemaLocation='http://www.xmpp.org/schemas/jabber-client.xsd'/>
 
-  <xs:element name='spim'>
+  <xs:element name='abuse'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='condition'/>
+        <xs:element ref='description'/>
+        <xs:element ref='jid'/>
+        <xs:element ref='pointer'/>
+        <xs:element ref='stanzas'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='condition'>
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name='gateway' type='empty'/>
+        <xs:element name='muc' type='empty'/>
+        <xs:element name='proxy' type='empty'/>
+        <xs:element name='pubsub' type='empty'/>
+        <xs:element name='service' type='empty'/>
+        <xs:element name='spam' type='empty'/>
+        <xs:element name='stanza-too-big' type='empty'/>
+        <xs:element name='too-many-recipients' type='empty'/>
+        <xs:element name='too-many-stanzas' type='empty'/>
+        <xs:element name='unacceptable-payload' type='empty'/>
+        <xs:element name='unacceptable-text' type='empty'/>
+        <xs:element name='undefined-abuse' type='empty'/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='stanzas'>
     <xs:complexType>
       <xs:choice xmlns:xmpp='jabber:client'>
         <xs:element ref='xmpp:iq'/>
@@ -226,10 +432,16 @@
         <xs:element ref='xmpp:presence'/>
       </xs:choice>
     </xs:complexType>
+  </xs:element>
 
-  <xs:element name='spimmer' type='xs:string'/>
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
 
 </xs:schema>
   ]]></code>
 </section1>
 </xep>
+
