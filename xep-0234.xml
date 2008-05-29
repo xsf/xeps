@@ -15,13 +15,20 @@
   <sig>Standards</sig>
   <dependencies>
     <spec>XMPP Core</spec>
+    <spec>XEP-0047</spec>
     <spec>XEP-0096</spec>
     <spec>XEP-0166</spec>
   </dependencies>
   <supersedes/>
   <supersededby/>
-  <shortname>NOT YET ASSIGNED</shortname>
+  <shortname>NOT_YET_ASSIGNED</shortname>
   &stpeter;
+  <revision>
+    <version>0.3</version>
+    <date>2008-05-29</date>
+    <initials>psa</initials>
+    <remark><p>Corrected and more clearly explained negotiation flows for consistency with XEP-0166 and other Jingle specifications.</p></remark>
+  </revision>
   <revision>
     <version>0.2</version>
     <date>2008-03-20</date>
@@ -57,7 +64,7 @@
 <section1 topic='Introduction' anchor='intro'>
   <p>&xep0096; defines the current XMPP protocol extension for file transfer. However, that protocol has several drawbacks, most related to the &xep0095; protocol on which it depends:</p>
   <ol>
-    <li>It does not enable a true, bidirectional negotiation; instead, the initiator sets the terms for the file transfer and the receiver either accepts the terms or cancels the negotiation.</li>
+    <li>It does not enable a true, bidirectional negotiation; instead, the initiator sets the terms for the file transfer and the responder either accepts the terms or cancels the negotiation.</li>
     <li>It is the only technology in the Jabber/XMPP protocol "stack" that uses <cite>XEP-095: Stream Initiation</cite>. More modern technologies such as voice and video session negotiation use &xep0166;, and it would be helpful if implementors could use the same code for all negotiation use cases.</li>
   </ol>
   <p>To overcome these drawbacks, this specification defines a file transfer negotiation method that meets the following requirements:</p>
@@ -66,23 +73,44 @@
     <li>Reuse the file description format from <cite>XEP-0096</cite>.</li>
     <li>Define a clear upgrade path from <cite>XEP-0096</cite> to this specification.</li>
   </ul>
+  <p>Jingle file transfer is only as reliable as the transports on which it depends. In particular, SOCKS5 Bytestreams does not always result in NAT or firewall traversal. To work around that problem, this specification requires all implementations to support In-Band Bytestreams, which tends to result in a successful (if slow) file transfer. A future version of this specification will also recommend implementation of a Jingle transport method that emulates the IETF's ICE-TCP technology, which is currently a work in progress (see &ice-tcp;).</p>
 </section1>
 
 <section1 topic='How It Works' anchor='protocol'>
   <p>This section provides a friendly introduction to Jingle file transfer.</p>
-  <p>First, the party that wishes to initiate the file transfer determines the receiver's capabilities (via &xep0030; or &xep0115;). In this example, we assume that the receiver supports the following service discovery features (note: these features may not reflect final namespace assignments):</p>
+  <p>First, the party that wishes to initiate the file transfer determines the responder's capabilities (via &xep0030; or &xep0115;). Here we assume that the responder supports the following service discovery features (note: these features may not reflect final namespace assignments):</p>
   <ul>
     <li>urn:xmpp:tmp:jingle</li>
     <li>urn:xmpp:tmp:jingle:apps:file-transfer</li>
     <li>urn:xmpp:tmp:jingle:transports:bytestreams</li>
     <li>urn:xmpp:tmp:jingle:transports:ibb</li>
   </ul>
-  <p>The initiator then sends a Jingle session-initiation request to a potential receiver. The content-type of the request specifies two things:</p>
+  <p>The initiator then sends a Jingle session-initiation request to a potential responder. The content-type of the request specifies two things:</p>
   <ol>
     <li>An application type of "urn:xmpp:tmp:jingle:apps:file-transfer" &NSNOTE;. In particular, the &lt;description/&gt; element contains an &lt;offer/&gt; or &lt;request/&gt; element that in turn contains a &lt;file/&gt; element qualified by the existing 'http://jabber.org/protocol/si/profile/file-transfer' namespace from <cite>XEP-0096</cite>.</li>
     <li>An appropriate transport method. Because the existing transport methods used in <cite>XEP-0096</cite> (i.e., &xep0065; and &xep0047;) are not yet defined as Jingle transport methods, this specification registers those definitions.</li>
   </ol>
-  <p>In this example, the initiation request specifies a file offer and a transport method of bytestreams (i.e., XEP-065).</p>
+  <p>In this example, the initiator is &lt;kingclaudius@shakespeare.lit&gt;, the responder is &lt;laertes@shakespeare.lit&gt;, and the initiation request specifies a file offer and a transport method of bytestreams (i.e., XEP-0065).</p>
+  <p>The flow is as follows.</p>
+  <code><![CDATA[
+Claudius                      Laertes
+   |                             |
+   |   session-initiate          |
+   |---------------------------->|
+   |   ack                       |
+   |<----------------------------|
+   |   session-accept            |
+   |<----------------------------|
+   |   ack                       |
+   |---------------------------->|
+   |   [ SOCKS5 Bytestreams ]    |
+   |<--------------------------->|
+   |   terminate                 |
+   |<----------------------------|
+   |   ack                       |
+   |---------------------------->|
+   |                             |
+  ]]></code>
   <example caption="Initiator sends session-initiate"><![CDATA[
 <iq from='kingclaudius@shakespeare.lit/castle'
     id='jingle1'
@@ -116,147 +144,38 @@
     to='kingclaudius@shakespeare.lit/castle'
     type='result'/>
   ]]></example>
-  <p>The parties would then attempt to negotiate use of the SOCKS5 Bytestreams transport method, as described in <cite>XEP-0065</cite>.</p>
+  <p>The parties would then attempt to negotiate use of the SOCKS5 Bytestreams transport method, as described in <cite>XEP-0065</cite>. The value of the 'sid' attribute in the <cite>XEP-0065</cite> &QUERY; element MUST match the value of the 'sid' attribute in the &lt;jingle/&gt; element (in this case, "851ba2"). If negotiation is successful, the parties exchange the file. Once the transfer is completed, either party can terminate the Jingle session.</p>
   <p>More detailed scenarios follow.</p>
 </section1>
 
 <section1 topic='Scenarios' anchor='scenarios'>
-  <section2 topic='Fallback' anchor='fallback'>
-    <p>Currently, <cite>XEP-0096</cite> does not enable the parties to fall back to a second method (e.g., In-Band Bytestreams) if the first method tried (e.g., SOCKS5 Bytestreams) does not work. This problem is addressed by Jingle. Consider the following protocol flow.</p>
-    <example caption="Initiator sends session-initiate"><![CDATA[
-<iq from='kingclaudius@shakespeare.lit/castle'
-    id='jingle1'
-    to='laertes@shakespeare.lit/castle'
-    type='set'>
-  <jingle xmlns='urn:xmpp:tmp:jingle'
-          action='session-initiate'
-          initiator='kingclaudius@shakespeare.lit/castle'
-          sid='851ba2'>
-    <content creator='initiator' name='a-file-offer'>
-      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
-        <offer>
-          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
-                name='test.txt'
-                size='1022'
-                hash='552da749930852c69ae5d2141d3766b1'
-                date='1969-07-21T02:56:15Z'>
-            <desc>This is a test. If this were a real file...</desc>
-          </file>
-        </offer>
-      </description>
-      <transport xmlns='urn:xmpp:tmp:jingle:transports:bytestreams'/>
-    </content>
-  </jingle>
-</iq>
-    ]]></example>
-    <p>The responder immediately acknowledges receipt of the session-initiate.</p>
-    <example caption="Responder acknowledges session-initiate"><![CDATA[
-<iq from='laertes@shakespeare.lit/castle'
-    id='jingle1'
-    to='kingclaudius@shakespeare.lit/castle'
-    type='result'/>
-    ]]></example>
-    <p>The receiver would then sends a session-accept.</p>
-    <example caption="Receiver sends session-accept"><![CDATA[
-<iq from='laertes@shakespeare.lit/castle'
-    id='accept1'
-    to='kingclaudius@shakespeare.lit/castle'
-    type='set'>
-  <jingle xmlns='urn:xmpp:tmp:jingle'
-          action='session-accept'
-          initiator='kingclaudius@shakespeare.lit/castle'
-          sid='a73sjjvkla37jfea'>
-    <content creator='initiator' name='a-file-offer'>
-      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
-        <offer>
-          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
-                name='test.txt'
-                size='1022'
-                hash='552da749930852c69ae5d2141d3766b1'
-                date='1969-07-21T02:56:15Z'>
-            <desc>This is a test. If this were a real file...</desc>
-          </file>
-        </offer>
-      </description>
-      <transport xmlns='urn:xmpp:tmp:jingle:transports:bytestreams'/>
-    </content>
-  </jingle>
-</iq>
-    ]]></example>
-    <p>The initiator acknowledges the session-accept action.</p>
-    <example caption="Responder acknowledges session-accept"><![CDATA[
-<iq from='laertes@shakespeare.lit/castle'
-    id='accept1'
-    to='kingclaudius@shakespeare.lit/castle'
-    type='result'/>
-    ]]></example>
-    <p>Now the parties attempt to negotiate use of SOCKS5 Bytestreams as defined in <cite>XEP-0065</cite>.</p>
-    <p>However, let us imagine that the SOCKS5 Bytestreams negotiation fails. The initiator or responder can then suggest the use of In-Band Bytestreams by sending a content-replace action. Here we assume that the responder sends a content-replace action including a request for the file originally offered and a transport of IBB.</p>
-    <example caption="Responder requests content-replace"><![CDATA[
-<iq from='laertes@shakespeare.lit/castle'
-    id='replace1'
-    to='kingclaudius@shakespeare.lit/castle'
-    type='set'>
-  <jingle xmlns='urn:xmpp:tmp:jingle'
-          action='content-replace'
-          initiator='kingclaudius@shakespeare.lit/castle'
-          sid='a73sjjvkla37jfea'>
-    <content creator='responder' name='a-file-request'>
-      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
-        <request>
-          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
-                hash='552da749930852c69ae5d2141d3766b1'
-                name='test.txt'/>
-          </file>
-        </request>
-      </description>
-      <transport xmlns='urn:xmpp:tmp:jingle:transports:ibb'/>
-    </content>
-  </jingle>
-</iq>
-    ]]></example>
-    <p>The initiator then acknowledges the content-replace action.</p>
-    <example caption="Initiator acknowledges content-replace"><![CDATA[
-<iq from='kingclaudius@shakespeare.lit/castle'
-    id='replace1'
-    to='laertes@shakespeare.lit/castle'
-    type='result'/>
-    ]]></example>
-    <p>If the content definition is acceptable, the initiator then sends a content-accept action to the responder.</p>
-    <example caption="Initiator sends content-accept"><![CDATA[
-<iq to='kingclaudius@shakespeare.lit/castle'
-    id='accept2'
-    to='laertes@shakespeare.lit/castle'
-    type='set'>
-  <jingle xmlns='urn:xmpp:tmp:jingle'
-          action='content-accept'
-          initiator='kingclaudius@shakespeare.lit/castle'
-          sid='a73sjjvkla37jfea'>
-    <content creator='responder' name='a-file-request'>
-      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
-        <request>
-          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
-                hash='552da749930852c69ae5d2141d3766b1'
-                name='test.txt'/>
-          </file>
-        </request>
-      </description>
-      <transport xmlns='urn:xmpp:tmp:jingle:transports:ibb'/>
-    </content>
-  </jingle>
-</iq>
-    ]]></example>
-    <p>The responder then acknowledges the content-accept action.</p>
-    <example caption="Responder acknowledges content-accept"><![CDATA[
-<iq from='laertes@shakespeare.lit/castle'
-    id='accept2'
-    to='kingclaudius@shakespeare.lit/castle'
-    type='result'/>
-    ]]></example>
-    <p>The parties then attempt to use In-Band Bytestreams.</p>
-  </section2>
   <section2 topic='Transport Selection' anchor='select'>
-    <p><cite>XEP-0096</cite> enable the initiator to offer more than one transport and for the receiving party to choose its desired transport. This flow can be emulated in Jingle negotiation as follows.</p>
+    <p><cite>XEP-0096</cite> enables the initiator to offer more than one transport and for the receiving party to choose its desired transport. This flow can be emulated in Jingle negotiation if the initiator includes more than one &lt;content/&gt; element (each with a different proposed transport method) and the responder removes all but its desired transport method before the session is accepted.</p>
+    <p>The protocol flow is as follows:</p>
+    <code><![CDATA[
+Claudius                      Laertes
+   |                             |
+   |   session-initiate          |
+   |   ( S5B + IBB )             |
+   |---------------------------->|
+   |   ack                       |
+   |<----------------------------|
+   |   content-remove (S5B)      |
+   |<----------------------------|
+   |   ack                       |
+   |---------------------------->|
+   |   session-accept            |
+   |<----------------------------|
+   |   ack                       |
+   |---------------------------->|
+   |   [ In-Band Bytestreams ]   |
+   |<--------------------------->|
+   |   terminate                 |
+   |<----------------------------|
+   |   ack                       |
+   |---------------------------->|
+   |                             |
+    ]]></code>
     <example caption="Initiator sends session-initiate with multiple transports"><![CDATA[
 <iq from='kingclaudius@shakespeare.lit/castle'
     id='jingle1'
@@ -304,8 +223,8 @@
     to='kingclaudius@shakespeare.lit/castle'
     type='result'/>
     ]]></example>
-    <p>The receiver then sends a content-remove in order to choose the desired transport, which in this case is IBB.</p>
-    <example caption="Receiver sends content-remove"><![CDATA[
+    <p>The responder then sends a content-remove in order to choose the desired transport, which in this case is IBB.</p>
+    <example caption="Responder sends content-remove"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='remove1'
     to='kingclaudius@shakespeare.lit/castle'
@@ -313,7 +232,7 @@
   <jingle xmlns='urn:xmpp:tmp:jingle'
           action='content-remove'
           initiator='kingclaudius@shakespeare.lit/castle'
-          sid='a73sjjvkla37jfea'>
+          sid='851ba2'>
     <content creator='initiator' name='first-transport'>
       <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
         <offer>
@@ -331,15 +250,15 @@
   </jingle>
 </iq>
     ]]></example>
-    <p>The initiator acknowledges the content-remove action.</p>
+    <p>The initiator acknowledges receipt of the content-remove action.</p>
     <example caption="Responder acknowledges content-remove"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='remove1'
     to='kingclaudius@shakespeare.lit/castle'
     type='result'/>
     ]]></example>
-    <p>The receiver then sends a session-accept.</p>
-    <example caption="Receiver sends session-accept"><![CDATA[
+    <p>The responder then sends a session-accept.</p>
+    <example caption="Responder sends session-accept"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='accept1'
     to='kingclaudius@shakespeare.lit/castle'
@@ -347,7 +266,7 @@
   <jingle xmlns='urn:xmpp:tmp:jingle'
           action='session-accept'
           initiator='kingclaudius@shakespeare.lit/castle'
-          sid='a73sjjvkla37jfea'>
+          sid='851ba2'>
     <content creator='initiator' name='a-file-offer'>
       <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
         <offer>
@@ -374,17 +293,183 @@
     ]]></example>
     <p>Now the initiator sends the file using In-Band Bytestreams as defined in <cite>XEP-0047</cite>.</p>
   </section2>
+  <section2 topic='Fallback' anchor='fallback'>
+    <p>Currently, <cite>XEP-0096</cite> does not enable the parties to fall back to a second method (e.g., In-Band Bytestreams) if the first method tried (e.g., SOCKS5 Bytestreams) does not work. This problem is addressed by Jingle. Such a fallback scenario is especially helpful when re-using the existing SOCKS5 Bytestreams ("S5B") method, since that method does not necessarily result in NAT or firewall traversal and therefore often results in a failed transfer attempt. However, because In-Band Bytestreams ("IBB") almost always succeeds (except if the parties violate rate-limiting policies at their servers), it provides a reliable transfer method of last resort. To provide seamless fallback, the initiator or responder can counter-propose IBB if S5B fails.</p>
+    <p>The protocol flow is as follows:</p>
+    <code><![CDATA[
+Claudius                      Laertes
+   |                             |
+   |   session-initiate          |
+   |---------------------------->|
+   |   ack                       |
+   |<----------------------------|
+   |   session-accept            |
+   |<----------------------------|
+   |   ack                       |
+   |---------------------------->|
+   |   [ SOCKS5 Bytestreams ]    |
+   |<--------------------------->|
+   |   [ transfer fails! ]       |
+   |x---------------------------x|
+   |   content-replace (IBB)     |
+   |<----------------------------|
+   |   ack                       |
+   |---------------------------->|
+   |   content-accept            |
+   |---------------------------->|
+   |   ack                       |
+   |<----------------------------|
+   |   [ In-Band Bytestreams ]   |
+   |<--------------------------->|
+   |   terminate                 |
+   |<----------------------------|
+   |   ack                       |
+   |---------------------------->|
+   |                             |
+    ]]></code>
+    <example caption="Initiator sends session-initiate"><![CDATA[
+<iq from='kingclaudius@shakespeare.lit/castle'
+    id='jingle1'
+    to='laertes@shakespeare.lit/castle'
+    type='set'>
+  <jingle xmlns='urn:xmpp:tmp:jingle'
+          action='session-initiate'
+          initiator='kingclaudius@shakespeare.lit/castle'
+          sid='851ba2'>
+    <content creator='initiator' name='a-file-offer'>
+      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
+        <offer>
+          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
+                name='test.txt'
+                size='1022'
+                hash='552da749930852c69ae5d2141d3766b1'
+                date='1969-07-21T02:56:15Z'>
+            <desc>This is a test. If this were a real file...</desc>
+          </file>
+        </offer>
+      </description>
+      <transport xmlns='urn:xmpp:tmp:jingle:transports:bytestreams'/>
+    </content>
+  </jingle>
+</iq>
+    ]]></example>
+    <p>The responder immediately acknowledges receipt of the session-initiate.</p>
+    <example caption="Responder acknowledges session-initiate"><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='jingle1'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='result'/>
+    ]]></example>
+    <p>The responder then sends a session-accept.</p>
+    <example caption="Responder sends session-accept"><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='accept1'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='set'>
+  <jingle xmlns='urn:xmpp:tmp:jingle'
+          action='session-accept'
+          initiator='kingclaudius@shakespeare.lit/castle'
+          sid='851ba2'>
+    <content creator='initiator' name='a-file-offer'>
+      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
+        <offer>
+          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
+                name='test.txt'
+                size='1022'
+                hash='552da749930852c69ae5d2141d3766b1'
+                date='1969-07-21T02:56:15Z'>
+            <desc>This is a test. If this were a real file...</desc>
+          </file>
+        </offer>
+      </description>
+      <transport xmlns='urn:xmpp:tmp:jingle:transports:bytestreams'/>
+    </content>
+  </jingle>
+</iq>
+    ]]></example>
+    <p>The initiator acknowledges the session-accept action.</p>
+    <example caption="Responder acknowledges session-accept"><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='accept1'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='result'/>
+    ]]></example>
+    <p>Now the parties attempt to negotiate use of SOCKS5 Bytestreams as defined in <cite>XEP-0065</cite>.</p>
+    <p>However, let us imagine that the SOCKS5 Bytestreams negotiation fails. The initiator or responder can then suggest the use of In-Band Bytestreams by sending a content-replace action. Here we assume that the responder sends a content-replace action including a transport of IBB and a <em>request</em> for the file originally offered (note the use of the &lt;request/&gt; element instead of the &lt;offer/&gt; element, since the responder wants the initiator to send the previously-offered file).</p>
+    <example caption="Responder requests content-replace"><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='replace1'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='set'>
+  <jingle xmlns='urn:xmpp:tmp:jingle'
+          action='content-replace'
+          initiator='kingclaudius@shakespeare.lit/castle'
+          sid='851ba2'>
+    <content creator='responder' name='a-file-request'>
+      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
+        <request>
+          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
+                hash='552da749930852c69ae5d2141d3766b1'
+                name='test.txt'/>
+          </file>
+        </request>
+      </description>
+      <transport xmlns='urn:xmpp:tmp:jingle:transports:ibb'/>
+    </content>
+  </jingle>
+</iq>
+    ]]></example>
+    <p>The initiator then acknowledges the content-replace action.</p>
+    <example caption="Initiator acknowledges content-replace"><![CDATA[
+<iq from='kingclaudius@shakespeare.lit/castle'
+    id='replace1'
+    to='laertes@shakespeare.lit/castle'
+    type='result'/>
+    ]]></example>
+    <p>If the content definition is acceptable, the initiator then sends a content-accept action to the responder.</p>
+    <example caption="Initiator sends content-accept"><![CDATA[
+<iq to='kingclaudius@shakespeare.lit/castle'
+    id='accept2'
+    to='laertes@shakespeare.lit/castle'
+    type='set'>
+  <jingle xmlns='urn:xmpp:tmp:jingle'
+          action='content-accept'
+          initiator='kingclaudius@shakespeare.lit/castle'
+          sid='851ba2'>
+    <content creator='responder' name='a-file-request'>
+      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
+        <request>
+          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
+                hash='552da749930852c69ae5d2141d3766b1'
+                name='test.txt'/>
+          </file>
+        </request>
+      </description>
+      <transport xmlns='urn:xmpp:tmp:jingle:transports:ibb'/>
+    </content>
+  </jingle>
+</iq>
+    ]]></example>
+    <p>The responder then acknowledges the content-accept action.</p>
+    <example caption="Responder acknowledges content-accept"><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='accept2'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='result'/>
+    ]]></example>
+    <p>The parties then attempt to use In-Band Bytestreams.</p>
+  </section2>
 </section1>
 
 <section1 topic='Implementation Notes' anchor='impl'>
   <section2 topic='Mandatory to Implement Technologies' anchor='impl-mti'>
-    <p>All implementations MUST support the In-Band Bytestreams transport method.</p>
+    <p>All implementations MUST support the In-Band Bytestreams transport method as a reliable method of last resort. An implementation SHOULD support other transport methods as well.</p>
   </section2>
   <section2 topic='Preference Order of Transport Methods' anchor='impl-pref'>
     <p>An application MAY present transport methods in any order, except that the In-Band Bytestreams method MUST be the lowest preference.</p>
   </section2>
   <section2 topic='Migration from XEP-0096' anchor='impl-migration'>
-    <p>Support for Jingle file transfer can be determined through discovery of the 'urn:xmpp:tmp:jingle:apps:file-transfer' namespace &NSNOTE;, via either service discovery or entity capabilities. If the initiator knows that the receiver supports Jingle file transfer, it SHOULD attempt negotiation using XEP-0166 rather than XEP-0095.</p>
+    <p>Support for Jingle file transfer can be determined through discovery of the 'urn:xmpp:tmp:jingle:apps:file-transfer' namespace &NSNOTE;, via either service discovery (<cite>XEP-0030</cite>) or entity capabilities (<cite>XEP-0115</cite>). If the initiator knows that the responder supports Jingle file transfer, it SHOULD first attempt negotiation using XEP-0166 rather than XEP-0095.</p>
   </section2>
 </section1>
 
