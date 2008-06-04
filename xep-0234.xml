@@ -24,6 +24,12 @@
   <shortname>NOT_YET_ASSIGNED</shortname>
   &stpeter;
   <revision>
+    <version>0.4</version>
+    <date>2008-06-04</date>
+    <initials>psa</initials>
+    <remark><p>Harmonized negotiation flows with other Jingle application types.</p></remark>
+  </revision>
+  <revision>
     <version>0.3</version>
     <date>2008-05-29</date>
     <initials>psa</initials>
@@ -99,18 +105,21 @@ Claudius                      Laertes
    |---------------------------->|
    |   ack                       |
    |<----------------------------|
+   |   [ SOCKS5 negotiation ]    |
+   |<--------------------------->|
    |   session-accept            |
    |<----------------------------|
    |   ack                       |
    |---------------------------->|
-   |   [ SOCKS5 Bytestreams ]    |
-   |<--------------------------->|
+   |   [ file transfer ]         |
+   |---------------------------->|
    |   terminate                 |
    |<----------------------------|
    |   ack                       |
    |---------------------------->|
    |                             |
   ]]></code>
+  <p>First the initiator sends a Jingle session-initiate.</p>
   <example caption="Initiator sends session-initiate"><![CDATA[
 <iq from='kingclaudius@shakespeare.lit/castle'
     id='jingle1'
@@ -137,14 +146,91 @@ Claudius                      Laertes
   </jingle>
 </iq>
   ]]></example>
-  <p>The responder immediately acknowledges receipt of the session-initiate.</p>
+  <p>The responder immediately acknowledges receipt of the Jingle session-initiate.</p>
   <example caption="Responder acknowledges session-initiate"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='jingle1'
     to='kingclaudius@shakespeare.lit/castle'
     type='result'/>
   ]]></example>
-  <p>The parties would then attempt to negotiate use of the SOCKS5 Bytestreams transport method, as described in <cite>XEP-0065</cite>. The value of the 'sid' attribute in the <cite>XEP-0065</cite> &QUERY; element MUST match the value of the 'sid' attribute in the &lt;jingle/&gt; element (in this case, "851ba2"). If negotiation is successful, the parties exchange the file. Once the transfer is completed, either party can terminate the Jingle session.</p>
+  <p>The initiator then attempts to initiate a SOCKS5 Bytestream with the responder.</p>
+  <example caption='Initiation of Interaction'><![CDATA[
+<iq type='set' 
+    from='kingclaudius@shakespeare.lit/castle' 
+    to='laertes@shakespeare.lit/castle' 
+    id='initiate'>
+  <query xmlns='http://jabber.org/protocol/bytestreams' 
+         sid='mySID' 
+	 mode='tcp'>
+    <streamhost 
+        jid='kingclaudius@shakespeare.lit/castle' 
+        host='192.168.4.1' 
+        port='5086'/>
+    <streamhost 
+        jid='streamhostproxy.example.net' 
+        host='24.24.24.1' 
+        zeroconf='_jabber.bytestreams'/>
+  </query>
+</iq>
+  ]]></example>
+  <p>If the responder is willing to accept the bytestream, it MUST attempt to open a standard TCP socket on the network address of the StreamHost communicated by the initiator. If the initiator provides more than one StreamHost, the responder SHOULD try to connect to them in the order they occur.</p>
+  <p>If the responder is able to open a TCP socket on a StreamHost, it MUST utilize the SOCKS5 protocol specified in &rfc1928; to establish the connection with the StreamHost.</p>
+  <example caption='Responder Connects to StreamHost'><![CDATA[
+CMD = X'01'
+ATYP = X'03'
+DST.ADDR = SHA1 Hash of: (SID + Initiator JID + Responder JID)
+DST.PORT = 0
+  ]]></example>
+  <example caption='StreamHost Acknowledges Connection'><![CDATA[
+STATUS = X'00'
+  ]]></example>
+  <p>After the responder has authenticated with the StreamHost, it MUST send an IQ-result to the initiator indicating which StreamHost was used.</p>
+  <example caption='Responder Notifies Initiator of Connection'><![CDATA[
+<iq type='result' 
+    from='laertes@shakespeare.lit/castle' 
+    to='kingclaudius@shakespeare.lit/castle' 
+    id='initiate'>
+  <query xmlns='http://jabber.org/protocol/bytestreams'>
+    <streamhost-used jid='streamhostproxy.example.net'/>
+  </query>
+</iq>
+  ]]></example>
+  <p>The responder then sends a Jingle session-accept.</p>
+  <example caption="Responder sends session-accept"><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='accept1'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='set'>
+  <jingle xmlns='urn:xmpp:tmp:jingle'
+          action='session-accept'
+          initiator='kingclaudius@shakespeare.lit/castle'
+          sid='851ba2'>
+    <content creator='initiator' name='a-file-offer'>
+      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
+        <offer>
+          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
+                name='test.txt'
+                size='1022'
+                hash='552da749930852c69ae5d2141d3766b1'
+                date='1969-07-21T02:56:15Z'>
+            <desc>This is a test. If this were a real file...</desc>
+          </file>
+        </offer>
+      </description>
+      <transport xmlns='urn:xmpp:tmp:jingle:transports:bytestreams'/>
+    </content>
+  </jingle>
+</iq>
+  ]]></example>
+  <p>The initiator acknowledges the Jingle session-accept.</p>
+  <example caption="Initiator acknowledges session-accept"><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='accept1'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='result'/>
+  ]]></example>
+  <p>Now the parties exchange the file using SOCKS5 Bytestreams.</p>
+  <p>Once the transfer is completed, either party can terminate the Jingle session.</p>
   <p>More detailed scenarios follow.</p>
 </section1>
 
@@ -164,18 +250,21 @@ Claudius                      Laertes
    |<----------------------------|
    |   ack                       |
    |---------------------------->|
+   |   [ IBB negotiation ]       |
+   |<--------------------------->|
    |   session-accept            |
    |<----------------------------|
    |   ack                       |
    |---------------------------->|
-   |   [ In-Band Bytestreams ]   |
-   |<--------------------------->|
+   |   [ file transfer ]         |
+   |---------------------------->|
    |   terminate                 |
    |<----------------------------|
    |   ack                       |
    |---------------------------->|
    |                             |
     ]]></code>
+    <p>First the initiator sends a Jingle session-initiate, in this case with multiple transports (SOCKS5 Bytestreams and IBB).</p>
     <example caption="Initiator sends session-initiate with multiple transports"><![CDATA[
 <iq from='kingclaudius@shakespeare.lit/castle'
     id='jingle1'
@@ -216,14 +305,14 @@ Claudius                      Laertes
   </jingle>
 </iq>
     ]]></example>
-    <p>The responder immediately acknowledges receipt of the session-initiate.</p>
+    <p>The responder immediately acknowledges receipt of the Jingle session-initiate.</p>
     <example caption="Responder acknowledges session-initiate"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='jingle1'
     to='kingclaudius@shakespeare.lit/castle'
     type='result'/>
     ]]></example>
-    <p>The responder then sends a content-remove in order to choose the desired transport, which in this case is IBB.</p>
+    <p>The responder then sends a Jingle content-remove (deleting SOCKS5 Bytestreams) in order to choose the desired transport, which in this case is IBB.</p>
     <example caption="Responder sends content-remove"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='remove1'
@@ -250,14 +339,31 @@ Claudius                      Laertes
   </jingle>
 </iq>
     ]]></example>
-    <p>The initiator acknowledges receipt of the content-remove action.</p>
+    <p>The initiator acknowledges receipt of the Jingle content-remove action.</p>
     <example caption="Responder acknowledges content-remove"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='remove1'
     to='kingclaudius@shakespeare.lit/castle'
     type='result'/>
     ]]></example>
-    <p>The responder then sends a session-accept.</p>
+    <p>The initiator then sends an IBB initiation request to the responder.</p>
+    <example caption='Initiation of Interaction'><![CDATA[
+<iq from='kingclaudius@shakespeare.lit/castle'
+    id='inband_1'
+    to='laertes@shakespeare.lit/castle'
+    type='set'>
+  <open sid='mySID' 
+        block-size='4096'
+        xmlns='http://jabber.org/protocol/ibb'/>
+</iq>
+    ]]></example>
+    <example caption='Success Response'><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='inband_1'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='result'/>
+    ]]></example>
+    <p>The responder then sends a Jingle session-accept.</p>
     <example caption="Responder sends session-accept"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='accept1'
@@ -284,7 +390,7 @@ Claudius                      Laertes
   </jingle>
 </iq>
     ]]></example>
-    <p>The initiator acknowledges the session-accept action.</p>
+    <p>The initiator acknowledges the Jingle session-accept action.</p>
     <example caption="Initiator acknowledges session-accept"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='accept1'
@@ -303,14 +409,12 @@ Claudius                      Laertes
    |---------------------------->|
    |   ack                       |
    |<----------------------------|
+   |   [ SOCKS5 failure! ]       |
+   |x---------------------------x|
    |   session-accept            |
    |<----------------------------|
    |   ack                       |
    |---------------------------->|
-   |   [ SOCKS5 Bytestreams ]    |
-   |<--------------------------->|
-   |   [ transfer fails! ]       |
-   |x---------------------------x|
    |   content-replace (IBB)     |
    |<----------------------------|
    |   ack                       |
@@ -319,14 +423,17 @@ Claudius                      Laertes
    |---------------------------->|
    |   ack                       |
    |<----------------------------|
-   |   [ In-Band Bytestreams ]   |
+   |   [ IBB negotiation ]       |
    |<--------------------------->|
+   |   [ file transfer ]         |
+   |---------------------------->|
    |   terminate                 |
    |<----------------------------|
    |   ack                       |
    |---------------------------->|
    |                             |
     ]]></code>
+    <p>First the initiator sends a Jingle session-initiate, in this case with a transport of SOCKS5 Bytestreams.</p>
     <example caption="Initiator sends session-initiate"><![CDATA[
 <iq from='kingclaudius@shakespeare.lit/castle'
     id='jingle1'
@@ -360,7 +467,39 @@ Claudius                      Laertes
     to='kingclaudius@shakespeare.lit/castle'
     type='result'/>
     ]]></example>
-    <p>The responder then sends a session-accept.</p>
+    <p>The initiator then attempts to initiate a SOCKS5 Bytestream with the responder.</p>
+    <example caption='Initiation of Interaction'><![CDATA[
+<iq from='kingclaudius@shakespeare.lit/castle' 
+    id='initiate'
+    to='laertes@shakespeare.lit/castle' 
+    type='set'>
+  <query xmlns='http://jabber.org/protocol/bytestreams' 
+         sid='mySID' 
+	 mode='tcp'>
+    <streamhost 
+        jid='kingclaudius@shakespeare.lit/castle' 
+        host='192.168.4.1' 
+        port='5086'/>
+    <streamhost 
+        jid='streamhostproxy.example.net' 
+        host='24.24.24.1' 
+        zeroconf='_jabber.bytestreams'/>
+  </query>
+</iq>
+    ]]></example>
+    <p>If the responder is willing to accept the bytestream, it MUST attempt to open a standard TCP socket on the network address of the StreamHost communicated by the initiator. If the initiator provides more than one StreamHost, the responder SHOULD try to connect to them in the order they occur.</p>
+    <p>If the responder tries but is unable to connect to any of the StreamHosts and it cannot or does not wish to attempt a connection from its side, it returns a &notfound; error to the initiator.</p>
+    <example caption='Target Is Unable to Connect to Any StreamHost and Wishes to End Transaction'><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='initiate'
+    to='kingclaudius@shakespeare.lit/castle' 
+    type='error'>
+  <error code='404' type='cancel'>
+    <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>At this point the file transfer has failed using SOCKS5 Bytestreams. However, all is not lost, because the parties can attempt to fall back to In-Band Bytestreams. Therefore the responder sends a session-accept to the initiator but immediately sends a Jingle content-replace action to propose the fallback.</p>
     <example caption="Responder sends session-accept"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='accept1'
@@ -387,15 +526,14 @@ Claudius                      Laertes
   </jingle>
 </iq>
     ]]></example>
-    <p>The initiator acknowledges the session-accept action.</p>
+    <p>The initiator acknowledges the Jingle session-accept action.</p>
     <example caption="Initiator acknowledges session-accept"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='accept1'
     to='kingclaudius@shakespeare.lit/castle'
     type='result'/>
     ]]></example>
-    <p>Now the parties attempt to negotiate use of SOCKS5 Bytestreams as defined in <cite>XEP-0065</cite>.</p>
-    <p>However, let us imagine that the SOCKS5 Bytestreams negotiation fails. The initiator or responder can then suggest the use of In-Band Bytestreams by sending a content-replace action. Here we assume that the responder sends a content-replace action including a transport of IBB and a <em>request</em> for the file originally offered (note the use of the &lt;request/&gt; element instead of the &lt;offer/&gt; element, since the responder wants the initiator to send the previously-offered file).</p>
+    <p>However, this session-accept is just a placeholder, and the initiator MUST NOT send the file using SOCKS5 Bytestreams because the initiator received a notification that the SOCKS5 negotiation failed. The responder immediately sends a content-replace action including a transport of IBB and a <em>request</em> for the file originally offered (note the use of the &lt;request/&gt; element instead of the &lt;offer/&gt; element, since the responder wants the initiator to send the previously-offered file).</p>
     <example caption="Responder requests content-replace"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='replace1'
@@ -457,7 +595,24 @@ Claudius                      Laertes
     to='kingclaudius@shakespeare.lit/castle'
     type='result'/>
     ]]></example>
-    <p>The parties then attempt to use In-Band Bytestreams.</p>
+    <p>The initiator then sends an IBB initiation request to the responder.</p>
+    <example caption='Initiation of Interaction'><![CDATA[
+<iq from='kingclaudius@shakespeare.lit/castle'
+    id='inband_1'
+    to='laertes@shakespeare.lit/castle'
+    type='set'>
+  <open sid='mySID' 
+        block-size='4096'
+        xmlns='http://jabber.org/protocol/ibb'/>
+</iq>
+    ]]></example>
+    <example caption='Success Response'><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='inband_1'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='result'/>
+    ]]></example>
+    <p>Now the initiator sends the file using In-Band Bytestreams as defined in <cite>XEP-0047</cite>.</p>
   </section2>
 </section1>
 
