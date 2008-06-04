@@ -28,6 +28,12 @@
   &hildjj;
   &seanegan;
   <revision>
+    <version>0.19</version>
+    <date>2008-06-04</date>
+    <initials>psa</initials>
+    <remark><p>Allowed batching of multiple candidates in a single transport-info action for optional interworking with the SDP offer-answer model, and added urn:ietf:rfc:3264 service discovery feature to advertise such support; updated security considerations regarding sharing of IP addresses.</p></remark>
+  </revision>
+  <revision>
     <version>0.18</version>
     <date>2008-05-28</date>
     <initials>psa</initials>
@@ -143,7 +149,7 @@
   <p>The process for ICE negotiation is largely the same in Jingle as it is in ICE. There are several differences:</p>
   <ul>
     <li>Instead of using SIP as the signalling channel, Jingle uses XMPP as the signalling channel.</li>
-    <li>In Jingle, each candidate transport is sent in a separate IQ exchange (rather than sending all candidates at once as in &icecore;). <note>This approach takes advantage of the request-response semantics of the XMPP &IQ; stanza type and enables the parties to send higher-priority candidates earlier in the negotiation, but implies that Jingle is not exactly an offer-answer protocol as specified in RFC 3264.</note></li>
+    <li>In Jingle, each candidate transport is typically sent in a separate IQ exchange (rather than sending all candidates at once as in &icecore;). This approach takes advantage of the request-response semantics of the XMPP &IQ; stanza type and enables the parties to send higher-priority candidates earlier in the negotiation, thus resulting in a faster negotiation. However, a Jingle client MAY send multiple candidates at a time in order to ensure interworking with entities that adhere to the SDP offer / answer model described in &rfc3264;.</li>
     <li>Syntax from the Session Description Protocol (see &rfc4566;) is mapped to an XML syntax suitable for sending over the XMPP signalling channel.</li>
     <li>ICE candidates can be upgraded during a session (e.g., to change an IP address).</li>
     <li>Either party can continue to send ICE candidates throughout a session and renegotiate which candidate will be used.</li>
@@ -266,6 +272,7 @@ INITIATOR                     RESPONDER
   <section2 topic='Candidate Negotiation' anchor='protocol-candidates'>
     <p>Once the responder acknowledges receipt of the session initiation request as shown above, both initiator and responder MUST immediately negotiate connectivity over the ICE transport by exchanging XML-formatted candidate transports for the channel. This negotiation proceeds immediately in order to maximize the possibility that media can be exchanged as quickly as possible. <note>Concurrent with negotiation of the ICE candidates, it is possible for the initiator and responder to negotiate which content types the session will include, which transport methods will be tried for each content type, etc. Those negotiation flows are shown in other specifications, such as <cite>XEP-0166</cite>. This document specifies only negotiation of the ICE transport method.</note></p>
     <p>Note: In order to expedite session establishment, the initiator MAY send transport candidates immediately after sending the "session-initiate" message and before receiving acknowledgement from the responder (i.e., the initiator MUST consider the session to be live even before receiving acknowledgement). Given in-order delivery, the responder should receive such "transport-info" messages after receiving the "session-initiate" message; if not, it is appropriate for the responder to return &lt;unknown-session/&gt; errors since according to its state machine the session does not exist. If either party receives an &lt;unknown-session/&gt; from the other party, it MUST terminate the negotiation and the session.</p>
+    <p>Note: See the <link url='#security'>Security Considerations</link> section of this document regarding the exposure of IP addresses on behalf by the responder's client.</p>
     <p>The candidate syntax and negotiation flow are described below.</p>
     <section3 topic='Syntax of Candidate Element' anchor='protocol-candidates-syntax'>
       <p>The following is an example of the candidate format:</p>
@@ -371,9 +378,11 @@ INITIATOR                     RESPONDER
       </table>
     </section3>
     <section3 topic='Exchange of Candidates' anchor='protocol-candidates-exchange'>
-      <p>The first step in negotiating connectivity is for each party to immediately begin sending transport candidates to the other party. <note>The fact that both parties send candidates means that Jingle requires each party to be a full implementation of ICE, not a lite implementation as specified in &icecore;.</note> These candidates SHOULD be gathered by following the procedure specified in Section 4.1.1 of &icecore; (typically by communicating with a stanadlone STUN server in order to discover the client's public IP address and port) and prioritized by following the procedure specified in Section 4.1.2 of &icecore;. Each candidate MUST be sent in a &JINGLE; element with an action of "transport-info".</p>
-      <p>If the responder receives and can successfully process a given candidate, it returns an IQ-result (if not, for example because the candidate data is improperly formatted, it returns an error). Note: The responder is only indicating receipt of the candidate, not telling the initiator that the candidate will be used.</p>
-      <p>The initiator keeps sending candidates, one after the other (without stopping to receive an acknowledgement of receipt from the responder for each candidate) until it has exhausted its supply of possible or desirable candidate transports. (Because certain candidates may be more "expensive" in terms of bandwidth or processing power, the initiator may not want to advertise their existence unless necessary.) For each candidate, the responder acknowledges receipt.</p>
+      <p>The first step in negotiating connectivity is for each party to immediately begin sending transport candidates to the other party. <note>The fact that both parties send candidates means that Jingle requires each party to be a full implementation of ICE, not a lite implementation as specified in &icecore;.</note> These candidates SHOULD be gathered by following the procedure specified in Section 4.1.1 of &icecore; (typically by communicating with a stanadlone STUN server in order to discover the client's public IP address and port) and prioritized by following the procedure specified in Section 4.1.2 of &icecore;.</p>
+      <p>Each candidate or set of candidates shall be sent as &lt;candidate/&gt; children of a &TRANSPORT; element qualified by the 'urn:xmpp:tmp:jingle:transports:ice-udp' namespace. The &TRANSPORT; element shall be sent via a Jingle action of "transport-info" as shown in the examples below.</p>
+      <p>Either party MAY include multiple &lt;candidate/&gt; elements in one &TRANSPORT; element. Sending one candidate per transport-info action typically results in a faster negotiation because the candidates most likely to succeed are sent first and it is not necessary to gather all candidates before beginning to send any candidates. Furthermore, because certain candidates may be more "expensive" in terms of bandwidth or processing power, the initiator may not want to advertise their existence unless it is necessary to do so after other candidates have failed.) However, sending multiple candidates in a single "transport-info" action can help to ensure interoperability with entities that implement the SDP offer/answer model described in <cite>RFC 3264</cite>. An entity SHOULD send one candidate per "transport-info" action and send multiple such actions, instead of sending multiple candidates in a single "transport-info" action; the only exception is if the other party advertises support for the "urn:ietf:rfc:3264" service discovery feature.</p>
+      <p>If the responder receives and can successfully process a given candidate or set of candidates, it returns an IQ-result (if not, for example because the candidate data is improperly formatted, it returns an error). Note: The responder is only indicating receipt of the candidate or set of candidates, not telling the initiator that the candidate will be used.</p>
+      <p>The initiator keeps sending candidates (without stopping to receive an acknowledgement of receipt from the responder for each candidate) until it has exhausted its supply of possible or desirable candidate transports. For each candidate or set of candidates, the responder acknowledges receipt.</p>
       <p>At the same time (i.e., immediately after acknowledging receipt of the session-initiate request, not waiting for the initiator to begin or finish sending candidates), the responder also begins sending potential candidates, in order of desirability according to the responder. As above, the initiator acknowledges receipt of the candidates.</p>
       <example caption="Initiator sends some candidates"><![CDATA[
 <iq from='romeo@montague.net/orchard'
@@ -802,8 +811,9 @@ INITIATOR                  NAT                  RESPONDER
 </section1>
 
 <section1 topic='Determining Support' anchor='support'>
-  <p>If an entity supports the Jingle ice-udp transport, it MUST return a feature of "urn:xmpp:tmp:jingle:transports:ice-udp" &NSNOTE; in response to &xep0030; information requests.</p>
-  <example caption="Service discovery information request"><![CDATA[
+  <section2 topic='ICE Support' anchor='support-ice'>
+    <p>If an entity supports the Jingle ice-udp transport, it MUST return a feature of "urn:xmpp:tmp:jingle:transports:ice-udp" &NSNOTE; in response to &xep0030; information requests.</p>
+    <example caption="Service discovery information request"><![CDATA[
 <iq from='romeo@montague.net/orchard'
     id='disco1'
     to='juliet@capulet.com/balcony'
@@ -822,12 +832,38 @@ INITIATOR                  NAT                  RESPONDER
     ...
   </query>
 </iq>
+    ]]></example>
+    <p>Naturally, support MAY also be determined via the dynamic, presence-based profile of Service Discovery defined in &xep0115;.</p>
+  </section2>
+  <section2 topic='SDP Offer / Answer Support' anchor='support-sdp'>
+    <p>If an entity supports the SDP offer / answer model described in <cite>RFC 3264</cite> and therefore prefers to receive multiple candidates in a single "transport-info" action, it MUST advertise support for the "urn:ietf:rfc:3264" service discovery feature. Typically this feature will be advertised only by gateways between Jingle and SIP.</p>
+    <example caption="Service discovery information request"><![CDATA[
+<iq from='romeo@montague.net/orchard'
+    id='disco2'
+    to='sip.shakespeare.lit'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
   ]]></example>
-  <p>Naturally, support MAY also be determined via the dynamic, presence-based profile of Service Discovery defined in &xep0115;.</p>
+  <example caption="Service discovery information response"><![CDATA[
+<iq from='sip.shakespeare.lit'
+    id='disco2'
+    to='romeo@montague.net/orchard'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:ietf:rfc:3264'/>
+    <feature var='urn:xmpp:tmp:jingle:transports:ice-udp'/>
+    ...
+  </query>
+</iq>
+    ]]></example>
+  </section2>
 </section1>
 
 <section1 topic='Implementation Notes' anchor='impl'>
-  <p>In order to speed the negotiation process so that media can flow as quickly as possible, the initiatior should gather and prioritize candidates in advance or as soon as the principal begins the process of initiating a session.</p>
+  <p>In order to speed the negotiation process so that media can flow as quickly as possible, the initiatior should gather and prioritize candidates in advance, or as soon as the principal begins the process of initiating a session.</p>
+  <p>The protocol-level "session-accept" action is not to be confused with an interface-level acceptance of the session request. After receiving and acknowledging the "session-initiate" action received from the initiator, the responder's client should present an interface element that enables a human user to explicitly agree to proceeding with the session (e.g., an "Accept Incoming Call?" pop-up window including "Yes" and "No" buttons). However, the responder's client should not return a "session-accept" action to the initiator until the responder has explicitly agreed to proceed with the session (unless the initiator is on a list of entities whose sessions are automatically accepted).</p>
 </section1>
 
 <section1 topic='Deployment Notes' anchor='deploy'>
@@ -835,7 +871,17 @@ INITIATOR                  NAT                  RESPONDER
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
-  <p>In order to secure the data stream that is negotiated via the Jingle ICE transport, implementations SHOULD use encryption methods appropriate to the transport method and media being exchanged (for details regarding audio and video exchanges via RTP, refer to <cite>XEP-0167</cite> and <cite>XEP-0180</cite>).</p>
+  <section2 topic='Sharing IP Addresses' anchor='security-sharing'>
+    <p>By definition, the exchange of transport candidates results in exposure of the sender's IP addresses, which comprise a form of personally identifying information. A Jingle client MUST enable a user to control which entities will be allowed to receive such information. If a human user explicitly accepts a session request, then the client should consider that action to imply approval of IP address sharing. However, waiting for a human user to explicitly accept the session request can result in delays during session setup, since it is more efficient to immediately begin sharing transport candidates. Therefore, it is RECOMMENDED for the client to immediately send transport candidates to a contact (without waiting for explicit user approval of the session request) in the following cases:</p>
+    <ol>
+      <li>The user has permanently and formally authorized the contact to view the user's presence information via a presence subscription as reflected in an XMPP roster item (see &xmppim;).</li>
+      <li>The user has temporarily and dynamically shared presence with the contact via "directed presence" as described in <cite>RFC 3921</cite>.</li>
+      <li>The user has explicitly added the contact to a "whitelist" of entities who may access the user's personally-identifying information.</li>
+    </ol>
+  </section2>
+  <section2 topic='Encryption of Media' anchor='security-media'>
+    <p>In order to secure the data stream that is negotiated via the Jingle ICE transport, implementations SHOULD use encryption methods appropriate to the transport method and media being exchanged (for details regarding RTP exchanges, refer to &xep0167;).</p>
+  </section2>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -885,7 +931,7 @@ INITIATOR                  NAT                  RESPONDER
   <xs:element name='transport'>
     <xs:complexType>
       <xs:sequence>
-        <xs:element ref='candidate' minOccurs='0' maxOccurs='1'/>
+        <xs:element ref='candidate' minOccurs='0' maxOccurs='unbounded'/>
       </xs:sequence>
       <xs:attribute name='pwd' type='xs:string' use='optional'/>
       <xs:attribute name='ufrag' type='xs:string' use='optional'/>
