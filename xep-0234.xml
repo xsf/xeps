@@ -16,6 +16,7 @@
   <dependencies>
     <spec>XMPP Core</spec>
     <spec>XEP-0047</spec>
+    <spec>XEP-0065</spec>
     <spec>XEP-0096</spec>
     <spec>XEP-0166</spec>
   </dependencies>
@@ -23,6 +24,12 @@
   <supersededby/>
   <shortname>NOT_YET_ASSIGNED</shortname>
   &stpeter;
+  <revision>
+    <version>0.5</version>
+    <date>2008-06-05</date>
+    <initials>psa</initials>
+    <remark><p>Modified fallback scenario to use content-replace action during pending state.</p></remark>
+  </revision>
   <revision>
     <version>0.4</version>
     <date>2008-06-04</date>
@@ -79,7 +86,7 @@
     <li>Reuse the file description format from <cite>XEP-0096</cite>.</li>
     <li>Define a clear upgrade path from <cite>XEP-0096</cite> to this specification.</li>
   </ul>
-  <p>Jingle file transfer is only as reliable as the transports on which it depends. In particular, SOCKS5 Bytestreams does not always result in NAT or firewall traversal. To work around that problem, this specification requires all implementations to support In-Band Bytestreams, which tends to result in a successful (if slow) file transfer. A future version of this specification will also recommend implementation of a Jingle transport method that emulates the IETF's ICE-TCP technology, which is currently a work in progress (see &ice-tcp;).</p>
+  <p>Jingle file transfer is only as reliable as the transports on which it depends. In particular, SOCKS5 Bytestreams ("S5B") does not always result in NAT or firewall traversal. To work around that problem, this specification requires all implementations to support In-Band Bytestreams ("IBB"), which tends to result in a successful (if slow) file transfer. A future version of this specification will also recommend implementation of a Jingle transport method that emulates the IETF's ICE-TCP technology, which is currently a work in progress (see &ice-tcp;).</p>
 </section1>
 
 <section1 topic='How It Works' anchor='protocol'>
@@ -400,21 +407,17 @@ Claudius                      Laertes
     <p>Now the initiator sends the file using In-Band Bytestreams as defined in <cite>XEP-0047</cite>.</p>
   </section2>
   <section2 topic='Fallback' anchor='fallback'>
-    <p>Currently, <cite>XEP-0096</cite> does not enable the parties to fall back to a second method (e.g., In-Band Bytestreams) if the first method tried (e.g., SOCKS5 Bytestreams) does not work. This problem is addressed by Jingle. Such a fallback scenario is especially helpful when re-using the existing SOCKS5 Bytestreams ("S5B") method, since that method does not necessarily result in NAT or firewall traversal and therefore often results in a failed transfer attempt. However, because In-Band Bytestreams ("IBB") almost always succeeds (except if the parties violate rate-limiting policies at their servers), it provides a reliable transfer method of last resort. To provide seamless fallback, the initiator or responder can counter-propose IBB if S5B fails.</p>
+    <p>Currently, <cite>XEP-0096</cite> does not enable the parties to fall back to a second method (e.g., In-Band Bytestreams) if the first method tried (e.g., SOCKS5 Bytestreams) does not work. This problem is addressed by Jingle. Such a fallback scenario is especially helpful when re-using the existing SOCKS5 Bytestreams method, since that method does not necessarily result in NAT or firewall traversal and therefore often results in a failed attempt at setting up the initial transport. However, because In-Band Bytestreams almost always succeeds (except if the parties violate rate-limiting policies at their servers), it provides a reliable transfer method of last resort. To provide seamless fallback, the initiator or responder can counter-propose IBB if S5B setup fails.</p>
     <p>The protocol flow is as follows:</p>
     <code><![CDATA[
 Claudius                      Laertes
    |                             |
-   |   session-initiate          |
+   |   session-initiate (S5B)    |
    |---------------------------->|
    |   ack                       |
    |<----------------------------|
    |   [ SOCKS5 failure! ]       |
    |x---------------------------x|
-   |   session-accept            |
-   |<----------------------------|
-   |   ack                       |
-   |---------------------------->|
    |   content-replace (IBB)     |
    |<----------------------------|
    |   ack                       |
@@ -425,6 +428,10 @@ Claudius                      Laertes
    |<----------------------------|
    |   [ IBB negotiation ]       |
    |<--------------------------->|
+   |   session-accept            |
+   |<----------------------------|
+   |   ack                       |
+   |---------------------------->|
    |   [ file transfer ]         |
    |---------------------------->|
    |   terminate                 |
@@ -433,6 +440,7 @@ Claudius                      Laertes
    |---------------------------->|
    |                             |
     ]]></code>
+    <p>Note: Currently, <cite>XEP-0166</cite> prohibits use of the content-replace action during the PENDING state. That restriction may be removed in the future.</p>
     <p>First the initiator sends a Jingle session-initiate, in this case with a transport of SOCKS5 Bytestreams.</p>
     <example caption="Initiator sends session-initiate"><![CDATA[
 <iq from='kingclaudius@shakespeare.lit/castle'
@@ -499,41 +507,7 @@ Claudius                      Laertes
   </error>
 </iq>
     ]]></example>
-    <p>At this point the file transfer has failed using SOCKS5 Bytestreams. However, all is not lost, because the parties can attempt to fall back to In-Band Bytestreams. Therefore the responder sends a session-accept to the initiator but immediately sends a Jingle content-replace action to propose the fallback.</p>
-    <example caption="Responder sends session-accept"><![CDATA[
-<iq from='laertes@shakespeare.lit/castle'
-    id='accept1'
-    to='kingclaudius@shakespeare.lit/castle'
-    type='set'>
-  <jingle xmlns='urn:xmpp:tmp:jingle'
-          action='session-accept'
-          initiator='kingclaudius@shakespeare.lit/castle'
-          sid='851ba2'>
-    <content creator='initiator' name='a-file-offer'>
-      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
-        <offer>
-          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
-                name='test.txt'
-                size='1022'
-                hash='552da749930852c69ae5d2141d3766b1'
-                date='1969-07-21T02:56:15Z'>
-            <desc>This is a test. If this were a real file...</desc>
-          </file>
-        </offer>
-      </description>
-      <transport xmlns='urn:xmpp:tmp:jingle:transports:bytestreams'/>
-    </content>
-  </jingle>
-</iq>
-    ]]></example>
-    <p>The initiator acknowledges the Jingle session-accept action.</p>
-    <example caption="Initiator acknowledges session-accept"><![CDATA[
-<iq from='laertes@shakespeare.lit/castle'
-    id='accept1'
-    to='kingclaudius@shakespeare.lit/castle'
-    type='result'/>
-    ]]></example>
-    <p>However, this session-accept is just a placeholder, and the initiator MUST NOT send the file using SOCKS5 Bytestreams because the initiator received a notification that the SOCKS5 negotiation failed. The responder immediately sends a content-replace action including a transport of IBB and a <em>request</em> for the file originally offered (note the use of the &lt;request/&gt; element instead of the &lt;offer/&gt; element, since the responder wants the initiator to send the previously-offered file).</p>
+    <p>At this point the file transfer has failed using SOCKS5 Bytestreams. However, all is not lost, because the parties can attempt to fall back to In-Band Bytestreams. Therefore the responder sends a content-replace action including a transport of IBB and a <em>request</em> for the file originally offered (note the use of the &lt;request/&gt; element instead of the &lt;offer/&gt; element, since the responder wants the initiator to send the previously-offered file).</p>
     <example caption="Responder requests content-replace"><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='replace1'
@@ -609,6 +583,40 @@ Claudius                      Laertes
     <example caption='Success Response'><![CDATA[
 <iq from='laertes@shakespeare.lit/castle'
     id='inband_1'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='result'/>
+    ]]></example>
+    <p>Now the responder sends a session-accept to the initiator.</p>
+    <example caption="Responder sends session-accept"><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='accept1'
+    to='kingclaudius@shakespeare.lit/castle'
+    type='set'>
+  <jingle xmlns='urn:xmpp:tmp:jingle'
+          action='session-accept'
+          initiator='kingclaudius@shakespeare.lit/castle'
+          sid='851ba2'>
+    <content creator='initiator' name='a-file-offer'>
+      <description xmlns='urn:xmpp:tmp:jingle:apps:file-transfer'>
+        <offer>
+          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
+                name='test.txt'
+                size='1022'
+                hash='552da749930852c69ae5d2141d3766b1'
+                date='1969-07-21T02:56:15Z'>
+            <desc>This is a test. If this were a real file...</desc>
+          </file>
+        </offer>
+      </description>
+      <transport xmlns='urn:xmpp:tmp:jingle:transports:bytestreams'/>
+    </content>
+  </jingle>
+</iq>
+    ]]></example>
+    <p>The initiator acknowledges the Jingle session-accept action.</p>
+    <example caption="Initiator acknowledges session-accept"><![CDATA[
+<iq from='laertes@shakespeare.lit/castle'
+    id='accept1'
     to='kingclaudius@shakespeare.lit/castle'
     type='result'/>
     ]]></example>
