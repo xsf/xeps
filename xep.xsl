@@ -34,7 +34,7 @@ THE SOFTWARE.
     <html>
       <head>
         <title>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></title>
-        <link rel='stylesheet' type='text/css' href='/xmpp.css' />
+        <link rel='stylesheet' type='text/css' href='../xmpp.css' />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
         <!-- BEGIN META TAGS FOR DUBLIN CORE -->
         <meta>
