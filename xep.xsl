@@ -696,6 +696,10 @@ THE SOFTWARE.
     </p>
   </xsl:template>
 
+  <xsl:template match='br'>
+    <br />
+  </xsl:template>
+
   <xsl:template match='ul'>
     <ul>
       <xsl:variable name='class.count' select='count(@class)'/>
