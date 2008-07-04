@@ -49,7 +49,7 @@
   &ralphm;
 
   <revision>
-    <version>1.12pre2</version>
+    <version>1.12pre3</version>
     <date>in progress, last updated 2008-07-02</date>
     <initials>psa</initials>
     <remark>
@@ -60,6 +60,7 @@
         <li>Corrected syntax for associating with and disassociating from a collection node so that it is possible to perform these tasks in relation to the root collection node.</li>
         <li>Added note about ignoring delivery options set for configuration of a collection node and instead applying delivery options as configured for the publishing leaf node.</li>
         <li>Defined handling of collection node deletion for various deployment scenarios.</li>
+        <li>Defined pubsub#notify_sub config option so that owners can receive notifications of new subscriptions, unsubscribes, and other subscription changes.</li>
       </ul>
     </remark>
   </revision>
@@ -1436,7 +1437,7 @@ And by opposing end them?
       <p>An entity may wish to subscribe using different subscription options, which it can do by subscribing multiple times to the same node. Support for this feature ("multi-subscribe") is OPTIONAL.</p>
       <p>If multiple subscriptions for the same JID are allowed, the service MUST use the 'subid' attribute to differentiate between subscriptions for the same entity (therefore the SubID MUST be unique for each node+JID combination and the SubID MUST be present on the entity element any time it is sent to the subscriber). It is NOT RECOMMENDED for clients to generate SubIDs, since collisions might result; therefore a service SHOULD generate the SubID on behalf of the subscriber and MAY overwrite SubIDs if they are provided by subscribers. If the service does not allow multiple subscriptions for the same entity and it receives an additional subscription request, the service MUST return the current subscription state (as if the subscription was just approved).</p>
     </section3>
-    <section3 topic='Sending the Last Published Item' anchor='subscriber-subscribe-last'>
+    <section3 topic='Receiving the Last Published Item' anchor='subscriber-subscribe-last'>
       <p>When a subscription request is successfully processed, the service MAY send the last published item to the new subscriber. The message containing this item SHOULD be stamped with extended information qualified by the 'urn:xmpp:delay' namespace (see &xep0203;) to indicate it is sent with delayed delivery. (Note that in this example the message notification is sent to the bare JID since that is the subscribed JID.)</p>
       <example caption='Service sends last published item'><![CDATA[
 <message from='pubsub.shakespeare.lit' to='francisco@denmark.lit'>
@@ -3285,6 +3286,7 @@ And by opposing end them?
         <field var='pubsub#notify_config'><value>0</value></field>
         <field var='pubsub#notify_delete'><value>0</value></field>
         <field var='pubsub#notify_retract'><value>0</value></field>
+        <field var='pubsub#notify_sub'><value>0</value></field>
         <field var='pubsub#max_payload_size'><value>1028</value></field>
         <field var='pubsub#type'><value>http://www.w3.org/2005/Atom</value></field>
         <field var='pubsub#body_xslt'>
@@ -3353,6 +3355,10 @@ And by opposing end them?
         <field var='pubsub#notify_retract' type='boolean'
                label='Notify subscribers when items are removed from the node'>
           <value>false</value>
+        </field>
+        <field var='pubsub#notify_sub' type='boolean'
+               label='Notify owners about new subscribers and unsubscribes'>
+          <value>0</value>
         </field>
         <field var='pubsub#persist_items' type='boolean'
                label='Persist items to storage'>
@@ -3537,6 +3543,7 @@ And by opposing end them?
         <field var='pubsub#notify_config'><value>0</value></field>
         <field var='pubsub#notify_delete'><value>0</value></field>
         <field var='pubsub#notify_retract'><value>0</value></field>
+        <field var='pubsub#notify_sub'><value>0</value></field>
         <field var='pubsub#max_payload_size'><value>1028</value></field>
         <field var='pubsub#type'><value>http://www.w3.org/2005/Atom</value></field>
         <field var='pubsub#body_xslt'>
@@ -3610,6 +3617,7 @@ And by opposing end them?
         <field var='pubsub#notify_config'><value>0</value></field>
         <field var='pubsub#notify_delete'><value>0</value></field>
         <field var='pubsub#notify_retract'><value>0</value></field>
+        <field var='pubsub#notify_sub'><value>0</value></field>
         <field var='pubsub#persist_items'><value>1</value></field>
         <field var='pubsub#max_items'><value>10</value></field>
         <field var='pubsub#subscribe'><value>1</value></field>
@@ -3677,6 +3685,10 @@ And by opposing end them?
         </field>
         <field var='pubsub#notify_retract' type='boolean'
                label='Notify subscribers when items are removed from the node'>
+          <value>0</value>
+        </field>
+        <field var='pubsub#notify_sub' type='boolean'
+               label='Notify owners about new subscribers and unsubscribes'>
           <value>0</value>
         </field>
         <field var='pubsub#persist_items' type='boolean'
@@ -4494,12 +4506,36 @@ And by opposing end them?
     <section3 topic='Delete a Subscriber' anchor='owner-subscriptions-delete'>
       <p>In order to remove an entity from the subscriptions list, the owner MUST set the value of the 'subscription' attribute to "none" and the service MUST remove that entity from the subscriptions list and not return it in response to future list requests.</p>
     </section3>
-    <section3 topic='Notifying Subscribers' anchor='owner-subscriptions-notify'>
+    <section3 topic='Notifying Subscribers' anchor='owner-subscriptions-notifysub'>
       <p>An implementation SHOULD send notification to an entity whose subscription has changed (see the <link url='#impl-subchange'>Notification of Subscription State Changes</link> section of this document).</p>
       <example caption='Service sends notification of subscription change'><![CDATA[
 <message from='pubsub.shakespeare.lit' to='polonius@denmark.lit'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <subscription node='princely_musings' jid='polonius@denmark.lit' subscription='none'/>
+  </pubsub>
+</message>
+      ]]></example>
+    </section3>
+    <section3 topic='Notifying Owners' anchor='owner-affiliations-notifyowners'>
+      <p>If the node is configured to support the "pubsub#notify_sub" option, the service MUST send to the node owners notifications regarding new subscribers, SHOULD send notifications regarding unsubscribe actions, and MAY send notifications regarding other subscription changes. The relationship between these notifications and the retrieval of the subscriptions list as described under <link url='#owner-subscriptions-retrieve'>Retrieve Subscriptions List</link> is similar to the relationship between a "roster get" and a "roster push" as described in &xmppim;.</p>
+      <p>In particular, the notification consists of a &MESSAGE; stanza containing a &lt;pubsub/&gt; element qualified by the 'http://jabber.org/protocol/pubsub#owner' namespace, which contains a &lt;subscriptions/&gt;l element whose 'node' attribute specifies the NodeID of the relevant node; this &lt;subscriptions/&gt; element in turn contains one &lt;subscription/&gt; element whose 'jid' attribute specifies the address of the subscriber and whose 'subscription' attribute specifies the suubscription state.</p>
+      <p>For instance, the following example shows a new subscriber notification.</p>
+      <example caption='Service sends new subscriber notification to owner'><![CDATA[
+<message from='pubsub.shakespeare.lit' to='hamlet@denmark.lit'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub#owner'>
+    <subscriptions node='princely_musings'>
+      <subscription jid='polonius@denmark.lit' subscription='subscribed'/>
+    </subscriptions>
+  </pubsub>
+</message>
+      ]]></example>
+      <p>The following example shows an unsubscribe notification.</p>
+      <example caption='Service sends unsubscribe notification to owner'><![CDATA[
+<message from='pubsub.shakespeare.lit' to='hamlet@denmark.lit'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub#owner'>
+    <subscriptions node='princely_musings'>
+      <subscription jid='polonius@denmark.lit' subscription='none'/>
+    </subscriptions>
   </pubsub>
 </message>
       ]]></example>
@@ -6801,6 +6837,9 @@ O, what a rogue and peasant slave am I!
   <field var='pubsub#notify_retract'
          type='boolean'
          label='Whether to notify subscribers when items are removed from the node'/>
+  <field var='pubsub#notify_sub'
+         type='boolean'
+         label='Whether to notify owners about new subscribers and unsubscribes'/>
   <field var='pubsub#persist_items'
          type='boolean'
          label='Whether to persist items to storage'/>
