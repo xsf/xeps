@@ -777,10 +777,12 @@ THE SOFTWARE.
   </xsl:template>
 
   <xsl:template match='table'>
-    <p class='caption'><a><xsl:attribute name='name'><xsl:text>table-</xsl:text><xsl:number level='any' count='table'/></xsl:attribute></a>Table <xsl:number level='any' count='table'/>:<xsl:text> </xsl:text><xsl:value-of select='@caption'/></p>
-    <table border='1' cellpadding='3' cellspacing='0'>
-      <xsl:apply-templates/>
-    </table>
+    <div class='indent'>
+      <p class='caption'><a><xsl:attribute name='name'><xsl:text>table-</xsl:text><xsl:number level='any' count='table'/></xsl:attribute></a>Table <xsl:number level='any' count='table'/>:<xsl:text> </xsl:text><xsl:value-of select='@caption'/></p>
+      <table border='1' cellpadding='3' cellspacing='0'>
+        <xsl:apply-templates/>
+      </table>
+    </div>
   </xsl:template>
 
   <xsl:template match='tr'>
