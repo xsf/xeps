@@ -142,10 +142,8 @@ if xepflag == "new":
     thesubject = 'NEW: XEP-'
 elif xepflag == "draft":
     thesubject = 'DRAFT: XEP-'
-    toaddrs = toaddrs + ", jdev@jabber.org"
 elif xepflag == "final":
     thesubject = 'FINAL: XEP-'
-    toaddrs = toaddrs + ", jdev@jabber.org"
 elif xepflag == "active":
     thesubject = 'ACTIVE: XEP-'
 elif xepflag == "retract":
