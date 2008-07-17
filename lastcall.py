@@ -129,7 +129,7 @@ fromaddr = "editor@xmpp.org"
 # for testing...
 # toaddrs = "stpeter@jabber.org"
 # for real...
-toaddrs = "standards@xmpp.org, jdev@jabber.org"
+toaddrs = "standards@xmpp.org"
 
 thesubject = 'LAST CALL: XEP-' + xepnum + " (" + title + ")"
 introline = 'This message constitutes notice of a Last Call for comments on XEP-' + xepnum + ' (' + title + ').'
