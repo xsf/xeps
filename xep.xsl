@@ -848,6 +848,12 @@ THE SOFTWARE.
 
 <!-- PRESENTATIONAL ELEMENTS -->
 
+  <xsl:template match='blockquote'>
+    <blockquote>
+      <xsl:apply-templates/>
+    </blockquote>
+  </xsl:template>
+
   <xsl:template match='cite'>
     <span class='ref'>
       <xsl:apply-templates/>
