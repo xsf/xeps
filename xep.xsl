@@ -261,7 +261,7 @@ THE SOFTWARE.
           <xsl:otherwise>
             <p class='indent'>The preferred venue for discussion of this document is the Standards discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">http://mail.jabber.org/mailman/listinfo/standards</a>&gt;.</p>
             <xsl:if test='contains(/xep/header/dependencies,"RFC")'>
-              <p class='indent'>Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the XSF-IETF list may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/jsf-ietf">http://mail.jabber.org/mailman/listinfo/jsf-ietf</a>&gt; for details).</p>
+              <p class='indent'>Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the XSF-IETF list may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/xsf-ietf">http://mail.jabber.org/mailman/listinfo/xsf-ietf</a>&gt; for details).</p>
             </xsl:if>
           </xsl:otherwise>
         </xsl:choose>
