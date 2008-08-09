@@ -32,6 +32,7 @@ xeppath=/var/www/xmpp.org/extensions
 
 xsltproc xep.xsl xep-$1.xml > $xeppath/xep-$1.html
 xsltproc ref.xsl xep-$1.xml > $xeppath/refs/reference.XSF.XEP-$1.xml
+xsltproc examples.xsl xep-$1.xml > $xeppath/examples/$1.xml
 
 cp xep-$1.xml $xeppath/
 

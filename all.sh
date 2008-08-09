@@ -38,6 +38,7 @@ while read f
 do
     xsltproc xep.xsl xep-$f.xml > $xeppath/xep-$f.html
     xsltproc ref.xsl xep-$f.xml > $xeppath/refs/reference.XSF.XEP-$f.xml
+    xsltproc examples.xsl xep-$f.xml > $xeppath/examples/$f.xml
     cp xep-$f.xml $xeppath/
 done < nums.txt
 
