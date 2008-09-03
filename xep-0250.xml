@@ -1,0 +1,249 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>C2C Authentication Using TLS</title>
+    <abstract>This document describes how to negotiate TLS extensions when using TLS for end-to-end XML streams between two clients. It covers X.509 certificates with an without CA, the use of OpenPGP, Shared Remote Passwords (SRP) and how to use one extension to bootstrap a trust relationship.</abstract>
+    &LEGALNOTICE;
+    <number>0250</number>
+    <status>Experimental</status>
+    <type>Standards Track</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XMPP Core</spec>
+      <spec>XEP-0189</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>NOT_YET_ASSIGNED</shortname>
+    <author>
+      <firstname>Dirk</firstname>
+      <surname>Meyer</surname>
+      <email>dmeyer@tzi.de</email>
+      <jid>dmeyer@jabber.org</jid>
+    </author>
+    <revision>
+      <version>0.1</version>
+      <date>2008-09-03</date>
+      <initials>psa</initials>
+      <remark><p>Initial published version.</p></remark>
+    </revision>
+    <revision>
+      <version>0.0.2</version>
+      <date>2008-08-26</date>
+      <initials>dm</initials>
+      <remark>
+        <ul>
+          <li>Add extension probing</li>
+          <li>Add xmlsig namespace for keys</li>
+          <li>Change namespace to urn:xmpp:tmp:c2ctls</li>
+          <li>Add note about future TLS extensions</li>
+        </ul>
+      </remark>
+    </revision>
+    <revision>
+      <version>0.0.1</version>
+      <date>2008-08-22</date>
+      <initials>dm</initials>
+      <remark><p>First draft.</p></remark>
+    </revision>
+  </header>
+
+  <section1 topic='Introduction' anchor='intro'>
+    <p>For secure client-to-client (C2C) communication the clients can use &xep0174; or &xep0247; to open a connection between the two clients. To open an XMPP connection &xep0246; defines a stream setup similar to the setup used by client-server communications. To secure the communication the extension defines the use of Transport Layer Security as defined in &rfc4346; for encryption and authentication. XEP-0246 suggest to use the OpenPGP TLS extension but does not specify how to negotiate if both peers support the extension and if they are able to verify the OpenPGP key. It makes no sense to use OpenPGP instead of X.509 certificates if there is also no trust on OpenPGP level. This document describes how to negotiate how to use TLS to exchange possible extensions and key fingerprints before the actual TLS handshake.</p>
+    <p>After the TLS handshake <strong>both</strong> communication partners MUST be sure that they are communicating with the correct person without a man-in-the-middle.</p>
+  </section1>
+
+  <section1 topic='Supported TLS Handshake Mechanisms' anchor='reqs'>
+    <p>A client requires support for X.509 certificates or one or more TLS extension that can be used to verify the end-to-end character of the stream. The following list defines authentication mechanisms a client MAY support. The list depends on TLS extensions defined by the Transport Layer Security working group of the IETF. A future version of the document may include additional extension like Short Authentication String (SAS) or Kerberos. A client MUST ignore XML stanzas defining an authentication method it does not understand.</p>
+    <section2 topic='X.509 Certificate'>
+      <p>The classic usage of TLS is done with X.509 certificates. The certificate is the end of a certificate chain. A certificate should be either signed by another certificate from a third party or a well known certification authority installed on the client machine. In an enterprise scenario all client would be signed by a certificate from the company making it possible for all clients to verify the identity of the other.</p>
+      <p>Getting a signed certificate is a complex and expensive task unsuitable for normal users. It also raises the question why a client should trust a CA its user does not know. Instead they create a self-signed certificate. The certificate is signed by itself and can not be verified through a certificate chain. To use these certificates in a real scenario the user must know the fingerprint of the peer certificate to verify it. But comparing fingerprints is not very userfriendly and the user may not have the fingerprint before starting the communication.</p>
+    </section2>
+    <section2 topic='OpenPGP Key'>
+      <p>Instead of relying on a certificate chain the users may rely on a web-of-trust as defined by &rfc4880;. The TLS extension "OpenPGP Keys for Transport Layer Security" (&rfc5081;) describes how to use OpenPGP keys in the TLS handshake. If users share a trusted friend who has signed both their keys they can open a secure connection based on that trust. If there is no trust relationship between the two peers, OpenPGP is as useless as self-signed certificates. The users can verify the fingerprint and communicate that fingerprint over a different medium (e.g. a real-life meeting), but the same problem that occurs with X.509 certificates exists: comparing fingerprints is far away from being userfriendly.</p>
+    </section2>
+    <section2 topic='Shared Secret'>
+      <p>A third way to verify the identify of the peer is a shared secret. This secret could be exchanged on a personal meeting or could be described as riddle only the other person can answer before opening the c2c link. It is up to the user and a good user interface to make the secret exchange as painless as possible.</p>
+      <p>This document uses the Secure Remote Password (SRP) extension from &rfc5054; when dealing with shared secrets and not the Pre-Shared Key Ciphersuites as defined in RFC4279. SRP allows the users to choose a much smaller password and it still verifies both clients to the other. The password (shared secret) is required by both to calculate the premaster secret which means both will notice if the peer is not who it should be. SRP requires a user name; since it is transmitted in plain text between client and server it has no value in this context. Both clients must use the same username for the calculations. For the TLS handshake using SRP both clients MUST use the bare JID of the initiator as username.</p>
+    </section2>
+  </section1>
+
+  <section1 topic='Protocol'>
+    <section2 topic='Extension Negotiation'>
+      <p>The main problem is what TLS extension to choose. It makes no sense to use OpenPGP if the clients have no trust-relationship or SRP if the users did not exchange a secret. To resolve this problem a client describes its extension in an offer to the peer. The offer lists all supported authentication methods including additional parameter like the certificate that will be used. &xep0189; can be used to look-up the keys or the client can look in its OpenPGP keyring. A client could also know a certificate or password from an earlier connection.</p>
+      <example caption='Client Offer Supporting X.509, OpenPGP and SRP'><![CDATA[
+<offer xmlns='urn:xmpp:tmp:c2ctls'>
+  <x509>
+    <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+      <KeyName>julietDSAkey1hash</KeyName>
+      <X509Data>
+        <X509IssuerSerial>
+          <X509IssuerName>CN=TAMURA Kent, OU=TRL, O=IBM, L=Yamato-shi, ST=Kanagawa, C=JP</X509IssuerName>
+          <X509SerialNumber>12345678</X509SerialNumber>
+        </X509IssuerSerial>
+        <X509SKI>31d97bd7</X509SKI>
+        <X509SubjectName>Subject of Certificate B</X509SubjectName>
+        <X509Certificate>...</X509Certificate>
+        <X509Certificate>...</X509Certificate>
+        <X509Certificate>...</X509Certificate>
+      </X509Data>
+    </KeyInfo>
+  </x509>
+  <openpgp>
+    <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+      <KeyName>julietPGPkey1hash</KeyName>
+      <PGPData>
+        <PGPKeyId>...</PGPKeyId>
+        <PGPKeyPacket>...</PGPKeyPacket>
+      </PGPData>
+    </KeyInfo>
+  </openpgp>
+  <srp/>
+</offer>
+  ]]></example>
+      <p><em>Authors Note: XMLSIG is very complicated but is was chosen because XEP-0189 also uses this namespace. If a future version of XEP-0189 uses the ASCII representation of keys this document must be adjusted.</em>
+      </p>
+      <p>If both clients know the offer of the other, they can determine what method to use to complete the TLS handshake without an error. Note: this information will be exchanged over an insecure communication channel and may be forged. If the information is altered it will be detected when doing the TLS handshake.</p>
+    </section2>
+    <section2 topic='Extension Probing'>
+      <p>I client MAY want to know the supported extension of the peer before opening the client-to-client stream. For serverless messaging this is not possible but for server based communication a client can exchange offers with the peer without using Jingle to open a client-to-client stream. The methods the peer supports depend on additional information from the client. Depending on the X.509 certificate of the client the peer may not support this extension because it can not verify the certificate. To receive the offer from the peer the client sends an IQ stanza with its own offer.</p>
+      <example caption='Client Sends Extension Probing IQ'><![CDATA[
+<iq type='get'
+    from='romeo@montague.net/b345687ba7607d3ddf401a0257464843a0a1c0b7'
+    to='juliet@capulet.com/da39a3ee5e6b4b0d3255bfef95601890afd80709'
+    id='info'>
+  <offer xmlns='urn:xmpp:tmp:c2ctls'>
+    <x509>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+      ...
+      </KeyInfo>
+    </x509>
+    <openpgp>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+      ...
+      </KeyInfo>
+    </openpgp>
+    <srp/>
+  </offer>
+</iq>
+  ]]></example>
+      <p>The receiver sends its offer back to the client. A client MAY support X.509 certificates it can not verify to be verified later. In that case the X.509 information MUST be marked as insecure. In the following example the receiver supports SRP and X.509, but can not verify the certificate from the offer. OpenPGP is either not supported or skipped because the key can not be verified.</p>
+      <example caption='Peer Sends Extension Probing Result'><![CDATA[
+<iq type='result'
+    from='juliet@capulet.com/da39a3ee5e6b4b0d3255bfef95601890afd80709'
+    to='romeo@montague.net/b345687ba7607d3ddf401a0257464843a0a1c0b7'
+    id='info'>
+  <offer xmlns='urn:xmpp:tmp:c2ctls'>
+    <x509 insecure='true'>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+      ...
+      </KeyInfo>
+    </x509>
+    <srp/>
+  </offer>
+</iq>
+  ]]></example>
+    </section2>
+    <section2 topic='STARTTLS Enhancements' anchor='starttls'>
+      <p>The offer information described above will be embedded into the XML based part of the STARTTLS handshake described in the XMPP core.</p>
+      <section3 topic='TLS Stream Feature'>
+        <p>The recipient in the role of the XMPP server is the first one active in the XMPP TLS handshake. It offers the STARTTLS feature to the client. Instead of just offering the feature, it also SHOULD describe what TLS extensions it supports and what keys to expect. In the following example the recipient supports all possible identification mechanisms describe before.</p>
+      <example caption='Recipient Sends Stream Features'><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+    <offer xmlns='urn:xmpp:tmp:c2ctls'>
+      <x509>
+        <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        ...
+        </KeyInfo>
+      </x509>
+      <openpgp>
+        <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+        ...
+        </KeyInfo>
+      </openpgp>
+      <srp/>
+    </offer>
+  </starttls>
+</stream:features>
+  ]]></example>
+        <p>If the recipient does not supply this additional information it is assumed that it does not support this extension and the TLS handshake continues as described in the XMPP core. If and how the users trust each other in that case is out of the scope of this document.</p>
+      </section3>
+      <section3 topic='Choosing the STARTTLS Feature'>
+        <p>When the initiator starts the TLS feature it also enhances the STARTTLS with its supported extensions and additional key information based on the recipient's offer. In the following example the initiator has no OpenPGP key and can not verify the recipient's X.509 certificate. It also supports SRP.</p>
+      <example caption='Initiator Starts TLS Feature'><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+  <offer xmlns='urn:xmpp:tmp:c2ctls'>
+    <x509 insecure='true'>
+      <KeyInfo xmlns='http://www.w3.org/2000/09/xmldsig#'>
+      ...
+      </KeyInfo>
+    </x509>
+    <srp/>
+  </offer>
+</starttls>
+  ]]></example>
+        <p>Similar to the feature announcement, if the initiator does not add an offer the recipient MUST assume the initiator does not support this XMPP extension and continue normal TLS handshake and hope it will work.</p>
+      </section3>
+      <section3 topic='Accepting STARTTLS'>
+        <p>The next step for an recipient is to send an proceed message so the initiator can start with the TLS handshake. At this point the recipient knows what certificates or OpenPGP keys to expect from the peer and what the peer supports. The method that the initiator SHOULD use is added to the proceed.</p>
+      <example caption='Recipient Accepts TLS'><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+  <offer xmlns='urn:xmpp:tmp:c2ctls'>
+    <srp/>
+  </offer>
+</proceed>
+  ]]></example>
+        <p>The initiator now starts the TLS handshake.</p>
+        <p>If only SRP is possible the client should ask the user if they exchanged a shared secret. If this is not the case no suitable methods are left and the recipient MUST sends a failure and close the stream.</p>
+        <example caption='Recipient Aborts TLS'><![CDATA[
+  <failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+</stream:stream>
+  ]]></example>
+      </section3>
+    </section2>
+  </section1>
+
+  <section1 topic='Bootstrapping Trust'>
+    <p>After the c2c connection is secure the clients MAY use this secure and trusted connection to update their information on each other. Using XEP-0189 "Requesting Public Keys Directly From Another Entity" or "Sending Public Keys Directly To Another Entity" they can bootstrap a different mechanisms for the next time. A SRP-based connection can bootstrap the trust of a self-signed certificate which will used the next time these two clients connect to each other. It can also be used to automatically sign an OpenPGP key with a minimum level of trust.</p>
+  </section1>
+
+  <section1 topic='Usability Considerations' anchor='user'>
+    <p>Usability Considerations will be provided in a later version of this document.</p>
+  </section1>
+
+  <section1 topic='Implementation Notes' anchor='impl'>
+    <p>It is RECOMMENDED to always create a self-signed X.509 certificate for a client. It is of less value than an OpenPGP key also used by other applications and connected to a web-of-trust. It MAY also be stored on the users PC unencrypted like the XMPP password. This makes it possible to open secure communications without entering the OpenPGP password or the shared secret. Of cause, storing the X.509 certificate in plain text reduces the security. It all depends on how much the user trusts the PC.</p>
+  </section1>
+
+  <section1 topic='Security Considerations' anchor='security'>
+    <p>Additional security considerations will be provided in a later version of this document.</p>
+  </section1>
+
+  <section1 topic='IANA Considerations' anchor='iana'>
+    <p>This document requires no interaction with &IANA;.</p>
+  </section1>
+
+  <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <p>XMPP Registrar considerations will be provided in a later version of
+      this document.</p>
+  </section1>
+
+  <section1 topic='Acknowledgements'>
+    <p>
+      The author would like to thank Eric Rescorla for suggesting TLS-SRP and
+      others on the xmpp-security mailing list for the discussion.
+    </p>
+  </section1>
+
+  <section1 topic='XML Schema' anchor='schema'>
+    <p>The XML schema will be provided in a later version of this document.</p>
+  </section1>
+</xep>
