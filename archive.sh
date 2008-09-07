@@ -26,10 +26,7 @@
 #
 ## END LICENSE ##
 
-# STAGE
-#xeppath=/var/www/stage.xmpp.org/extensions
-# PRODUCTION
-xeppath=/var/www/xmpp.org/extensions
+xeppath=/var/www/vhosts/xmpp.org/extensions
 
 cp $xeppath/xep-$1.html $xeppath/attic/xep-$1-$2.html
 

@@ -26,8 +26,7 @@
 #
 ## END LICENSE ##
 
-# PRODUCTION
-xeppath=/var/www/xmpp.org/extensions
+xeppath=/var/www/vhosts/xmpp.org/extensions
 
 ls xep-0*.xml > tmp1.txt
 sed s/^xep-// tmp1.txt > tmp2.txt
