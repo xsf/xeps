@@ -229,16 +229,6 @@ THE SOFTWARE.
               &lt;<a href='{$registryURL}'><xsl:value-of select='$registryURL'/></a>&gt;
               <br />
             </xsl:if>
-            <xsl:variable name='wikiURL'>
-              <xsl:text>http://wiki.jabber.org/index.php/</xsl:text>
-              <xsl:value-of select='/xep/header/title'/>
-              <xsl:text> (XEP-</xsl:text>
-              <xsl:value-of select='/xep/header/number'/>
-              <xsl:text>)</xsl:text>
-            </xsl:variable>
-            <xsl:if test='$thestatus != "ProtoXEP"'>
-              Wiki Page: &lt;<a href='{$wikiURL}'><xsl:value-of select='$wikiURL'/></a>&gt;
-            </xsl:if>
           </p>
         <hr />
         <!-- AUTHOR INFO -->
