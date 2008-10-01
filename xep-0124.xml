@@ -28,10 +28,10 @@
     &dizzyd;
     &stpeter;
     <revision>
-      <version>1.7pre1</version>
-      <date>in progress, last updated 2008-08-14</date>
+      <version>1.7rc2</version>
+      <date>in progress, last updated 2008-10-01</date>
       <initials>psa</initials>
-      <remark><p>Moved alternative script syntax to historical specification; added implementation note about HTTP Pipelining.</p></remark>
+      <remark><p>Moved alternative script syntax to historical specification; added implementation note about HTTP Pipelining; adjusted architectural description.</p></remark>
     </revision>
     <revision>
       <version>1.6</version>
@@ -139,7 +139,7 @@
   <section1 topic="Introduction" anchor='intro'>
     <p>Certain applications often find that arbitrary TCP connections (see &rfc0793;) cannot be established (e.g., applications that are restricted either by their runtime environments or by firewalls permitting only Web browsing). BOSH, the protocol described in this document, can be used as a "drop-in" alternative to a bidirectional TCP connection. It is a mature, full-featured protocol that has been in use for many years with many open source and commercial implementations. It overcomes common communication constraints by employing fully-compliant HTTP 1.0 or HTTP 1.1 as a transport (see &rfc1945; and &rfc2616;) without then need for "cookies" (see &rfc2965;).  <note>Requiring cookies is sub-optimal because several significant computing platforms provide only limited access to underlying HTTP requests/responses; worse, some platforms hide or remove cookie-related headers.</note></p>
     <p>BOSH can transport any data efficiently and with minimal latency in both directions. For applications that require both "push" and "pull" communications, BOSH is significantly more bandwidth-efficient and responsive than most other bidirectional HTTP-based transport protocols (e.g. &xep0025;) and the techniques now commonly known as "AJAX".</p>
-    <p>BOSH achieves this efficiency and low latency by avoiding polling without resorting to chunked HTTP responses (i.e. without using the technique which is now commonly known as "Comet"). The protocol employs multiple synchronous HTTP request/response pairs, enabling it to pass through even those proxies that buffer partial HTTP responses before forwarding the full responses only once they are available.</p>
+    <p>BOSH achieves this efficiency and low latency by avoiding polling without using chunked HTTP responses (i.e. without using the technique which is now commonly known as "Comet"). The protocol employs multiple synchronous HTTP request/response pairs, enabling it to pass through even those proxies that buffer partial HTTP responses before forwarding the full responses only once they are available.</p>
     <p>Note: Although the XML being transported in the examples herein is XMPP (see &rfc3920;), this transport is not part of XMPP. In fact, from its conception the intention was that BOSH could be used to implement any bidirectional XML stream transporting a mixture of elements qualified by namespaces defined by different protocols (e.g., both XMPP and JSON). This mix is necessary since some connection managers might not support <link url="#multi">Multiple Streams</link> and constrained clients often have no access to HTTP Pipelining (which limits them to one BOSH session at a time). BOSH connection managers are generally not required to understand anything about the XML content that they transport beyond perhaps ensuring that each XML stanza is qualified by the correct namespace. &xep0206; documents some XMPP-specific extensions of this protocol that were formerly included in this document.</p>
     <p>Note: This document inherits terminology regarding the Hypertext Transport Protocol from <cite>RFC 1945</cite> and <cite>RFC 2616</cite>.</p>
   </section1>
@@ -147,10 +147,9 @@
     <p>The following design requirements reflect the need to offer performance as close as possible to a standard TCP connection.</p>
     <ol>
       <li>Compatible with constrained runtime environments* (e.g., mobile and browser-based clients).</li>
-      <li>Enable browser-based clients to make bidirectional cross-domain connections.**</li>
-      <li>Compatible with proxies that buffer partial HTTP responses.**</li>
-      <li>Efficient through proxies that limit the duration of HTTP responses.**</li>
-      <li>Fully compatible with HTTP/1.0.**</li>
+      <li>Compatible with proxies that buffer partial HTTP responses.</li>
+      <li>Efficient through proxies that limit the duration of HTTP responses.</li>
+      <li>Fully compatible with HTTP/1.0.</li>
       <li>Compatible with restricted network connections (e.g., firewalls, proxies, and gateways).</li>
       <li>Fault tolerant (e.g., session recovers after an underlying TCP connection breaks at any stage during an HTTP request).</li>
       <li>Extensible.</li>
@@ -168,23 +167,22 @@
       <li>The body of each HTTP request and response is parsable XML with a single root element.</li>
       <li>Clients can specify the Content-Type of the HTTP responses they receive.</li>
     </ol>
-    <p>**Note: These requirements are not possible to fulfill these requirements with the Comet technique.</p>
   </section1>
   <section1 topic="Architectural Assumptions" anchor='arch'>
-    <p>This document assumes that most implementations will utilize a specialized "connection manager" to handle HTTP connections rather than the usual TCP connections. Effectively, such a connection manager will be a specialized HTTP server that translates between the HTTP requests and responses defined herein and the data streams (or API) implemented by the server or servers with which it communicates, thus enabling an HTTP client to connect to a server. We can illustrate this graphically as follows:</p>
+    <p>This document assumes that most implementations will utilize a specialized connection manager ("CM") to handle HTTP connections rather than the native connection type for the relevant application (e.g., TCP connections in XMPP). Effectively, such a connection manager is a specialized HTTP server that translates between the HTTP requests and responses defined herein and the data streams (or API) implemented by the server with which it communicates, thus enabling a client to connect to a server via HTTP on port 80 or 443 instead of an application-specific port. We can illustrate this graphically as follows:</p>
     <code><![CDATA[
-    Server
-      |
-      |  [unwrapped data streams]
-      |
-Connection Manager
-      |
-      |  [HTTP + <body/> wrapper]
-      |
-  HTTP Client
+      Server
+        |
+        |  [unwrapped data streams]
+        |
+     HTTP CM
+        |
+        |  [HTTP + <body/> wrapper]
+        |
+      Client
     ]]></code>
-    <p>This specification covers communications between an HTTP client and the connection manager only. It does not cover communications between the connection manager and the server, since such communications are implementation-specific (e.g., the server might natively support this HTTP binding, in which case the connection manager will be a logical entity rather than a physical entity; alternatively the connection manager might be an independent translating proxy such that the server might believe it is talking directly to the client over TCP; or the connection manager and the server might use a component protocol or an API defined by the server implementation).</p>
-    <p>Furthermore, no aspect of this protocol limits its use to client-to-server communications. It could be used for server-to-server or component-to-server communications as well. However, this document focuses exclusively on use of the transport by clients that cannot maintain arbitrary persistent TCP connections with a server. We assume that servers and components are under no such restrictions and thus would use TCP. (However, on some unreliable networks, BOSH might enable more stable communication between servers.)</p>
+    <p>This specification covers communication only between a client and the connection manager. It does not cover communication between the connection manager and the server, since such communications are implementation-specific (e.g., the server might natively support this HTTP binding, in which case the connection manager will be a logical entity rather than a physical entity; alternatively the connection manager might be an independent translating proxy such that the server might believe it is talking directly to the client over TCP; or the connection manager and the server might use a component protocol or an API defined by the server implementation).</p>
+    <p>Furthermore, no aspect of this protocol limits its use to communication between a client and a server. For example, it could be used for communication between a server and a peer server if such communication can occur for the relevant application (e.g., in XMPP). However, this document focuses exclusively on use of the transport by clients that cannot maintain arbitrary persistent TCP connections with a server. We assume that servers and components are under no such restrictions and thus would use the native connection transport for the relevant application. (However, on some unreliable networks, BOSH might enable more stable communication between servers.)</p>
   </section1>
   <section1 topic="The BOSH Technique" anchor='technique'>
     <p>Since HTTP is a synchronous request/response protocol, the traditional solution to emulating a bidirectional-stream over HTTP involved the client intermittently polling the connection manager to discover if it has any data queued for delivery to the client. This naive approach wastes a lot of network bandwidth by polling when no data is available. It also reduces the responsiveness of the application since the data spends time queued waiting until the connection manager receives the next poll (HTTP request) from the client. This results in an inevitable trade-off between responsiveness and bandwidth, since increasing the polling frequency will decrease latency but simultaneously increase bandwidth consumption (or vice versa if polling frequency is decreased).</p>
@@ -193,7 +191,7 @@ Connection Manager
     <p>BOSH works reliably even if network conditions force every HTTP request to be made over a different TCP connection. However, if as is usually the case, the client is able to use HTTP/1.1, then (assuming reliable network conditions) all requests during a session will pass over the same two persistent TCP connections. Almost all of the time (see below) the client is able to push data on one of the connections, while the connection manager is able to push data on the other (so latency is as low as a standard TCP connection). It's interesting to note that the roles of the two connections typically switch whenever the client sends data to the connection manager.</p>
     <p>If there is no traffic in either direction for an agreed amount of time (typically several minutes), then the connection manager responds to the client with no data, and that response immediately triggers a fresh client request. The connection manager does so to ensure that if a network connection is broken then both parties will realise within a reasonable amount of time. This exchange is similar to the "keep-alive" or "ping" that is common practice over most persistent TCP connections. Since the BOSH technique involves no polling, bandwidth consumption is not significantly greater than a standard TCP connection. <note>If there is no traffic other than the "pings" then bandwidth consumption will be double that of a TCP connection (although double nothing is still nothing). If data is sent in large packets then bandwidth consumption will be almost identical.</note></p>
     <p>Most of the time data can be pushed immediately. However, if one of the endpoints has just pushed some data then it will usually have to wait for a network round trip until it is able to push again. If HTTP Pipelining is available to the client then multiple concurrent requests are possible. Thus the client can always push data immediately. It can also ensure the connection manager is always holding enough requests such that even during bursts of activity it will never have to wait before pushing data. Furthermore, if the pool of requests being held by the connection manager is large enough, then the client will not be under pressure to send a new empty request immediately after receiving data from the connection manager. It can instead wait until it needs to send data. Therefore, if over time the traffic to and from the client is balanced, bandwidth consumption will be about the same as if a standard TCP connection were being used.</p>
-    <p>Each block of data pushed by the connection manager is a complete HTTP response. So, unlike the Comet technique, the BOSH technique works through intermediate proxies that buffer partial HTTP responses. It is also fully compliant with HTTP/1.0 -- which does not provide for chunked transfer encoding. Also unlike Comet, Web clients can use BOSH to make cross-domain connections.</p>
+    <p>Each block of data pushed by the connection manager is a complete HTTP response. So, unlike the Comet technique, the BOSH technique works through intermediate proxies that buffer partial HTTP responses. It is also fully compliant with HTTP/1.0 -- which does not provide for chunked transfer encoding.</p>
   </section1>
   <section1 topic="HTTP Overview" anchor='overview'>
     <p>All information is encoded in the body of standard HTTP POST requests and responses. Each HTTP body contains a single &lt;body/&gt; wrapper which encapsulates the XML elements being transferred (see <link url="#wrapper">&lt;body/&gt; Wrapper Element</link>).</p>
@@ -256,7 +254,7 @@ Content-Length: 104
       <p>After receiving a new session request, the connection manager MUST generate an opaque, unpredictable session identifier (or SID). The SID MUST be unique within the context of the connection manager application. The &lt;body/&gt; element of the connection manager's response to the client's session creation request MUST possess the following attributes (they SHOULD NOT be included in any other responses):</p>
       <ul>
         <li><strong>'sid'</strong> -- This attribute specifies the SID</li>
-        <li><strong>'wait'</strong> -- This is the longest time (in seconds) that theconnection manager will wait before responding to any request during the session. The time MUST be less than or equal to the value specified in the session request.</li>
+        <li><strong>'wait'</strong> -- This is the longest time (in seconds) that the connection manager will wait before responding to any request during the session. The time MUST be less than or equal to the value specified in the session request.</li>
       </ul>
       <p>The &lt;body/&gt; element SHOULD also include the following attributes (they SHOULD NOT be included in any other responses):</p>
       <ul>
