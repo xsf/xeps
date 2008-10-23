@@ -7,7 +7,7 @@
 <xep>
 <header>
   <title>Serverless Messaging</title>
-  <abstract>This specification defines how to communicate over local or wide-area networks using the principles of zero-configuration networking for endpoint discovery and the syntax of XML streams and XMPP messaging for real-time communication. This method uses DNS-based Service Discovery and Multicast DNS (or Wide-Area DNS-SD) to discover entities that support the protocol, including their IP addresses and preferred ports. Any two entities can then negotiate a serverless connection using standard XML streams in order to exchange XMPP message and IQ stanzas.</abstract>
+  <abstract>This specification defines how to communicate over local or wide-area networks using the principles of zero-configuration networking for endpoint discovery and the syntax of XML streams and XMPP messaging for real-time communication. This method uses DNS-based Service Discovery and Multicast DNS to discover entities that support the protocol, including their IP addresses and preferred ports. Any two entities can then negotiate a serverless connection using XML streams in order to exchange XMPP message and IQ stanzas.</abstract>
   &LEGALNOTICE;
   <number>0174</number>
   <status>Draft</status>
@@ -27,10 +27,10 @@
   <registry/>
   &stpeter;
   <revision>
-    <version>1.3rc1</version>
-    <date>in progress, last updated 2008-10-21</date>
+    <version>1.3rc2</version>
+    <date>in progress, last updated 2008-10-23</date>
     <initials>psa</initials>
-    <remark><p>Corrected TXT record format in conformance with draft-cheshire-dnsext-dns-sd.</p></remark>
+    <remark><p>Corrected TXT record format in conformance with draft-cheshire-dnsext-dns-sd; clarified a number of issues related to DNS-SD and Multicast DNS; as an optimization, recommended sending of disco#info data in stream features; removed reference to Encrypted Sessions specification from the security considerations.</p></remark>
   </revision>
   <revision>
     <version>1.2</version>
@@ -159,11 +159,11 @@
     <p>The Extensible Messaging and Presence Protocol (XMPP) as defined in &rfc3920; does not support direct client-to-client interactions, since it requires authentication with a server: an XMPP client is allowed access to the network only after it has authenticated with a server, and the server will not grant access if authentication fails for any reason. If an unauthenticated client attempts to communicate directly with another client, such communication will fail because all XMPP communications are sent through one or more servers and a client cannot inject messages onto the network unless it first authenticates with a server.</p>
     <p>However, it is possible to establish an XMPP-like communication system on a local (or even wide-area) network using the principles of zero-configuration networking. In this situation, the clients obviate the XMPP requirement for authentication with a server by relying on zero-configuration networking to establish serverless communication using the _presence._tcp DNS SRV service type. Once discovery has been completed, the clients are able to negotiate an XML stream between themselves (as generalized in &xep0246;) and then exchange messages and other structured data using the XMPP &MESSAGE; and &IQ; stanzas.</p>
     <p>Serverless messaging is typically restricted to a local network (or ad-hoc wide-area network) because of how zero-configuration networking works. It is impossible for clients that communicate via this serverless mode to insert messages into an XMPP network, which is why this kind of "mesh" is most accurately referred to as an XMPP-like system that exists outside the context of existing XMPP networks (though see the <link url='#security'>Security Considerations</link> regarding the ability to "forward" messages from a serverless mesh to an XMPP network or vice-versa).</p>
-    <p>Such a "mesh" can be quite valuable in certain circumstances. For instance, participants in a trade show or conference, users of the same wifi hotspot, or employees on the same local area network can communicate without the need for a pre-configured server. For this reason, support for serverless messaging has been a feature of Apple's iChat client when operating in Bonjour (formerly Rendezvous) mode for many years. Because it is desirable for other Jabber/XMPP clients to support such functionality, this document describes how to use zero-configuration networking as the basis for serverless communication, mainly for use on local links (although the protocol can also be used on ad-hoc wide-area networks).</p>
+    <p>Such a "mesh" can be quite valuable in certain circumstances. For instance, participants in a trade show or conference, users of the same wifi hotspot, or employees on the same local area network can communicate without the need for a pre-configured server. For this reason, support for serverless messaging has been a feature of Apple's iChat client when operating in Bonjour (formerly Rendezvous) mode since 2002. Because it is desirable for other Jabber/XMPP clients to support such functionality, this document describes how to use zero-configuration networking as the basis for serverless communication, mainly for use on local links (although the protocol can also be used on ad-hoc wide-area networks).</p>
   </section2>
   <section2 topic='How It Works' anchor='howitworks'>
     <p>This section provides a friendly introduction to serverless messaging. The examples show usage on a local link using dynamically configured link-local addresses as described in &rfc3927; (see the <link url='#impl-wide'>Wide-Area Networks</link> section of this document regarding non-local usage).</p>
-    <p>Imagine that you are a Shakespearean character named Juliet. You are are using your laptop computer (a machine named "pronto") at a wifi hotspot in downtown Verona and you want to find other people to chat with on an ad-hoc basis (i.e., not people in your normal XMPP roster). Therefore your chat client advertises a serverless address of "juliet@pronto" so that other people can dynamically find you at the hotspot. Your client does this by invoking a daemon on your machine that supports DNS-based Service Discovery ("DNS-SD") as defined in &dnssd; and Multicast DNS ("mDNS") as defined in &mdns;. As a result, the daemon stores the following DNS records and listens for multicast DNS queries asking for them:</p>
+    <p>Imagine that you are a Shakespearean character named Juliet. You are are using your laptop computer (a machine named "pronto") at a wifi hotspot in downtown Verona and you want to find other people to chat with on an ad-hoc basis (i.e., not people in your normal XMPP roster). Therefore your chat client advertises a serverless address of "juliet@pronto" so that other people can dynamically find you at the hotspot. Your client does this by invoking a daemon on your machine that supports DNS-based Service Discovery ("DNS-SD") as defined in &dnssd; and Multicast DNS ("mDNS") as defined in &mdns;. As a result, the daemon (1) publishes the following DNS records to the multicast DNS address 224.0.0.251 (or FF02::FB for IPv6) and (2) listens for multicast DNS queries requesting these records:</p>
     <code><![CDATA[
 pronto.local. A 10.2.1.187
 
@@ -177,7 +177,7 @@ _presence._tcp.local. PTR juliet@pronto._presence._tcp.local.
       <li>The SRV record (see &rfc2782;) maps the presence service instance "juliet@pronto" to the machine "pronto.local." on port 5562.</li>
       <li>The PTR ("pointer") record (see &rfc2317; and &rfc1886;) says that there is a service of type "presence" on the local subnet (".local.") called "juliet@pronto" and that the service communicates over TCP.</li>
     </ul>
-    <p>Your chat client also wants to advertise some information about you (subject to your control so that you don't divulge private information). Therefore it invokes the mDNS daemon to also store a single DNS TXT record (see &rfc1464;) that encapsulates some strings of information, where the record name is the same as the SRV record and the record value follows the format defined in <cite>draft-cheshire-dnsext-dns-sd</cite> (note: the line breaks are provided only for the sake of readability).</p>
+    <p>Your chat client also wants to advertise some information about you (subject to your control so that you don't divulge private information). Therefore it invokes the mDNS daemon to also publish a single DNS TXT record (see &rfc1464;) that encapsulates some strings of information, where the record name is the same as the SRV record and the record value follows the format defined in the DNS-SD specification (note: the line breaks are provided only for the sake of readability).</p>
     <code><![CDATA[
 juliet@pronto._presence._tcp.local. IN TXT "
   0x09txtvers=1
@@ -193,11 +193,11 @@ juliet@pronto._presence._tcp.local. IN TXT "
   0x14port.p2pj=5562 
   0x12status=avail 
   0x06vc=CA! 
-  0x33ver=66/0NaeaBKkwk85efJTGmU47vXI\=
+  0x33ver=QgayPKawpkPSDYmwT/WM94uAlu0=
   "
     ]]></code>
     <p>Other people at the hotspot can also advertise similar DNS records for use on the local link. Essentially, the mDNS daemons running on all of the machines at the hotspot collectively manage the ".local." domain, which has meaning only at the hotspot (not across the broader Internet). Queries and responses for services on the local link occur via multicast DNS over UDP port 5353 instead of via normal DNS unicast over UDP port 53. When a new machine joins the local link, it can send out queries for any number of service types, to which the other machines will reply. For the purpose of serverless messaging we are interested only in the "presence" service, but many other services could exist on the local link (see <link url='http://www.dns-sd.org/'>dns-sd.org</link> for a complete list).</p>
-    <p>Now let us imagine that a fine young gentleman named Romeo joins the hotspot and that his chat client (actually his mDNS daemon) sends out multicast DNS queries for services of type "presence". To do this, his client essentially reverses the order of DNS record publication (explained above) by asking for pointers to presence services (i.e., PTR records that match "_presence._tcp.local."), querying each service for its service instance and port (i.e., SRV record), mapping each service instance to an IP address (i.e., A record), and finding out additional information about the entity using the service (i.e., TXT record parameters). As a result, Romeo's client will discover any number of local presence services, among them a service named "juliet@pronto" (with some intriguing TXT record parameters) at IP address 10.2.1.187 and port 5562. Being a romantic fellow, he then initiates a chat with you by opening an XML stream to the advertised IP address and port.</p>
+    <p>Now let us imagine that a fine young gentleman named Romeo joins the hotspot and that his chat client (actually his mDNS daemon) sends out multicast DNS queries for services of type "presence". To do this, his client essentially reverses the order of DNS record publication (explained above) by asking for pointers to presence services (i.e., PTR records that match "_presence._tcp.local."), querying each service for its service instance and port (i.e., SRV record), mapping each service instance to an IP address (i.e., A record), and finding out additional information about the entity using the service (i.e., TXT record parameters). <note>As explained in the DNS-SD specification, these queries might all be returned in the same answer.</note> As a result, Romeo's client will discover any number of local presence services, among them a service named "juliet@pronto" (with some intriguing TXT record parameters) at IP address 10.2.1.187 and port 5562. Being a romantic fellow, he then initiates a chat with you by opening an XML stream to the advertised IP address and port.</p>
     <code><![CDATA[
 <stream:stream 
         xmlns='jabber:client' 
@@ -206,7 +206,7 @@ juliet@pronto._presence._tcp.local. IN TXT "
         to='juliet@pronto'
         version='1.0'>
     ]]></code>
-    <p>Your client then responds with a response stream header (perhaps subject to user approval -- it's not always safe to chat with strangers!).</p>
+    <p>Your client then responds with a response stream header.</p>
     <code><![CDATA[
 <stream:stream 
         xmlns='jabber:client' 
@@ -270,25 +270,25 @@ juliet@pronto._presence._tcp.local. IN TXT "
     <li>
       <p>A PTR record of the following form:</p>
       <code><![CDATA[
-_presence._tcp.local. PTR username@machine-name._presence._tcp.local.
+_presence._tcp.local. PTR user@machine._presence._tcp.local.
       ]]></code>
     </li>
     <li>
       <p>An address ("A" or "AAAA") record of the following form (where the IP address can be either an IPv4 address or an IPv6 address):</p>
       <code><![CDATA[
-machine-name.local. A ip-address
+machine.local. A ip-address
       ]]></code>
     </li>
     <li>
       <p>An SRV record of the following form:</p>
       <code><![CDATA[
-username@machine-name._presence._tcp.local <ttl> SRV <priority> <weight> port-number machine-name.local. 
+user@machine._presence._tcp.local <ttl> SRV <priority> <weight> port-number machine.local. 
       ]]></code>
     </li>
     <li>
-      <p>Optionally, a TXT record whose name is the same as the SRV record and whose value follows the format defined in <cite>draft-cheshire-dnsext-dns-sd</cite>, as further described in the <link url='#txt'>TXT Record</link> section of this document (note: the line breaks are provided only for the sake of readability):</p>
+      <p>A TXT record whose name is the same as the SRV record and whose value follows the format defined in the DNS-SD specification, as further described in the <link url='#txt'>TXT Record</link> section of this document (note: the line breaks are provided only for the sake of readability):</p>
       <code><![CDATA[
-username@machine-name._presence._tcp.local. IN TXT "
+user@machine._presence._tcp.local. IN TXT "
   0x##txtvers=1
   0x##1st=user-first-name"
   0x##email=user-email-address"
@@ -307,9 +307,10 @@ username@machine-name._presence._tcp.local. IN TXT "
   0x##ver=entity-capabilities-identity"
   "
       ]]></code>
+      <p>Note: The DNS-SD specification stipulates that the TXT record MUST be published, but that it MAY contain no more than a single zero byte (e.g., if the user does not wish to publish any personal information).</p>
     </li>
   </ol>
-  <p>The "machine-name" is the name of the computer, the "username" is the system username of the principal currently logged into the computer, the "port" can be any unassigned port number, and the "ip-address" is the physical address of the computer on the local network.</p>
+  <p>The "machine" is the name of the computer, the "user" is the system username of the principal currently logged into the computer, the "port" can be any unassigned port number, and the "ip-address" is the physical address of the computer on the local network.</p>
   <p>So, for example, if the machine name is "pronto", the username is "juliet", the chosen port is "5562", the IP address is "10.2.1.187", and the personal information is that plausibly associated with a certain Shakespearean character, the DNS records would be as follows:</p>
   <code><![CDATA[
 _presence._tcp.local. PTR juliet@pronto._presence._tcp.local.
@@ -332,72 +333,76 @@ juliet@pronto._presence._tcp.local. IN TXT "
   0x14port.p2pj=5562 
   0x12status=avail 
   0x06vc=CA! 
-  0x33ver=66/0NaeaBKkwk85efJTGmU47vXI\=
+  0x33ver=QgayPKawpkPSDYmwT/WM94uAlu0=
   "
   ]]></code>
   <p>The IPv4 and IPv6 addresses associated with a machine might vary depending on the local network to which the machine is connected. For example, on an Ethernet connection the physical address might be "192.168.0.100" but when the machine is connected to a wireless network the physical address might change to "10.10.1.187". See <cite>RFC 3927</cite> for details.</p>
   <p>If the machine name asserted by a client is already taken by another machine on the network, the client MUST assert a different machine name, which SHOULD be formed by adding the character "-" and digit "1" to the end of the machine name string (e.g., "pronto-1"), adding the character "-" and digit "2" if the resulting machine name is already taken (e.g., "pronto-2"), and similarly incrementing the digit until a unique machine name is constructed.</p> 
   <p>If the username asserted by a client is already taken by another application on the machine, the client MUST assert a different username, which SHOULD be formed by adding the character "-" and digit "1" to the end of the username string (e.g., "juliet-1"), adding the character "-" and digit "2" if the resulting username is already taken (e.g., "juliet-2"), and similarly incrementing the digit until a unique username is constructed.</p> 
   <section2 topic='TXT Record' anchor='txt'>
-    <p>DNS-SD enables service definitions to include a TXT record that specifies parameters to be used in the context of the relevant service type. The name of the TXT record is the same as that of the SRV record (i.e., "username@machine-name._presence._tcp.local."). The value of the TXT record is a binary object that contains one or more strings, where (1) each string is a parameter that usually takes the form of a key-value pair and (2) the parameters are separated by a single-length byte ("0x##") that specifies the length of the parameter itself.</p>
+    <p>DNS-SD enables service definitions to include a TXT record that specifies parameters to be used in the context of the relevant service type. The name of the TXT record is the same as that of the SRV record (i.e., "user@machine._presence._tcp.local."). The value of the TXT record is a binary object that contains one or more strings, where (1) each string is a parameter that usually takes the form of a key-value pair and (2) the parameters are separated by a single-length byte ("0x##") that specifies the length of the parameter itself.</p>
     <p>For detailed information about the format of the TXT record value, refer to the DNS-SD specification. The following truncated example illustrates the format.</p>
     <code><![CDATA[
 --------------------------------------------------------------------------
 | 0x09 | txtvers=1 | 0x10 | 1st=Juliet | 0x1E | email=juliet@capulet.lit |
 --------------------------------------------------------------------------
     ]]></code>
-    <p>Note: In accordance with Section 6.7 of <cite>draft-cheshire-dnsext-dns-sd</cite>, the first parameter in the TXT record value SHOULD be "txtvers".</p>
-    <p>The &REGISTRAR; maintains a registry of the parameters that can be used in the TXT record value for the _presence._tcp service type, as specified in the <link url='#registrar'>XMPP Registrar Considerations</link> section of this document. Those parameters are not listed here.</p>
-    <p>It is OPTIONAL to include any of these TXT record parameters, and an implementation MUST NOT fail (i.e., MUST enable serverless messaging) even if none of the parameters are provided by another entity.</p>
+    <p>In the context of serverless messaging, the following rules apply:</p>
+    <ol>
+      <li>The entire TXT record needs to comply with the suggested maximum TXT record size (see Section 6.3 of the DNS-SD specification).</li>
+      <li>A given key MUST NOT occur more than once in a given TXT record value (see Section 6.4 of the DNS-SD specification).</li>
+      <li>The first parameter in the TXT record value SHOULD be "txtvers" (see Section 6.7 of the DNS-SD specification).</li>
+    </ol>
+    <p>The &REGISTRAR; maintains a registry of the parameters that can be used in the TXT record value for the _presence._tcp service type, as specified in the <link url='#registrar'>XMPP Registrar Considerations</link> section of this document. Those parameters are not listed here. It is OPTIONAL to include any of these TXT record parameters, and an implementation MUST NOT fail (i.e., MUST enable serverless messaging) even if none of the parameters are provided by another entity. However, as mentioned the TXT reocrd MUST be published (although its value MAY be a single zero byte).</p>
     <p>Most of the registered TXT record parameters relate to human users, in which context certain parameters are of greater interest than others, e.g. "msg", "nick", and "status"; however, serverless messaging can be used by non-human entities (e.g., devices).</p>
     <p>Note: See the <link url='#security'>Security Considerations</link> section of this document regarding the inclusion of information that can have an impact on personal privacy (e.g., the "1st", "last", "nick", "email", and "jid" parameters).</p>
   </section2>
 </section1>
 
 <section1 topic='Discovering Other Users' anchor='disco'>
-  <p>In order to discover other users, a client sends an mDNS request for PTR records that match "_presence._tcp.local.". The client then receives replies from all machines that advertise support for serverless messaging. <note>The replies will include a record corresponding the client itself; the client MUST filter out this result.</note> The client MAY then find out detailed information about each machine by sending SRV and TXT queries to "username@machine-name.local." for each machine (however, to preserve bandwidth, the client SHOULD NOT send these queries unless it is about to initiate communication with the other user, and it MUST cancel the queries after it has received a response). Note: The presence name to be used for display in a serverless "roster" SHOULD be obtained from the &lt;Instance&gt; portion of the received PTR record for each user; however, the client MAY instead display a name or nickname derived from the TXT record if available.</p>
+  <p>In order to discover other users, a client sends an mDNS request for PTR records that match "_presence._tcp.local.". The client then receives replies from all machines that advertise support for serverless messaging. <note>The replies will include a record corresponding to the client itself; the client MUST filter out this result.</note> In accordance with Section 13 of the DNS-SD specification, these replies can include the SRV, A/AAAA, and TXT records in the Additional Section of the DNS message (subject to the size limits described in Section 19 of the Multicast DNS specification).</p>
+  <p>The client MAY then find out detailed information about each machine by sending SRV and TXT queries <note>These questions MAY all be sent in one DNS query packet.</note> to "user@machine.local." for each machine; however, to preserve bandwidth, the client SHOULD NOT send these queries unless it is about to initiate communication with the other user, and it MUST cancel the queries after it has received a response). 
+  </p>
 </section1>
 
 <section1 topic='Exchanging Presence' anchor='presence'>
-  <p>When the _presence._tcp service is used, presence is exchanged via the format described in the <link url='#txt'>TXT Record</link> section of this document. In particular, presence information is not pushed as in XMPP (see &rfc3921;). Instead, clients listen for presence announcements from other entities on the local link or wide-area network. Recommended rates for sending updates can be found in <cite>Multicast DNS</cite>.</p>
+  <p>When the _presence._tcp service is used, presence is exchanged via the format described in the <link url='#txt'>TXT Record</link> section of this document. In particular, presence information is not pushed as in XMPP (see &rfc3921;). Instead, clients listen for presence announcements from other entities on the local link or wide-area network. Recommended rates for sending updates can be found in the Multicast DNS specification.</p>
 </section1>
 
-<section1 topic='Discovering Capabilities' anchor='caps'>
-  <p>Because serverless communication does not involve the exchange of XMPP presence, it is not possible to use &xep0115; for capabilities discovery. Therefore, it is RECOMMENDED to instead include the node, hash, and ver TXT record parameters (and OPTIONAL to include the ext parameter). The values of these parameters MUST be the same as the values for the 'node', 'hash', 'ver', and 'ext' attributes that are advertised for the application in normal XMPP presence (if any) via the Entity Capabilities protocol as described in <cite>XEP-0115</cite>.</p>
-</section1>
-
-<section1 topic='Initiating a Messaging Session' anchor='initiate'>
+<section1 topic='Initiating an XML Stream' anchor='initiate'>
   <p>In order to exchange serverless messages, the initiator and recipient MUST first establish XML streams between themselves, as is familiar from <cite>RFC 3920</cite>.</p>
   <p>First, the initiator opens a TCP connection at the IP address and port discovered via the DNS lookup for an entity and opens an XML stream to the recipient, which SHOULD include 'to' and 'from' address:</p>
-  <example caption="Opening a Stream"><![CDATA[
-<stream:stream 
-        xmlns='jabber:client' 
-        xmlns:stream='http://etherx.jabber.org/streams'
-        from='romeo@forza'
-        to='juliet@pronto'
-        version='1.0'>
+  <example caption="Initiator Opens a Stream"><![CDATA[
+I: <stream:stream 
+           xmlns='jabber:client' 
+           xmlns:stream='http://etherx.jabber.org/streams'
+           from='romeo@forza'
+           to='juliet@pronto'
+           version='1.0'>
   ]]></example>
   <p>Note: If the initiator supports stream features and the other stream-related aspects of XMPP 1.0 as specified in <cite>RFC 3920</cite>, then it SHOULD include the version='1.0' flag as shown in the previous example.</p>
   <p>The recipient then responds with a stream header as well:</p>
-  <example caption="Stream Header Response"><![CDATA[
-<stream:stream 
-        xmlns='jabber:client' 
-        xmlns:stream='http://etherx.jabber.org/streams'
-        from='juliet@pronto'
-        to='romeo@forza'
-        version='1.0'>
+  <example caption="Recipient Sends Stream Header Response"><![CDATA[
+R: <stream:stream 
+           xmlns='jabber:client' 
+           xmlns:stream='http://etherx.jabber.org/streams'
+           from='juliet@pronto'
+           to='romeo@forza'
+           version='1.0'>
   ]]></example>
   <p>If both the initiator and recipient included the version='1.0' flag, the recipient SHOULD also send stream features as specified in <cite>RFC 3920</cite>:</p>
   <example caption="Recipient Sends Stream Features"><![CDATA[
-<stream:features>
-  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
-</stream:features>
+R: <stream:features>
+     <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+       <optional/>
+     </starttls>
+   </stream:features>
   ]]></example>
   <p>The exchange of stream headers results in an unencrypted and unauthenticated channel between the two entities. See the <link url='#security'>Security Considerations</link> section of this document regarding methods for authenticating and encrypting the stream.</p>
 </section1>
 
-<section1 topic='Exchanging Messages' anchor='exchange'>
-  <p>Once the streams are established, either entity then can send XMPP message or IQ stanzas by specifying 'to' and 'from' addresses using the logical addresses: <note>The to and from addresses MUST be of the form "username@machine-name" as discovered via SRV (this is the &lt;Instance&gt; portion of the Service Instance Name).</note></p>
+<section1 topic='Exchanging Stanzas' anchor='exchange'>
+  <p>Once the streams are established, either entity then can send XMPP message or IQ stanzas by specifying 'to' and 'from' addresses using the logical addresses: <note>The to and from addresses MUST be of the form "user@machine" as discovered via SRV (this is the &lt;Instance&gt; portion of the Service Instance Name).</note></p>
   <example caption="Sending a Message"><![CDATA[
 <message from='romeo@forza' to='juliet@pronto'>
   <body>M'lady, I would be pleased to make your acquaintance.</body>
@@ -410,21 +415,65 @@ juliet@pronto._presence._tcp.local. IN TXT "
   ]]></example>
 </section1>
 
-<section1 topic='Ending a Messaging Session' anchor='end'>
+<section1 topic='Ending an XML Stream' anchor='end'>
   <p>To end the chat, either party closes the XML stream:</p>
   <example caption="Ending the Chat"><![CDATA[
-</stream:stream>
+R: </stream:stream>
   ]]></example>
   <p>The other party MUST then also close the stream in the other direction:</p>
   <example caption="Closing the Stream"><![CDATA[
-</stream:stream>
+I: </stream:stream>
   ]]></example>
   <p>The closing party (i.e., the party that sent the first closing stream tag) then MUST close the TCP connection between them.</p>
   <p>Note: The closing party might receive additional stanzas from the other party after sending its closing stream tag and before receiving a closing stream tag from the other party (e.g., because of network latency or because the other party has messages queued up for delivery when it receives the closing party's closing stream tag). Therefore, the closing party needs to be prepared to handle such messages, which it SHOULD do by presenting them to the controlling user (if any).</p>
 </section1>
 
 <section1 topic='Going Offline' anchor='offline'>
-  <p>In order to go offline, a link-local entity MUST send a Multicast DNS "Goodbye" packet for the user's PTR record. As a result, all other entities on the local network will receive a Multicast DNS "Remove" event, at which point they MUST cancel any outstanding TXT, SRV, or NULL record queries for the offline user.</p>
+  <p>In order to go offline, a link-local entity MUST send a Multicast DNS "Goodbye" packet for the user's PTR record as described in Section 11.2 of the Multicast DNS specification. As a result, all other entities on the local network will receive a Multicast DNS "Remove" event, at which point they MUST cancel any outstanding TXT, SRV, or NULL record queries for the offline user.</p>
+</section1>
+
+<section1 topic='Discovering Capabilities' anchor='caps'>
+  <p>Because serverless communication does not involve the exchange of XMPP presence, it is not possible to use &xep0115; for capabilities discovery. Therefore, it is RECOMMENDED to instead include the node, hash, and ver TXT record parameters (and OPTIONAL to include the ext parameter). The values of these parameters MUST be the same as the values for the 'node', 'hash', 'ver', and 'ext' attributes that are advertised for the application in normal XMPP presence (if any) via the Entity Capabilities protocol as described in <cite>XEP-0115</cite>.</p>
+  <p>As with Entity Capabilities over native XMPP networks, a client might not know the &xep0030; features associated with the 'ver' value advertised by another entity. However, in the case of serverless messaging there is no way for the client to discover the entity's supported features without initiating an XML stream to that entity and then sending a Service Discovery information ("disco#info") request over the negotiated stream.</p>
+  <p>Unfortunately, full stream negotiation (including TLS and SASL if appropriate) can require a large number of packets. Therefore, as an optimization, it is RECOMMENDED for the receiving entity in a serverless XML stream negotiation to include its disco#info data (including node) as a stream feature, as shown in the following examples.</p>
+  <example caption="Initiator Opens a Stream"><![CDATA[
+I: <stream:stream 
+           xmlns='jabber:client' 
+           xmlns:stream='http://etherx.jabber.org/streams'
+           from='romeo@forza'
+           to='juliet@pronto'
+           version='1.0'>
+  ]]></example>
+  <example caption="Recipient Sends Stream Header Response"><![CDATA[
+R: <stream:stream 
+           xmlns='jabber:client' 
+           xmlns:stream='http://etherx.jabber.org/streams'
+           from='juliet@pronto'
+           to='romeo@forza'
+           version='1.0'>
+  ]]></example>
+  <example caption="Recipient Sends Stream Features"><![CDATA[
+R: <stream:features>
+     <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+       <optional/>
+     </starttls>
+     <query xmlns='http://jabber.org/protocol/disco#info'
+            node='http://code.google.com/p/exodus#QgayPKawpkPSDYmwT/WM94uAlu0='>
+       <identity category='client' name='Exodus 0.9.1' type='pc'/>
+       <feature var='http://jabber.org/protocol/caps'/>
+       <feature var='http://jabber.org/protocol/disco#info'/>
+       <feature var='http://jabber.org/protocol/disco#items'/>
+       <feature var='http://jabber.org/protocol/muc'/>
+     </query>
+   </stream:features>
+  ]]></example>
+  <p>If the initiating entity was connecting to the receiving entity only to perform a Service Discovery query, it SHOULD then end the stream:</p>
+  <example caption="Initiating Entity Terminates XML Stream"><![CDATA[
+I: </stream:stream>
+  ]]></example>
+  <example caption="Receiving Entity Mirrors Stream Termination"><![CDATA[
+R: </stream:stream>
+  ]]></example>
 </section1>
 
 <section1 topic='Implementation Notes' anchor='impl'>
@@ -446,23 +495,22 @@ _presence._tcp.local. IN NULL raw-binary-data-here
   <section2 topic='Wide-Area Networks' anchor='impl-wide'>
     <p>Serverless messaging via the _presence._tcp DNS SRV service type is not limited to local networks, since it is possible to advertise this service type via Wide-Area DNS-SD as described at &lt;<link url='http://www.dns-sd.org/iChatWideArea.html'>http://www.dns-sd.org/iChatWideArea.html</link>&gt;. Although the protocol is most commonly used on local networks, there is nothing intrinsic to the protocol that limits its use to peers on the same link, and it also works between any two peers that can discover each other via any profile of DNS-SD (whether local or wide-area). Naturally, the DNS records used in Wide-Area DNS-SD will not contain the ".local." domain, since the records are not intended for use over a local link.</p>
   </section2>
+  <section2 topic='User Interface' anchor='impl-ui'>
+    <p>The presence name to be used for display in a serverless "roster" SHOULD be obtained from the &lt;Instance&gt; portion of the received PTR record for each user; however, the client MAY instead display a name or nickname derived from the TXT record if available.</p>
+    <p>A client MAY require user approval before allowing a human user to chat with other users over serverless messaging.</p>
+  </section2>
 </section1>
 
 <section1 topic='Internationalization Considerations' anchor='i18n'>
-  <p><cite>RFC 1035</cite> does not allow characters outside the &ascii; character range in DNS A records. Therefore the "machine-name" portion of an A record as used for serverless messaging MUST NOT contain characters outside the US-ASCII character range.</p>
-  <p>Although <cite>RFC 2317</cite> and <cite>RFC 2782</cite> do not allow characters outside the US-ASCII character range in PTR and SRV records respectively, Section 4.1 of <cite>DNS-Based Service Discovery</cite> recommends support for UTF-8-encoded Unicode characters in the &lt;Instance&gt; portion of Service Instance Names, which in serverless messaging is the "username@machine-name" portion of the PTR or SRV record. This document adheres to the recommendation in <cite>DNS-Based Service Discovery</cite>. However, as mentioned above, the "machine-name" portion of the &lt;Instance&gt; portion MUST NOT contain characters outside the US-ASCII range.</p>
+  <p><cite>RFC 1035</cite> does not allow characters outside the &ascii; character range in DNS A records. Therefore the "machine" portion of an A record as used for serverless messaging MUST NOT contain characters outside the US-ASCII character range.</p>
+  <p>Although <cite>RFC 2317</cite> and <cite>RFC 2782</cite> do not allow characters outside the US-ASCII character range in PTR and SRV records respectively, Section 4.1 of <cite>DNS-Based Service Discovery</cite> recommends support for UTF-8-encoded Unicode characters in the &lt;Instance&gt; portion of Service Instance Names, which in serverless messaging is the "user@machine" portion of the PTR or SRV record. This document adheres to the recommendation in <cite>DNS-Based Service Discovery</cite>. However, as mentioned above, the "machine" portion of the &lt;Instance&gt; portion MUST NOT contain characters outside the US-ASCII range.</p>
   <p>Although <cite>RFC 1464</cite> does not allow characters outside the US-ASCII character range in TXT records, Section 6.5 of <cite>DNS-Based Service Discovery</cite> mentions support for UTF-8-encoded Unicode characters in text record values (e.g., values of the TXT "msg" name). This document adheres to the recommendation in <cite>DNS-Based Service Discovery</cite>.</p>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
   <section2 topic='Authentication and Encryption' anchor='security-auth'>
     <p>XMPP networks use TLS (&rfc4346;) for channel encryption, SASL (&rfc4422;) for authentication, and the Domain Name System (&rfc1034;) for weak validation of server hostnames; these technologies help to ensure the identity of sending entities and to encrypt XML streams. By contrast, zero-configuration networking uses dynamic discovery and asserted machine names as the basis of sender identity. Therefore, serverless messaging does not result in authenticated identities in the same way that XMPP itself does, nor does it provide for an encrypted channel between entities.</p>
-    <p>There are two potential solutions to this problem:</p>
-    <ol>
-      <li>Negotiate the use of TLS and SASL for the XML stream as described in <cite>RFC 3920</cite>.</li>
-      <li>Negotiate encryption with identity checking for the message exchange using &xep0116;.</li>
-    </ol>
-    <p>It is RECOMMENDED to use one of these methods to secure communications between serverless entities. However, subject to client configuration and local service policies, two entities MAY accept an unauthenticated and unencrypted channel; but a client SHOULD warn the human user that the channel is unauthenticated and unencrypted.</p>
+    <p>To secure communications between serverless entities, it is RECOMMENDED to negotiate the use of TLS and SASL for the XML stream as described in <cite>RFC 3920</cite>. However, subject to client configuration and local service policies, an entity MAY accept an unauthenticated and unencrypted channel, in which case the client SHOULD warn the human user that the channel is unauthenticated and unencrypted.</p>
   </section2>
   <section2 topic='Stanza Injection' anchor='security-inject'>
     <p>Because of fundamental differences between a true XMPP network and a serverless client "mesh", entities communicating via serverless messaging MUST NOT attempt to inject serverless traffic onto an XMPP network and an XMPP server MUST reject communications until an entity is properly authenticated in accordance with the rules defined in <cite>RFC 3920</cite>. However, a client on a serverless mesh MAY forward traffic to an XMPP network after having properly authenticated on such a network (e.g., to forward a message received on a serverless client mesh to a contact on an XMPP network).</p>
@@ -494,7 +542,7 @@ _presence._tcp.local. IN NULL raw-binary-data-here
       <li>Responsible person: XMPP Registrar &lt;registrar at xmpp.org&gt;</li>
       <li>Protocol URL: http://www.xmpp.org/extensions/xep-0174.html</li>
       <li>Primary transport protocol: _tcp</li>
-      <li>TXT keys URL: http://www.xmpp.org/registrar/linklocal.html</li>
+      <li>TXT record URL: http://www.xmpp.org/registrar/linklocal.html</li>
     </ol>
   </div>
 </section1>
