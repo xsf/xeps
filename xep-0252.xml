@@ -1,0 +1,165 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>BOSH Script Syntax</title>
+  <abstract>This specification provides historical documentation regarding the "alternative script syntax" first defined in Version 1.6 of XEP-0124.</abstract>
+  &LEGALNOTICE;
+  <number>0252</number>
+  <status>Experimental</status>
+  <type>Historical</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0124</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  &ianpaterson;
+  <revision>
+    <version>0.1</version>
+    <date>2008-10-31</date>
+    <initials>psa</initials>
+    <remark><p>Initial published version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2008-08-14</date>
+    <initials>ip</initials>
+    <remark><p>Extracted from XEP-0124 version 1.6.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>The cross domain security restrictions of some runtime environments permit clients to access pure XML text only if it was received from a specific server (e.g., the hostname a Web client was downloaded from). Surprisingly, the same environments typically permit clients to receive and execute scripts from any server. The <link url="#security">Security Considerations</link> section below describes the significant risks of deploying Script Syntax.</p>
+  <p>To enable domain-restricted clients to use BOSH with any connection manager, this section proposes an <em>optional</em> alternative to the standard "BOSH Pure Syntax" defined in &xep0124;. The "BOSH Script Syntax" defined here essentially inserts each &lt;body/&gt; element sent by the client into an HTTP GET header instead of into the body of a POST request. Each &lt;body/&gt; element sent by the connection manager is wrapped inside an &ecma262; string and function call. No changes to the &lt;body/&gt; element or to any other aspects of the BOSH protocol are needed.</p>
+  <p>If, and only if, a client is <em>unable</em> to use the Pure Syntax defined in <cite>XEP-0124</cite>, then it MAY instead request the use of the Script Syntax defined herein.</p>
+</section1>
+
+<section1 topic='Script Syntax' anchor='syntax'>
+  <section2 topic='Requesting Use of Script Syntax' anchor='syntax-request'>
+    <p>A BOSH client can send a session request to a BOSH connection manager for using Script Syntax instead of Pure Syntax.</p>
+    <p>If the connection manager supports Script Syntax then it MUST send its Session Creation Response using Script Syntax, and all subsequent client requests and connection manager responses within the session MUST be sent using Script Syntax. If the connection manager does not support the "BOSH Script" syntax then it SHOULD return either an 'item-not-found' terminal binding error (in Script Syntax) or an HTTP 404 (Not Found) error in response to the client's session request.</p>
+    <p>Note: The line break in the body of the HTTP response in the following example is included only to improve readability. In practice there MUST be no line breaks.</p>
+    <example caption="Script Syntax not supported binding error">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/javascript; charset=utf-8
+Cache-Control: no-store
+Cache-Control: no-cache
+Pragma: no-cache
+Content-Length: 212
+
+_BOSH_("<body type='terminate' condition='item-not-found'
+        xmlns='http://jabber.org/protocol/httpbind'/>")
+    ]]></example>
+    <example caption="Script Syntax not supported HTTP error">
+<![CDATA[HTTP/1.1 404 Not Found
+Content-Length: 0]]></example>
+  </section2>
+  <section2 topic='Changes to the Request Syntax' anchor='script-request'>
+    <p>Clients MUST make the following changes to convert their requests to Script Syntax:</p>
+    <ol>
+      <li><p>Certain octets within the UTF-8 encoded &lt;body/&gt; element SHOULD be replaced according to the rules for escaping octets within URIs defined by &rfc3986;. Therefore all octets except those representing 7-bit alphanumeric characters or the characters -._~!$&amp;'()*+,;=:@/? should be substituted with a character triplet, consisting of the percent character "%" followed by the two hexadecimal digits that represent the value of the octet.</p></li>
+      <li><p>A '?' character and the URI-encoded &lt;body/&gt; element MUST be appended to the URI at which the connection manager is operating within its server.</p></li>
+      <li><p>The resulting URI MUST be sent to the connection manager within an HTTP GET request.</p></li>
+      <li><p>Include extra HTTP headers to prevent request/response caching or storage by any intermediary.</p></li>
+    </ol>
+    <p>Note: All whitespace between "GET " and " HTTP/1.1" in the HTTP GET header lines in the following two examples is included only to improve readability. In practice there MUST be no whitespace.</p>
+    <example caption="Requesting a BOSH session in Script Syntax"><![CDATA[
+GET /webclient?%3Cbody%20content='text/xml;%20charset=utf-8'%20
+    hold='1'%20rid='1573741820'%20to='jabber.org'%20
+    route='xmpp:jabber.org:9999'%20secure='true'%20ver='1.6'%20
+    wait='60'%20xml:lang='en'%20
+    xmlns='http://jabber.org/protocol/httpbind'/%3E
+    HTTP/1.1
+Host: httpcm.jabber.org
+Accept-Encoding: gzip, deflate
+Cache-Control: no-store
+Cache-Control: no-cache
+Pragma: no-cache
+Content-Length: 0]]></example>
+    <example caption="Transmitting stanzas in Script Syntax"><![CDATA[
+GET /webclient?%3Cbody%20rid='1249243562'%20sid='SomeSID'%20
+    xmlns='http://jabber.org/protocol/httpbind'%3E%3C
+    message%20to='friend@example.com'%20xmlns='jabber:client'%3E%3C
+    body%3EI%20said%20%22Hi!%22%3C/body%3E%3C/message%3E%3C/body%3E
+    HTTP/1.1
+Host: httpcm.jabber.org
+Accept-Encoding: gzip, deflate
+Cache-Control: no-store
+Cache-Control: no-cache
+Pragma: no-cache
+Content-Length: 0
+    ]]></example>
+    <p>Although <cite>RFC 2616</cite> does not limit the length of HTTP URIs, the runtime environment of the client might restrict the length of the URI that it can include in each GET request. <note>Internet Explorer versions 4.0 thru 7.0 have a maximum <em>path</em> length of 2048 characters and a maximum URL length of 2083 characters. Other popular browsers appear to have no limit.</note> In these cases the client MUST reduce the content of the &lt;body/&gt; element accordingly and send the remaining content in subsequent HTTP GET requests wrapped in new &lt;body/&gt; elements (with incremented 'rid' attributes). This is possible since, unlike Pure Syntax, with Script Syntax the connection manager MUST treat the string of characters between the opening and closing &lt;body&gt; tags of each request as part of an octet stream instead of as a set of complete XML stanzas. The content of any one &lt;body/&gt; element MUST NOT be parsed in isolation from the rest of the stream.</p>
+  </section2>
+  <section2 topic='Changes to the Response Syntax' anchor='script-response'>
+    <p>Connection managers MUST make the following changes to convert their responses to Script Syntax:</p>
+    <ol>
+      <li><p>Certain characters within the &lt;body/&gt; element MUST be replaced according to the rules for escaping characters within strings defined by <cite>ECMAScript</cite>. The necessary substitutions are summarised in the table below.</p>
+        <table caption='Character Substitutions'>
+          <tr><th>Character</th><th>Unicode Code Point Value</th><th>Escape sequence</th></tr>
+          <tr><td>"</td><td>U+0022</td><td>\"</td></tr>
+          <tr><td>Line Feed (New Line)</td><td>U+000A</td><td>\n</td></tr>
+          <tr><td>Carriage Return</td><td>U+000D</td><td>\r</td></tr>
+          <tr><td>Line Separator</td><td>U+2028</td><td>\u2028</td></tr>
+          <tr><td>Paragraph Separator</td><td>U+2029</td><td>\u2029</td></tr>
+          <tr><td>\</td><td>U+005C</td><td>\\</td></tr>
+        </table>
+        <p>Each Unicode format-control character (i.e., the characters in category "Cf" in the Unicode Character Database, e.g., LEFT-TO-RIGHT MARK or RIGHT-TO-LEFT MARK) MUST also be substituted by its Unicode escape sequence (e.g. \u200e or \u200f).</p></li>
+      <li><p>The following eight characters MUST be prepended to the &lt;body/&gt; element: <code>_BOSH_("</code></p></li>
+      <li><p>The following two characters MUST be appended to the &lt;body/&gt; element: <code>")</code></p></li>
+      <li><p>If the client request does not possess a 'content' attribute, then the HTTP Content-Type header of responses MUST be either "text/javascript; charset=utf-8" or "application/x-javascript; charset=utf-8".</p></li>
+      <li><p>Include extra HTTP headers to prevent caching or storage by any intermediary.</p></li>
+    </ol>
+    <p>Note: All line breaks in the bodies of the HTTP responses in the following two examples are included only to improve readability. In practice there MUST be no line breaks.</p>
+    <example caption="Session creation response in Script Syntax">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/javascript; charset=utf-8
+Cache-Control: no-store
+Cache-Control: no-cache
+Pragma: no-cache
+Content-Length: 233
+
+_BOSH_("<body wait='60' inactivity='30' polling='5' requests='2' hold='1'
+        ack='1573741820' accept='deflate,gzip' maxpause='120' sid='SomeSID'
+        charsets='ISO_8859-1 ISO-2022-JP' ver='1.6' from='jabber.org'
+        secure='true' xmlns='http://jabber.org/protocol/httpbind'/>")
+    ]]></example>
+    <example caption="Receiving stanzas in Script Syntax">
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/javascript; charset=utf-8
+Cache-Control: no-store
+Cache-Control: no-cache
+Pragma: no-cache
+Content-Length: 212
+
+_BOSH_("<body rid='1249243562' sid='SomeSID'
+        xmlns='http://jabber.org/protocol/httpbind'>\n
+        <message to='contact@example.com' xmlns='jabber:client'>\n
+        <body>I said \"Hi!\"</body>\n</message>\n</body>")
+    ]]></example>
+    <p>Note: As with Pure Syntax, each &lt;body/&gt; element sent to the client MUST encapsulate zero or more complete XML stanzas.</p>
+  </section2>
+</section1>
+
+<section1 topic='Error Handling' anchor='error'>
+  <p>Any connection manager (not only legacy connection managers) can indicate that it does not support <link url="#script">Script Syntax</link> by sending an HTTP 404 error code (instead of sending a bad-request error using Scrypt Syntax).</p>
+  <example caption="Script Syntax not supported error">
+<![CDATA[HTTP/1.1 404 Not Found
+Content-Length: 0
+  ]]></example>
+</section1>
+
+<section1 topic='Security Consideration' anchor='security'>
+  <p>To avoid the storage of private communications by third parties, when using the alternative Script Syntax connection managers MUST (and clients SHOULD) include all the appropriate HTTP/1.0 and/or HTTP/1.1 headers necessary to ensure as far as possible that no request or response will ever be cached or stored by any intermediary.</p>
+  <p>The alternative Script Syntax returns code for the client to execute. This code is typically executed immediately without any validation and with the same rights as the code of the client itself. This vulnerability could be exploited to steal passwords and private keys, or to fabricate messages sent from and received by the client, or to forward or modify priviledged information on the servers to which the client has access, or to interfere with any aspect of the client's functionality -- limited only by the extent of the runtime environment ("sandbox"), by the extent that naive users can be tricked into doing things outside that environment, and by the attacker's fertile imagination. Therefore, although the client could use Script Syntax with any connection manager on the network, in practice it MUST take care to employ it only with connection managers that the client's user trusts (as much as the server from which the client was downloaded). To prevent a-man-in-the-middle from manipulating the code clients SHOULD only use Script Syntax over encrypted connections (see above). If the client was downloaded over an encrypted connection then it MUST NOT use Script Syntax over connections that are not encrypted.</p>
+</section1>
+
+</xep>
