@@ -235,6 +235,21 @@ OR OTHER DEALINGS IN THE SOFTWARE.
               &lt;<a href='{$registryURL}'><xsl:value-of select='$registryURL'/></a>&gt;
               <br />
             </xsl:if>
+            <xsl:variable name='sourceHTML'>
+              <xsl:text>http://svn.xmpp.org:18080/browse/XMPP/trunk/extensions/xep-</xsl:text>
+              <xsl:value-of select='/xep/header/number'/>
+              <xsl:text>.xml</xsl:text>
+            </xsl:variable>
+            <xsl:variable name='sourceRSS'>
+              <xsl:text>http://svn.xmpp.org:18080//changelog/~rss/XMPP/trunk/extensions/xep-</xsl:text>
+              <xsl:value-of select='/xep/header/number'/>
+              <xsl:text>.xml/rss.xml</xsl:text>
+            </xsl:variable>
+            <xsl:if test='$thestatus != "ProtoXEP"'>
+              Source Control: 
+                <a class='standardsButton' href='{$sourceHTML}'>HTML</a>&#160;
+                <a class='standardsButton' href='{$sourceRSS}'>RSS</a>
+            </xsl:if>
           </p>
         <hr />
         <!-- AUTHOR INFO -->
@@ -255,9 +270,18 @@ OR OTHER DEALINGS IN THE SOFTWARE.
             <p class='indent'>Discussion by the membership of the XSF may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/members">http://mail.jabber.org/mailman/listinfo/members</a>&gt; for details).</p>
           </xsl:when>
           <xsl:otherwise>
-            <p class='indent'>The preferred venue for discussion of this document is the Standards discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">http://mail.jabber.org/mailman/listinfo/standards</a>&gt;.</p>
+            <p class='indent'>
+              The preferred venue for discussion of this document is the standards@xmpp.org discussion list:
+              <br />
+              &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">http://mail.jabber.org/mailman/listinfo/standards</a>&gt;
+            </p>
+            <p>Discussion on other xmpp.org discussion lists might also be appropriate; see &lt;<a href='http://xmpp.org/about/discuss.shtml'>http://xmpp.org/about/discuss.shtml</a>&gt; for a complete list.</p>
             <xsl:if test='contains(/xep/header/dependencies,"RFC")'>
-              <p class='indent'>Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the XSF-IETF list may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/xsf-ietf">http://mail.jabber.org/mailman/listinfo/xsf-ietf</a>&gt; for details).</p>
+              <p class='indent'>
+                Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the XSF-IETF list might also be appropriate:
+                <br />
+                &lt;<a href="http://mail.jabber.org/mailman/listinfo/xsf-ietf">http://mail.jabber.org/mailman/listinfo/xsf-ietf</a>&gt;
+              </p>
             </xsl:if>
           </xsl:otherwise>
         </xsl:choose>
