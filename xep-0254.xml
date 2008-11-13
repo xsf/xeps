@@ -1,0 +1,378 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>PubSub Queueing</title>
+  <abstract>This specification defines an extension to XMPP publish-subscribe for queueing information at a node.</abstract>
+  &LEGALNOTICE;
+  <number>0254</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0060</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  &hildjj;
+  &stpeter;
+  <revision>
+    <version>0.1</version>
+    <date>2008-11-13</date>
+    <initials>psa</initials>
+    <remark><p>Initial published version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.3</version>
+    <date>2008-10-07</date>
+    <initials>jjh/psa</initials>
+    <remark><p>Added more detailed error flows; added additional implementation notes.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2008-10-07</date>
+    <initials>jjh/psa</initials>
+    <remark>
+      <ul>
+        <li>Specified that notifications are sent to only one subscriber at a time.</li>
+        <li>Specified that notifications include payloads.</li>
+        <li>Added protocol extension for unlock feature.</li>
+        <li>Modified namespace to incorporate namespace versioning.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2008-08-14</date>
+    <initials>psa/jjh</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>The &xep0060; extension to XMPP provides a comprehensive technology for alerts, notifications, data syndication, rich presence, and other real-time messaging use cases. In terms of traditional publish-subscribe systems like Java Message Service (JMS), the core XMPP PubSub specification covers the Observer design pattern only; however, traditional publish-subscribe systems often include support for a second design pattern, usually called the "point-to-point" or "queueing" pattern. <note>See for instance &lt;<link url='http://en.wikipedia.org/wiki/Java_Message_Service'>http://en.wikipedia.org/wiki/Java_Message_Service</link>&gt;.</note> This specification defines a few small extensions to XMPP PubSub that enable support for a queueing mode in XMPP. The queueing mode is an add-on feature that a service can support, and that a node owner can enable if supported by the service. The feature name is "urn:xmpp:pubsub:queueing:0".</p>
+</section1>
+
+<section1 topic='How It Works' anchor='howitworks'>
+  <section2 topic='Subscribing' anchor='subscribe'>
+    <p>If a node has enabled support for the queueing mode, in response to a subscription request without configuration options it MUST return an IQ-error containing a subscription options form; this form MUST include the "queue_requests" field (which specifies the number of parallel requests a subscriber is willing to process).</p>
+    <example caption='Service indicates that subscription configuration is required'><![CDATA[
+<iq from='workflows.shakespeare.lit'
+    id='sub1'
+    to='workerbee237@shakespeare.lit/foo'
+    type='error'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscribe
+        jid='workerbee237@shakespeare.lit'
+        node='a290fjsl29j19kjb'/>
+    <options 
+        jid='workerbee237@shakespeare.lit'
+        node='a290fjsl29j19kjb'>
+      <x xmlns='jabber:x:data' type='form'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#subscribe_options</value>
+        </field>
+        <field type='text-single' var='pubsub#queue_requests'>
+          <required/>
+        </field>
+      </x>
+    </options>
+  </pubsub>
+  <error type='modify'>
+    <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <configuration-required xmlns='http://jabber.org/protocol/pubsub#errors'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>The subscriber would then send a new subscription request, this time with options.</p>
+    <example caption='Subscribing with options'><![CDATA[
+<iq from='workerbee237@shakespeare.lit/foo'
+    id='sub2'
+    to='workflows.shakespeare.lit'
+    type='set'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscribe
+        jid='workerbee237@shakespeare.lit'
+        node='a290fjsl29j19kjb'/>
+    <options 
+        jid='workerbee237@shakespeare.lit'
+        node='a290fjsl29j19kjb'>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#subscribe_options</value>
+        </field>
+        <field var='pubsub#queue_requests'>
+          <value>5</value>
+        </field>
+      </x>
+    </options>
+  </pubsub>
+</iq>
+    ]]></example>
+    <p>If the subscription request can be processed successfully, the service returns an IQ-result and includes the configuration options established during the negotiation.</p>
+    <example caption='Service replies with success (including configuration options)'><![CDATA[
+<iq from='workflows.shakespeare.lit'
+    id='sub2'
+    to='workerbee237@shakespeare.lit/foo'
+    type='result'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscription
+        jid='workerbee237@shakespeare.lit'
+        node='a290fjsl29j19kjb'
+        subid='ba49252aaa4f5d320c24d3766f0bdcade78c78d3'
+        subscription='subscribed'/>
+    <options>
+      <x xmlns='jabber:x:data' type='result'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#subscribe_options</value>
+        </field>
+        <field var='pubsub#queue_requests'>
+          <value>5</value>
+        </field>
+      </x>
+    </options>
+  </pubsub>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Assigning an Item' anchor='assign'>
+    <p>At any time, a publisher can push an item to the queue node.</p>
+    <example caption='Publisher publishes an item'><![CDATA[
+<iq from='engine.shakespeare.lit'
+    id='pub1'
+    to='workflow.shakespeare.lit'
+    type='set'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='a290fjsl29j19kjb'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'>
+        <example xmlns='urn:xmpp:example'>payload</example>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+    ]]></example>
+    <p>The item is published to <em>one</em> of the subscribers.</p>
+    <example caption='One subscriber receives a notification'><![CDATA[
+<message from='workflow.shakespeare.lit' 
+         id='foo'
+         to='workerbee237@shakespeare.lit'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='a290fjsl29j19kjb'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'>
+        <example xmlns='urn:xmpp:example'>payload</example>
+      </item>
+    </items>
+  </event>
+</message>
+    ]]></example>
+  </section2>
+  <section2 topic='Deleting an Item from the Queue' anchor='delete'>
+    <p>When the subscriber that received the item has successfully processed it (whatever that means in the context of the queue), the subscriber deletes the item from the queue.</p>
+    <example caption='Entity deletes an item from a node'><![CDATA[
+<iq from='workerbee237@shakespeare.lit/foo'
+    id='delete1'
+    to='workflows.shakespeare.lit'
+    type='get'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <retract node='a290fjsl29j19kjb'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    </retract>
+  </pubsub>
+</iq>
+    ]]></example>
+    <p>In the context of a queue node, the service MUST treat a delete request from a subscriber that received the item as if the sender were a publisher; i.e., it MUST delete the item from the queue and notify only this subscriber that the item has been deleted.</p>
+    <example caption='Subscriber receives delete notification'><![CDATA[
+<message from='workflow.shakespeare.lit' 
+         id='bar'
+         to='workerbee237@shakespeare.lit'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='a290fjsl29j19kjb'>
+      <retract id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    </items>
+  </event>
+</message>
+    ]]></example>
+    <p>Note: The subscriber SHOULD NOT commit any pending transactions until it receives the delete notification.</p>
+    <p>If the item does not exist, the service MUST return an &notfound; error as described in <cite>XEP-0060</cite>.</p>
+    <p>If the entity that attempts to delete the item is not the subscriber that received the item, the service MUST return a &forbidden; error as described in <cite>XEP-0060</cite>.</p>
+    <p>If the item is locked by another subscriber, the service MUST return a &conflict; error (this flow is not defined in <cite>XEP-0060</cite>.</p>
+    <example caption='Item is locked by another subscriber'><![CDATA[
+<iq from='workflows.shakespeare.lit'
+    id='delete1'
+    to='workerbee237@shakespeare.lit/foo'
+    type='get'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <retract node='a290fjsl29j19kjb'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    </retract>
+  </pubsub>
+  <error type='auth'>
+    <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>If the subscriber that received the item attempts to delete the item but the item is no longer locked by the subscriber (e.g., because of a race condition or a lost notification), the service MUST return an &unexpected; error (this flow is not defined in <cite>XEP-0060</cite>.</p>
+    <example caption='Item is no longer locked by subscriber'><![CDATA[
+<iq from='workflows.shakespeare.lit'
+    id='delete1'
+    to='workerbee237@shakespeare.lit/foo'
+    type='get'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <retract node='a290fjsl29j19kjb'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    </retract>
+  </pubsub>
+  <error type='wait'>
+    <unexpected-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Unlocking an Item' anchor='unlock'>
+    <p>The subscriber might determine that it cannot process the item (whatever that means in the context of the queue); if so, the subscriber unlocks the item.</p>
+    <example caption='Entity unlocks an item'><![CDATA[
+<iq from='workerbee237@shakespeare.lit/foo'
+    id='unlock1'
+    to='workflows.shakespeare.lit'
+    type='get'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <unlock xmlns='urn:xmpp:pubsub:queueing:0'
+            node='a290fjsl29j19kjb'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    </unlock>
+  </pubsub>
+</iq>
+    ]]></example>
+    <p>The service then MUST unlock the item and notify only this subscriber that the item has been unlocked.</p>
+    <example caption='Subscriber receives unlock notification'><![CDATA[
+<message from='workflow.shakespeare.lit' 
+         id='baz'
+         to='workerbee237@shakespeare.lit'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='a290fjsl29j19kjb'>
+      <unlock xmlns='urn:xmpp:queueing:0'
+              id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    </items>
+  </event>
+</message>
+    ]]></example>
+    <p>When an item is unlocked, the service would then send a publish notification to another subscriber according to application-specific logic for determining the "next" subscriber.</p>
+    <p>If the item does not exist, the service MUST return an &notfound; error.</p>
+    <example caption='Item does not exist'><![CDATA[
+<iq from='workflows.shakespeare.lit'
+    id='delete1'
+    to='workerbee237@shakespeare.lit/foo'
+    type='error'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <unlock xmlns='urn:xmpp:pubsub:queueing:0'
+            node='a290fjsl29j19kjb'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    </unlock>
+  </pubsub>
+  <error type='cancel'>
+    <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>If the entity that attempts to unlock the item is not the subscriber that received the item, the service MUST return a &forbidden; error.</p>
+    <example caption='Requesting entity did not receive item'><![CDATA[
+<iq from='workflows.shakespeare.lit'
+    id='delete1'
+    to='workerbee237@shakespeare.lit/foo'
+    type='error'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <unlock xmlns='urn:xmpp:pubsub:queueing:0'
+            node='a290fjsl29j19kjb'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    </unlock>
+  </pubsub>
+  <error type='auth'>
+    <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>If the item is locked by another subscriber, the service MUST return a &conflict; error.</p>
+    <example caption='Item is locked by another subscriber'><![CDATA[
+<iq from='workflows.shakespeare.lit'
+    id='delete1'
+    to='workerbee237@shakespeare.lit/foo'
+    type='error'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <unlock xmlns='urn:xmpp:pubsub:queueing:0'
+            node='a290fjsl29j19kjb'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    </unlock>
+  </pubsub>
+  <error type='cancel'>
+    <conflict xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>If the subscriber that received the item attempts to unlock the item but the item is no longer locked by the subscriber (e.g., because of a race condition or a lost notification), the service MUST return an &unexpected; error.</p>
+    <example caption='Item is no longer locked by subscriber'><![CDATA[
+<iq from='workflows.shakespeare.lit'
+    id='delete1'
+    to='workerbee237@shakespeare.lit/foo'
+    type='error'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <unlock xmlns='urn:xmpp:pubsub:queueing:0'
+            node='a290fjsl29j19kjb'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    </unlock>
+  </pubsub>
+  <error type='wait'>
+    <unexpected-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+</section1>
+
+<section1 topic='Determining Support' anchor='support'>
+  <p>If a pubsub service supports the queueing mode, it MUST advertise support for  the "urn:xmpp:pubsub:queueing:0" namespace in response to &xep0030; information requests.</p>
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>If the service receives unavailable presence from a subscriber, it SHOULD unlock all outstanding queue items associated with the subscriber and unsubscribe the subscriber to prevent delivery of further publish notifications.</p>
+  <p>If a subscriber cannot process queue items because of an unrecoverable error (e.g., disk full), the subscriber SHOULD unsubscribe and then unlock all of its outstanding queue items.</p>
+  <p>If the service does not receive a delete or unlock request from a subscriber that received a queue item in a configurable amount of time, it SHOULD timeout the request, send an unlock notification to the subscriber, and send a publish notification to the "next" subscriber.</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>To follow.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p> 
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:pubsub:queueing:0</li>
+    </ul>
+    <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespaces to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
+  </section2>
+  <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+    <p>If the protocol defined in this specification undergoes a major revision that is not fully backward-compatible with an older version, or that contains significant new features, the XMPP Registrar shall increment the protocol version number found at the end of the XML namespaces defined herein, as described in Section 4 of <cite>XEP-0053</cite>.</p>
+  </section2>
+  <section2 topic='Service Discovery Features' anchor='registrar-features'>
+    <p>The &REGISTRAR; maintains a registry of service discovery features (see &DISCOFEATURES;), which includes a number of features that can be returned by pubsub services. The following registry submission supplements the existing list.</p>
+    <code><![CDATA[
+<var>
+  <name>urn:xmpp:pubsub:queueing:0</name>
+  <desc>The node or service supports the queueing mode.</desc>
+  <doc>XEP-xxxx</doc>
+</var>
+    ]]></code>
+  </section2>
+</section1>
+</xep>
