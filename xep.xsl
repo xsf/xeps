@@ -275,7 +275,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
               <br />
               &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">http://mail.jabber.org/mailman/listinfo/standards</a>&gt;
             </p>
-            <p>Discussion on other xmpp.org discussion lists might also be appropriate; see &lt;<a href='http://xmpp.org/about/discuss.shtml'>http://xmpp.org/about/discuss.shtml</a>&gt; for a complete list.</p>
+            <p class='indent'>Discussion on other xmpp.org discussion lists might also be appropriate; see &lt;<a href='http://xmpp.org/about/discuss.shtml'>http://xmpp.org/about/discuss.shtml</a>&gt; for a complete list.</p>
             <xsl:if test='contains(/xep/header/dependencies,"RFC")'>
               <p class='indent'>
                 Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the XSF-IETF list might also be appropriate:
