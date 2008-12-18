@@ -263,25 +263,30 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <hr />
         <!-- DISCUSSION VENUE -->
         <h2>Discussion Venue</h2>
+        <xsl:variable name='discuss.count' select='count(/xep/header/discuss)'/>
+        <xsl:variable name='discuss.venue' select='count(/xep/header/discuss)'/>
+        <xsl:if test='$discuss.count=1'>
+          <xsl:variable name='discussWeb'>
+            <xsl:text>http://mail.jabber.org/mailman/listinfo/</xsl:text>
+            <xsl:value-of select='/xep/header/discuss'/>
+          </xsl:variable>
+          <xsl:variable name='discussMail'>
+            <xsl:value-of select='/xep/header/discuss'/>
+            <xsl:text>@xmpp.org</xsl:text>
+          </xsl:variable>
+          <p class='indent'>There exists a special venue for discussion related to the technology described in this document: the &lt;<a href='{$discussWeb}'><xsl:value-of select='$discussMail'/></a>&gt; mailing list.</p>
+        </xsl:if>
         <xsl:variable name='Approver' select='/xep/header/approver'/>
         <xsl:choose>
           <xsl:when test='$Approver = "Board"'>
-            <p class='indent'>The preferred venue for discussion of this document is the Standards discussion list: &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">http://mail.jabber.org/mailman/listinfo/standards</a>&gt;.</p>
+            <p class='indent'>The primary venue for discussion of XMPP Extension Protocols is the &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">standards@xmpp.org</a>&gt; discussion list.</p>
             <p class='indent'>Discussion by the membership of the XSF may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/members">http://mail.jabber.org/mailman/listinfo/members</a>&gt; for details).</p>
           </xsl:when>
           <xsl:otherwise>
-            <p class='indent'>
-              The preferred venue for discussion of this document is the standards@xmpp.org discussion list:
-              <br />
-              &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">http://mail.jabber.org/mailman/listinfo/standards</a>&gt;
-            </p>
+            <p class='indent'>The primary venue for discussion of XMPP Extension Protocols is the &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">standards@xmpp.org</a>&gt; discussion list.</p>
             <p class='indent'>Discussion on other xmpp.org discussion lists might also be appropriate; see &lt;<a href='http://xmpp.org/about/discuss.shtml'>http://xmpp.org/about/discuss.shtml</a>&gt; for a complete list.</p>
             <xsl:if test='contains(/xep/header/dependencies,"RFC")'>
-              <p class='indent'>
-                Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the XSF-IETF list might also be appropriate:
-                <br />
-                &lt;<a href="http://mail.jabber.org/mailman/listinfo/xsf-ietf">http://mail.jabber.org/mailman/listinfo/xsf-ietf</a>&gt;
-              </p>
+              <p class='indent'>Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the &lt;<a href="http://mail.jabber.org/mailman/listinfo/xsf-ietf">xsf-ietf@xmpp.org</a>&gt; list might also be appropriate.</p>
             </xsl:if>
           </xsl:otherwise>
         </xsl:choose>
