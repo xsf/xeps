@@ -4,7 +4,7 @@
 
 ## LICENSE ##
 #
-# Copyright (c) 1999 - 2008 XMPP Standards Foundation
+# Copyright (c) 1999 - 2009 XMPP Standards Foundation
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
