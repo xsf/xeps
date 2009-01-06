@@ -48,8 +48,6 @@ xsltproc xep.xsl xep-template.xml > $xeppath/template.html
 
 cp *.dtd $xeppath/
 cp *.ent $xeppath/
-cp *.gif $xeppath/
-cp *.html $xeppath/
 cp *.shtml $xeppath/
 cp *.xsd $xeppath/
 
