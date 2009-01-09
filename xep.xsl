@@ -89,7 +89,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
       <body>
         <!-- TITLE -->
         <h1>XEP-<xsl:value-of select='/xep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></h1>
-        <p>Copyright (c) 1999 - 2009 <a href='http://xmpp.org/'>XMPP Standards Foundation</a>. See <a href='#legal'>Legal Notices</a>.</p>
+        <p>Copyright (c) 1999 - 2009 <a href='http://xmpp.org/'>XMPP Standards Foundation</a>. See <a href='#appendix-legal'>Legal Notices</a>.</p>
         <!-- ABSTRACT -->
         <hr />
         <p><xsl:value-of select='/xep/header/abstract'/></p>
