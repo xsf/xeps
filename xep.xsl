@@ -89,10 +89,11 @@ OR OTHER DEALINGS IN THE SOFTWARE.
       <body>
         <!-- TITLE -->
         <h1>XEP-<xsl:value-of select='/xep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></h1>
+        <p>Copyright (c) 1999 - 2009 <a href='http://xmpp.org/'>XMPP Standards Foundation</a>. See <a href='#legal'>Legal Notices</a>.</p>
         <!-- ABSTRACT -->
-        <p><xsl:value-of select='/xep/header/abstract'/></p>
-        <!-- NOTICE -->
         <hr />
+        <p><xsl:value-of select='/xep/header/abstract'/></p>
+        <!-- DEPLOYABILITY -->
         <xsl:variable name='thestatus' select='/xep/header/status'/>
         <xsl:variable name='thetype' select='/xep/header/type'/>
         <xsl:if test='$thestatus = "Active" and $thetype = "Historical"'>
@@ -146,9 +147,22 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <xsl:if test='$thestatus = "Retracted"'>
           <p style='color:red'>WARNING: This document has been retracted by the author(s). Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
         </xsl:if>
+        <!-- TABLE OF CONTENTS -->
+        <hr />
+        <xsl:call-template name='processTOC' />
+        <!-- END FRONT MATTER -->
+        <!-- BEGIN XEP CONTENTS -->
+        <hr />
+        <xsl:apply-templates select='/xep/section1'/>
+        <!-- END XEP CONTENTS -->
+        <!-- BEGIN APPENDICES -->
+        <hr />
+        <a name='appendices'></a>
+        <h2>Appendices</h2>
         <hr />
         <!-- XEP INFO -->
-        <h2>Document Information</h2>
+        <a name='appendix-docinfo'></a>
+        <h3>Appendix A: Document Information</h3>
           <p class='indent'>
             Series: <a href='http://www.xmpp.org/extensions/'>XEP</a><br />
             Number: <xsl:value-of select='/xep/header/number'/><br />
@@ -253,16 +267,25 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           </p>
         <hr />
         <!-- AUTHOR INFO -->
-        <h2>Author Information</h2>
+        <a name='appendix-authorinfo'></a>
+        <h3>Appendix B: Author Information</h3>
         <div class='indent'>
           <xsl:apply-templates select='/xep/header/author'/>
         </div>
         <hr />
         <!-- LEGAL NOTICES -->
+        <a name='appendix-legal'></a>
+        <h3>Appendix C: Legal Notices</h3>
         <xsl:apply-templates select='/xep/header/legal'/>
         <hr />
+        <!-- XMPP NOTICE -->
+        <a name='appendix-xmpp'></a>
+        <h3>Appendix D: Relation to XMPP</h3>
+        <p class='indent'>The Extensible Messaging and Presence Protocol (XMPP) is defined in the XMPP Core (RFC 3920) and XMPP IM (RFC 3921) specifications contributed by the XMPP Standards Foundation to the Internet Standards Process, which is managed by the Internet Engineering Task Force in accordance with RFC 2026. Any protocol defined in this document has been developed outside the Internet Standards Process and is to be understood as an extension to XMPP rather than as an evolution, development, or modification of XMPP itself.</p>
+        <hr />
         <!-- DISCUSSION VENUE -->
-        <h2>Discussion Venue</h2>
+        <a name='appendix-discuss'></a>
+        <h3>Appendix E: Discussion Venue</h3>
         <xsl:variable name='discuss.count' select='count(/xep/header/discuss)'/>
         <xsl:variable name='discuss.venue' select='count(/xep/header/discuss)'/>
         <xsl:if test='$discuss.count=1'>
@@ -291,29 +314,22 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           </xsl:otherwise>
         </xsl:choose>
         <p class='indent'>Errata may be sent to &lt;<a href='mailto:editor@xmpp.org'>editor@xmpp.org</a>&gt;.</p>
-        <!-- XMPP NOTICE AND CONFORMANCE TERMS-->
-        <!-- (we don't put these on Procedural XEPs) -->
-        <xsl:if test='$thetype = "Standards Track" or $thetype = "Historical" or $thetype = "Informational"'>
-          <h2>Relation to XMPP</h2>
-          <p class='indent'>The Extensible Messaging and Presence Protocol (XMPP) is defined in the XMPP Core (RFC 3920) and XMPP IM (RFC 3921) specifications contributed by the XMPP Standards Foundation to the Internet Standards Process, which is managed by the Internet Engineering Task Force in accordance with RFC 2026. Any protocol defined in this document has been developed outside the Internet Standards Process and is to be understood as an extension to XMPP rather than as an evolution, development, or modification of XMPP itself.</p>
-          <h2>Conformance Terms</h2>
-          <p class='indent'>The following keywords as used in this document are to be interpreted as described in <a href='http://www.ietf.org/rfc/rfc2119.txt'>RFC 2119</a>: "MUST", "SHALL", "REQUIRED"; "MUST NOT", "SHALL NOT"; "SHOULD", "RECOMMENDED"; "SHOULD NOT", "NOT RECOMMENDED"; "MAY", "OPTIONAL".</p>
-        </xsl:if>
-        <!-- TABLE OF CONTENTS -->
         <hr />
-        <xsl:call-template name='processTOC' />
-        <!-- XEP CONTENTS -->
+        <!-- CONFORMANCE TERMS-->
+        <a name='appendix-conformance'></a>
+        <h3>Appendix F: Requirements Conformance</h3>
+        <p class='indent'>The following requirements keywords as used in this document are to be interpreted as described in <a href='http://www.ietf.org/rfc/rfc2119.txt'>RFC 2119</a>: "MUST", "SHALL", "REQUIRED"; "MUST NOT", "SHALL NOT"; "SHOULD", "RECOMMENDED"; "SHOULD NOT", "NOT RECOMMENDED"; "MAY", "OPTIONAL".</p>
         <hr />
-        <xsl:apply-templates select='/xep/section1'/>
         <!-- NOTES -->
-        <hr />
-        <h2><a name="notes"></a>Notes</h2>
+        <a name="appendix-notes"></a>
+        <h3>Appendix G: Notes</h3>
         <div class='indent'>
           <xsl:apply-templates select='//note' mode='endlist'/>
         </div>
         <!-- REVISION HISTORY -->
         <hr />
-        <h2><a name="revs"></a>Revision History</h2>
+        <a name="appendix-revs"></a>
+        <h3>Appendix H: Revision History</h3>
           <div class='indent'>
             <xsl:apply-templates select='/xep/header/revision'/>
           </div>
@@ -339,10 +355,16 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   <xsl:template name='processTOC'>
     <h2>Table of Contents</h2>
     <div class='indent'>
-    <p>
-      <xsl:apply-templates select='//section1' mode='toc'/>
-      <br /><a href="#notes">Notes</a>
-      <br /><a href="#revs">Revision History</a>
+    <p><xsl:apply-templates select='//section1' mode='toc'/></p>
+    <p><a href='#appendices'>Appendices</a>
+      <br />&#160;&#160;&#160;&#160;<a href="#appendix-docinfo">A: Document Information</a>
+      <br />&#160;&#160;&#160;&#160;<a href="#appendix-authorinfo">B: Author Information</a>
+      <br />&#160;&#160;&#160;&#160;<a href="#appendix-legal">C: Legal Notices</a>
+      <br />&#160;&#160;&#160;&#160;<a href="#appendix-xmpp">D: Relation to XMPP</a>
+      <br />&#160;&#160;&#160;&#160;<a href="#appendix-discuss">E: Discussion Venue</a>
+      <br />&#160;&#160;&#160;&#160;<a href="#appendix-conformance">F: Requirements Conformance</a>
+      <br />&#160;&#160;&#160;&#160;<a href="#appendix-notes">G: Notes</a>
+      <br />&#160;&#160;&#160;&#160;<a href="#appendix-revs">H: Revision History</a>
     </p>
     </div>
   </xsl:template>
@@ -404,19 +426,18 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   </xsl:template>
 
   <xsl:template match='legal'>
-    <h2>Legal Notices</h2>
     <div class='indent'>
-      <h3>Copyright</h3>
+      <h4>Copyright</h4>
       <xsl:apply-templates select='/xep/header/legal/copyright'/>
-      <h3>Permissions</h3>
+      <h4>Permissions</h4>
       <xsl:apply-templates select='/xep/header/legal/permissions'/>
-      <h3>Disclaimer of Warranty</h3>
+      <h4>Disclaimer of Warranty</h4>
       <span style='font-weight: bold'>
         <xsl:apply-templates select='/xep/header/legal/warranty'/>
       </span>
-      <h3>Limitation of Liability</h3>
+      <h4>Limitation of Liability</h4>
       <xsl:apply-templates select='/xep/header/legal/liability'/>
-      <h3>IPR Conformance</h3>
+      <h4>IPR Conformance</h4>
       <xsl:apply-templates select='/xep/header/legal/conformance'/>
     </div>
   </xsl:template>
