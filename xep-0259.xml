@@ -1,0 +1,466 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Message Mine-ing</title>
+  <abstract>In servers that deliver messages intended for the bare JID to
+  all resources, the resource that claims a conversation notifies all
+  of the other resources of that claim.</abstract>
+  &LEGALNOTICE;
+  <number>0259</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0045</spec>
+    <spec>XEP-0115</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>mine</shortname>
+  &hildjj;
+  <revision>
+    <version>0.1</version>
+    <date>2009-01-21</date>
+    <initials>psa</initials>
+    <remark><p>Initial published version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2008-10-22</date>
+    <initials>jjh</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>At the time of original writing of this XEP, many XMPP servers
+  handle message stanzas sent to a user@host (or "bare") JID with no
+  resource by delivering that message only to the resource with
+  the highest priority for the target user.  Some server
+  implementations, however, have chosen to send these messages to all
+  of the online resources for the target user.  If the target user is
+  online with multiple resources when the orginal message is sent, a
+  conversation ensues on one of the user's devices; if the user
+  subsequently switches devices, parts of the conversation may end up
+  on the alternate device, causing the user to be confused, misled,
+  or annoyed.</p>
+
+  <p>This XEP proposes an approach for cleaning up the leftover
+  conversation shards on alternate devices, paving the way for servers
+  to deliver messages to multiple devices.  As the basic approach, the
+  receiving server asks all of the resources of a user "whose message
+  is this?".  The first resource to say "mine!" wins.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Large changes SHOULD NOT be required to existing servers</li>
+    <li>Clients that do not implement the new protocol MUST be able
+    participate in conversations</li>
+    <li>All messages MUST NOT be delivered to all devices at all
+    times, due to scale concerns</li>
+    <li>Clients that do not own the message MUST be notified
+    when a different device claims ownership of the message</li>
+    <li>Multiple clients MUST be able to uambiguosly decide which of
+    them owns a given message.</li>
+  </ul>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Determining Support: Servers' anchor='disco_server'>
+    <p>If a server implements the Mine capability, it MUST specify the
+    'urn:xmpp:tmp:mine:0' feature in its service discovery
+    information features as specified in &xep0115; or &xep0030;.
+    Clients MUST NOT send ownership changes if their server does
+    not support this feature.</p>
+    <example caption='Client requests information about its own server'><![CDATA[
+<iq type='get'
+    from='romeo@montague.net/orchard'
+    id='info1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+    <example caption='Server responds with mine feature'><![CDATA[
+<iq type='get'
+    to='romeo@montague.net/home'
+    from='montague.net'
+    id='info1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+...
+    <feature var='urn:xmpp:tmp:mine:0'/>
+...
+  </query>
+</iq>]]></example>
+  </section2>
+  <section2 topic='Determining Support: Clients' anchor='disco_client'>
+    <p>Clients that support this protocol MUST support <cite>XEP-0115</cite>, and MUST add the
+    'urn:xmpp:tmp:mine:0' feature to their entity capabilities, in
+    order to allow for potential server optimizations.</p>
+    <example caption='Romeo publishes his capabilities'><![CDATA[
+<presence from='romeo@example.net/home'>
+  <c xmlns='http://jabber.org/protocol/caps' 
+     hash='sha-1'
+     node='http://example.com/clients/Mine'
+     ver='j+5eLRCz6NP6IEPob80JB6sWR3Y='/>
+</presence>
+]]></example>
+    <example caption='Romeo responds to capabilities inquiry from his server'><![CDATA[
+<iq from='romeo@example.net/home'
+    id='disco1'
+    to='example.net' 
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+         node='http://example.com/clients/Mine#/WmLAKHhB87dOqn5NUgxrr5NbfE='>
+    <identity category='client' type='pc' name='Mine'/>
+    <feature var='urn:xmpp:tmp:mine:0'/>
+  </query>
+</iq>]]></example>
+  </section2>
+  <section2 topic='Receving a message to the bare JID' anchor='receiving'>
+    <p>When a server that implements the Mine capability receives a
+    message addressed to a user's bare JID, it MUST:</p>
+    <ul>
+      <li>Ensure that no "whose" element is already on the message.
+      See the <link url="#errors">Errors</link> section for processing.</li>
+      <li>Add a whose element to the message, containing an id
+      attribute with a new value</li>
+      <li>Ensure that the the same value of the "id" attribute is
+      never sent to the same session </li>
+    </ul>
+
+    <p>Messages that have been processed to include a valid "whose"
+    element, are now also considered an "ownership request"</p>
+
+    <example caption='Juliet sends Romeo an undirected message'><![CDATA[
+<message
+    from='juliet@example.com/balcony'
+    to='romeo@example.net'
+    type='chat'>
+  <body>Wherefore art thou, Romeo?</body>
+  <thread>0e3141cd80894871a68e6fe6b1ec56fa</thread>
+</message>
+]]></example>
+
+    <example caption='The ownership request, before broadcasting'><![CDATA[
+<message
+    from='juliet@example.com/balcony'
+    to='romeo@example.net'
+    type='chat'>
+  <body>Wherefore art thou, Romeo?</body>
+  <thread>0e3141cd80894871a68e6fe6b1ec56fa</thread>
+  <whose xmlns='urn:xmpp:tmp:mine:0' id='4'/>
+</message>
+]]></example>
+  </section2>
+
+  <section2 topic='Broadcasting ownership requests' anchor='broadcast'>
+    <p>The receiving server MUST send a copy of the ownership request
+    to each of that user's non-negative priority resources.  Each copy
+    of the message MUST contain a whose element, each of which has the
+    same id attribute.</p>
+    <example caption='Romeo&apos;s server forwards copies of the
+                      message to all of his resources'><![CDATA[
+<message
+    from='juliet@example.com/balcony'
+    to='romeo@example.net/home'
+    type='chat'>
+  <body>Wherefore art thou, Romeo?</body>
+  <thread>0e3141cd80894871a68e6fe6b1ec56fa</thread>
+  <whose xmlns='urn:xmpp:tmp:mine:0' id='4'/>
+</message>
+
+<message
+    from='juliet@example.com/balcony'
+    to='romeo@example.net/work'
+    type='chat'>
+  <body>Wherefore art thou, Romeo?</body>
+  <thread>0e3141cd80894871a68e6fe6b1ec56fa</thread>
+  <whose xmlns='urn:xmpp:tmp:mine:0' id='4'/>
+</message>
+
+<message
+    from='juliet@example.com/balcony'
+    to='romeo@example.net/mobile'
+    type='chat'>
+  <body>Wherefore art thou, Romeo?</body>
+  <thread>0e3141cd80894871a68e6fe6b1ec56fa</thread>
+  <whose xmlns='urn:xmpp:tmp:mine:0' id='4'/>
+</message>
+]]></example>
+  </section2>
+
+  <section2 topic='Claiming ownership' anchor='claim'>
+    <p>When one client for a receiving user detects that the user's
+    attention has been directed to a given message, that client MUST
+    send an ownership claim (mine!) to the bare JID of the receiving
+    user.  If there was a thread element in the original message, it
+    MUST be included in the acceptance notification.  There MUST NOT
+    be a body element in the message, and the message SHOULD use the
+    same message type as the ownership request.  The mine element MUST
+    include an id element for each of the messages that the client
+    wants to accept.  The mine element MUST include at least one
+    id.</p>
+    <example caption='Romeo&apos;s &quot;work&quot; client claims ownership'><![CDATA[
+<message
+    to='romeo@example.net'
+    from='romeo@example.net/work'
+    type='chat'>
+  <thread>0e3141cd80894871a68e6fe6b1ec56fa</thread>
+  <mine xmlns='urn:xmpp:tmp:mine:0'>
+    <id>4</id>
+  </mine>
+</message>
+]]></example>
+  </section2>
+  <section2 topic='Notification of ownership claim' anchor='notification'>
+    <p>As with all messages sent to a bare JID at a server
+    implementing the Mine feature, the acceptance message MUST be
+    forwarded to all of the non-negative priority resources.</p>
+    <example caption='Each of Romeo&apos;s clients receives the claim'><![CDATA[
+<message
+    to='romeo@example.net/home'
+    from='romeo@example.net/work'
+    type='chat'>
+  <thread>0e3141cd80894871a68e6fe6b1ec56fa</thread>
+  <mine xmlns='urn:xmpp:tmp:mine:0'>
+    <id>4</id>
+  </mine>
+</message>
+
+<message
+    to='romeo@example.net/work'
+    from='romeo@example.net/work'
+    type='chat'>
+  <thread>0e3141cd80894871a68e6fe6b1ec56fa</thread>
+  <mine xmlns='urn:xmpp:tmp:mine:0'>
+    <id>4</id>
+  </mine>
+</message>
+
+<message
+    to='romeo@example.net/mobile'
+    from='romeo@example.net/work'
+    type='chat'>
+  <thread>0e3141cd80894871a68e6fe6b1ec56fa</thread>
+  <mine xmlns='urn:xmpp:tmp:mine:0'>
+    <id>4</id>
+  </mine>
+</message>
+]]></example>
+  </section2>
+  <section2 topic='Claim processing' anchor='processing'>
+    <p>When a client receives an ownership claim that was sent from
+    that client for an ID that has not been previously claimed,
+    the client MUST note that the message associated with the ID has
+    been confirmed, and ignore any further ownership claims for
+    that ID.</p>
+    <p>When a client receives an ownership claim that was sent from
+    a different client of the same user for a ID that has not
+    been previously received, the client MUST note that the message
+    associated with the ID has been retracted, and ignore any further
+    ownership claims for that ID.  Retracted messages SHOULD
+    be removed from the client's user interface, or otherwise marked
+    in some way as retracted.</p>
+    <p>Clients MUST ignore ownership claims for IDs for which they
+    have no corresponding message.</p>
+    <p>Assuming that messages are delivered and processed in order,
+    these rules should ensure that exactly one client resource has a
+    confirmed copy of the message</p>
+  </section2>
+  <section2 topic='Claims for Multi-User Chat rooms' anchor='muc'>
+    <p>The same approach that has been described for one-to-one
+    messages above can also be used by &xep0045; (MUC) rooms.
+    Rooms that want to participate MUST send the
+    'urn:xmpp:tmp:mine:0' feature in the room's disco info.  The room
+    MUST then perform the role of the server in the above
+    descriptions, ensuring that unique ID's are assigned to all
+    outbound groupchat messages that were addressed to the bare JID of
+    the room.  Ownership claims MUST be sent to the bare JID of the
+    <strong>room</strong>, not the receiving user.</p>
+    <p>This capability might be used to distribute questions to
+    multiple experts in a room, such that a single expert answers a
+    question.</p>
+    <example caption='Message is sent to the room'><![CDATA[
+<message
+    from='hag66@shakespeare.lit/pda'
+    to='darkcave@chat.shakespeare.lit'
+    type='groupchat'>
+  <body>Harpier cries: 'tis time, 'tis time.</body>
+</message>]]></example>
+    <example caption='Room forwards message to all participants as ownership request'><![CDATA[
+<message
+    from='darkcave@chat.shakespeare.lit/thirdwitch'
+    to='crone1@shakespeare.lit/desktop'
+    type='groupchat'>
+  <body>Harpier cries: 'tis time, 'tis time.</body>
+  <whose xmlns='urn:xmpp:tmp:mine:0' id='5'/>
+</message>
+
+<message
+    from='darkcave@chat.shakespeare.lit/thirdwitch'
+    to='wiccarocks@shakespeare.lit/laptop'
+    type='groupchat'>
+  <body>Harpier cries: 'tis time, 'tis time.</body>
+  <whose xmlns='urn:xmpp:tmp:mine:0' id='5'/>
+</message>
+
+<message
+    from='darkcave@chat.shakespeare.lit/thirdwitch'
+    to='hag66@shakespeare.lit/pda'
+    type='groupchat'>
+  <body>Harpier cries: 'tis time, 'tis time.</body>
+  <whose xmlns='urn:xmpp:tmp:mine:0' id='5'/>
+</message>
+]]></example>
+    <example caption='A participant claims ownership'><![CDATA[
+<message
+    to='darkcave@chat.shakespeare.lit'
+    from='crone1@shakespeare.lit/desktop'
+    type='groupchat'>
+  <mine xmlns='urn:xmpp:tmp:mine:0'>
+    <id>5</id>
+  </mine>
+</message>
+]]></example>
+  </section2>
+</section1>
+
+<section1 topic='Error Cases' anchor='errors'>
+  <section2 topic='Invalid "whose"' anchor='bad_whose'>
+    <p>A server receives a message addressed to the bare JID of a
+    user, from a different user than the one in the to address,
+    containing a "whose" or "mine" element, it MUST NOT forward the
+    message on to any clients.  This case is always either an attack,
+    a misconfiguration, or the result of bad code.  If the user in the
+    from address is already known to the user in the to address (for
+    example, to user in the to address has a presence subscription to
+    the user in the from address), the server MAY send back a helpful
+    "bad-request" error.</p>
+    <example caption='Romeo responds to a bad request from his friend Juliet'><![CDATA[
+<message
+    to='juliet@example.com/balcony'
+    from='romeo@example.net'
+    type='error>
+  <thread>0e3141cd80894871a68e6fe6b1ec56fa</thread>
+  <body>My client runneth over</body>
+  <whose xmlns='urn:xmpp:tmp:mine:0' id='4'>
+  <error type='modify'>
+    <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <text>Yours</text>
+  </error>
+</message>
+]]></example>
+    <p>However, if the user in the from address is not known to the user
+    in the to address, or the server perfers not to send helpful
+    errors, the server MUST treat the message as if it was addressed
+    to an unknown user.  Otherwise, sending a message with an invalid
+    "whose" or "mine" could allow an attacker to probe for valid users
+    at a site.</p>
+  </section2>
+</section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <section2 topic='Generating IDs' anchor='generate'>
+    <p>The value of the id attribute sent by servers MUST be
+    valid output from the NODEPREP profile of stringprep.</p>
+  </section2>
+  <section2 topic="ID Semantics" anchor="semantics">
+    <p>The value of the id resource is completely opqaque;
+    receiving clients MUST NOT use any apparent order or semantic in
+    the value of the id to perform optimizations or business
+    logic.</p>
+  </section2>
+  <section2 topic='Comparing IDs' anchor='compare'>
+    <p>Clients MUST only compare the value of ID's for equality,
+    never for order.  ID's MUST be compared for equality
+    octet-for-octet or codepoint-for-codepoint; a basic string
+    comparison with no extra canonicalization.</p>
+  </section2>
+  <section2 topic='Accepting Multiple IDs' anchor='multiple'>
+    <p>A client MAY send multiple id elements in an accceptance.
+    Clients that receive a notification with multiple IDs MUST process
+    each ID individually, as if multiple claims had been sent.</p>
+  </section2>
+  <section2 topic='When to send?' anchor='when'>
+    <p>To avoid race conditions and edge cases (including
+    invisibility), if both the client and server support the Mine
+    capability, the client SHOULD send ownership queries regardless
+    of whether or not the client sees other resources for the same
+    user online, or the capabilities of those other resources.</p>
+  </section2>
+  <section2 topic='Legacy Clients' anchor='unsupported_clients'>
+    <p>Clients that do not implement the Mine capability MAY be sent
+    notifications by the server.  The server MAY be optimized to
+    avoid these notifications, however.</p>
+  </section2>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>Some examples of events that might lead to a client sending an
+  ownsership claim:</p>
+  <ul>
+    <li>Clicking on a toast notification for the message</li>
+    <li>Bringing the client window to the front within a short time
+    after receiving the message, where the message is then displayed
+    to the user</li>
+    <li>Bringing the tab containing the message to the front</li>
+    <li>Beginning to type a response to the message</li>
+    <li>Closing the window containing the message at least several
+    seconds after the message was received</li>
+    <li>Clicking an accept button next to a message</li>
+    <li>Shutting down the screen saver while the message is in the
+    top-most window</li>
+    <li>A camera notices the user's eyes directed at the message</li>
+  </ul>
+</section1>
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>Some care should be given to the events that can cause ownsership
+  claims, particularly in the MUC client implementations, such that
+  users with different abilities all have a chance to claim ownership.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Clients MUST ignore acceptance notifications received from other users.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This XEP proposes the new namespace 'urn:xmpp:tmp:mine:0'.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+<code><![CDATA[
+<?xml version='1.0' encoding='UTF-8' ?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:tmp:mine:0'
+    xmlns='urn:xmpp:tmp:mine:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='whose'>
+    <xs:complexType>
+      <xs:attribute name='id' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='mine'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='id' minOccurs='1' maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='id'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='xs:NMTOKEN'/>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+]]></code>
+</section1>
+</xep>
