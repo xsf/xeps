@@ -28,6 +28,16 @@
     <jid>dmeyer@jabber.org</jid>
   </author>
   <revision>
+    <version>0.2</version>
+    <date>2009-02-01</date>
+    <initials>dm</initials>
+    <remark>
+      <p>Split revoke command into disable and revoke</p>
+      <p>Add more documentation including more detailed use cases</p>
+      <p>Additional security considerations</p>
+    </remark>
+  </revision>
+  <revision>
     <version>0.1</version>
     <date>2009-01-05</date>
     <initials>psa</initials>
@@ -48,7 +58,8 @@
 </header>
 <section1 topic='Introduction' anchor='intro'>
   <p>An XMPP client needs a user name and a password to log into an account. Many clients provide a mechanism to store these credentials to automatically log in into an account. While this practice is very user friendly, it is a security risk for some devices. Mobile devices like a phone or a laptop may get stolen, providing the thief with the required password. Mobile phones are particular insecure: providing the password on the keypad for each log in is too complicated and the risk of loosing the phone is high.</p>
-  <p>A solution to this problem is to allow a client to log in without knowing the password. XMPP as specified in &rfc3920; and provisionally clarified in &rfc3920bis; allows the use of any SASL mechanism (see &rfc4422;) in the authentication of XMPP entities, including the SASL EXTERNAL mechanism. &xep0178; defines the usage of X.509 certificates used in the TLS handshake. This document provides a mechanism to manage different user certificates.</p>
+  <p>A solution to this problem is to allow a client to log in without knowing the password. XMPP as specified in &rfc3920; and provisionally clarified in &rfc3920bis; allows the use of any SASL mechanism (see &rfc4422;) in the authentication of XMPP entities, including the SASL EXTERNAL mechanism. &xep0178; defines the usage of X.509 certificates used in the TLS handshake.</p>
+  <p>XEP-0178 assumes that the certificates used for SASL EXTERNAL are signed by a trusted CA. This could be a problem for the average user: signing a certificate is both an expensive and a complicated procedure. If the device gets stolen, the user also has to provide the required information to the CA to revoke the certificate, and the server needs to keep its list of revoked certificates up-to-date. The end-to-end security mechanism as described in &xep0250; rely on self-signed certificates. A client capable of secure end-to-end communicate already has a self-signed X.509 certificate for that purpose. The same client certificate should be used for a client to log in. Since the certificates are not signed by a trusted CA, the server must be aware of the list of certificates that are used by the users' clients. This document describes how to manage the list of client certificates.</p>
 </section1>
 
 <section1 topic='Certificate Management' anchor='manage'>
@@ -81,6 +92,7 @@
 </iq>
   ]]></example>
     <p>The server either returns an empty result or an error. From now on the client can use that certificate to authenticate the user using SASL EXTERNAL.</p>
+    <p>The client adding the certificate does not need to be the client using it. A user may use a client to upload a certificate for a bot. The bot creates its certificate and private key, and the user uploads the certificate to the server (and may also sign the certificate outside the X.509 infrastructure to be used in &xep0189;). After that procedure the bot can log in to the XMPP network and even participate in secure end-to-end communication without ever knowing the user's password.</p>
   </section2>
   <section2 topic='Request a list of all Certificates'>
     <p>A user may want to get a list of all certificates that can be used for SASL EXTERNAL. The client can query the list of the items by sending an items iq stanza.</p>
@@ -119,8 +131,20 @@
 </iq>
   ]]></example>
   </section2>
+  <section2 topic='Disable a Certificate'>
+    <p>A client has to create a new certification before its current one expires. After the new certificate is added to the server, it MAY want to disable the old certificate to keep the list of certificates short. Without that, the list will grow indefinitely, making the certificate handling for the user more difficult. Once a certificate is removed it can no longer be used for SASL EXTERNAL.</p>
+  <example caption='Client disables an X.509 Certificate'><![CDATA[
+<iq type='get'
+    from='hamlet@shakespeare.lit/denmark'
+    id='disable'>
+  <disable xmlns='urn:xmpp:tmp:saslcert'/>
+    <item id='428b1358a286430f628da23fb33ddaf6e474f5c5'/>
+  </disable>
+</iq>
+  ]]></example>
+  </section2>
   <section2 topic='Revoke a Certificate'>
-    <p>The user may want to revoke a certificate from a stolen or compromised device. Another reason is that the client created a new certificate because the current one will expire in some days. After the client created a new certificate for itself it MAY revoke the old certificate for future usage.</p>
+    <p>The user may want to revoke a certificate from a stolen or compromised device. The mechanism is similar to disabling a certificate. The difference is that if a client is logged in with that compromised certificate using SASL EXTERNAL, the server SHOULD close the stream to that client forcing a log out of the client.</p>
   <example caption='Client revokes an X.509 Certificate'><![CDATA[
 <iq type='get'
     from='hamlet@shakespeare.lit/denmark'
@@ -132,7 +156,6 @@
   </revoke>
 </iq>
   ]]></example>
-  <p>The revoke stanza can contain more than one item to revoke. The server MUST remove the certificates with the given ids from the list. If the additional information compromised is added, the server SHOULD close the stream to a client logged in using that certificate for the SASL EXTERNAL mechanism.</p>
   </section2>
 </section1>
 
@@ -144,17 +167,21 @@
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
-  <p>&xep0077; defines a mechanism to change the password without knowing the current one. If the server supports password change it MUST return not-authorized for clients logged in using SASL EXTERNAL and MAY include a password change form requiring the old password.</p>
-  <example caption='Password Change'><![CDATA[
-<iq type='set' to='shakespeare.lit' id='change1'>
-  <query xmlns='jabber:iq:register'>
-    <username>hamlet</username>
-    <password>newpass</password>
-  </query>
-</iq>
-    ]]></example>
-  <p>If the sending client has logged in using SASL EXTERNAL and the server supports XEP-0077 password changes it returns a form to change the password. If the client has logged in with the current password, the server MAY change the password without a form as specified in XEP-0077.</p>
-    <example caption='Server Returns Password Change Form With Error'><![CDATA[
+  <section2 topic='Stream Characteristics'>
+    <p>This specification allows the user to manipulate an alternative way to log into the server. The certificates are not signed and any certificate can be used. Therefore the server MUST reject any communication described in this document if the link between client and server is not secured with both STARTTLS and SASL to prevent a man-in-the-middle to modify the certificate.</p>
+  </section2>
+  <section2 topic='Changing the Password'>
+    <p>&xep0077; defines a mechanism to change the password without knowing the current one. If the server supports password change it MUST return not-authorized for clients logged in using SASL EXTERNAL and MAY include a password change form requiring the old password.</p>
+    <example caption='Password Change'><![CDATA[
+  <iq type='set' to='shakespeare.lit' id='change1'>
+    <query xmlns='jabber:iq:register'>
+      <username>hamlet</username>
+      <password>newpass</password>
+    </query>
+  </iq>
+      ]]></example>
+    <p>If the sending client has logged in using SASL EXTERNAL and the server supports XEP-0077 password changes it returns a form to change the password. If the client has logged in with the current password, the server MAY change the password without a form as specified in XEP-0077.</p>
+      <example caption='Server Returns Password Change Form With Error'><![CDATA[
 <iq type='error' from='shakespeare.lit' to='hamlet@shakespeare.lit/denmark' id='change1'>
   <query xmlns='jabber:iq:register'>
     <x xmlns='jabber:x:data' type='form'>
@@ -178,8 +205,9 @@
     <not-authorized xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
   </error>
 </iq>
-    ]]></example>
-    <p>If a client is allowed to change the password without knowing the current password, the additional security provided by this document is compromised</p>
+     ]]></example>
+     <p>If a client is allowed to change the password without knowing the current password, the additional security provided by this document is compromised</p>
+  </section2>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
