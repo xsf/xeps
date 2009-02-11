@@ -52,13 +52,15 @@ def getText(nodelist):
             thisText = thisText + node.data
     return thisText
 
-# READ IN ARGS: 
-#
-# 1. XEP filename (sans extension)
+# READ in XEP filename (sans extension)
 
 xepname = sys.argv[1];
 
 xepfile = xepname + '.xml'
+
+inboxpath=/var/www/vhosts/xmpp.org/extensions/inbox
+xsltproc xep.xsl $xepfile > $inboxpath/$xepname.html
+cp $xepfile.xml $xeppath/
 
 # PARSE XEP HEADERS:
 #
