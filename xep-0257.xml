@@ -28,6 +28,17 @@
     <jid>dmeyer@jabber.org</jid>
   </author>
   <revision>
+    <version>0.3</version>
+    <date>2009-02-12</date>
+    <initials>dm</initials>
+    <remark>
+      <p>Add note about full JID in subjectAltName</p>
+      <p>Additional information about certificates signed by a CA</p>
+      <p>Make it possible to restrict access with no-cert-management</p>
+      <p>Example updates</p>
+    </remark>
+  </revision>
+  <revision>
     <version>0.2</version>
     <date>2009-02-01</date>
     <initials>dm</initials>
@@ -93,6 +104,23 @@
   ]]></example>
     <p>The server either returns an empty result or an error. From now on the client can use that certificate to authenticate the user using SASL EXTERNAL.</p>
     <p>The client adding the certificate does not need to be the client using it. A user may use a client to upload a certificate for a bot. The bot creates its certificate and private key, and the user uploads the certificate to the server (and may also sign the certificate outside the X.509 infrastructure to be used in &xep0189;). After that procedure the bot can log in to the XMPP network and even participate in secure end-to-end communication without ever knowing the user's password.</p>
+    <p>An optional element &lt;no-cert-management/&gt; inside the keyinfo element indicates that a client logged in with that certificate is not allowed to add or remove certificates from the list. A server MAY allow such a client to query the list of certificates.</p>
+    <example caption='X.509 Certificate Upload (no-cert-management)'><![CDATA[
+<iq type='set'
+    from='hamlet@shakespeare.lit/denmark'
+    id='nocert'>
+  <append xmlns='urn:xmpp:tmp:saslcert'>
+    <name>Simple Bot</name>
+    <keyinfo xmlns='urn:xmpp:tmp:pubkey'>
+      <name>89d099a3428481cc63fe3fa44e7df2d002b4ce44</name>
+      <no-cert-management xmlns='urn:xmpp:tmp:saslcert'/>
+      <x509cert>
+          ...
+      </x509cert>
+    </keyinfo>
+  </append>
+</iq>
+  ]]></example>
   </section2>
   <section2 topic='Request a list of all Certificates'>
     <p>A user may want to get a list of all certificates that can be used for SASL EXTERNAL. The client can query the list of the items by sending an items iq stanza.</p>
@@ -100,7 +128,7 @@
 <iq type='get'
     from='hamlet@shakespeare.lit/denmark'
     id='query'>
-  <items xmlns='urn:xmpp:tmp:saslcert'/>
+  <query xmlns='urn:xmpp:tmp:saslcert'/>
 </iq>
   ]]></example>
   <p>The server then returns the list of all known certificates including the user provided name.</p>
@@ -132,9 +160,9 @@
   ]]></example>
   </section2>
   <section2 topic='Disable a Certificate'>
-    <p>A client has to create a new certification before its current one expires. After the new certificate is added to the server, it MAY want to disable the old certificate to keep the list of certificates short. Without that, the list will grow indefinitely, making the certificate handling for the user more difficult. Once a certificate is removed it can no longer be used for SASL EXTERNAL.</p>
+    <p>A client has to create a new certification before its current one expires. After the new certificate is added to the server, it MAY want to disable the old certificate to keep the list of certificates short. Without that, the list will grow indefinitely, making the certificate handling for the user more difficult. Once a certificate is removed it can no longer be used for SASL EXTERNAL. A server MAY automatically remove expired certificates for this list.</p>
   <example caption='Client disables an X.509 Certificate'><![CDATA[
-<iq type='get'
+<iq type='set'
     from='hamlet@shakespeare.lit/denmark'
     id='disable'>
   <disable xmlns='urn:xmpp:tmp:saslcert'/>
@@ -146,13 +174,11 @@
   <section2 topic='Revoke a Certificate'>
     <p>The user may want to revoke a certificate from a stolen or compromised device. The mechanism is similar to disabling a certificate. The difference is that if a client is logged in with that compromised certificate using SASL EXTERNAL, the server SHOULD close the stream to that client forcing a log out of the client.</p>
   <example caption='Client revokes an X.509 Certificate'><![CDATA[
-<iq type='get'
+<iq type='set'
     from='hamlet@shakespeare.lit/denmark'
     id='revoke'>
   <revoke xmlns='urn:xmpp:tmp:saslcert'/>
-    <item id='428b1358a286430f628da23fb33ddaf6e474f5c5'>
-      <compromised/>
-    </item>
+    <item id='428b1358a286430f628da23fb33ddaf6e474f5c5'/>
   </revoke>
 </iq>
   ]]></example>
@@ -160,15 +186,17 @@
 </section1>
 
 <section1 topic='SASL EXTERNAL' anchor='sasl'>
-  <p>The protocol flow is similar to the one described in XEP-0178. Only step 9 is different: the certificate does not need to be signed by a trusted entity if the certificate was uploaded by the user. The server still MUST reject the certificate if it is expired. The client certificate SHOULD include a JID as defined in sections 15.2.1.2. and 15.2.1.3. in rfc3920bis: a JID MUST be represented as an XmppAddr, i.e., as a UTF8String within an otherName entity inside the subjectAltName.</p>
+  <p>The protocol flow is similar to the one described in XEP-0178. Only step 9 is different: the certificate does not need to be signed by a trusted entity if the certificate was uploaded by the user. The server still MUST reject the certificate if it is expired. In a company environment the server MAY only accept signed certificates; the behavior depends on the company's security policy. A free public XMPP server MUST allow self-signed certificates and certificates signed by a CA unknown to the server.</p>
+  <p>The client certificate SHOULD include a JID as defined in sections 15.2.1.2. and 15.2.1.3. in rfc3920bis: a JID MUST be represented as an XmppAddr, i.e., as a UTF8String within an otherName entity inside the subjectAltName.</p>
   <example caption='subjectAltName using the "id-on-xmppAddr" format'><![CDATA[
     subjectAltName=otherName:id-on-xmppAddr;UTF8:hamlet@shakespeare.lit
     ]]></example>
+  <p>If the subjectAltName contains a full JID the server MUST force the client to the given resource during resource binding. The client is only allowed to use the provided resource name. If a client with the same resource name is currently logged in and that client is not forced to that resource name, it SHOULD be logged out by the server.</p>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
   <section2 topic='Stream Characteristics'>
-    <p>This specification allows the user to manipulate an alternative way to log into the server. The certificates are not signed and any certificate can be used. Therefore the server MUST reject any communication described in this document if the link between client and server is not secured with both STARTTLS and SASL to prevent a man-in-the-middle to modify the certificate.</p>
+    <p>This specification allows the user to manipulate an alternative way to log into the server. The certificates are not required to be signed and any certificate can be used. Therefore the server MUST reject any communication described in this document if the link between client and server is not secured with both STARTTLS and SASL to prevent a man-in-the-middle to modify the certificate.</p>
   </section2>
   <section2 topic='Changing the Password'>
     <p>&xep0077; defines a mechanism to change the password without knowing the current one. If the server supports password change it MUST return not-authorized for clients logged in using SASL EXTERNAL and MAY include a password change form requiring the old password.</p>
