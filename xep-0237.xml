@@ -6,8 +6,8 @@
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 <xep>
 <header>
-  <title>Data Sequencing</title>
-  <abstract>This specification defines an XMPP extension that enables a requesting entity to receive a large data set only if the set has changed; the primary use case is sequencing of roster changes for more efficient downloading of the roster information.</abstract>
+  <title>Roster Versioning</title>
+  <abstract>This specification defines a proposed modification to the XMPP roster protocol that enables versioning of rosters such that the server will not send the roster to the client if the roster has not changed, thus saving bandwidth during session establishment.</abstract>
   &LEGALNOTICE;
   <number>0237</number>
   <status>Experimental</status>
@@ -22,6 +22,12 @@
   <supersededby/>
   <shortname>NOT_YET_ASSIGNED</shortname>
   &stpeter;
+  <revision>
+    <version>0.5</version>
+    <date>2009-02-19</date>
+    <initials>psa</initials>
+    <remark><p>Reverted to a roster-specific method and modified presentation to enable incorporation into rfc3921bis.</p></remark>
+  </revision>
   <revision>
     <version>0.4</version>
     <date>2008-09-17</date>
@@ -67,220 +73,100 @@
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
-  <p>Certain XMPP technologies can return large data sets to users (examples are rosters as specified in &xmppim; and item lists as specified in &xep0030;). Although &xep0059; provides a generic way to page through such data sets, it does not provide a way to learn if the data set has changed since it was last retrieved. If the client could cache the data set (e.g., the roster) and retrieve only changes to the data set, certain use cases (e.g., the login process) could be significantly streamlined. This feature might be especially valuable over low-bandwidth connections such as those common in mobile environments. This document defines a method for such streamlining, via the concept of data sequencing.</p>
+  <p>Although XMPP rosters can become quite large, they change infrequently. Therefore it can be inefficient for the server to send the roster to the client during session establishment if the roster has not changed. This document defines a small modification to the XMPP roster protocol specified in &xmppim; that enables "versioning" of roster information; when the client requests the roster it specifies its latest version, and the server will simply inform the client that it is up to date if the roster has not changed.</p>
+  &RFC3921BISNOTE;
 </section1>
 
-<section1 topic='Data Format' anchor='format'>
-  <p>This document defines a &lt;seq/&gt; element qualified by the 'urn:xmpp:tmp:seq' namespace &NSNOTE;. This element can be included in any IQ request that might result in a large data set. Because only one child element is allowed in an IQ stanza, the &lt;seq/&gt; element MUST be included as a child of the payload element (i.e., as a grandchild of the IQ stanza).</p>
-  <p>The &lt;seq/&gt; element is defined as empty (except when used to advertise a <link url='#support-stream'>stream feature</link>). It possesses a single attribute: 'num'.</p>
-  <p>The value of the 'num' attribute MUST be a non-negative integer representing a strictly increasing sequence number that is increased (but not necessarily incremented-by-one) with any change to the data set.</p>
-</section1>
-
-<section1 topic='Use With Rosters' anchor='roster'>
-  <section2 topic='Roster Get' anchor='roster-get'>
-    <p>If a client supports data sequencing and knows that the server does so (see <link url='#support'>Determining Support</link>), it SHOULD include the &lt;seq/&gt; element in its request for the roster, where the 'num' attribute is set to the sequence number associated with its last cache of the roster.</p>
+<section1 topic='Protocol' anchor='proto'>
+  <section2 topic='Data Format' anchor='format'>
+    <p>This document adds a new 'ver' attribute to the &QUERY; element qualified by the 'jabber:iq:roster' namespace. The value of the 'ver' attribute MUST be a non-negative integer representing a strictly increasing sequence number that is increased (but not necessarily incremented-by-one) with any change to the roster data.</p>
+  </section2>
+  <section2 topic='Client Request' anchor='request'>
+    <p>If a client supports roster versioning, it SHOULD include the 'ver' element in its request for the roster, where the 'ver' attribute is set to the sequence number associated with its last cache of the roster.</p>
     <example caption="Roster get with sequence number"><![CDATA[
 <iq from='romeo@montague.lit/home' id='r1' to='romeo@montague.lit' type='get'>
-  <query xmlns='jabber:iq:roster'>
-    <seq xmlns='urn:xmpp:tmp:seq' num='305'/>
-  </query>
+  <query xmlns='jabber:iq:roster' ver='305'/>
 </iq>
     ]]></example>
-    <p>If the client has not yet cached the roster or the cache is lost or corrupted, but the client wishes to bootstrap the use of data sequencing, it SHOULD include the &lt;seq/&gt; element with the 'num' attribute set to a value of zero (0).</p>
-    <p>Naturally, if the client does not support data sequencing or does not wish to bootstrap use of data sequencing, it will behave like an RFC-3921-compliant client by not including the &lt;seq/&gt; element.</p>
+    <p>If the client has not yet cached the roster or the cache is lost or corrupted, but the client wishes to bootstrap the use of roster versioning, it SHOULD set the 'ver' attribute to a value of zero (0).</p>
+    <p>Naturally, if the client does not support roster versioning or does not wish to bootstrap use of roster versioning, it will behave like an RFC-3921-compliant client by not including the &lt;seq/&gt; element.</p>
   </section2>
-  <section2 topic='Roster Is Unchanged' anchor='roster-unchanged'>
+  <section2 topic='Server Response With Unchanged Roster' anchor='response-unchanged'>
     <p>If the roster has not changed since the version enumerated by the client, the server MUST return an empty IQ-result.</p>
     <example caption="Roster result (unchanged)"><![CDATA[
-<iq from='romeo@montague.lit' id='r1' type='result'/>
+<iq from='romeo@montague.lit' id='r1' to='romeo@montague.lit/home' type='result'/>
     ]]></example>
   </section2>
-  <section2 topic='Roster Has Changed' anchor='roster-changed'>
-    <p>If the roster has changed since the version enumerated by the client, the server MUST return a &QUERY; element that includes the latest sequence number.</p>
-    <p>The &QUERY; element MUST either contain the complete roster (including the sequence number to indicate that the roster has changed) or be empty (indicating that roster changes will be sent as interim roster pushes).</p>
+  <section2 topic='Server Response With Changed Roster' anchor='response-changed'>
+    <p>If the roster has changed since the version enumerated by the client, the server MUST return a &QUERY; element that includes the latest version number.</p>
+    <p>The &QUERY; element MUST either contain the complete roster (including the version number to indicate that the roster has changed) or be empty (indicating that roster changes will be sent as interim roster pushes).</p>
     <p>In general, if returning the complete roster would use less bandwidth than sending individual roster pushes to the client (e.g., if the roster contains only a few items), the server SHOULD return the complete roster.</p>
     <example caption="Roster result with complete roster"><![CDATA[
 <iq from='romeo@montague.lit' id='r1' to='romeo@montague.lit/home' type='result'>
-  <query xmlns='jabber:iq:roster'>
+  <query xmlns='jabber:iq:roster' ver='317'>
     <item jid='bill@shakespeare.lit' subscription='both'/>
     <item jid='nurse@capulet.lit' name='Nurse' subscription='both'>
       <group>Servants</group>
     </item>
-    <seq xmlns='urn:xmpp:tmp:seq' num='317'/>
   </query>
 </iq>
     ]]></example>
     <p>However, if returning the complete roster would use more bandwidth than sending individual roster pushes to the client (e.g., if the roster contains many items, only a few of which have changed), the server SHOULD return an empty &QUERY; element, then send individual roster pushes.</p>
     <example caption="Roster result with no items"><![CDATA[
 <iq from='romeo@montague.lit' id='r1' to='romeo@montague.lit/home' type='result'>
-  <query xmlns='jabber:iq:roster'>
-    <seq xmlns='urn:xmpp:tmp:seq' num='317'/>
-  </query>
+  <query xmlns='jabber:iq:roster' ver='317'>
 </iq>
     ]]></example>
     <example caption="Interim roster pushes"><![CDATA[
 <iq from='romeo@montague.lit' id='p1' to='romeo@montague.lit/home' type='set'>
-  <query xmlns='jabber:iq:roster'>
+  <query xmlns='jabber:iq:roster' ver='313'>
     <item jid='shylock@shakespeare.lit' subscription='remove'/>
-    <seq xmlns='urn:xmpp:tmp:seq' num='313'/>
   </query>
 </iq>
 
 <iq from='romeo@montague.lit' id='p2' to='romeo@montague.lit/home' type='set'>
-  <query xmlns='jabber:iq:roster'>
+  <query xmlns='jabber:iq:roster' ver='317'>
     <item jid='bill@shakespeare.lit' subscription='both'/>
-    <seq xmlns='urn:xmpp:tmp:seq' num='317'/>
   </query>
 </iq>
     ]]></example>
     <p>The interim roster pushes can be understood as follows:</p>
     <ol>
       <li>Imagine that the client had an active presence session for the entire time between its cached roster version (in this case, 305) and the new roster version (317).</li>
-      <li>During that time, the client might have received roster pushes related to data sequence numbers 306, 307, 310, 311, 313, 314, 315, and 317 (the sequence numbers must be strictly increasing but there is no requirement that the sequence shall be continuous).</li>
+      <li>During that time, the client might have received roster pushes related to roster version numbers 306, 307, 310, 311, 313, 314, 315, and 317 (the version numbers must be strictly increasing but there is no requirement that the sequence shall be continuous).</li>
       <li>However, some of those roster pushes might have contained intermediate updates to the same roster item (e.g., changes in the subscription state for bill@shakespeare.lit from "none" to "to" and from "to" to "both").</li>
       <li>The interim roster pushes would not include all of the intermediate steps, only the final result of all changes applied while the client was in fact offline.</li>
     </ol>
-    <p>The client can determine when the interim roster pushes have ended by comparing the sequence number it received on the empty &QUERY; element against the sequence number it receives in roster pushes.</p>
+    <p>The client can determine when the interim roster pushes have ended by comparing the version number it received on the empty &QUERY; element against the version number it receives in roster pushes.</p>
   </section2>
   <section2 topic='Subsequent Roster Pushes' anchor='roster-push'>
-    <p>When the server sends subsequent roster pushes to the client, it MUST include the updated data sequence number. Roster pushes MUST occur in sequence order. The sequence number contained in a roster push MUST be unique. A "change to the roster" is any addition of, update to, or removal of a roster item that would result in a roster push, including changes in subscription states, as described in <cite>RFC 3921</cite> or <cite>rfc3921bis</cite>.</p> 
+    <p>When the server sends subsequent roster pushes to the client, it MUST include the updated roster version number. Roster pushes MUST occur in sequence order. The version number contained in a roster push MUST be unique. A "change to the roster" is any addition of, update to, or removal of a roster item that would result in a roster push, including changes in subscription states, as described in <cite>RFC 3921</cite> or <cite>rfc3921bis</cite>.</p> 
     <example caption="Roster push"><![CDATA[
 <iq from='romeo@montague.lit' id='p3' to='romeo@montague.lit/home' type='set'>
-  <query xmlns='jabber:iq:roster'>
+  <query xmlns='jabber:iq:roster' ver='319'>
     <item jid='muse@shakespeare.lit' name='The Muse' subscription='to'/>
-    <seq xmlns='urn:xmpp:tmp:seq' num='317'/>
   </query>
 </iq>
     ]]></example>
   </section2>
 </section1>
 
-<section1 topic='Use With Service Discovery' anchor='disco'>
-  <section2 topic='Items Request' anchor='disco-get'>
-    <p>If the requesting supports data sequencing and knows that another entity does so (see <link url='#support'>Determining Support</link>), it MAY include the &lt;seq/&gt; element in its disco#items request, where the 'num' attribute is set to the sequence number associated with its last cache of the items.</p>
-    <example caption="Items request with sequence number"><![CDATA[
-<iq from='bill@shakespeare.lit/globe'
-    id='disco2'
-    to='chat.shakespeare.lit'
-    type='get'>
-  <query xmlns='http://jabber.org/protocol/disco#items'>
-    <seq xmlns='urn:xmpp:tmp:seq' num='3'/>
-  </query>
-</iq>
-    ]]></example>
-    <p>As above, if the requesting entity has not yet cached the data set (or the cache is lost or corrupted) but wishes to bootstrap the use of data sequencing, it SHOULD include the &lt;seq/&gt; element with the 'num' attribute set to a value of zero (0).</p>
-  </section2>
-  <section2 topic='Disco Items Are Unchanged' anchor='disco-unchanged'>
-    <p>If the set of disco items has not changed since the version enumerated by the requesting entity, the responding entity MUST return an empty IQ-result.</p>
-    <example caption="Disco items result (unchanged)"><![CDATA[
-<iq from='chat.shakespeare.lit'
-    id='r1'
-    to='bill@shakespeare.lit/globe'
-    type='result'/>
-    ]]></example>
-  </section2>
-  <section2 topic='Disco Items Have Changed' anchor='disco-changed'>
-    <p>If the set of disco items has changed since the version enumerated by the client, the server MUST return a &QUERY; element that includes the latest sequence number.</p>
-    <p>The &QUERY; element MUST either contain the complete set of items (including the sequence number to indicate that the set has changed) or be empty (indicating that changes will be sent as notifications as specified in &xep0230;).</p>
-    <p>In general, if returning the complete set of items would use less bandwidth than sending individual notifications (e.g., if the set contains only a few items), the server SHOULD return the complete set.</p>
-    <example caption="Disco items result with complete set"><![CDATA[
-<iq from='chat.shakespeare.lit'
-    id='disco2'
-    to='bill@shakespeare.lit/globe'
-    type='result'>
-  <query xmlns='http://jabber.org/protocol/disco#items'>
-    <item jid='heath@chat.shakespeare.lit'
-          name='A Lonely Heath'/>
-    <item jid='darkcave@chat.shakespeare.lit'
-          name='A Dark Cave'/>
-    <item jid='forres@chat.shakespeare.lit'
-          name='The Palace'/>
-    <item jid='inverness@chat.shakespeare.lit'
-          name='Macbeth&apos;s Castle'/>
-    <seq xmlns='urn:xmpp:tmp:seq' num='5'/>
-  </query>
-</iq>
-    ]]></example>
-    <p>However, if returning the complete set would use more bandwidth than sending individual notifications (e.g., if the complete set contains many items, only a few of which have changed), the server SHOULD return an empty &QUERY; element, then send individual notifications.</p>
-    <example caption="Disco items result with no items"><![CDATA[
-<iq from='chat.shakespeare.lit'
-    id='disco2'
-    to='bill@shakespeare.lit/globe'
-    type='result'>
-  <query xmlns='http://jabber.org/protocol/disco#items'>
-    <seq xmlns='urn:xmpp:tmp:seq' num='5'/>
-  </query>
-</iq>
-    ]]></example>
-    <example caption="Interim notifications"><![CDATA[
-<message from='chat.shakespeare.lit' to='bill@shakespeare.lit' id='foo'>
-  <event xmlns='http://jabber.org/protocol/pubsub#event'>
-    <items node='http://jabber.org/protocol/disco#items'>
-      <item id='ae890ac52d0df67ed7cfdf51b644e901'>
-        <item xmlns='http://jabber.org/protocol/disco#items'
-              jid='henry-the-fifth@chat.shakespeare.lit'>
-          <seq xmlns='urn:xmpp:tmp:seq' num='4'/>
-        </item>
-      </item>
-    </items>
-  </event>
-</message>
-
-<message from='chat.shakespeare.lit' to='bill@shakespeare.lit' id='bar'>
-  <event xmlns='http://jabber.org/protocol/pubsub#event'>
-    <items node='http://jabber.org/protocol/disco#items'>
-      <retract id='fa890ca52d0df67de7fcfd51b644c701'>
-        <item xmlns='http://jabber.org/protocol/disco#items'
-              jid='cardenio@chat.shakespeare.lit'>
-          <seq xmlns='urn:xmpp:tmp:seq' num='5'/>
-        </item>
-      </retract>
-    </items>
-  </event>
-</message>
-    ]]></example>
-    <p>The client can determine when the interim notifications have ended by comparing the sequence number it received on the empty &QUERY; element against the sequence number it receives in the notifications.</p>
-  </section2>
-  <section2 topic='Subsequent Notifications' anchor='disco-notify'>
-    <p>When the responding entity sends subsequent notifications to the requesting entity, it MUST include the updated sequence number. Notifications MUST occur in sequence order. The sequence number contained in a notification MUST be unique.</p>
-    <example caption="A subsequent notification"><![CDATA[
-<message from='chat.shakespeare.lit' to='bill@shakespeare.lit' id='baz'>
-  <event xmlns='http://jabber.org/protocol/pubsub#event'>
-    <items node='http://jabber.org/protocol/disco#items'>
-      <retract id='fa890ca52d0df67de7fcfd51b644c701'>
-        <item xmlns='http://jabber.org/protocol/disco#items'
-              jid='darkcave@chat.shakespeare.lit'>
-          <seq xmlns='urn:xmpp:tmp:seq' num='6'/>
-        </item>
-      </retract>
-    </items>
-  </event>
-</message>
-    ]]></example>
-  </section2>
-</section1>
-
-<section1 topic='Determining Support' anchor='support'>
-  <section2 topic='Stream Feature' anchor='support-stream'>
-    <p>If a server supports data sequencing, it MUST inform the connecting entity when returning stream features during the stream negotiation process; at the latest, when informing a client that resource binding is required. This is done by including a &lt;seq/&gt; element qualified by the 'urn:xmpp:tmp:seq' namespace &NSNOTE;.</p>
-    <example caption="Stream features"><![CDATA[
+<section1 topic='Stream Feature' anchor='feature'>
+  <p>If a server supports roster versioning, it MUST inform the connecting entity when returning stream features during the stream negotiation process; at the latest, when informing a client that resource binding is required. This is done by including a &lt;ver/&gt; element qualified by the 'urn:xmpp:features:rosterver' namespace.</p>
+  <example caption="Stream features"><![CDATA[
 <stream:features>
   <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
     <required/>
   </bind>
-  <seq xmlns='urn:xmpp:tmp:seq'>
+  <ver xmlns='urn:xmpp:features:rosterver'>
     <optional/>
-  </seq>
+  </ver>
 </stream:features>
-    ]]></example>
-  </section2>
-  <section2 topic='Service Discovery' anchor='support-disco'>
-    <p>In order for an application to determine whether an entity supports this protocol, where possible it SHOULD use the dynamic, presence-based profile of service discovery defined in &xep0115;. However, if an application has not received entity capabilities information from an entity, it SHOULD use explicit service discovery instead.</p>
-  </section2>
+  ]]></example>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
-  <p>It is possible that caching of data sets (rather than holding them in memory only for the life of the session) could introduce new vulnerabilities. Implementations are advised to appropriately protect cached data sets.</p>
+  <p>It is possible that client-side caching of roster information (rather than holding them in memory only for the life of the session) could introduce new vulnerabilities, such as misuse by malware. Implementations are advised to appropriately protect cached roster data.</p>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -289,42 +175,16 @@
 
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
   <section2 topic='Protocol Namespaces' anchor='ns'>
-    <p>Until this specification advances to a status of Draft, the associated namespace for its stream feature shall be "urn:xmpp:tmp:seq". Upon advancement of this specification, the &REGISTRAR; shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;; the requested namespace is "urn:xmpp:seq", which is thought to be unique per the XMPP Registrar's requirements.</p>
+    <p>Until this specification advances to a status of Draft, the associated namespace for its stream feature shall be "urn:xmpp:features:rosterver". Upon advancement of this specification, the &REGISTRAR; shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;; the requested namespace is "urn:xmpp:seq", which is thought to be unique per the XMPP Registrar's requirements.</p>
   </section2>
 </section1>
 
 <section1 topic='XML Schemas' anchor='schemas'>
-  <code><![CDATA[
-<?xml version='1.0' encoding='UTF-8'?>
-
-<xs:schema
-    xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='urn:xmpp:tmp:seq'
-    xmlns='urn:xmpp:tmp:seq'
-    elementFormDefault='qualified'>
-
-  <xs:element name='seq'>
-    <xs:complexType>
-      <xs:choice minOccurs='0'>
-        <xs:element name='optional' type='empty' minOccurs='0'/>
-        <xs:element name='required' type='empty' minOccurs='0'/>
-      </xs:choice>
-      <xs:attribute name='num' type='xs:string' use='optional'/>
-    </xs:complexType>
-  </xs:element>
-
-  <xs:simpleType name='empty'>
-    <xs:restriction base='xs:string'>
-      <xs:enumeration value=''/>
-    </xs:restriction>
-  </xs:simpleType>
-
-</xs:schema>
-  ]]></code>
+  <p>This specification proposes addition of the 'ver' attribute to the schema for the 'jabber:iq:roster' namespace.</p>
 </section1>
 
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>Thanks to Dave Cridland, Richard Dobson, Fabio Forno, Alexander Gnauck, Juha Hartikainen, Joe Hildebrand, Justin Karneges, and Pedro Melo for their comments.</p>
+  <p>Thanks to Dave Cridland, Richard Dobson, Fabio Forno, Alexander Gnauck, Juha Hartikainen, Joe Hildebrand, Justin Karneges, Curtis King, Pedro Melo, and Jiří Zárevúcký for their comments.</p>
 </section1>
 
 </xep>
