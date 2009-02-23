@@ -26,10 +26,10 @@
   &infiniti;
   &stpeter;
   <revision>
-    <version>1.2rc2</version>
-    <date>in progress, last updated 2009-02-19</date>
+    <version>1.2rc3</version>
+    <date>in progress, last updated 2009-02-23</date>
     <initials>psa/jk</initials>
-    <remark>Encouraged use of IQ stanzas rather than message stanzas for sending data; clarified bidirectional nature of IBB; more clearly specified data handling, error conditions, XML syntax, and attribute datatypes.</remark>
+    <remark>Encouraged use of IQ stanzas rather than message stanzas for sending data; clarified bidirectional nature of IBB; more clearly specified data handling, error conditions, XML syntax, and attribute datatypes; added optional stanza attribute as in XEP-0261.</remark>
   </revision>
   <revision>
     <version>1.1</version>
@@ -94,26 +94,32 @@
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
-  <p>This document describes In-Band Bytestreams (IBB), a simple XMPP protocol extension that enables two entities to establish a virtual bytestream over which they can exchange Base64-encoded chunks of data over XMPP itself. Because IBB provides a generic bytestream, so its usage is open-ended. To date it has been used as a fallback method for sending files when out-of-band methods such as &xep0065; are not available. However, IBB could also be useful for any kind of relatively low-bandwidth activity, such as games, shell sessions, or encrypted communication.</p>
+  <p>This document describes In-Band Bytestreams (IBB), a simple XMPP protocol extension that enables two entities to establish a virtual bytestream over which they can exchange Base64-encoded chunks of data over XMPP itself. Because IBB provides a generic bytestream, its usage is open-ended. To date it has been used as a fallback method for sending files when out-of-band methods such as &xep0065; are not available. However, IBB could also be useful for any kind of relatively low-bandwidth activity, such as games, shell sessions, or encrypted communication.</p>
 </section1>
 
 <section1 topic='Protocol' anchor='protocol'>
   <p>IBB as specified in this document defines two protocol aspects:</p>
   <ol>
     <li>How to set up and tear down an IBB session using &lt;open/&gt; and &lt;close/&gt; elements sent within IQ stanzas.</li>
-    <li>How to send chunks of IBB data using IQ or message stanzas containing &lt;data/&gt; elements.</li>
+    <li>How to send chunks of IBB data using IQ (or message) stanzas containing &lt;data/&gt; elements.</li>
   </ol>
   <p>Other methods can be used for setup and teardown, such as &xep0166; as specified in &xep0261;.</p>
   <section2 topic='Creating a Bytestream' anchor='create'>
-    <p>In order to set up an in-band bytestream, the initiator sends an IQ stanza of type "set" containing an &lt;open/&gt; element qualified by the 'http://jabber.org/protocol/ibb' namespace. This element possesses two attributes: 'block-size' defines the maximum size in bytes of each data chunk (which SHOULD NOT be greater than 65535) and 'sid' defines a unique session ID for this IBB session (which SHOULD math the NMTOKEN datatype).</p>
+    <p>In order to set up an in-band bytestream, the initiator sends an IQ stanza of type "set" containing an &lt;open/&gt; element qualified by the 'http://jabber.org/protocol/ibb' namespace. This element possesses three attributes:</p>
+    <ul>
+      <li>The REQUIRED 'block-size' attribute defines the maximum size in bytes of each data chunk (which SHOULD NOT be greater than 65535).</li>
+      <li>The REQUIRED 'sid' attribute defines a unique session ID for this IBB session (which SHOULD match the NMTOKEN datatype).</li>
+      <li>The OPTIONAL 'stanza' attribute defines whether the data will be sent using IQ stanzas or message stanzas (the default value is "iq").</li>
+    </ul>
     <example caption='Initiator requests session'><![CDATA[
 <iq from='romeo@montague.net/orchard'
     id='jn3h8g65'
     to='juliet@capulet.com/balcony'
     type='set'>
-  <open sid='i781hf64' 
+  <open xmlns='http://jabber.org/protocol/ibb'
         block-size='4096'
-        xmlns='http://jabber.org/protocol/ibb'/>
+        sid='i781hf64'
+        stanza='iq'/>
 </iq>
     ]]></example>
     <p>If the responder wishes to proceed with the IBB session, it returns an IQ-result to the initiator.</p>
@@ -161,7 +167,7 @@
   <section2 topic='Sending Data' anchor='send'>
     <p>If the responder informs the initiator that it wishes to proceed with the session, the initiator can begin to send data over the bytestream (in addition, because the bytestream is bidirectional, the responder can also send data; see the <link url='#bidi'>Bidirectionality</link> section of this document for details).</p>
     <p>Each chunk of data is contained in a &lt;data/&gt; element qualified by the 'http://jabber.org/protocol/ibb' namespace. The data element SHOULD be sent in an IQ stanza to enable proper tracking and throttling, but MAY be sent in a message stanza. The data to be sent, prior to any wrapping in the &lt;data/&gt; element and IQ or message stanza, MUST NOT be larger than the 'block-size' determined in the bytestream negotiation.</p>
-    <example caption='Sending data using IQ'><![CDATA[
+    <example caption='Sending data in an IQ stanza'><![CDATA[
 <iq from='romeo@montague.net/orchard' 
     id='kr91n475'
     to='juliet@capulet.com/balcony'
@@ -225,7 +231,24 @@
 </section1>
 
 <section1 topic='Bidirectionality' anchor='bidi'>
-  <p>An in-band bytestream is bidirectional. Therefore, either party to the bytestream is allowed to send data. Each sender MUST initialize the 'seq' attribute to zero and increment the 'seq' value by one with each chunk of data it sends. Each recipient MUST track chunks based on the 'seq' values it receives. The 'seq' values in each direction are independent of the values in the other direction. Thus there are two data sequences for each SessionID. If enabled by the application that uses IBB, the parties MAY negotiate multiple SessionIDs for the same bytestream, however such methods are out of scope for this specification.</p>
+  <p>An in-band bytestream is bidirectional. Therefore, either party to the bytestream is allowed to send data. Each sender MUST initialize the 'seq' attribute to zero and increment the 'seq' value by one with each chunk of data it sends. Each recipient MUST track chunks based on the 'seq' values it receives. The 'seq' values in each direction are independent of the values in the other direction. Thus there are two data sequences for each SessionID.</p>
+</section1>
+
+<section1 topic='Use of Message Stanzas' anchor='message'>
+  <p>It is RECOMMENDED to use IQ stanzas when sending data packets. However, an application MAY use message stanzas instead. If message stanzas are used when sending data packets, the sender SHOULD also use &xep0079; or some other stanza flow-control method. For proper tracking of delivery and processing errors related to data packets, the 'id' attribute SHOULD be used with message stanzas.</p>
+  <example caption='Sending data in a message stanza'><![CDATA[
+<message from='romeo@montague.net/orchard' 
+         id='dsw71gj3'
+         to='juliet@capulet.com/balcony'>
+  <data xmlns='http://jabber.org/protocol/ibb' seq='0' sid='i781hf64'>
+    qANQR1DBwU4DX7jmYZnncmUQB/9KuKBddzQH+tZ1ZywKK0yHKnq57kWq+RFtQdCJ
+    WpdWpR0uQsuJe7+vh3NWn59/gTc5MDlX8dS9p0ovStmNcyLhxVgmqS8ZKhsblVeu
+    IpQ0JgavABqibJolc3BKrVtVV1igKiX/N7Pi8RtY1K18toaMDhdEfhBRzO/XB0+P
+    AQhYlRjNacGcslkhXqNjK5Va4tuOAPy2n1Q8UUrHbUd0g+xJ9Bm0G0LZXyvCWyKH
+    kuNEHFQiLuCY6Iv0myq6iX6tjuHehZlFSh80b5BVV9tNLwNR5Eqz1klxMhoghJOA
+  </data>
+</message>
+    ]]></example>
 </section1>
 
 <section1 topic='Usage Guidelines' anchor='intro'>
@@ -234,9 +257,6 @@
     <li>A server MAY rate limit a connection, depending on the size and frequency of data packets.</li>
     <li>A server MAY disconnect a connection that sends overly large packets as defined by server policy.</li>
     <li>It is RECOMMENDED to use a 'block-size' of 4096.</li>
-    <li>For proper tracking of delivery and processing errors related to data packets, the 'id' attribute MUST be used with IQ stanzas and SHOULD be used with message stanzas.</li>
-    <li>It is RECOMMENDED to use IQ stanzas when sending data packets.</li>
-    <li>If message stanzas are used when sending data packets, the sender SHOULD also use &xep0079; or some other stanza flow-control method.</li>
   </ul>
 </section1>
 
@@ -278,6 +298,14 @@
         <xs:extension base='empty'>
           <xs:attribute name='block-size' type='xs:unsignedShort' use='required'/>
           <xs:attribute name='sid' type='xs:NMTOKEN' use='required'/>
+          <xs:attribute name='stanza' use='optional' default='iq'>
+            <xs:simpleType>
+              <xs:restriction base='xs:NCName'>
+                <xs:enumeration value='iq'>
+                <xs:enumeration value='message'/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
         </xs:extension>
       </xs:simpleContent>
      </xs:complexType>
