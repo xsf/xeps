@@ -23,6 +23,22 @@
   &hildjj;
   &stpeter;
   <revision>
+    <version>0.6</version>
+    <date>2009-03-19</date>
+    <initials>psa</initials>
+    <remark>
+      <ul>
+        <li>Incremented protocol number from 0 to 1.</li>
+        <li>Changed attribute names from c (?) and b (?) to u (unacknowledged) and h (handled).</li>
+        <li>Added stanzas attribute to specify maximum number of stanzas between acking requests.</li>
+        <li>More clearly defined error handling using &lt;failed/&gt; element plus stanza error conditions.</li>
+        <li>Defined error handling for &lt;ping/&gt; element by allowing stanza error conditions in &lt;pong/&gt; element.</li>
+        <li>More clearly specified maximum reconnect time.</li>
+        <li>Added detailed scenarios for basic acking and for outbound and inbound throttling.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>0.5</version>
     <date>2008-09-29</date>
     <initials>psa</initials>
@@ -44,7 +60,7 @@
     <version>0.2</version>
     <date>2007-04-05</date>
     <initials>jk</initials>
-    <remark><p>Require c attribute on &lt;r/&gt; element.  Describe minimal implementation.  Switch to standard temporary namespace.</p></remark>
+    <remark><p>Require c attribute on &lt;r/&gt; element. Describe minimal implementation. Switch to standard temporary namespace.</p></remark>
   </revision>
   <revision>
     <version>0.1</version>
@@ -75,145 +91,340 @@
 <section1 topic='Introduction' anchor='intro'>
   <p>&xmppcore; defines the fundamental streaming XML technology used by XMPP (i.e., stream establishment and termination including authentication and encryption). However, the core XMPP specification does not provide tools for actively managing a "live" XML stream. In particular, the following management features might improve network reliability and the end-user experience (especially when connectivity is infrequent):</p>
   <ul>
-    <li>Acknowledgements -- the ability to know if a particular stanza (or a series of stanzas) has in fact been received and processed by either of the endpoints.</li>
+    <li>Acks -- the ability to know if a particular stanza (or a series of stanzas) has in fact been received and processed by either of the endpoints.</li>
     <li>Pings -- the ability to test the connectivity of the XML stream.</li>
-    <li>Resume -- the ability to quickly resume a stream that has been terminated.</li>
+    <li>Resumption -- the ability to quickly resume a stream that has been terminated.</li>
   </ul>
   <p>Detailed descriptions of these features are provided in the remainder of this specification.</p>
-  <p>The facilities provided by this specification are different from those provided by &xep0079;, &xep0184;, and &xep0199;. Those specifications cover end-to-end and multi-hop acks and pings, which are useful in special scenarios, but unnecessary for checking of a single-hop stream. It is also expected that this protocol will revive interest in Advanced Message Processing (AMP), because single-hop acks are necessary for AMP delivery receipts to function properly.</p>
-  <p>The basic concept behind stream management is that the initiating entity (either a client or a server) and the receiving entity (a server) can exchange commands for active management of the stream. In particular, instead of using XMPP IQ, message, or presence stanzas (which are relatively verbose), stream management uses a series of short XML elements at the root stream level.</p>
+  <p>This specification applies at the level of an XML stream between a client and a server or between a server and a peer server. By constrast, &xep0079;, &xep0184;, and &xep0199; cover acks and pings that are sent end-to-end over multiple streams; these facilities are useful in special scenarios but are unnecessary for checking of a direct stream between two XMPP entities. It is also expected that this protocol will revive interest in Advanced Message Processing (AMP), because single-hop acks are necessary for AMP delivery receipts to function properly.</p>
+  <p>The basic concept behind stream management is that the initiating entity (either a client or a server) and the receiving entity (a server) can exchange commands for active management of the stream. Instead of using XMPP IQ, message, or presence stanzas (which are relatively verbose), stream management uses a series of short XML elements at the root stream level.</p>
   <p>The benefits to be gained from stream management include the following:</p>
   <ul>
-    <li>Ability to take alternate action if the peer has not acknowledged receipt of a stanza, such as storing and delivering again later.</li>
-    <li>Servers can send stanzas with the same to/from JID pair on separate server-to-server TCP channels, as long as the sent stanzas have been acknowledged.</li>
-    <li>Clients can determine when they have reached a throughput limitation (such as "karma").</li>
+    <li>Ability to take alternate action if the peer has not acknowledged handling of a stanza, such as storing and delivering again later.</li>
+    <li>Servers can send stanzas with the same to/from JID pair on separate server-to-server TCP channels, as long as the sent stanzas have been acknowledged as handled.</li>
+    <li>Clients can determine when they have reached a throughput limitation.</li>
   </ul>
-  <p>Note: In this specification, packets generated by a client are denoted by "C:" and packets generated by a server are denoted by "S:".</p>
 </section1>
 
 <section1 topic='Stream Feature' anchor='feature'>
-  <p>After negotiating use of TLS and authenticating via SASL, the receiving entity returns a new stream header to the intiating entity along with new stream features, where the features include an &lt;sm/&gt; element qualified by the 'urn:xmpp:sm:0' namespace &VNOTE;.</p>
-  <p>Note: The stream management feature MUST NOT be offered unless the initiating entity has been authenticated.</p>
+  <p>After negotiating use of TLS and authenticating via SASL, the receiving entity returns a new stream header to the intiating entity along with stream features, where the features include an &lt;sm/&gt; element qualified by the 'urn:xmpp:sm:1' namespace &VNOTE;.</p>
+  <p>The stream management feature MUST NOT be offered unless the initiating entity has been authenticated via SASL, &xep0078;, or &xep0220;.</p>
   <example caption='Server sends new stream header along with stream features'><![CDATA[
-S: <stream:stream
-       to='example.com'
-       xmlns='jabber:client'
-       xmlns:stream='http://etherx.jabber.org/streams'
-       version='1.0'>
+<stream:stream
+    to='example.com'
+    xmlns='jabber:client'
+    xmlns:stream='http://etherx.jabber.org/streams'
+    version='1.0'>
 
-S: <stream:features>
-     <sm xmlns='urn:xmpp:sm:0'>
-       <optional/>
-     </sm>
-     <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
-       <required/>
-     </bind>
-   </stream:features>
+<stream:features>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+    <required/>
+  </bind>
+  <sm xmlns='urn:xmpp:sm:1'>
+    <optional/>
+  </sm>
+</stream:features>
   ]]></example>
-  <p>If the receiving entity offers stream resumption, the &lt;sm/&gt; element MUST include an 'id' attribute (a unique identifier for the session) and SHOULD include a 'max' attribute that specifies the longest allowable time period for session resumption (in minutes).</p>
+  <p>The &lt;sm/&gt; element MAY include a 'stanzas' attribute whose value indicates the server's preferred maximum number of received stanzas between acks. For example, if the 'stanzas' attribute has a value of "10" then a server would prefer that a connected client request an ack after the client has sent at most ten stanzas to the server.</p>
+  <example caption='Stream features with stanzas attribute'><![CDATA[
+<stream:features>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+    <required/>
+  </bind>
+  <sm xmlns='urn:xmpp:sm:1' stanzas='10'>
+    <optional/>
+  </sm>
+</stream:features>
+  ]]></example>
+  <p>If the receiving entity offers stream resumption in addition to acks and pings, the &lt;sm/&gt; element MUST include an 'id' attribute (a unique identifier for the session) and SHOULD include a 'max' attribute that specifies the longest allowable time period for session resumption (in seconds).</p>
   <example caption='Stream features for resumption'><![CDATA[
-S: <stream:features>
-     <sm xmlns='urn:xmpp:sm:0' id='some-long-sm-id' max='15'>
-       <optional/>
-     </sm>
-     <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
-       <required/>
-     </bind>
-   </stream:features>
+<stream:features>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+    <required/>
+  </bind>
+  <sm xmlns='urn:xmpp:sm:1' id='some-long-sm-id' max='600' stanzas='4'>
+    <optional/>
+  </sm>
+</stream:features>
+  ]]></example>
+  <p class='def'><strong>Definition:</strong> The 'id' attribute defines a unique identifier for purposes of stream management (an "SM-ID"). The SM-ID MUST be generated by the receiving entity (server). The initiating entity MUST consider the SM-ID to be opaque and therefore MUST NOT assign any semantic meaning to the SM-ID. The receiving entity MAY encode any information it deems useful into the SM-ID, such as the full JID &LOCALFULL; of a connected client (e.g., the full JID plus a nonce value). Any characters allowed in an XML attribute are allowed. The SM-ID MUST NOT be reused for simultaneous or subsequent sessions (as long as the receiving entity is available). The SM-ID SHOULD NOT be longer than 4000 bytes.</p>
+  <example caption='Stream features for resumption'><![CDATA[
+<stream:features>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+    <required/>
+  </bind>
+  <sm xmlns='urn:xmpp:sm:1' id='some-long-sm-id' max='600' stanzas='4'>
+    <optional/>
+  </sm>
+</stream:features>
   ]]></example>
 </section1>
 
-<section1 topic='Enabling a Stream Management Session' anchor='enable'>
-  <p>To enable use of stream management, the client sends an &lt;enable/&gt; command to the server. If it wants to be allowed to resume the stream, it includes a boolean 'resume' attribute, which defaults to false &BOOLEANNOTE;.</p>
+<section1 topic='Enabling Stream Management' anchor='enable'>
+  <p>To enable use of stream management, the client sends an &lt;enable/&gt; command to the server.</p>
   <example caption='Client enables stream management'><![CDATA[
-C: <enable xmlns='urn:xmpp:sm:0'/>
+<enable xmlns='urn:xmpp:sm:1'/>
   ]]></example>
-  <p>For information about enabling stream management when resuming a previous session, see the <link url='#resumption'>Stream Resumption</link> section of this document.</p>
-  <p>Upon receiving the enable request, the receiving entity MUST reply with an &lt;enabled/&gt; element or an &lt;error/&gt; element qualified by the 'urn:xmpp:sm:0' namespace. The &lt;error/&gt; element indicates that there was a problem enabling the stream management "session". The &lt;enabled/&gt; element indicates successful enabling of the stream management session.</p>
+  <p>If the client wants to be allowed to resume the stream, it includes a boolean 'resume' attribute, which defaults to false &BOOLEANNOTE;. For information about resuming a previous session, see the <link url='#resumption'>Resumption</link> section of this document.</p>
+  <p>Upon receiving the enable request, the receiving entity MUST reply with an &lt;enabled/&gt; element or an &lt;failed/&gt; element qualified by the 'urn:xmpp:sm:1' namespace. The &lt;failed/&gt; element indicates that there was a problem enabling the stream management "session". The &lt;enabled/&gt; element indicates successful enabling of the stream management session.</p>
+  <p>For client-to-server connections, the client SHOULD NOT attempt to enable stream management until after it has completed Resource Binding. The server MAY enforce this order and return a &lt;failed/&gt; element in response (see <link url='#errors'>Error Handling</link>).</p>
+  <example caption='Server returns error if client attempts to enable stream management before resource binding'><![CDATA[
+<failed xmlns='urn:xmpp:sm:1'>
+  <unexpected-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</failed>
+  ]]></example>
   <p>If session resumption is allowed, the receiving entity MUST include a 'resume' attribute set to a value of "true" or "1".</p>
   <example caption='Server enables stream management'><![CDATA[
-S: <enabled xmlns='urn:xmpp:sm:0' resume='1'/>
+<enabled xmlns='urn:xmpp:sm:1' resume='1'/>
   ]]></example>
   <p>The parties can then the use stream management features defined below.</p>
 </section1>
   
-<section1 topic='Stream Acknowledgements' anchor='acking'>
-  <p>After enabling the feature, the initiating or receiving entity can send acknowledgement elements at any time over the stream.  An acknowledgement element is either an &lt;r/&gt; element ("request ack") or an &lt;a/&gt; element ("gratuitous ack"), qualified by the 'urn:xmpp:sm:0' namespace.  Both elements are referred to here as "ack elements". The syntax is as follows.</p>
+<section1 topic='Acks' anchor='acking'>
+  <p>After enabling the feature, the initiating or receiving entity can send ack elements at any time over the stream. An ack element is one of the following:</p>
   <ul>
-    <li>An &lt;r/&gt; element MUST contain a 'c' attribute and MAY contain a 'b' attribute.</li>
-    <li>An &lt;a/&gt; element MAY contain a 'c' attribute and/or a 'b' attribute.</li>
-    <li>The 'c' attribute is used to indicate a sequence number.  It is an integer value generated by the sender, and MUST be strictly increasing. However, the sender MAY choose to reset the integer to a lower value if all stanzas sent have been acknowledged.</li>
-    <li>The 'b' attribute acknowledges a previously-received sequence number from the other entity.</li>
+    <li>The &lt;r/&gt; element is used to <strong>request</strong> acknowledgement of received stanzas.</li>
+    <li>The &lt;a/&gt; element is used to <strong>answer</strong> a request for acknowledgement.</li>
   </ul>
-  <p>Therefore an ack element is used to indicate a sequence number (contains 'c'), to acknowledge a sequence number (contains 'b'), or to do both at once (contains 'c' and contains 'b').  Acknowledging a previously-received ack element indicates stanza acceptance, in that all stanzas received until then are now safely in the receiver's hands and that the receiver will take care of them.  Acks do not indicate successful delivery to a remote entity beyond the receiver.</p>
-  <example caption='A message with an ack request'><![CDATA[
-C: <message from='laurence@example.net/churchyard'
-            to='juliet@example.com'
-            xml:lang='en'>
-     <body>
-       I'll send a friar with speed, to Mantua, 
-       with my letters to thy lord.
-     </body>
-   </message>
-   <r xmlns='urn:xmpp:sm:0' c='1'/>
+  <p>The &lt;r/&gt; and &lt;a/&gt; elements are qualified by the 'urn:xmpp:sm:1' namespace.</p>
+  <p>The following attributes are defined:</p>
+  <ul>
+    <li>The 'u' attribute identifies the last <strong>unacknowledged</strong> stanza (i.e., the last stanza generated by the sender which has not yet been acknowledged as handled by the peer). It is an integer value generated by the sender and MUST be strictly increasing.</li>
+    <li>The 'h' attribute identifies the last <strong>handled</strong> stanza (i.e., the last stanza that the receiver will acknowledge as having handled). It is an integer value that corresponds to the 'u' attribute of the last received &lt;r/&gt; element.</li>
+  </ul>
+  <p>An &lt;r/&gt; element MUST contain a 'u' attribute and MAY contain an 'h' attribute.</p>
+  <p>An &lt;a/&gt; element MUST contain an 'h' attribute and MAY contain a 'u' attribute.</p>
+  <p>Therefore an ack element is used to indicate an unacknowledged sequence number (contains 'u'), to acknowledge a sequence number (contains 'h'), or to do both at once (contains 'u' and contains 'h').</p>
+  <p class='def'><strong>Definition:</strong> Acknowledging a previously-received ack element indicates that the stanza(s) sent since then have been "handled" by the receiver. By "handled" we mean that the stanzas have been either processed directly by the receiver, delivered to a local entity such as another connected client on the same server, or routed to a remote entity at a different server. Acking a stanza does not necessarily indicate that the stanza has been successfully delivered to the intended recipient, only that it has been handled by the entity at the other end of an XML stream.</p>
+  <example caption='A message with a request'><![CDATA[
+<message from='laurence@example.net/churchyard'
+         to='juliet@example.com'
+         xml:lang='en'>
+  <body>
+    I'll send a friar with speed, to Mantua, 
+    with my letters to thy lord.
+  </body>
+</message>
+<r xmlns='urn:xmpp:sm:1' u='1'/>
   ]]></example>
-  <p>Note: The ack request SHOULD be sent in the same TCP packet as the XMPP stanza.</p>
-  <p>When an &lt;r/&gt; element ("request ack") is received, the recipient MUST acknowledge it by sending an ack element back to the sender.  The sender does not have to wait for an ack to continue sending stanzas.  The response ack MUST contain a value of 'b' that is greater than or equal to the 'c' value given in the request ack.  Acks SHOULD be sent as soon as possible, and MUST NOT be withheld for any condition other than a timeout. For example, a client with a slow connection might want to collect many stanzas over a period of time before acking, and a server might want to throttle incoming stanzas. Because acks indicate stanza acceptance, a server that is throttling stanzas MUST defer the acks until the client is no longer being penalized.</p>
-  <p>When a sequence number is received (via the 'c' attribute), the recipient SHOULD keep a record of this value as the last received sequence number for the current stream.  Every time a new sequence number is received, the previous number SHOULD be discarded.  If a stream ends and it is not resumed within the time specified in the acknowledgement feature element, then the sequence number and any associated state MAY be discarded.  Before the session state is discarded, implementations SHOULD take alternative action with any unacknowledged stanzas (e.g. stanzas sent after the latest sequence number reported by 'b').  A server implementation SHOULD treat unacknowledged stanzas in the same way that it would treat a stanza sent to an unavailable resource, by either returning an error to the sender or committing the stanza to offline storage.  A user-oriented client implementation SHOULD inform the user of the failure via appropriate user-interface elements.</p>
+  <p class='box'>Note: Ack elements SHOULD be sent immediately after sending an XMPP stanza. In particular, if a request is received, an applications MAY wait a short period for something else to send before responding, so that the response can be sent with the other data.</p>
+  <p>When an &lt;r/&gt; element ("request") is received, the recipient MUST acknowledge it by sending an ack element (either &lt;a/&gt; or &lt;r/&gt;) to the sender. The sender does not have to wait for an ack to continue sending stanzas. The response MUST contain a value of 'h' that is greater than or equal to the 'u' value given in the request. The response SHOULD be sent as soon as possible, and MUST NOT be withheld for any condition other than a timeout. For example, a client with a slow connection might want to collect many stanzas over a period of time before acking, and a server might want to throttle incoming stanzas. Because acks indicate stanza acceptance, a server that is throttling stanzas MUST delay the response until the client is no longer being penalized.</p>
+  <p>When a recipient receives a sequence number for unacknowledged stanzas (via the 'u' attribute), the recipient SHOULD keep a record of this value as the last received sequence number for the current stream. Every time a new sequence number is received, the previous number SHOULD be discarded. If a stream ends and it is not resumed within the time specified in the acknowledgement feature element, the sequence number and any associated state MAY be discarded. Before the session state is discarded, implementations SHOULD take alternative action regarding any unacknowledged stanzas (e.g. stanzas sent after the latest sequence number reported by 'h'). A server implementation SHOULD treat unacknowledged stanzas in the same way that it would treat a stanza sent to an unavailable resource, by either returning an error to the sender or committing the stanza to offline storage. A user-oriented client implementation SHOULD inform the user of the failure via appropriate user-interface elements.</p>
   <example caption='An ack'><![CDATA[
-S: <a xmlns='urn:xmpp:sm:0' b='1'/>
+<a xmlns='urn:xmpp:sm:1' h='1'/>
   ]]></example>
 </section1>
 
-<section1 topic='Stream Pings' anchor='pings'>
-  <p>Either entity can also ping the other. This is useful for ensuring that the TCP connection is still up and working, and also for determining latency. The procedure is intended to replace the legacy behavior of sending whitespace. Pinging is done by sending a 'ping' element:</p>
-  <example caption='Pinging the Peer'><![CDATA[
-<ping xmlns='urn:xmpp:sm:0'/>
+<section1 topic='Pings' anchor='pings'>
+  <p>Either entity can also ping the other. This is useful for ensuring that the TCP connection is still up and working, and also for determining latency. The procedure is intended to replace the legacy behavior of sending whitespace. Pinging is done by sending a &lt;ping/&gt; element:</p>
+  <example caption='Pinging the peer'><![CDATA[
+<ping xmlns='urn:xmpp:sm:1'/>
   ]]></example>
-  <p>The peer then MUST reply immediately with a 'pong' element.</p>
-  <example caption='Replying to a Ping'><![CDATA[
-<pong xmlns='urn:xmpp:sm:0'/>
+  <p>The peer then MUST reply immediately with a &lt;pong/&gt; element.</p>
+  <example caption='Replying to a ping'><![CDATA[
+<pong xmlns='urn:xmpp:sm:1'/>
   ]]></example>
-  <p>A server that is throttling stanzas (and thus withholding acks until later) SHOULD still immediately reply to pings.</p>
+  <p>A server that is throttling stanzas (and thus withholding ack answers until later) MUST still immediately reply to pings and SHOULD include an appropriate error or status condition in the &lt;pong/&gt; element (preferably &constraint; for inbound throttling and &policy; for outbound throttling). However, if the connected entity continues to send stanzas or sends excessive pings then the server MAY terminate the stream as explained elsewhere.</p>
 </section1>
 
-<section1 topic='Stream Resumption' anchor='resumption'>
-  <p>It can happen that an XML stream is terminated temporarily and involuntarily (e.g., because of network outages). In this case, it is desirable to quickly resume the former stream rather than complete the tedious process of stream establishment.</p>
-  <p>The &lt;enable/&gt; element MAY contain a 'resume' attribute with value "true" or "1", to request that the stream management session be made resumable.  The &lt;enable/&gt; element MAY also contain a 'previd' attribute and a 'b' attribute, if the initiating entity wishes to resume a previously known stream management session.  The value of the 'previd' attribute is set to the same value as the 'id' attribute of the acknowledgement feature element in the previous session.  The value of the 'b' attribute, if applicable, is set to the last received sequence number (discussed below) by the initiating entity.  If the initiating entity is not resuming a past session, the 'previd' and 'b' attributes MUST NOT be included.</p>
-  <example caption='Client enables stream management with stream resumption'><![CDATA[
-C: <enable xmlns='urn:xmpp:sm:0' resume='true'/>
+<section1 topic='Resumption' anchor='resumption'>
+  <p>It can happen that an XML stream is terminated unexpectedly (e.g., because of network outages). In this case, it is desirable to quickly resume the former stream rather than complete the tedious process of stream establishment, roster retrieval, and presence broadcast.</p>
+  <p>To request that the stream will be resumable, when enabling stream management the initiating entity MUST add a 'resume' attribute to the &lt;enable/&gt; element with a value of "true" or "1" &BOOLEANNOTE;.</p>
+  <example caption='Client enables stream management'><![CDATA[
+<enable xmlns='urn:xmpp:sm:1' resume='true'/>
   ]]></example>
-  <example caption='Session Resumption Request'><![CDATA[
-<resume xmlns='urn:xmpp:sm:0'/>
+  <p>If the receiving entity will allow the stream to be resumed, it MUST include a 'resume' attribute set to "true" or "1" on the &lt;enabled/&gt; element.</p>
+  <example caption='Server allows stream resumption'><![CDATA[
+<enabled xmlns='urn:xmpp:sm:1' resume='true'/>
   ]]></example>
-  <p>If the initiating entity provided a 'resume' attribute in the &lt;enable/&gt; element, and the receiving entity supports session resumption, then the receiving entity MAY provide a 'resume' attribute (with value "true" or "1") in the &lt;enabled/&gt; element to indicate that the session shall be resumable.  If the initiating entity provided a 'previd' attribute in the &lt;enable/&gt; element, and the receiving entity supports session resumption, then the receiving entity MAY provide a 'b' attribute in the &lt;enabled/&gt; element.  The value of this attribute is set to the last received sequence number (discussed below) by the receiving entity in the previous session.  If the receiving entity does not support session resumption, or does not recognize the 'previd' as an earlier session, or there is no known last received sequence number for the session, then the attribute MUST NOT be included.  If session resumption is used, and the receiving entity still has the stream for the previously-identified session open at this time, the old stream SHOULD be terminated.</p>
-  <example caption='Session Resumed'><![CDATA[
-<resumed xmlns='urn:xmpp:sm:0'/>
+  <p>If the stream is terminated unexpectedly, the initiating entity would then open a TCP connection to the receiving entity. The order of events is envisioned to be as follows:</p>
+  <ol start='1'>
+    <li>Initiating entity sends initial stream header.</li>
+    <li>Receiving entity sends response stream header.</li>
+    <li>Receiving entity sends stream features.</li>
+    <li>Initiating entity sends STARTTLS request.</li>
+    <li>Receiving entity informs initiating entity to proceed with the TLS negotiation.</li>
+    <li>The parties complete a TLS handshake. (Note: When performing session resumption and also utilizing TLS, it is RECOMMENDED to take advantage of TLS session resumption to further optimize the resumption of the XML stream.)</li>
+    <li>Initiating entity sends new initial stream header.</li>
+    <li>Receiving entity sends response stream header.</li>
+    <li>Receiving entity sends stream features, requiring SASL negotiation and offering appropriate SASL mechanisms. (Note: If the server considers the information provided during TLS session resumption to be sufficient authentication, it MAY offer the SASL EXTERNAL mechanism; for details, refer to &sasltls;.)</li>
+    <li>The parties complete SASL negotiation.</li>
+    <li>Initiating entity sends new initial stream header.</li>
+    <li>Receiving entity sends response stream header.</li>
+    <li>Receiving entity sends stream features, offering the SM feature.</li>
+    <li>Initiating entity requests resumption of the former stream.</li>
+  </ol>
+  <p>To request resumption of the former stream, the initiating entity sends a &lt;resume/&gt; element qualified by the 'urn:xmpp:sm:1' namespace. This element MUST include a 'previd' attribute whose value is the SM-ID of the former stream and SHOULD include an 'h' attribute that identifies the last acknowledged sequence number sent over the former stream from the receiving entity to the initiating entity.</p>
+  <example caption='Stream resumption request'><![CDATA[
+<resume xmlns='urn:xmpp:sm:1' previd='some-long-sm-id' h='foo'/>
   ]]></example>
-  <p>Note: When performing session resumption and also utilizing TLS, it is RECOMMENDED to take advantage of TLS session resumption to further optimize the resumption of the XML stream.</p>
-  <p>We then assume that the client gets disconnected (e.g., because it has roamed into an area without connectivity). When the client once again has network connectivity, it attempts to resume its session.</p>
-  <example caption='Client attempt to resume a previous session:'><![CDATA[
-<resume xmlns='urn:xmpp:sm:0' previd='some-long-sm-id'/>
+  <p>If the receiving entity can resume the former stream, it MUST return a &lt;resumed/&gt; element that includes a 'previd' attribute set to the SM-ID of the former stream. If the receiving entity does not support session resumption or does not recognize the 'previd' as an earlier session, it MUST return an &lt;failed/&gt; element, which SHOULD include an error condition of &feature; or &notfound; respectively.</p>
+  <p>The &lt;resumed/&gt; element MAY also include an 'h' attribute set to the last acknowledged sequence number sent over the former stream from the initiating entity to the receiving entity. If there is no known last acknowledged sequence number for the former stream, then the 'h' attribute MUST NOT be included.</p>
+  <p>If the former stream is resumed and the receiving entity still has the stream for the previously-identified session open at this time, the old stream SHOULD be terminated.</p>
+  <example caption='Stream resumed'><![CDATA[
+<resumed xmlns='urn:xmpp:sm:1' previd='some-long-sm-id'/>
   ]]></example>
-  <example caption='Server informs client that session is resumed:'><![CDATA[
-<resume xmlns='urn:xmpp:sm:0' b='7'/>
-  ]]></example>
-  <p>When a session is resumed, and resource binding is completed (if required), both the initiating entity and the receiving entity SHOULD retransmit any stanzas that were not accepted during the previous session, each based on the last received sequence number reported by the other.  A client SHOULD NOT request the roster after resumption, because any changes to the roster while the client was disconnected will be sent to the client after it resumes.  Similarly, the client SHOULD NOT resend presence stanzas in an act to restore its original presence state, as this state will have been retained by the server.</p>
-</section1>
-
-<section1 topic='Implementation Notes' anchor='impl'>
-  <p>Stream management elements SHOULD be sent in the same TCP packet as XMPP stanzas, to reduce the number of total packets sent. In particular, if a request ack is received, an applications MAY wait a short period for something else to send before responding, so that the response ack can share a TCP packet with the other data.</p>
-</section1>
-
-<section1 topic='Minimal Implementation Guideline' anchor='guideline'>
-  <p>The Stream Management protocol has a complex appearance, and indeed it is complex to implement if you want to perform all of the optimizations allowed.  However, a basic implementation is not very difficult, if you just want simple acking and don't care about sequence numbers too much.  Here is what a basic implementation would do:</p>
+  <p>When a session is resumed, the parties SHOULD proceed as follows:</p>
   <ul>
-    <li>As an initiating entity, send &lt;enable/&gt; with no attributes, and ignore the attributes on the &lt;enabled/&gt; response.</li>
-    <li>As a receiving entity, ignore the attributes on the &lt;enable/&gt; element received, and respond using &lt;enabled/&gt; with no attributes.</li>
-    <li>When receiving an &lt;r/&gt; or &lt;a/&gt; element with a 'c' attribute, immediately respond with an &lt;a/&gt; element with a value of 'b' equal to the value of 'c' received.</li>
-    <li>Keep an integer X for this stream session, initially set to zero.  When you are about to send a stanza, first put the stanza (paired with the current value of X) in an "unacknowleged" queue.  Then send the stanza over the wire followed by &lt;r c='[value of X]'/&gt;, and increment X by 1.  When receiving an &lt;r/&gt; or &lt;a/&gt; element with a 'b' attribute, all stanzas whose paired value (X at the time of queuing) is less than or equal to the value of 'b' can be removed from the queue.</li>
+    <li>Both parties SHOULD retransmit any stanzas that were not accepted during the previous session, based on the last acknowledged sequence number reported by the peer.</li>
+    <li>A reconnecting client SHOULD NOT request the roster, because any roster changes that occurred while the client was disconnected will be sent to the client after the stream resumes.</li>
+    <li>The client SHOULD NOT resend presence stanzas in an attempt to restore its former presence state, since this state will have been retained by the server.</li>
   </ul>
-  <p>This is enough of an implementation to minimally satisfy the remote entity, and allows basic tracking of your own stanzas sent.  If the stream connection is broken, you have a queue of unacknowledged stanzas that you can choose to handle appropriately (e.g., warned the sending user or send on reconnect).</p>
+</section1>
+
+<section1 topic='Error Handling' anchor='errors'>
+  <p>If an error occurs with regard to an &lt;enable/&gt; or &lt;resume/&gt; element, the receiving entity MUST return a &lt;failed/&gt; element. This element SHOULD contain an error condition, which MUST be one of the stanza error conditions defined in &rfc3920bis;.</p>
+  <p>An example follows.</p>
+  <example caption='Server returns error'><![CDATA[
+<failed xmlns='urn:xmpp:sm:1'>
+  <unexpected-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</failed>
+  ]]></example>
+  <p>In addition, the &lt;pong/&gt; element MAY contain an error condition.</p>
+  <p>Stream management errors SHOULD be considered recoverable; however, misuse of stream management (e.g., sending excessive pings) MAY result in termination of the stream.</p>
+</section1>
+
+<section1 topic='Scenarios' anchor='scenarios'>
+  <p>The following scenarios illustrate several different uses of stream management. The examples are that of a client and a server, but stream management can also be used for server-to-server streams.</p>
+  <section2 topic='Basic Acking' anchor='scenarios-basic'>
+    <p>The Stream Management protocol can be used to improve reliability using acks without the ability to resume a session. In fact, a basic implementation might not even care about sequence numbers and therefore would do the following:</p>
+    <ul>
+      <li>As an initiating entity, send &lt;enable/&gt; with no attributes, and ignore the attributes on the &lt;enabled/&gt; response.</li>
+      <li>As a receiving entity, ignore the attributes on the &lt;enable/&gt; element received, and respond via &lt;enabled/&gt; with no attributes.</li>
+      <li>When receiving an &lt;r/&gt; or &lt;a/&gt; element with a 'u' attribute, immediately respond via an &lt;a/&gt; element where the value of 'h' sent is the value of 'u' received.</li>
+      <li>Keep an integer X for this stream session, initially set to zero. When about to send a stanza, first put the stanza (paired with the current value of X) in an "unacknowleged" queue. Then send the stanza over the wire with &lt;r u='[value of X]'/&gt; to request acknowledgement of that outbond stanza, and increment X by 1. When receiving an &lt;r/&gt; or &lt;a/&gt; element with an 'h' attribute, all stanzas whose paired value (X at the time of queueing) is less than or equal to the value of 'h' can be removed from the unacknowledged queue.</li>
+    </ul>
+    <p>This is enough of an implementation to minimally satisfy the peer, and allows basic tracking of each outbound stanza. If the stream connection is broken, the application has a queue of unacknowledged stanzas that it can choose to handle appropriately (e.g., warned a human user or silently sending on reconnect).</p>
+    <p>The following examples illustrate basic acking.</p>
+    <p>First, after authentication and resource binding, the client enables stream management.</p>
+    <example caption='Client enables stream management'><![CDATA[
+<enable xmlns='urn:xmpp:sm:1'/>
+    ]]></example>
+    <p>The server then enables stream management.</p>
+  <example caption='Server enables stream management'><![CDATA[
+<enabled xmlns='urn:xmpp:sm:1'/>
+    ]]></example>
+    <p>The client then retrieves its roster and immediately sends an &lt;r/&gt; element to request acknowledgement.</p>
+    <example caption='Client sends a stanza and requests acknowledgement'><![CDATA[
+<iq id='ls72g593' type='get'>
+  <query xmlns='jabber:iq:roster'/>
+</iq>
+<r xmlns='urn:xmpp:sm:1' u='1'/>
+    ]]></example>
+    <p>The server returns the roster and immediately sends an &lt;a/&gt; element to acknowledge handling of the stanza.</p>
+    <example caption='Server sends a stanza and acknowledges handling of client stanza'><![CDATA[
+<iq id='ls72g593' type='result'>
+  <query xmlns='jabber:iq:roster'>
+    <item jid='juliet@capulet.lit'/>
+    <item jid='benvolio@montague.lit'/>
+  </query>
+</iq>
+<a xmlns='urn:xmpp:sm:1' u='1'/>
+    ]]></example>
+    <p>The client then sends initial presence and immediately sends an &lt;r/&gt; element to request acknowledgement, incrementing the 'u' attribute by one.</p>
+    <example caption='Client sends a stanza and requests acknowledgement'><![CDATA[
+<presence/>
+<r xmlns='urn:xmpp:sm:1' u='2'/>
+    ]]></example>
+    <p>The server handles the stanza by broadcasting the user's presence and immediately sends an &lt;a/&gt; element to acknowledge handling of the stanza.</p>
+    <example caption='Server sends a stanza and acknowledges handling of client stanza'><![CDATA[
+<presence from='romeo@montague.lit/orchard' to='romeo@montague.lit/orchard'/>
+<a xmlns='urn:xmpp:sm:1' u='2'/>
+    ]]></example>
+    <p>The client then sends an outbound message and an &lt;r/&gt; element.</p>
+    <example caption='Client sends a stanza and requests acknowledgement'><![CDATA[
+<message to='juliet@capulet.lit'>
+  <body>ciao!</body>
+</message>
+<r xmlns='urn:xmpp:sm:1' u='3'/>
+    ]]></example>
+    <p>The server handles the stanza by routing it to the remote contact and immediately sends an &lt;a/&gt; element to acknowledge handling of the stanza.</p>
+    <example caption='Server acknowledges handling of the stanza'><![CDATA[
+<a xmlns='urn:xmpp:sm:1' u='3'/>
+    ]]></example>
+    <p>And so on.</p>
+  </section2>
+
+  <section2 topic='Throttling' anchor='scenarios-throttling'>
+    <p>Most XMPP servers include rate limiting functionality (often called "karma") to prevent connected clients from generating too much outbound traffic. A connected client might also have a "thin pipe" that prevents it from receiving too much inbound traffic. Both of these scenarios can be more successfully handled using stream management, because the server can inform the client to throttle the generation of outbound stanzas or determine that the delivery of inbound stanzas is throttled.</p>
+    <section3 topic='Outbound' anchor='scenarios-throttling-outbound'>
+      <p>In the first scenario we assume that Romeo tries to send a file to Juliet via in-band bytestreams.</p>
+      <example caption='Client sends a stanza'><![CDATA[
+<iq from='romeo@montague.net/home' 
+    id='kr91n475'
+    to='juliet@capulet.com/balcony'
+    type='set'>
+  <data xmlns='http://jabber.org/protocol/ibb' seq='0' sid='i781hf64'>
+    4k-of-base64-encoded-data-here
+  </data>
+</iq>
+<r xmlns='urn:xmpp:sm:1' u='17'/>
+      ]]></example>
+      <p>His server handles the stanza by routing it to the remote contact and immediately sends an &lt;a/&gt; element to acknowledge handling of the stanza.</p>
+      <example caption='Server acknowledges handling of the stanza'><![CDATA[
+<a xmlns='urn:xmpp:sm:1' u='17'/>
+      ]]></example>
+      <p>After Romeo sends a number of 4k IBB blocks, the montague.net server starts to enforce rate limiting, so it does not immediately acknowledge handling of the stanzas.</p>
+      <example caption='Client sends a stanza'><![CDATA[
+<iq from='romeo@montague.net/home' 
+    id='gb183g59'
+    to='juliet@capulet.com/balcony'
+    type='set'>
+  <data xmlns='http://jabber.org/protocol/ibb' seq='7' sid='i781hf64'>
+    4k-of-base64-encoded-data-here
+  </data>
+</iq>
+<r xmlns='urn:xmpp:sm:1' u='24'/>
+      ]]></example>
+      <p>Because the server has not responded after some period of time, Romeo pings the server.</p>
+      <example caption='Romeo pings his server'><![CDATA[
+<ping xmlns='urn:xmpp:sm:1'/>
+      ]]></example>
+      <p>As mentioned, even though Romeo's server is throttling his outbound stanzas (i.e., not handling them by routing them to the remote contact), it replies by sending a &lt;pong/&gt; element. In this case the server informs Romeo why it is not handling his stanzas by including a &policy; condition because Romeo is violating a service policy on the number of outbound stanzas.</p>
+      <example caption='Server replies to ping and informs sender of policy violation'><![CDATA[
+<pong xmlns='urn:xmpp:sm:1'>
+  <policy-violation xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</pong>
+      ]]></example>
+      <p>Romeo's client now knows that the stream is still active but that his server is not processing stanzas because of a policy violation.</p>
+    </section3>
+    <section3 topic='Inbound' anchor='scenarios-throttling-inbound'>
+      <p>In the second scenario we assume that Juliet tries to send a file to Romeo via in-band bytestreams, but that Romeo is on a slow connection via a mobile device.</p>
+      <example caption='Client receives a stanza'><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    id='ih3g1652'
+    to='romeo@montague.net/orchard' 
+    type='set'>
+  <data xmlns='http://jabber.org/protocol/ibb' seq='0' sid='dv7153fz'>
+    4k-of-base64-encoded-data-here
+  </data>
+</iq>
+      ]]></example>
+      <p>Romeo then sends an outbound IQ-result and also immediately sends an &lt;r/&gt; to request acknowledge that his server has handled the stanza.</p>
+      <example caption='Client sends a stanza'><![CDATA[
+<iq from='romeo@montague.net/home' 
+    id='ih3g1652'
+    to='juliet@capulet.com/balcony'
+    type='result'/>
+<r xmlns='urn:xmpp:sm:1' u='39'/>
+      ]]></example>
+      <p>His server handles the stanza by routing it to the remote contact and immediately sends an &lt;a/&gt; element to acknowledge handling of the stanza.</p>
+      <example caption='Server acknowledges handling of the stanza'><![CDATA[
+<a xmlns='urn:xmpp:sm:1' u='39'/>
+      ]]></example>
+      <p>After Juliet sends a number of 4k IBB blocks, delivery from the montague.net to Remeo's mobile device starts to get backed up, so Romeo receives slow delivery of packets from the server. Therefore Romeo pings the server.</p>
+      <example caption='Romeo pings his server'><![CDATA[
+<ping xmlns='urn:xmpp:sm:1'/>
+      ]]></example>
+      <p>As mentioned, even though Romeo's server is throttling inbound stanzas intended for him because he is on a slow connection, it replies by sending a &lt;pong/&gt; element. In this case the server informs Romeo why stanza delivery is slowed down by including a &constraint; condition.</p>
+      <example caption='Server replies to ping and informs sender of resource constraint'><![CDATA[
+<pong xmlns='urn:xmpp:sm:1'>
+  <resource-constraint xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+</pong>
+      ]]></example>
+      <p>Romeo's client now knows that the stream is still active but that delivery of inbound stanzas is slow because of resource constraints.</p>
+    </section3>
+  </section2>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
@@ -228,7 +439,7 @@ C: <enable xmlns='urn:xmpp:sm:0' resume='true'/>
   <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
     <p>This specification defines the following XML namespace:</p>
     <ul>
-      <li>urn:xmpp:sm:0</li>
+      <li>urn:xmpp:sm:1</li>
     </ul>
     <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespaces to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
   </section2>
@@ -236,7 +447,7 @@ C: <enable xmlns='urn:xmpp:sm:0' resume='true'/>
     &NSVER;
   </section2>
   <section2 topic='Stream Features' anchor='registrar-stream'>
-    <p>Upon approval of this specification, the XMPP Registrar shall add 'urn:xmpp:sm:0:feature' to its registry of stream features.</p>
+    <p>Upon approval of this specification, the XMPP Registrar shall add 'urn:xmpp:sm:1:feature' to its registry of stream features.</p>
   </section2>
 </section1>
 
@@ -246,17 +457,20 @@ C: <enable xmlns='urn:xmpp:sm:0' resume='true'/>
 
 <xs:schema
     xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='urn:xmpp:sm:0'
-    xmlns='urn:xmpp:sm:0'
+    targetNamespace='urn:xmpp:sm:1'
+    xmlns='urn:xmpp:sm:1'
     elementFormDefault='qualified'>
 
-  <xs:element name='a' type='empty'/>
+  <xs:element name='a' type='ackElementType'/>
 
   <xs:element name='enable'>
     <xs:complexType>
       <xs:simpleContent>
         <xs:extension base='empty'>
-          <xs:attribute name='resume' type='xs:boolean' use='optional' default='false'/>
+          <xs:attribute name='resume' 
+                        type='xs:boolean'
+                        use='optional'
+                        default='false'/>
         </xs:extension>
       </xs:simpleContent>
     </xs:complexType>
@@ -266,17 +480,40 @@ C: <enable xmlns='urn:xmpp:sm:0' resume='true'/>
     <xs:complexType>
       <xs:simpleContent>
         <xs:extension base='empty'>
-          <xs:attribute name='resume' type='xs:boolean' use='optional' default='false'/>
+          <xs:attribute name='host' 
+                        type='xs:string'
+                        use='optional'/>
+          <xs:attribute name='port' 
+                        type='xs:unsignedShort'
+                        use='optional'/>
+          <xs:attribute name='resume' 
+                        type='xs:boolean'
+                        use='optional'
+                        default='false'/>
         </xs:extension>
       </xs:simpleContent>
     </xs:complexType>
   </xs:element>
 
+  <xs:element name='failed'>
+    <xs:complexType>
+      <xs:sequence xmlns:err='urn:ietf:params:xml:ns:xmpp-stanzas' minOccurs='0'>
+        <xs:group ref='err:stanzaErrorGroup'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
   <xs:element name='ping' type='empty'/>
 
-  <xs:element name='pong' type='empty'/>
+  <xs:element name='pong'>
+    <xs:complexType>
+      <xs:sequence xmlns:err='urn:ietf:params:xml:ns:xmpp-stanzas' minOccurs='0'>
+        <xs:group ref='err:stanzaErrorGroup'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
 
-  <xs:element name='r' type='empty'/>
+  <xs:element name='r' type='ackElementType'/>
 
   <xs:element name='resume' type='empty'/>
 
@@ -291,7 +528,14 @@ C: <enable xmlns='urn:xmpp:sm:0' resume='true'/>
     </xs:complexType>
   </xs:element>
 
-  </xs:element>
+  <xs:complexType name='ackElementType'>
+    <xs:simpleContent>
+      <xs:extension base='empty'>
+        <xs:attribute name='h' type='xs:integer' use='optional'/>
+        <xs:attribute name='u' type='xs:integer' use='optional'/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
 
   <xs:simpleType name='empty'>
     <xs:restriction base='xs:string'>
@@ -304,7 +548,7 @@ C: <enable xmlns='urn:xmpp:sm:0' resume='true'/>
 </section1>
 
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>Thanks to Dave Cridland for his feedback.</p>
+  <p>Thanks to Dave Cridland, Philipp Hancke, Curtis King, Tobias Markmann, Pedro Melo, Robin Redeker, and Mickaël Rémond for their feedback.</p>
 </section1>
 
 </xep>
