@@ -89,11 +89,62 @@ OR OTHER DEALINGS IN THE SOFTWARE.
       <body>
         <!-- TITLE -->
         <h1>XEP-<xsl:value-of select='/xep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></h1>
-        <p>Copyright (c) 1999 - 2009 <a href='http://xmpp.org/'>XMPP Standards Foundation</a>. See <a href='#appendix-legal'>Legal Notices</a>.</p>
-        <!-- ABSTRACT -->
-        <hr />
-        <p><xsl:value-of select='/xep/header/abstract'/></p>
+        <!-- TOP TABLE -->
+        <xsl:variable name='authors.count' select='count(/xep/header/author)'/>
+        <table>
+          <tr valign='top'>
+            <td><strong>Abstract:</strong></td>
+            <td><xsl:value-of select='/xep/header/abstract'/></td>
+          </tr>
+          <xsl:if test='$authors.count=1'>
+            <tr valign='top'>
+              <td><strong>Author:</strong></td>
+              <td><xsl:value-of select='/xep/header/author/firstname'/><xsl:text> </xsl:text><xsl:value-of select='/xep/header/author/surname'/></td>
+            </tr>
+          </xsl:if>
+          <xsl:if test='$authors.count&gt;1'>
+            <tr valign='top'>
+              <td><strong>Authors:</strong></td>
+              <td>
+                <xsl:for-each select='/xep/header/author'>
+                  <xsl:if test="position()!=last()">
+                    <xsl:value-of select='firstname'/>
+                    <xsl:text> </xsl:text>
+                    <xsl:value-of select='surname'/>
+                    <xsl:text>, </xsl:text>
+                  </xsl:if>
+                  <xsl:if test="position()=last()">
+                    <xsl:value-of select='firstname'/>
+                    <xsl:text> </xsl:text>
+                    <xsl:value-of select='surname'/>
+                  </xsl:if>
+                </xsl:for-each>
+              </td>
+            </tr>
+          </xsl:if>
+          <tr valign='top'>
+            <td><strong>Copyright:</strong></td>
+            <td>(c) 1999 - 2009 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</td>
+          </tr>
+          <tr valign='top'>
+            <td><strong>Status:</strong></td>
+            <td><xsl:value-of select='/xep/header/status'/></td>
+          </tr>
+          <tr valign='top'>
+            <td><strong>Type:</strong></td>
+            <td><xsl:value-of select='/xep/header/type'/></td>
+          </tr>
+          <tr valign='top'>
+            <td><strong>Version:</strong></td>
+            <td><xsl:value-of select='/xep/header/revision[position()=1]/version'/></td>
+          </tr>
+          <tr valign='top'>
+            <td><strong>Last&#160;Updated:</strong></td>
+            <td><xsl:value-of select='/xep/header/revision[position()=1]/date'/></td>
+          </tr>
+        </table>
         <!-- DEPLOYABILITY -->
+        <hr />
         <xsl:variable name='thestatus' select='/xep/header/status'/>
         <xsl:variable name='thetype' select='/xep/header/type'/>
         <xsl:if test='$thestatus = "Active" and $thetype = "Historical"'>
