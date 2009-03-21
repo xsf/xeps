@@ -920,6 +920,32 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     </td>
   </xsl:template>
 
+  <xsl:template match='dl'>
+    <div class='indent'>
+      <dl>
+        <xsl:apply-templates/>
+      </dl>
+    </div>
+  </xsl:template>
+
+  <xsl:template match='di'>
+    <di>
+      <xsl:apply-templates/>
+    </di>
+  </xsl:template>
+
+  <xsl:template match='dt'>
+    <dt>
+      <strong><xsl:apply-templates/></strong>
+    </dt>
+  </xsl:template>
+
+  <xsl:template match='dd'>
+    <dd>
+      <xsl:apply-templates/>
+    </dd>
+  </xsl:template>
+
   <xsl:template match='note'>
     <xsl:variable name='notenum'>
       <xsl:number level='any' count='note'/>
