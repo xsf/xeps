@@ -58,10 +58,6 @@ xepname = sys.argv[1];
 
 xepfile = xepname + '.xml'
 
-inboxpath=/var/www/vhosts/xmpp.org/extensions/inbox
-xsltproc xep.xsl $xepfile > $inboxpath/$xepname.html
-cp $xepfile.xml $xeppath/
-
 # PARSE XEP HEADERS:
 #
 # - title
@@ -112,7 +108,7 @@ remark = getText(remarkNode.childNodes)
 
 fromaddr = "editor@xmpp.org"
 # for testing...
-# toaddrs = "stpeter@jabber.org"
+# toaddrs = "editor@jabber.org"
 # for real...
 toaddrs = "standards@xmpp.org"
 
