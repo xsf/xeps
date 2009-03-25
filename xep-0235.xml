@@ -22,6 +22,12 @@
   <shortname>NOT_YET_ASSIGNED</shortname>
   &stpeter;
   <revision>
+    <version>0.7</version>
+    <date>2009-03-24</date>
+    <initials>psa</initials>
+    <remark><p>Changed protocol namespace from urn:xmpp:tmp:oauth to urn:xmpp:oauth:0 to conform to XMPP Registrar policies; clarified protocol flow and error handling; corrected examples.</p></remark>
+  </revision>
+  <revision>
     <version>0.6</version>
     <date>2008-08-07</date>
     <initials>psa</initials>
@@ -93,22 +99,22 @@ Consumer                  Service Provider
    |                             |
   ]]></code>
   <p>Before presenting an access token to a Service Provider in a protocol-specific access request, a Consumer SHOULD verify that the Service Provider supports this protocol, as described under the <link url='#support'>Determining Support</link> section of this document.</p>
-  <p>Consider the example of a User (say, &lt;world-traveler@example.com&gt;) who wishes to authorize a Consumer (say, an application called FindMeNow as represented by the JID &lt;travelbot@findemenow.tld&gt;) to access the User's geolocation feed at a Service Provider called WorldGPS (as represented by a publish-subscribe node of &lt;feeds.worldgps.tld/world-traveler&gt;). The order of events might be as follows.</p>
+  <p>Consider the example of a User (say, &lt;world-traveler@example.com&gt;) who wishes to authorize a Consumer (say, an application called FindMeNow as represented by the JID &lt;travelbot@findmenow.tld&gt;) to access the User's geolocation feed at a Service Provider called WorldGPS (as represented by a publish-subscribe node of &lt;feeds.worldgps.tld/world-traveler&gt;). The order of events might be as follows.</p>
   <ol start='1'>
-    <li>WorldGPS and FindMeNow have agreed upon a certificate and secret for FindMeNow to use when communicating with WorldGPS.</li>
-    <li>WorldGPS maintains a feed for the User's location data in an XMPP PubSub Node.</li>
+    <li>FindMeNow has registered as a Consumer for WorldGPS' API and has been assigned an OAuth consumer key and secret for use in its dealings with WorldGPS.</li>
+    <li>The User registers with WorldGPS, which creates a feed for the User's location data in an XMPP PubSub Node at WorldGPS.</li>
     <li>The User visits FindMeNow.tld and requests real-time updates from his WorldGPS feed.</li>
-    <li>FindMeNow, over HTTP, requests a "request token" from WorldGPS's pubsub service, signing it with the agreed-upon certificate and secret.</li>
-    <li>WorldGPS, if the signature was valid, sends FindMeNow a "request token."</li>
+    <li>FindMeNow, over HTTP, requests an OAuth "request token" from WorldGPS, signing it with FindMeNow's OAuth consumer key and secret.</li>
+    <li>WorldGPS, if the signature was valid, sends FindMeNow an OAuth "request token."</li>
     <li>FindMeNow then redirects the user to a WorldGPS webpage.</li>
     <li>On the WorldGPS webpage, the User logs in (or is already logged in) and is then asked whether to approve of FindMeNow having read-only access to his geolocation information.</li>
     <li>The User approves the request and WorldGPS redirects the User back to FindMeNow.</li>
-    <li>FindMeNow, over HTTP, requests an "access token" (again signing it) and now using the "request token" approved by the User.</li>
-    <li>WorldGPS, if the signature is correct and the request token was approved, replies with an access token.</li>
-    <li>FindMeNow, over XMPP, subscribes to the User's pubsub node using the access token.</li>
+    <li>FindMeNow, over HTTP, requests an OAuth "access token" from WorldGPS, signing the request with the "request token" that has now been approved by the User.</li>
+    <li>WorldGPS, if the signature is correct and the request token was approved, replies to FindMeNow with an OAuth "access token".</li>
+    <li>FindMeNow, over XMPP, subscribes to the User's pubsub node using the OAuth "access token" as described below.</li>
   </ol>
   <p>As a result, FindMeNow gets updated every time the User publishes items to his geolocation node at WorldGPS.</p>
-  <p>Steps 1 through 10 occur via HTTP. Step 11 occurs via XMPP.</p>
+  <p>Steps 1-10 describe OAuth's standard HTTP flow and represent an out-band means for obtaining OAuth access tokens for use in XMPP operations.</p>
 </section1>
 
 <section1 topic='Access Request Format' anchor='request'>
@@ -116,7 +122,7 @@ Consumer                  Service Provider
   <ul>
     <li>oauth_consumer_key</li>
     <li>oauth_nonce</li>
-    <li>oauth_signature</li>
+    <li>oauth_signature (note: in XMPP this value is <strong>not</strong> escaped)</li>
     <li>oauth_signature_method</li>
     <li>oauth_timestamp</li>
     <li>oauth_token</li>
@@ -129,11 +135,11 @@ Consumer                  Service Provider
     to='feeds.worldgps.tld'
     type='set'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <subscribe node='bard_geoloc'/>
-    <oauth xmlns='urn:xmpp:tmp:oauth'>
+    <subscribe jid='travelbot@findmenow.tld' node='bard_geoloc'/>
+    <oauth xmlns='urn:xmpp:oauth:0'>
       <oauth_consumer_key>0685bd9184jfhq22</oauth_consumer_key>
       <oauth_nonce>4572616e48616d6d65724c61686176</oauth_nonce>
-      <oauth_signature>wOJIO9A2W5mFwDgiDvZbTSMK%2FPY%3D</oauth_signature>
+      <oauth_signature>9PQkM4YKgaM067wqrDGshXOwDW0=</oauth_signature>
       <oauth_signature_method>HMAC-SHA1</oauth_signature_method>
       <oauth_timestamp>1218137833</oauth_timestamp>
       <oauth_token>ad180jjd733klru7</oauth_token>
@@ -151,26 +157,7 @@ Consumer                  Service Provider
     <li>The request URL SHALL be the 'from' address of the XMPP stanza concatenated with the ampersand character "&amp;" and the 'to' address of the XMPP stanza.</li>
     <li>The normalized request parameters string SHALL be all of the oauth_* parameters included in the &lt;oauth/&gt; element (except oauth_signature).</li>
   </ul>
-  <p>As an example, consider the following stanza:</p>
-  <code><![CDATA[
-<iq from='travelbot@findmenow.tld/bot'
-    id='sub1'
-    to='feeds.worldgps.tld'
-    type='set'>
-  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <subscribe node='bard_geoloc'/>
-    <oauth xmlns='urn:xmpp:tmp:oauth'>
-      <oauth_consumer_key>0685bd9184jfhq22</oauth_consumer_key>
-      <oauth_nonce>4572616e48616d6d65724c61686176</oauth_nonce>
-      <oauth_signature>wOJIO9A2W5mFwDgiDvZbTSMK%2FPY%3D</oauth_signature>
-      <oauth_signature_method>HMAC-SHA1</oauth_signature_method>
-      <oauth_timestamp>1218137833</oauth_timestamp>
-      <oauth_token>ad180jjd733klru7</oauth_token>
-      <oauth_version>1.0</oauth_version>
-    </oauth>
-  </pubsub>
-</iq>
-  ]]></code>
+  <p>As an example, consider the stanza shown above.</p>
   <p>The Signature Base String would be as follows (where line endings have been added for readability and are denoted by the "\" character):</p>
   <code><![CDATA[
 iq%26travelbot%40findmenow.tld%2Fbot%26feeds.worldgps.tld%26\
@@ -183,53 +170,62 @@ oauth_version%3D1.0
   ]]></code>
   <p>Assuming a consumer secret of 'consumersecret' and a token secret of 'tokensecret', the signature will be:</p>
   <code><![CDATA[
-    Z0F5zmPWwbunk5dc2hNBn1NgBj4=
+    9PQkM4YKgaM067wqrDGshXOwDW0=
   ]]></code>
 </section1>
 
 <section1 topic='Error Handling' anchor='error'>
-  <p>If a Service Provider rejects a Consumer's access request, the Service Provider SHOULD return either a &badrequest; or &notauthorized; stanza error, with an appropriate OAuth-specific error condition as described in the following table.</p>
-
+  <p>If a Service Provider rejects a Consumer's request to access a Protected Resource over XMPP, the Service Provider MUST return an XMPP stanza error. The XMPP error condition SHOULD be either &badrequest; or &notauthorized; and the stanza SHOULD include an OAuth-specific error condition as described in the following table.</p>
   <table caption='Application-Specific Error Conditions'>
     <tr>
       <th>OAuth-Specific Condition</th>
       <th>Generic Condition</th>
+      <th>Description</th>
     </tr>
     <tr>
       <td>&lt;duplicated-parameter/&gt;</td>
       <td>&badrequest;</td>
+      <td>One of the oauth_* elements was included more than once.</td>
     </tr>
     <tr>
       <td>&lt;invalid-consumer-key/&gt;</td>
       <td>&notauthorized;</td>
+      <td>The Consumer's OAuth consumer key is not valid.</td>
     </tr>
     <tr>
       <td>&lt;invalid-nonce/&gt;</td>
       <td>&notauthorized;</td>
+      <td>The provided nonce is invalid; it might have already been used.</td>
     </tr>
     <tr>
       <td>&lt;invalid-signature/&gt;</td>
       <td>&notauthorized;</td>
+      <td>The provided signature is invalid; the Consumer needs to confirm that the signature base string is calculated correctly.</td>
     </tr>
     <tr>
       <td>&lt;invalid-token/&gt;</td>
       <td>&notauthorized;</td>
+      <td>The provided access token is invalid; it might have been revoked.</td>
     </tr>
     <tr>
       <td>&lt;missing-parameter/&gt;</td>
       <td>&badrequest;</td>
+      <td>One of the required oauth_* elements is missing.</td>
     </tr>
     <tr>
       <td>&lt;token-required/&gt;</td>
       <td>&notauthorized;</td>
+      <td>The Consumer did not include an OAuth access token in its request; this error condition is XMPP-specific and does not have a counterpart in the OAuth specification.</td>
     </tr>
     <tr>
       <td>&lt;unsupported-parameter/&gt;</td>
       <td>&badrequest;</td>
+      <td>The &lt;oauth/&gt; stanza contains unknown or unsupported parameters.</td>
     </tr>
     <tr>
       <td>&lt;unsupported-signature-method/&gt;</td>
       <td>&badrequest;</td>
+      <td>The specified signature method is not supported by the server.</td>
     </tr>
   </table>
   <p>An example follows.</p>
@@ -240,14 +236,14 @@ oauth_version%3D1.0
     type='error'>
   <error type='modify'>
     <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-    <invalid-nonce xmlns='urn:xmpp:tmp:oauth:errors'/>
+    <invalid-nonce xmlns='urn:xmpp:oauth:0:errors'/>
   </error>
 </iq>
   ]]></example>
 </section1>
 
 <section1 topic='Determining Support' anchor='support'>
-  <p>If an entity supports the protocol specified herein, it MUST advertise that fact by returning a feature of "urn:xmpp:tmp:oauth" in response to &xep0030; information requests &NSNOTE;.</p>
+  <p>If an entity supports the protocol specified herein, it MUST advertise that fact by returning a feature of "urn:xmpp:oauth:0" in response to &xep0030; information requests &NSNOTE;.</p>
   <example caption="Service discovery information request"><![CDATA[
 <iq from='travelbot@findmenow.tld/bot'
     id='disco1'
@@ -262,9 +258,7 @@ oauth_version%3D1.0
     to='travelbot@findmenow.tld/bot'
     type='result'>
   <query xmlns='http://jabber.org/protocol/disco#info'>
-    ...
-    <feature var='urn:xmpp:tmp:oauth'/>
-    ...
+    <feature var='urn:xmpp:oauth:0'/>
   </query>
 </iq>
   ]]></example>
@@ -286,8 +280,15 @@ oauth_version%3D1.0
 </section1>
 
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
-  <section2 topic='Protocol Namespaces' anchor='ns'>
-    <p>Until this specification advances to a status of Draft, its associated namespace shall be "urn:xmpp:tmp:oauth"; upon advancement of this specification, the &REGISTRAR; shall issue a permanent namespace in accordance with the process defined in Section 4 of &xep0053;. The permanent namespace "urn:xmpp:oauth" will be requested, which is thought to be unique per the XMPP Registrar's requirements.</p>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:oauth:0</li>
+    </ul>
+    <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespaces to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
+  </section2>
+  <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+    &NSVER;
   </section2>
 </section1>
 
@@ -298,8 +299,8 @@ oauth_version%3D1.0
 
 <xs:schema
     xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='urn:xmpp:tmp:oauth'
-    xmlns='urn:xmpp:tmp:oauth'
+    targetNamespace='urn:xmpp:oauth:0'
+    xmlns='urn:xmpp:oauth:0'
     elementFormDefault='qualified'>
 
   <xs:element name='oauth'>
@@ -325,8 +326,8 @@ oauth_version%3D1.0
 
 <xs:schema
     xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='urn:xmpp:tmp:oauth:errors'
-    xmlns='urn:xmpp:tmp:oauth:errors'
+    targetNamespace='urn:xmpp:oauth:0:errors'
+    xmlns='urn:xmpp:oauth:0:errors'
     elementFormDefault='qualified'>
 
   <xs:element name='duplicated-parameter' type='empty'/>
@@ -351,7 +352,7 @@ oauth_version%3D1.0
 </section1>
 
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>The author gratefully acknowledges the contributions of Blaine Cook, Leah Culver, Kellan Elliott-McCrea, Seth Fitzsimmons, Nathan Fritz, Evan Henshaw-Plath, Joe Hildebrand, and Ralph Meijer to the content of this specification, as provided during the XMPP Summit held in Portland, Oregon, on July 21 and 22, 2008. Thanks also to Dave Cridland and Pedro Melo for their comments on an early draft.</p>
+  <p>The author gratefully acknowledges the contributions of Blaine Cook, Leah Culver, Kellan Elliott-McCrea, Seth Fitzsimmons, Nathan Fritz, Evan Henshaw-Plath, Joe Hildebrand, and Ralph Meijer to the content of this specification, as provided during the XMPP Summit held in Portland, Oregon, on July 21 and 22, 2008. Thanks also to Dave Cridland and Pedro Melo for their comments on an early draft. Seth Fitzsimmons checked many details and provided text regarding the protocol flow and error handling.</p>
 </section1>
 
 </xep>
