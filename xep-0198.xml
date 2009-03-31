@@ -7,7 +7,7 @@
 <xep>
 <header>
   <title>Stream Management</title>
-  <abstract>This specification defines an XMPP protocol extension for active management of an XML stream between two XMPP entities, including features for stanza acknowledgements, pings, and stream resumption.</abstract>
+  <abstract>This specification defines an XMPP protocol extension for active management of an XML stream between two XMPP entities, including features for stanza acknowledgements and stream resumption.</abstract>
   &LEGALNOTICE;
   <number>0198</number>
   <status>Experimental</status>
@@ -22,6 +22,12 @@
   &infiniti;
   &hildjj;
   &stpeter;
+  <revision>
+    <version>0.7</version>
+    <date>2009-03-30</date>
+    <initials>jjh/psa</initials>
+    <remark><p>Removed pings (use XEP-0199, whitespace pings, or TCP keepalives instead); removed section on throttling, since it is unworkable.</p></remark>
+  </revision>
   <revision>
     <version>0.6</version>
     <date>2009-03-19</date>
@@ -91,19 +97,18 @@
 <section1 topic='Introduction' anchor='intro'>
   <p>&xmppcore; defines the fundamental streaming XML technology used by XMPP (i.e., stream establishment and termination including authentication and encryption). However, the core XMPP specification does not provide tools for actively managing a "live" XML stream. In particular, the following management features might improve network reliability and the end-user experience (especially when connectivity is infrequent):</p>
   <ul>
-    <li>Acks -- the ability to know if a particular stanza (or a series of stanzas) has in fact been received and processed by either of the endpoints.</li>
-    <li>Pings -- the ability to test the connectivity of the XML stream.</li>
+    <li>Acks -- the ability to know if a stanza or series of stanzas has been received by one's peer.</li>
     <li>Resumption -- the ability to quickly resume a stream that has been terminated.</li>
   </ul>
-  <p>Detailed descriptions of these features are provided in the remainder of this specification.</p>
-  <p>This specification applies at the level of an XML stream between a client and a server or between a server and a peer server. By constrast, &xep0079;, &xep0184;, and &xep0199; cover acks and pings that are sent end-to-end over multiple streams; these facilities are useful in special scenarios but are unnecessary for checking of a direct stream between two XMPP entities. It is also expected that this protocol will revive interest in Advanced Message Processing (AMP), because single-hop acks are necessary for AMP delivery receipts to function properly.</p>
   <p>The basic concept behind stream management is that the initiating entity (either a client or a server) and the receiving entity (a server) can exchange commands for active management of the stream. Instead of using XMPP IQ, message, or presence stanzas (which are relatively verbose), stream management uses a series of short XML elements at the root stream level.</p>
   <p>The benefits to be gained from stream management include the following:</p>
   <ul>
     <li>Ability to take alternate action if the peer has not acknowledged handling of a stanza, such as storing and delivering again later.</li>
     <li>Servers can send stanzas with the same to/from JID pair on separate server-to-server TCP channels, as long as the sent stanzas have been acknowledged as handled.</li>
-    <li>Clients can determine when they have reached a throughput limitation.</li>
   </ul>
+  <p>Detailed descriptions of these features are provided in the remainder of this specification.</p>
+  <p>Note: To check TCP connectivity for a given stream, it is RECOMMENDED to use &xep0199;, whitespace pings (see Section 5.7.3 of &rfc3920bis;), or TCP keepalives.</p>
+  <p>Note: This specification applies at the level of an XML stream between a client and a server or between a server and a peer server. By constrast, &xep0079; and &xep0184; define acks that are sent end-to-end over multiple streams; these facilities are useful in special scenarios but are unnecessary for checking of a direct stream between two XMPP entities. (It is also expected that this protocol will revive interest in Advanced Message Processing (AMP), because single-hop acks are necessary for AMP delivery receipts to function properly.)</p>
 </section1>
 
 <section1 topic='Stream Feature' anchor='feature'>
@@ -136,18 +141,17 @@
   </sm>
 </stream:features>
   ]]></example>
-  <p>If the receiving entity offers stream resumption in addition to acks and pings, the &lt;sm/&gt; element MUST include an 'id' attribute (a unique identifier for the session) and SHOULD include a 'max' attribute that specifies the longest allowable time period for session resumption (in seconds).</p>
+  <p>If the receiving entity offers stream resumption in addition to stanza acks, the &lt;sm/&gt; element MUST include a 'max' attribute that specifies the longest allowable time period for session resumption (in seconds).</p>
   <example caption='Stream features for resumption'><![CDATA[
 <stream:features>
   <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
     <required/>
   </bind>
-  <sm xmlns='urn:xmpp:sm:1' id='some-long-sm-id' max='600' stanzas='4'>
+  <sm xmlns='urn:xmpp:sm:1' max='600' stanzas='10'>
     <optional/>
   </sm>
 </stream:features>
   ]]></example>
-  <p class='def'><strong>Definition:</strong> The 'id' attribute defines a unique identifier for purposes of stream management (an "SM-ID"). The SM-ID MUST be generated by the receiving entity (server). The initiating entity MUST consider the SM-ID to be opaque and therefore MUST NOT assign any semantic meaning to the SM-ID. The receiving entity MAY encode any information it deems useful into the SM-ID, such as the full JID &LOCALFULL; of a connected client (e.g., the full JID plus a nonce value). Any characters allowed in an XML attribute are allowed. The SM-ID MUST NOT be reused for simultaneous or subsequent sessions (as long as the receiving entity is available). The SM-ID SHOULD NOT be longer than 4000 bytes.</p>
 </section1>
 
 <section1 topic='Enabling Stream Management' anchor='enable'>
@@ -165,7 +169,7 @@
   ]]></example>
   <p>If session resumption is allowed, the receiving entity MUST include a 'resume' attribute set to a value of "true" or "1".</p>
   <example caption='Server enables stream management'><![CDATA[
-<enabled xmlns='urn:xmpp:sm:1' resume='1'/>
+<enabled xmlns='urn:xmpp:sm:1' resume='true'/>
   ]]></example>
   <p>The parties can then the use stream management features defined below.</p>
 </section1>
@@ -205,28 +209,17 @@
   ]]></example>
 </section1>
 
-<section1 topic='Pings' anchor='pings'>
-  <p>Either entity can also ping the other. This is useful for ensuring that the TCP connection is still up and working, and also for determining latency. The procedure is intended to replace the legacy behavior of sending whitespace. Pinging is done by sending a &lt;ping/&gt; element:</p>
-  <example caption='Pinging the peer'><![CDATA[
-<ping xmlns='urn:xmpp:sm:1'/>
-  ]]></example>
-  <p>The peer then MUST reply immediately with a &lt;pong/&gt; element.</p>
-  <example caption='Replying to a ping'><![CDATA[
-<pong xmlns='urn:xmpp:sm:1'/>
-  ]]></example>
-  <p>A server that is throttling stanzas (and thus withholding ack answers until later) MUST still immediately reply to pings and SHOULD include an appropriate error or status condition in the &lt;pong/&gt; element (preferably &constraint; for inbound throttling and &policy; for outbound throttling). However, if the connected entity continues to send stanzas or sends excessive pings then the server MAY terminate the stream as explained elsewhere.</p>
-</section1>
-
 <section1 topic='Resumption' anchor='resumption'>
   <p>It can happen that an XML stream is terminated unexpectedly (e.g., because of network outages). In this case, it is desirable to quickly resume the former stream rather than complete the tedious process of stream establishment, roster retrieval, and presence broadcast.</p>
   <p>To request that the stream will be resumable, when enabling stream management the initiating entity MUST add a 'resume' attribute to the &lt;enable/&gt; element with a value of "true" or "1" &BOOLEANNOTE;.</p>
   <example caption='Client enables stream management'><![CDATA[
 <enable xmlns='urn:xmpp:sm:1' resume='true'/>
   ]]></example>
-  <p>If the receiving entity will allow the stream to be resumed, it MUST include a 'resume' attribute set to "true" or "1" on the &lt;enabled/&gt; element.</p>
+  <p>If the receiving entity will allow the stream to be resumed, it MUST include a 'resume' attribute set to "true" or "1" on the &lt;enabled/&gt; element and MUST include an 'id' attribute that specifies an identifier for the stream.</p>
   <example caption='Server allows stream resumption'><![CDATA[
-<enabled xmlns='urn:xmpp:sm:1' resume='true'/>
+<enabled xmlns='urn:xmpp:sm:1' id='some-long-sm-id' resume='true'/>
   ]]></example>
+  <p class='def'><strong>Definition:</strong> The 'id' attribute defines a unique identifier for purposes of stream management (an "SM-ID"). The SM-ID MUST be generated by the receiving entity (server). The initiating entity MUST consider the SM-ID to be opaque and therefore MUST NOT assign any semantic meaning to the SM-ID. The receiving entity MAY encode any information it deems useful into the SM-ID, such as the full JID &LOCALFULL; of a connected client (e.g., the full JID plus a nonce value). Any characters allowed in an XML attribute are allowed. The SM-ID MUST NOT be reused for simultaneous or subsequent sessions (as long as the receiving entity is available). The SM-ID SHOULD NOT be longer than 4000 bytes.</p>
   <p>If the stream is terminated unexpectedly, the initiating entity would then open a TCP connection to the receiving entity. The order of events is envisioned to be as follows:</p>
   <ol start='1'>
     <li>Initiating entity sends initial stream header.</li>
@@ -248,7 +241,8 @@
   <example caption='Stream resumption request'><![CDATA[
 <resume xmlns='urn:xmpp:sm:1' previd='some-long-sm-id' h='foo'/>
   ]]></example>
-  <p>If the receiving entity can resume the former stream, it MUST return a &lt;resumed/&gt; element that includes a 'previd' attribute set to the SM-ID of the former stream. If the receiving entity does not support session resumption or does not recognize the 'previd' as an earlier session, it MUST return a &lt;failed/&gt; element, which SHOULD include an error condition of &feature; or &notfound; respectively.</p>
+  <p>If the receiving entity can resume the former stream, it MUST return a &lt;resumed/&gt; element that includes a 'previd' attribute set to the SM-ID of the former stream.</p>
+  <p>If the receiving entity does not support session resumption, it MUST return a &lt;failed/&gt; element, which SHOULD include an error condition of &feature;. If the receiving entity does not recognize the 'previd' as an earlier session (e.g., because the former session has timed out), it MUST return a &lt;failed/&gt; element, which SHOULD include an error condition of &notfound;. In both of these failure cases, the receiving entity SHOULD allow the initiating entity to bind a resource at this point rather than forcing the initiating entity to restart the stream and re-authenticate.</p>
   <p>The &lt;resumed/&gt; element MAY also include an 'h' attribute set to the last acknowledged sequence number sent over the former stream from the initiating entity to the receiving entity. If there is no known last acknowledged sequence number for the former stream, then the 'h' attribute MUST NOT be included.</p>
   <p>If the former stream is resumed and the receiving entity still has the stream for the previously-identified session open at this time, the old stream SHOULD be terminated.</p>
   <example caption='Stream resumed'><![CDATA[
@@ -271,11 +265,12 @@
 </failed>
   ]]></example>
   <p>In addition, the &lt;pong/&gt; element MAY contain an error condition.</p>
-  <p>Stream management errors SHOULD be considered recoverable; however, misuse of stream management (e.g., sending excessive pings) MAY result in termination of the stream.</p>
+  <p>Stream management errors SHOULD be considered recoverable; however, misuse of stream management MAY result in termination of the stream.</p>
 </section1>
 
 <section1 topic='Scenarios' anchor='scenarios'>
   <p>The following scenarios illustrate several different uses of stream management. The examples are that of a client and a server, but stream management can also be used for server-to-server streams.</p>
+
   <section2 topic='Basic Acking' anchor='scenarios-basic'>
     <p>The Stream Management protocol can be used to improve reliability using acks without the ability to resume a session. In fact, a basic implementation might not even care about sequence numbers and therefore would do the following:</p>
     <ul>
@@ -335,86 +330,6 @@
     <p>And so on.</p>
   </section2>
 
-  <section2 topic='Throttling' anchor='scenarios-throttling'>
-    <p>Most XMPP servers include rate limiting functionality (often called "karma") to prevent connected clients from generating too much outbound traffic. A connected client might also have a "thin pipe" that prevents it from receiving too much inbound traffic. Both of these scenarios can be more successfully handled using stream management, because the server can inform the client to throttle the generation of outbound stanzas or determine that the delivery of inbound stanzas is throttled.</p>
-    <section3 topic='Outbound' anchor='scenarios-throttling-outbound'>
-      <p>In the first scenario we assume that Romeo tries to send a file to Juliet via in-band bytestreams.</p>
-      <example caption='Client sends a stanza'><![CDATA[
-<iq from='romeo@montague.net/home' 
-    id='kr91n475'
-    to='juliet@capulet.com/balcony'
-    type='set'>
-  <data xmlns='http://jabber.org/protocol/ibb' seq='0' sid='i781hf64'>
-    4k-of-base64-encoded-data-here
-  </data>
-</iq>
-<r xmlns='urn:xmpp:sm:1' u='17'/>
-      ]]></example>
-      <p>His server handles the stanza by routing it to the remote contact and immediately sends an &lt;a/&gt; element to acknowledge handling of the stanza.</p>
-      <example caption='Server acknowledges handling of the stanza'><![CDATA[
-<a xmlns='urn:xmpp:sm:1' u='17'/>
-      ]]></example>
-      <p>After Romeo sends a number of 4k IBB blocks, the montague.net server starts to enforce rate limiting, so it does not immediately acknowledge handling of the stanzas.</p>
-      <example caption='Client sends a stanza'><![CDATA[
-<iq from='romeo@montague.net/home' 
-    id='gb183g59'
-    to='juliet@capulet.com/balcony'
-    type='set'>
-  <data xmlns='http://jabber.org/protocol/ibb' seq='7' sid='i781hf64'>
-    4k-of-base64-encoded-data-here
-  </data>
-</iq>
-<r xmlns='urn:xmpp:sm:1' u='24'/>
-      ]]></example>
-      <p>Because the server has not responded after some period of time, Romeo pings the server.</p>
-      <example caption='Romeo pings his server'><![CDATA[
-<ping xmlns='urn:xmpp:sm:1'/>
-      ]]></example>
-      <p>As mentioned, even though Romeo's server is throttling his outbound stanzas (i.e., not handling them by routing them to the remote contact), it replies by sending a &lt;pong/&gt; element. In this case the server informs Romeo why it is not handling his stanzas by including a &policy; condition because Romeo is violating a service policy on the number of outbound stanzas.</p>
-      <example caption='Server replies to ping and informs sender of policy violation'><![CDATA[
-<pong xmlns='urn:xmpp:sm:1'>
-  <policy-violation xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-</pong>
-      ]]></example>
-      <p>Romeo's client now knows that the stream is still active but that his server is not processing stanzas because of a policy violation.</p>
-    </section3>
-    <section3 topic='Inbound' anchor='scenarios-throttling-inbound'>
-      <p>In the second scenario we assume that Juliet tries to send a file to Romeo via in-band bytestreams, but that Romeo is on a slow connection via a mobile device.</p>
-      <example caption='Client receives a stanza'><![CDATA[
-<iq from='juliet@capulet.com/balcony'
-    id='ih3g1652'
-    to='romeo@montague.net/orchard' 
-    type='set'>
-  <data xmlns='http://jabber.org/protocol/ibb' seq='0' sid='dv7153fz'>
-    4k-of-base64-encoded-data-here
-  </data>
-</iq>
-      ]]></example>
-      <p>Romeo then sends an outbound IQ-result and also immediately sends an &lt;r/&gt; to request acknowledge that his server has handled the stanza.</p>
-      <example caption='Client sends a stanza'><![CDATA[
-<iq from='romeo@montague.net/home' 
-    id='ih3g1652'
-    to='juliet@capulet.com/balcony'
-    type='result'/>
-<r xmlns='urn:xmpp:sm:1' u='39'/>
-      ]]></example>
-      <p>His server handles the stanza by routing it to the remote contact and immediately sends an &lt;a/&gt; element to acknowledge handling of the stanza.</p>
-      <example caption='Server acknowledges handling of the stanza'><![CDATA[
-<a xmlns='urn:xmpp:sm:1' u='39'/>
-      ]]></example>
-      <p>After Juliet sends a number of 4k IBB blocks, delivery from the montague.net to Remeo's mobile device starts to get backed up, so Romeo receives slow delivery of packets from the server. Therefore Romeo pings the server.</p>
-      <example caption='Romeo pings his server'><![CDATA[
-<ping xmlns='urn:xmpp:sm:1'/>
-      ]]></example>
-      <p>As mentioned, even though Romeo's server is throttling inbound stanzas intended for him because he is on a slow connection, it replies by sending a &lt;pong/&gt; element. In this case the server informs Romeo why stanza delivery is slowed down by including a &constraint; condition.</p>
-      <example caption='Server replies to ping and informs sender of resource constraint'><![CDATA[
-<pong xmlns='urn:xmpp:sm:1'>
-  <resource-constraint xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-</pong>
-      ]]></example>
-      <p>Romeo's client now knows that the stream is still active but that delivery of inbound stanzas is slow because of resource constraints.</p>
-    </section3>
-  </section2>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
@@ -486,16 +401,6 @@
   </xs:element>
 
   <xs:element name='failed'>
-    <xs:complexType>
-      <xs:sequence xmlns:err='urn:ietf:params:xml:ns:xmpp-stanzas' minOccurs='0'>
-        <xs:group ref='err:stanzaErrorGroup'/>
-      </xs:sequence>
-    </xs:complexType>
-  </xs:element>
-
-  <xs:element name='ping' type='empty'/>
-
-  <xs:element name='pong'>
     <xs:complexType>
       <xs:sequence xmlns:err='urn:ietf:params:xml:ns:xmpp-stanzas' minOccurs='0'>
         <xs:group ref='err:stanzaErrorGroup'/>
