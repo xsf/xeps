@@ -130,7 +130,7 @@ elif (xepstatus == "Deferred"):
 #    Abstract: $abstract
 #    Changelog: $remark ($initials)
 #    CVS Diff: $diffs
-#    URL: http://www.xmpp.org/extensions/xep-$xepnum.html
+#    URL: http://xmpp.org/extensions/xep-$xepnum.html
 
 fromaddr = "editor@xmpp.org"
 # for testing...
@@ -160,7 +160,7 @@ versionline = 'Version ' + version + ' of XEP-' + xepnum + ' (' + title + ') has
 abstractline = 'Abstract: ' + abstract
 changelogline = 'Changelog: ' + remark + ' (' + initials + ')'
 diffsline = 'Diff: ' + diffs
-urlline = 'URL: http://www.xmpp.org/extensions/xep-' + xepnum + '.html'
+urlline = 'URL: http://xmpp.org/extensions/xep-' + xepnum + '.html'
 
 msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr
 msg = msg + "To: %s\r\n" % toaddrs
