@@ -1,0 +1,3783 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>XMPP Protocol Flows for Inter-Domain Federation</title>
+  <abstract>This specification provides detailed protocol flows for the establishment of communication between domains that provide XMPP services, including permutations for a wide variety of possible federation policies.</abstract>
+  &LEGALNOTICE;
+  <number>0238</number>
+  <status>Experimental</status>
+  <type>Informational</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0220</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>N/A</shortname>
+  &stpeter;
+  <revision>
+    <version>0.1</version>
+    <date>2008-03-31</date>
+    <initials>psa</initials>
+    <remark><p>Initial published version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2008-01-23</date>
+    <initials>psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>&xmppcore; describes the client-server architecture upon which Jabber/XMPP communication is based. One aspect of such communication is "federation", i.e., the ability for two XMPP servers in different domains to exchange XML stanzas. There are at least four levels of federation:</p>
+  <ol start='1'>
+    <li><p>Permissive Federation -- a server accepts a connection from any other peer on the network, even without verifiying the identity of the peer based on DNS lookups. The lack of peer verification or authentication means that domains can be spoofed. Permissive federation was effectively outlawed on the Jabber network in October 2000 with the release of the jabberd 1.2 server, which included support for the newly-developed &xep0220; protocol.</p></li>
+    <li><p>Verified Federation -- a server accepts a connection from a peer only after the identity of the peer has been weakly verified via Server Dialback, based on information obtained via the Domain Name System (DNS) and verification keys exchanged in-band over XMPP. However, the connection is not encrypted. The use of identity verification effectively prevents domain spoofing, but federation requires proper DNS setup and is still subject to DNS poisoning attacks. Verified federation has been the default service policy followed by servers on the open XMPP network from October 2000 until now.</p></li>
+    <li><p>Encrypted Federation -- a server accepts a connection from a peer only if the peer supports Transport Layer Security (TLS) as defined for XMPP in &rfc3920; and the peer presents a digital certificate. However, the certificate may be self-signed, in which case mutual authentication is typically not possible. Therefore, after STARTTLS negotiation the parties proceed to weakly verify identity using Server Dialback. This combination results in an encrypted connection with weak identity verification.</p></li>
+    <li><p>Trusted Federation -- a server accepts a connection from a peer only if the peer supports Transport Layer Security (TLS) and the peer presents a digital certificate issued by a trusted root certification authority (CA). The list of trusted root CAs is determined by local service policy, as is the level of trust accorded to various types of certificates (i.e., Class 1, Class 2, or Class 3). The use of trusted domain certificates effectively prevents DNS poisoning attacks but makes federation more difficult since typically such certificates are not easy to obtain.</p></li>
+  </ol>
+  <p>The remainder of this document describes in more detail the protocol flows that make it possible to deploy verified federation, encrypted federation, and trusted federation. Protocol flows are shown for federation attempts between various combinations to illustrate the interaction between different federation policies.</p>
+</section1>
+
+<section1 topic='Terminology' anchor='terminology'>
+  <p>To simplify the text, this document uses the following terminology. For each service type, the domain "example.lit" is used to illustrate connections to that same service type.</p>
+  <table caption='Example Servers'>
+    <tr>
+      <th>Service Type</th>
+      <th>Federation Policy</th>
+      <th>Certificate</th>
+      <th>Protocols Supported</th>
+      <th>Example Domain</th>
+      <th>Example User</th>
+    </tr>
+    <tr>
+      <td>Type 1</td>
+      <td>Verified Only</td>
+      <td>None</td>
+      <td>XMPP 0.9 <note>"XMPP 0.9" is the core XML streaming protocol used in the Jabber community before the formalization of XMPP 1.0 by the IETF in <cite>RFC 3920</cite>, including STARTTLS and SASL.</note> and Server Dialback</td>
+      <td>type1.lit</td>
+      <td>citizen@type1.lit</td>
+    </tr>
+    <tr>
+      <td>Type 2</td>
+      <td>Verified Acceptable</td>
+      <td>Self-signed</td>
+      <td>XMPP 1.0 <note>"XMPP 1.0" is defined in <cite>RFC 3920</cite> and includes STARTTLS and SASL negotiation.</note> and Server Dialback</td>
+      <td>type2.lit</td>
+      <td>juliet@type2.lit</td>
+    </tr>
+    <tr>
+      <td>Type 3</td>
+      <td>Verified Acceptable</td>
+      <td>CA-issued</td>
+      <td>XMPP 1.0 and Server Dialback</td>
+      <td>type3.lit</td>
+      <td>romeo@type3.lit</td>
+    </tr>
+    <tr>
+      <td>Type 4</td>
+      <td>Encrypted Required</td>
+      <td>Self-signed</td>
+      <td>XMPP 1.0 and Server Dialback</td>
+      <td>type4.lit</td>
+      <td>hamlet@type4.lit</td>
+    </tr>
+    <tr>
+      <td>Type 5</td>
+      <td>Encrypted Required</td>
+      <td>CA-issued</td>
+      <td>XMPP 1.0 and Server Dialback</td>
+      <td>type5.lit</td>
+      <td>bill@type5.lit</td>
+    </tr>
+    <tr>
+      <td>Type 6</td>
+      <td>Trusted Required</td>
+      <td>CA-issued</td>
+      <td>XMPP 1.0</td>
+      <td>type6.lit</td>
+      <td>chris@type6.lit</td>
+    </tr>
+  </table>
+</section1>
+
+<section1 topic='Connection Success' anchor='success'>
+  <p>The following table summarizes the results of connection attempts between the various services, where "U" stands for "Unsuccessful", "V" stands for "Verified", "E" stands for "Encrypted", and "T" stands for "Trusted". The rows indicate the initiating service and the columns indicate the receiving service.</p>
+  <table caption='Connection Success'>
+    <tr>
+      <th></th>
+      <th>Type 1</th>
+      <th>Type 2</th>
+      <th>Type 3</th>
+      <th>Type 4</th>
+      <th>Type 5</th>
+      <th>Type 6</th>
+    </tr>
+    <tr>
+      <td>Type 1</td>
+      <td>V</td>
+      <td>V</td>
+      <td>V</td>
+      <td>U</td>
+      <td>U</td>
+      <td>U</td>
+    </tr>
+    <tr>
+      <td>Type 2</td>
+      <td>V</td>
+      <td>V</td>
+      <td>E</td>
+      <td>E</td>
+      <td>U</td>
+      <td>U</td>
+    </tr>
+    <tr>
+      <td>Type 3</td>
+      <td>V</td>
+      <td>V</td>
+      <td>E</td>
+      <td>E</td>
+      <td>E</td>
+      <td>T</td>
+    </tr>
+    <tr>
+      <td>Type 4</td>
+      <td>U</td>
+      <td>E</td>
+      <td>E</td>
+      <td>E</td>
+      <td>E</td>
+      <td>U</td>
+    </tr>
+    <tr>
+      <td>Type 5</td>
+      <td>U</td>
+      <td>E</td>
+      <td>T</td>
+      <td>E</td>
+      <td>T</td>
+      <td>T</td>
+    </tr>
+    <tr>
+      <td>Type 6</td>
+      <td>U</td>
+      <td>U</td>
+      <td>T</td>
+      <td>U</td>
+      <td>T</td>
+      <td>T</td>
+    </tr>
+  </table>
+</section1>
+
+<section1 topic='Connections from Type 1 Services' anchor='type1'>
+
+  <section2 topic='Type 1 to Type 1' anchor='type1-type1'>
+    <p>In this scenario, an XMPP user citizen@type1.lit attempts to send an XML stanza to user@example.lit.</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='citizen@type1.lit/foo'
+    id='t1_t1'
+    to='user@example.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type1.lit service attempts to initiate a server-to-server connection with example.lit (both of which support verified connections only and neither of which has a certificate).</p>
+    <p>First, the type1.lit service sends an initial stream header to example.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        to='example.lit'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type1.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt1_t1o'
+        to='type1.lit'>
+    ]]></example>
+    <p>Because neither service supports XMPP 1.0, the type1.lit service attempts to complete a server dialback negotiation with the example.lit service. Therefore it sends a dialback key to example.lit over the existing connection.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type1.lit'
+    to='example.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The example.lit service then performs a DNS lookup on the type1.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type1.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        to='type1.lit'>
+    ]]></example>
+    <p>The authoritative server for the type1.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        id='idt1_t1r'
+        to='example.lit'>
+    ]]></example>
+    <p>The example.lit service then sends a dialback verification request to the authoritative server for the type1.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='example.lit'
+    id='idt1_t1o'
+    to='type1.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type1.lit domain notifies the example.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type1.lit'
+    id='idt1_t1o'
+    to='example.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The example.lit service then returns a positive server dialback result to the originating server.</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='example.lit'
+    to='type1.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type1.lit service routes the XML stanza from citizen@type1.lit to the example.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 1 to Type 2' anchor='type1-type2'>
+    <p>In this scenario, an XMPP user citizen@type1.lit attempts to send an XML stanza to juliet@type2.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='citizen@type1.lit/foo'
+    id='t1_t2'
+    to='juliet@type2.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type1.lit service (which supports verified connections only and does not have a certificate) attempts to initiate a server-to-server connection with the type2.lit service (which accepts verified connections and has a self-signed certificate).</p>
+    <p>First, the type1.lit service sends an initial stream header to type2.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        to='type2.lit'>
+    ]]></example>
+    <p>Next the type2.lit service sends a response stream header to type1.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt1_t2o'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type2.lit service also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because the type1.lit service does not support XMPP 1.0, it ignores the stream features and attempts to complete a server dialback negotiation with the type2.lit service. Therefore it sends a dialback key to type2.lit over the existing connection.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type1.lit'
+    to='type2.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type2.lit service then performs a DNS lookup on the type1.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type1.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The authoritative server for the type1.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        id='idt1_t2r'
+        to='type2.lit'>
+    ]]></example>
+    <p>The type2.lit service then sends a dialback verification request to the authoritative server for the type1.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type2.lit'
+    id='idt1_t2o'
+    to='type1.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type1.lit domain notifies the type2.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type1.lit'
+    id='idt1_t2o'
+    to='type2.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type2.lit service then returns a positive server dialback result to the originating server.</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type2.lit'
+    to='type1.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type1.lit service routes the XML stanza from citizen@type1.lit to the type2.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 1 to Type 3' anchor='type1-type3'>
+    <p>In this scenario, an XMPP user citizen@type1.lit attempts to send an XML stanza to romeo@type3.lit.</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='citizen@type1.lit/foo'
+    id='t1_t3'
+    to='romeo@type3.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type1.lit service (which supports verified connections only and does not have a certificate) attempts to initiate a server-to-server connection with the type3.lit service (which accepts verified connections and has a CA-issued certificate).</p>
+    <p>First, the type1.lit service sends an initial stream header to type3.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        to='type3.lit'>
+    ]]></example>
+    <p>Next the type3.lit service sends a response stream header to type1.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt1_t3o'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type3.lit service also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because the type1.lit service does not support XMPP 1.0, it ignores the stream features and attempts to complete a server dialback negotiation with the type3.lit service. Therefore it sends a dialback key to the authoritative server for the type3.lit service.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type1.lit'
+    to='type3.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type3.lit service then performs a DNS lookup on the type1.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The authoritative server for the type1.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        id='idt1_t3r'
+        to='type3.lit'>
+    ]]></example>
+    <p>The type3.lit service then sends a dialback verification request to the authoritative server for the type1.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type3.lit'
+    id='idt1_t3o'
+    to='type1.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type1.lit domain notifies the type3.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type1.lit'
+    id='idt1_t3o'
+    to='type2.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type3.lit service then returns a positive server dialback result to the originating server.</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type3.lit'
+    to='type1.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type1.lit service routes the XML stanza from citizen@type1.lit to the type3.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 1 to Type 4' anchor='type1-type4'>
+    <p>In this scenario, an XMPP user citizen@type1.lit attempts to send an XML stanza to hamlet@type4.lit.</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='citizen@type1.lit/foo'
+    id='t1_t4'
+    to='hamlet@type4.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type1.lit service (which supports verified connections only and does not have a certificate) attempts to initiate a server-to-server connection with type4.lit (which does not accept verified connections and has a self-signed certificate).</p>
+    <p>First, the type1.lit service sends an initial stream header to type4.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        to='type4.lit'>
+    ]]></example>
+    <p>Next the type4.lit service sends a response stream header to type1.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt1_t4o'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type4.lit service also sends stream features. Because the type4.lit service does not accept verified connections, it returns stream features with a notation that STARTTLS is required.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+</stream:features>
+    ]]></example>
+    <p>Because the type1.lit service does not support XMPP 1.0, it ignores the stream features and attempts to complete a server dialback negotiation with the type4.lit service. Therefore it sends a dialback key to the authoritative server for the type4.lit service.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type1.lit'
+    to='type4.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type4.lit service understands the server dialback protocol but since it requires STARTTLS at this point in the stream negotiation it returns a stream error to the type1.lit service, which should be &lt;not-authorized/&gt;.</p>
+    <example caption="Stream Error"><![CDATA[
+<stream:error>
+  <not-authorized 
+      xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
+</stream:error>
+</stream:stream>
+    ]]></example>
+    <p>Because the connection is unsuccessful, the type1.lit service returns a stanza error to citizen@type1.lit, which should be &timeout;.</p>
+    <example caption="Error Stanza"><![CDATA[
+<iq from='romeo@type4.lit'
+    id='t1_t4'
+    to='citizen@type1.lit/foo'
+    type='error'>
+  <error type='cancel'>
+    <remote-server-timeout
+        xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Type 1 to Type 5' anchor='type1-type5'>
+    <p>In this scenario, an XMPP user citizen@type1.lit attempts to send an XML stanza to bill@type5.lit.</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='citizen@type1.lit/foo'
+    id='t1_t5'
+    to='bill@type5.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type1.lit service (which supports verified connections only and does not have a certificate) attempts to initiate a server-to-server connection with type5.lit (which does not accept verified connections and has a CA-issued signed certificate).</p>
+    <p>First, the type1.lit service sends an initial stream header to type5.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        to='type5.lit'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type1.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt1_t5o'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type5.lit service also sends stream features. Because the type5.lit service does not accept verified connections, it returns stream features with a notation that STARTTLS is required.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+</stream:features>
+    ]]></example>
+    <p>Because the type1.lit service does not support XMPP 1.0, it ignores the stream features and attempts to complete a server dialback negotiation with the type5.lit service. Therefore it sends a dialback key to the authoritative server for the type5.lit service.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type1.lit'
+    to='type5.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type5.lit service understands the server dialback protocol but since it requires STARTTLS at this point in the stream negotiation it returns a stream error to the type1.lit service, which should be &lt;not-authorized/&gt;.</p>
+    <example caption="Stream Error"><![CDATA[
+<stream:error>
+  <not-authorized 
+      xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
+</stream:error>
+</stream:stream>
+    ]]></example>
+    <p>Because the connection is unsuccessful, the type1.lit service returns a stanza error to citizen@type1.lit, which should be &timeout;.</p>
+    <example caption="Error Stanza"><![CDATA[
+<iq from='bill@type5.lit'
+    id='t1_t5'
+    to='citizen@type1.lit/foo'
+    type='error'>
+  <error type='cancel'>
+    <remote-server-timeout
+        xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Type 1 to Type 6' anchor='type1-type6'>
+    <p>In this scenario, an XMPP user citizen@type1.lit attempts to send an XML stanza to chris@type6.lit.</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='citizen@type1.lit/foo'
+    id='t1_t6'
+    to='chris@type6.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type1.lit service (which supports verified connections only and does not have a certificate) attempts to initiate a server-to-server connection with the type6.lit service (which accepts only trusted connections, has a CA-issued certificate, and does not support Server Dialback).</p>
+    <p>First, the type1.lit service sends an initial stream header to type6.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        to='type6.lit'>
+    ]]></example>
+    <p>Next the type6.lit service sends a response stream header to type1.lit. Notice that the response stream header does not include the dialback namespace, since the type6.lit service does not support Server Dialback.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        id='idt1_t6o'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type6.lit service also sends stream features. Because the type6.lit service does not accept untrusted connections, it returns stream features with a notation that STARTTLS is required.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+</stream:features>
+    ]]></example>
+    <p>The type1.lit service does not detect support for server dialback by the type6.lit service but in any case attempts to complete server dialback.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type1.lit'
+    to='type6.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type6.lit service does not accept dialback negotiations so it returns a &notauthorized; stream error and closes the stream.</p>
+    <example caption="Stream Error"><![CDATA[
+<stream:error>
+  <not-authorized 
+      xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
+</stream:error>
+</stream:stream>
+    ]]></example>
+    <p>The type1.lit service closes the stream as well.</p>
+    <example caption="Stream Close"><![CDATA[
+</stream:stream>
+    ]]></example>
+    <p>Because the connection is unsuccessful, the type1.lit service returns a stanza error to citizen@type1.lit, which should be &timeout;.</p>
+    <example caption="Error Stanza"><![CDATA[
+<iq from='chris@type6.lit'
+    id='t1_t6'
+    to='citizen@type1.lit/foo'
+    type='error'>
+  <error type='cancel'>
+    <remote-server-timeout
+        xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+
+</section1>
+
+<section1 topic='Connections from Type 2 Services' anchor='type2'>
+
+  <section2 topic='Type 2 to Type 1' anchor='type2-type1'>
+    <p>In this scenario, an XMPP user juliet@type2.lit attempts to send an XML stanza to citizen@type1.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='juliet@type2.lit/foo'
+    id='t2_t1'
+    to='citizen@type1.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type2.lit service (which accepts verified connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type1.lit service (which supports verified connections only and does not have a certificate).</p>
+    <p>First, the type2.lit service sends an initial stream header to type1.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type1.lit service sends a response stream header to type2.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        id='idt1_t2o'
+        to='type2.lit'>
+    ]]></example>
+    <p>Because the type1.lit service does not support XMPP 1.0, it does not send stream features. Because the type2.lit service accepts verified connections, it attempts to verify the identity of type1.lit using server dialback. Therefore it sends a dialback key to type1.lit over the existing connection.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type2.lit'
+    to='type1.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type1.lit service then performs a DNS lookup on the type2.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type2.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        to='type2.lit'>
+    ]]></example>
+    <p>The authoritative server for the type2.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt1_t2r'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type1.lit service then sends a dialback verification request to the authoritative server for the type2.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type1.lit'
+    id='idt2_t1o'
+    to='type2.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type2.lit domain notifies the type1.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type2.lit'
+    id='idt1_t1o'
+    to='type1.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type1.lit service then returns a positive server dialback result to the originating server (i.e., type2.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type1.lit'
+    to='type2.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type2.lit service routes the XML stanza from juliet@type2.lit to the type1.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 2 to Type 2' anchor='type2-type2'>
+    <p>In this scenario, an XMPP user juliet@type2.lit attempts to send an XML stanza to user@example.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='juliet@type2.lit/foo'
+    id='t2_t2'
+    to='user@example.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type2.lit service (which accepts verified connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the example.lit service (which also supports verified connections and has a self-signed certificate).</p>
+    <p>First, the type2.lit service sends an initial stream header to example.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type2.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt2_t2o'
+        to='type2.lit'>
+    ]]></example>
+    <p>Because the example.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>We assume that type2.lit does not attempt STARTTLS negotiation but instead attempts server dialback for weak identity verification.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type2.lit'
+    to='example.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The example.lit service then performs a DNS lookup on the type2.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type2.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        to='type2.lit'>
+    ]]></example>
+    <p>The authoritative server for the type2.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt2_t2r'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The example.lit service then sends a dialback verification request to the authoritative server for the type2.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='example.lit'
+    id='idt2_t2o'
+    to='type2.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type2.lit domain notifies the example.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type2.lit'
+    id='idt2_t2o'
+    to='example.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The example.lit service then returns a positive server dialback result to the originating server (i.e., type2.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='example.lit'
+    to='type2.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type2.lit service routes the XML stanza from juliet@type2.lit to the example.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 2 to Type 3' anchor='type2-type3'>
+    <p>In this scenario, an XMPP user juliet@type2.lit attempts to send an XML stanza to romeo@type3.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='juliet@type2.lit/foo'
+    id='t2_t3'
+    to='romeo@type3.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type2.lit service (which accepts verified connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type3.lit service (which also supports verified connections and has a CA-issued certificate).</p>
+    <p>First, the type2.lit service sends an initial stream header to type3.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type3.lit service sends a response stream header to type2.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt2_t3o'
+        to='type2.lit'>
+    ]]></example>
+    <p>Because the type3.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>We assume that type2.lit does not attempt STARTTLS negotiation but instead attempts server dialback for weak identity verification.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type2.lit'
+    to='type3.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type3.lit service then performs a DNS lookup on the type2.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type2.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type2.lit'>
+    ]]></example>
+    <p>The authoritative server for the type2.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt2_t3r'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type3.lit service then sends a dialback verification request to the authoritative server for the type2.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type3.lit'
+    id='idt2_t3o'
+    to='type2.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type2.lit domain notifies the type3.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type2.lit'
+    id='idt2_t3o'
+    to='type3.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type3.lit service then returns a positive server dialback result to the originating server (i.e., type2.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type3.lit'
+    to='type2.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type2.lit service routes the XML stanza from juliet@type2.lit to the type3.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 2 to Type 4' anchor='type2-type4'>
+    <p>In this scenario, an XMPP user juliet@type2.lit attempts to send an XML stanza to hamlet@type4.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='juliet@type2.lit/foo'
+    id='t2_t4'
+    to='hamlet@type4.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type2.lit service (which accepts verified connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type4.lit service (which also supports verified connections and has a CA-issued certificate).</p>
+    <p>First, the type2.lit service sends an initial stream header to type4.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type4.lit service sends a response stream header to type2.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt2_t4o'
+        to='type2.lit'>
+    ]]></example>
+    <p>Because the type4.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because type4.lit requires encryption, type2.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type2.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type4.lit service sends a response stream header to type2.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt2_t4o2'
+        to='type2.lit'>
+    ]]></example>
+    <p>Because the type4.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <dialback xmlns='urn:xmpp:features:dialback'>
+    <required/>
+  </dialback>
+</stream:features>
+    ]]></example>
+    <p>Notice that type4.lit requires dialback here (perhaps because of some local service policy). Therefore type2.lit sends a dialback key to type4.lit.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type2.lit'
+    to='type4.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type4.lit service then performs a DNS lookup on the type2.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type2.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type2.lit'>
+    ]]></example>
+    <p>The authoritative server for the type2.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt2_t4r'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type4.lit service then sends a dialback verification request to the authoritative server for the type2.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type4.lit'
+    id='idt2_t4o'
+    to='type2.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type2.lit domain notifies the type4.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type2.lit'
+    id='idt2_t4o'
+    to='type4.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type4.lit service then returns a positive server dialback result to the originating server (i.e., type2.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type4.lit'
+    to='type2.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type2.lit service routes the XML stanza from juliet@type2.lit to the type4.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 2 to Type 5' anchor='type2-type5'>
+    <p>In this scenario, an XMPP user juliet@type2.lit attempts to send an XML stanza to bill@type5.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='juliet@type2.lit/foo'
+    id='t2_t5'
+    to='bill@type5.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type2.lit service (which accepts verified connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type5.lit service (which also supports verified connections and has a CA-issued certificate).</p>
+    <p>First, the type2.lit service sends an initial stream header to type5.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type2.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt2_t5o'
+        to='type2.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because type5.lit requires encryption, type2.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type2.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type2.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt2_t5o2'
+        to='type2.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <dialback xmlns='urn:xmpp:features:dialback'>
+    <required/>
+  </dialback>
+</stream:features>
+    ]]></example>
+    <p>Notice that type5.lit requires dialback here (perhaps because of some local service policy). Therefore type2.lit sends a dialback key to type5.lit.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type2.lit'
+    to='type5.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type5.lit service then performs a DNS lookup on the type2.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type2.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type2.lit'>
+    ]]></example>
+    <p>The authoritative server for the type2.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt2_t5r'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type5.lit service then sends a dialback verification request to the authoritative server for the type2.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type5.lit'
+    id='idt2_t5o'
+    to='type2.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type2.lit domain notifies the type5.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type2.lit'
+    id='idt2_t5o'
+    to='type5.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type5.lit service then returns a positive server dialback result to the originating server (i.e., type2.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type5.lit'
+    to='type2.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type2.lit service routes the XML stanza from juliet@type2.lit to the type5.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 2 to Type 6' anchor='type2-type6'>
+    <p>In this scenario, an XMPP user juliet@type2.lit attempts to send an XML stanza to chris@type6.lit.</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='juliet@type2.lit/foo'
+    id='t2_t6'
+    to='chris@type6.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type2.lit service (which supports verified connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type6.lit service (which accepts only trusted connections, has a CA-issued certificate, and does not support Server Dialback).</p>
+    <p>First, the type2.lit service sends an initial stream header to type6.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type6.lit'>
+    ]]></example>
+    <p>Next the type6.lit service sends a response stream header to type2.lit. Notice that the response stream header does not include the dialback namespace, since the type6.lit service does not support Server Dialback.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        id='idt2_t6o'
+        to='type2.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type6.lit service also sends stream features. Because the type6.lit service does not accept untrusted connections, it returns stream features with a notation that STARTTLS is required.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+</stream:features>
+    ]]></example>
+    <p>Because type6.lit requires encryption, type2.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then attempt negotiate TLS. We assume the negotiation fails because type2.lit presents a self-signed certificate but type6.lit requires trusted federation relying on a common root CA.</p>
+    <p>Because the connection is unsuccessful, the type2.lit service returns a stanza error to juliet@type2.lit, which should be &timeout;.</p>
+    <example caption="Error Stanza"><![CDATA[
+<iq from='chris@type6.lit'
+    id='t2_t6'
+    to='juliet@type2.lit/foo'
+    type='error'>
+  <error type='cancel'>
+    <remote-server-timeout
+        xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+
+</section1>
+
+<section1 topic='Connections from Type 3 Services' anchor='type3'>
+
+  <section2 topic='Type 3 to Type 1' anchor='type3-type1'>
+    <p>In this scenario, an XMPP user romeo@type3.lit attempts to send an XML stanza to citizen@type1.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='romeo@type3.lit/foo'
+    id='t3_t1'
+    to='citizen@type1.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type3.lit service (which accepts verified connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type1.lit service (which supports verified connections only and does not have a certificate).</p>
+    <p>First, the type3.lit service sends an initial stream header to type1.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type1.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        id='idt3_t1o'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type1.lit service does not support XMPP 1.0, it does not send stream features. Therefore the type3.lit attempts to complete server dialback verification.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type3.lit'
+    to='type1.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type1.lit service then performs a DNS lookup on the type3.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type3.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        to='type3.lit'>
+    ]]></example>
+    <p>The authoritative server for the type3.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt3_t1r'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type1.lit service then sends a dialback verification request to the authoritative server for the type3.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type1.lit'
+    id='idt3_t1o'
+    to='type3.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type3.lit domain notifies the type1.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type3.lit'
+    id='idt3_t1o'
+    to='type1.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type1.lit service then returns a positive server dialback result to the originating server (i.e., type3.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type1.lit'
+    to='type3.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type3.lit service routes the XML stanza from romeo@type3.lit to the type1.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 3 to Type 2' anchor='type3-type2'>
+    <p>In this scenario, an XMPP user romeo@type3.lit attempts to send an XML stanza to juliet@type2.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='romeo@type3.lit/foo'
+    id='t3_t2'
+    to='juliet@type2.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type3.lit service (which accepts verified connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type2.lit service (which supports verified connections and has a self-signed certificate).</p>
+    <p>First, the type3.lit service sends an initial stream header to type2.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type2.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type2.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt3_t2o'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type3.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>We assume that type2.lit does not attempt STARTTLS negotiation but instead attempts server dialback for weak identity verification.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type3.lit'
+    to='type2.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type2.lit service then performs a DNS lookup on the type3.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type3.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type3.lit'>
+    ]]></example>
+    <p>The authoritative server for the type3.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt3_t2r'
+        to='type2.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type2.lit service then sends a dialback verification request to the authoritative server for the type3.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type2.lit'
+    id='idt3_t2o'
+    to='type3.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type3.lit domain notifies the type2.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type3.lit'
+    id='idt3_t1o'
+    to='type2.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type2.lit service then returns a positive server dialback result to the originating server (i.e., type3.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type2.lit'
+    to='type3.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type3.lit service routes the XML stanza from romeo@type3.lit to the type2.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 3 to Type 3' anchor='type3-type3'>
+    <p>In this scenario, an XMPP user romeo@type3.lit attempts to send an XML stanza to user@example.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='romeo@type3.lit/foo'
+    id='t3_t3'
+    to='user@example.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type3.lit service (which accepts verified connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the example.lit service (which also supports verified connections and has a CA-issued certificate).</p>
+    <p>First, the type3.lit service sends an initial stream header to example.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt3_t3o'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type3.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>We assume that example.lit does not attempt STARTTLS negotiation but instead attempts server dialback for weak identity verification.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type3.lit'
+    to='example.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The example.lit service then performs a DNS lookup on the type3.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type3.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        to='type3.lit'>
+    ]]></example>
+    <p>The authoritative server for the type3.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt3_t3r'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The example.lit service then sends a dialback verification request to the authoritative server for the type3.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='example.lit'
+    id='idt3_t3o'
+    to='type3.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type3.lit domain notifies the example.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type3.lit'
+    id='idt3_t1o'
+    to='example.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The example.lit service then returns a positive server dialback result to the originating server (i.e., type3.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='example.lit'
+    to='type3.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type3.lit service routes the XML stanza from romeo@type3.lit to the example.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 3 to Type 4' anchor='type3-type4'>
+    <p>In this scenario, an XMPP user romeo@type3.lit attempts to send an XML stanza to hamlet@type4.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='romeo@type3.lit/foo'
+    id='t3_t4'
+    to='hamlet@type4.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type3.lit service (which accepts verified connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type4.lit service (which also supports verified connections and has a CA-issued certificate).</p>
+    <p>First, the type3.lit service sends an initial stream header to type4.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type4.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt3_t4o'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type4.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because type4.lit requires encryption, type3.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type3.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type4.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt3_t4o2'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type4.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <dialback xmlns='urn:xmpp:features:dialback'>
+    <required/>
+  </dialback>
+</stream:features>
+    ]]></example>
+    <p>Notice that type4.lit requires dialback here (perhaps because of some local service policy). Therefore type3.lit sends a dialback key to type4.lit.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type3.lit'
+    to='type4.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type4.lit service then performs a DNS lookup on the type3.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type3.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type3.lit'>
+    ]]></example>
+    <p>The authoritative server for the type3.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt3_t4r'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type4.lit service then sends a dialback verification request to the authoritative server for the type3.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type4.lit'
+    id='idt3_t4o'
+    to='type3.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type3.lit domain notifies the type4.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type3.lit'
+    id='idt3_t4o'
+    to='type4.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type4.lit service then returns a positive server dialback result to the originating server (i.e., type3.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type4.lit'
+    to='type3.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type3.lit service routes the XML stanza from romeo@type3.lit to the type4.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 3 to Type 5' anchor='type3-type5'>
+    <p>In this scenario, an XMPP user romeo@type3.lit attempts to send an XML stanza to bill@type5.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='romeo@type3.lit/foo'
+    id='t3_t5'
+    to='bill@type5.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type3.lit service (which accepts verified connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type5.lit service (which also supports encrypted connections and has a CA-issued certificate).</p>
+    <p>First, the type3.lit service sends an initial stream header to type5.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt3_t5o'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because type5.lit requires encryption, type3.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type3.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt3_t5o2'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    <mechanism>EXTERNAL</mechanism>
+    <required/>
+  </mechanisms>
+</stream:features>
+    ]]></example>
+    <p>Notice that type5.lit requires use of SASL EXTERNAL here (because the certificate presented by type3.lit was issued by a common root CA). Therefore type3.lit attempts to complete SASL negotiation.</p>
+    <example caption="SASL Mechanism Selection"><![CDATA[
+<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl'
+      mechanism='EXTERNAL'/>dHlwZTMubGl0</auth>
+    ]]></example>
+    <p>The type5.lit service determines that the authorization identity provided by type3.lit matches the information in the presented certificate and therefore returns success.</p>
+    <example caption="SASL Success"><![CDATA[
+<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+    ]]></example>
+    <p>The type3.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt3_t5o3'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features (which in this case are empty).</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features/>
+    ]]></example>
+    <p>Because the connection is successful, the type3.lit service routes the XML stanza from romeo@type3.lit to the type5.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 3 to Type 6' anchor='type3-type6'>
+    <p>In this scenario, an XMPP user romeo@type3.lit attempts to send an XML stanza to chris@type6.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='romeo@type3.lit/foo'
+    id='t3_t6'
+    to='chris@type6.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type3.lit service (which accepts verified connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type6.lit service (which requires trusted communications and has a CA-issued certificate).</p>
+    <p>First, the type3.lit service sends an initial stream header to type6.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type6.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type6.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        id='idt3_t6o'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type6.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because type6.lit requires encryption, type3.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type3.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type6.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type6.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        id='idt3_t6o2'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type6.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    <mechanism>EXTERNAL</mechanism>
+    <required/>
+  </mechanisms>
+</stream:features>
+    ]]></example>
+    <p>Notice that type6.lit requires use of SASL EXTERNAL here (because the certificate presented by type3.lit was issued by a common root CA). Therefore type3.lit attempts to complete SASL negotiation.</p>
+    <example caption="SASL Mechanism Selection"><![CDATA[
+<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl'
+      mechanism='EXTERNAL'/>dHlwZTMubGl0</auth>
+    ]]></example>
+    <p>The type6.lit service determines that the authorization identity provided by type3.lit matches the information in the presented certificate and therefore returns success.</p>
+    <example caption="SASL Success"><![CDATA[
+<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+    ]]></example>
+    <p>The type3.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type6.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type6.lit service sends a response stream header to type3.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        id='idt3_t6o3'
+        to='type3.lit'>
+    ]]></example>
+    <p>Because the type6.lit service supports XMPP 1.0, it also sends stream features (which in this case are empty).</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features/>
+    ]]></example>
+    <p>Because the connection is successful, the type3.lit service routes the XML stanza from romeo@type3.lit to the type6.lit service.</p>
+  </section2>
+
+</section1>
+
+<section1 topic='Connections from Type 4 Services' anchor='type4'>
+
+  <section2 topic='Type 4 to Type 1' anchor='type4-type1'>
+    <p>In this scenario, an XMPP user hamlet@type4.lit attempts to send an XML stanza to citizen@type1.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='hamlet@type4.lit/foo'
+    id='t4_t1'
+    to='citizen@type1.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type4.lit service (which requires encrypted connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type1.lit service (which supports verified connections only and does not have a certificate).</p>
+    <p>First, the type4.lit service sends an initial stream header to type1.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type1.lit service sends a response stream header to type4.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        id='idt4_t1o'
+        to='type4.lit'>
+    ]]></example>
+    <p>Because the type1.lit service does not support XMPP 1.0, it does not send stream features. Because the type4.lit service requires encryption via TLS, it cannot proceed further with the stream negotiation and closes the stream.</p>
+    <example caption="Stream Close"><![CDATA[
+</stream:stream>
+    ]]></example>
+    <p>The type1.lit service closes the stream as well.</p>
+    <example caption="Stream Close"><![CDATA[
+</stream:stream>
+    ]]></example>
+    <p>Because the connection is unsuccessful, the type4.lit service returns a stanza error to hamlet@type4.lit, which should be &timeout;.</p>
+    <example caption="Error Stanza"><![CDATA[
+<iq from='citizen@type1.lit'
+    id='t4_t1'
+    to='hamlet@type4.lit/foo'
+    type='error'>
+  <error type='cancel'>
+    <remote-server-timeout
+        xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Type 4 to Type 2' anchor='type4-type2'>
+    <p>In this scenario, an XMPP user hamlet@type4.lit attempts to send an XML stanza to juliet@type2.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='hamlet@type4.lit/foo'
+    id='t4_t2'
+    to='juliet@type2.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type4.lit service (which requires encrypted connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type2.lit service (which supports verified connections and has a self-signed certificate).</p>
+    <p>First, the type4.lit service sends an initial stream header to type2.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type2.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type2.lit service sends a response stream header to type4.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt4_t2o'
+        to='type4.lit'>
+    ]]></example>
+    <p>Because the type2.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because the type4.lit service requires encryption, it attempts STARTTLS negotiation.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type4.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type2.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type2.lit service sends a response stream header to type4.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt4_t2o2'
+        to='type4.lit'>
+    ]]></example>
+    <p>Because the type4.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <dialback xmlns='urn:xmpp:features:dialback'>
+    <required/>
+  </dialback>
+</stream:features>
+    ]]></example>
+    <p>Notice that type2.lit requires dialback here (perhaps because of some local service policy). Therefore type4.lit sends a dialback key to type2.lit.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type4.lit'
+    to='type2.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type2.lit service then performs a DNS lookup on the type4.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type4.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type4.lit'>
+    ]]></example>
+    <p>The authoritative server for the type4.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt4_t2r'
+        to='type2.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type2.lit service then sends a dialback verification request to the authoritative server for the type4.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type2.lit'
+    id='idt4_t2o'
+    to='type4.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type4.lit domain notifies the type2.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type4.lit'
+    id='idt4_t2o'
+    to='type2.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type2.lit service then returns a positive server dialback result to the originating server (i.e., type4.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type2.lit'
+    to='type4.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type4.lit service routes the XML stanza from hamlet@type4.lit to the type2.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 4 to Type 3' anchor='type4-type3'>
+    <p>In this scenario, an XMPP user hamlet@type4.lit attempts to send an XML stanza to romeo@type3.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='hamlet@type4.lit/foo'
+    id='t4_t3'
+    to='romeo@type3.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type4.lit service (which requires encrypted connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type3.lit service (which supports verified connections and has a CA-issued certificate).</p>
+    <p>First, the type4.lit service sends an initial stream header to type3.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type3.lit service sends a response stream header to type4.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt4_t3o'
+        to='type4.lit'>
+    ]]></example>
+    <p>Because the type3.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because the type4.lit service requires encryption, it attempts STARTTLS negotiation.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type4.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type3.lit service sends a response stream header to type4.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt4_t3o2'
+        to='type4.lit'>
+    ]]></example>
+    <p>Because the type4.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <dialback xmlns='urn:xmpp:features:dialback'>
+    <required/>
+  </dialback>
+</stream:features>
+    ]]></example>
+    <p>Notice that type3.lit requires dialback here (perhaps because of some local service policy). Therefore type4.lit sends a dialback key to type3.lit.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type4.lit'
+    to='type3.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type3.lit service then performs a DNS lookup on the type4.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type4.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        to='type4.lit'>
+    ]]></example>
+    <p>The authoritative server for the type4.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt4_t3r'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type3.lit service then sends a dialback verification request to the authoritative server for the type4.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type3.lit'
+    id='idt4_t3o'
+    to='type4.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type4.lit domain notifies the type3.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type4.lit'
+    id='idt4_t3o'
+    to='type3.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type3.lit service then returns a positive server dialback result to the originating server (i.e., type4.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type3.lit'
+    to='type4.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type4.lit service routes the XML stanza from hamlet@type4.lit to the type3.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 4 to Type 4' anchor='type4-type4'>
+    <p>In this scenario, an XMPP user hamlet@type4.lit attempts to send an XML stanza to user@example.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='hamlet@type4.lit/foo'
+    id='t4_t4'
+    to='user@example.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type4.lit service (which requires encrypted connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the example.lit service (which also requires encrypted connections and has a self-signed certificate).</p>
+    <p>First, the type4.lit service sends an initial stream header to example.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type4.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt4_t4o'
+        to='type4.lit'>
+    ]]></example>
+    <p>Because the example.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because the type4.lit service requires encryption, it attempts STARTTLS negotiation.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type4.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type4.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt4_t4o2'
+        to='type4.lit'>
+    ]]></example>
+    <p>Because the type4.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <dialback xmlns='urn:xmpp:features:dialback'>
+    <required/>
+  </dialback>
+</stream:features>
+    ]]></example>
+    <p>Notice that example.lit requires dialback here (perhaps because of some local service policy). Therefore type4.lit sends a dialback key to example.lit.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type4.lit'
+    to='example.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The example.lit service then performs a DNS lookup on the type4.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type4.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        to='type4.lit'>
+    ]]></example>
+    <p>The authoritative server for the type4.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt4_t4r'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The example.lit service then sends a dialback verification request to the authoritative server for the type4.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='example.lit'
+    id='idt4_t4o'
+    to='type4.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type4.lit domain notifies the example.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type4.lit'
+    id='idt4_t4o'
+    to='example.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The example.lit service then returns a positive server dialback result to the originating server (i.e., type4.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='example.lit'
+    to='type4.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type4.lit service routes the XML stanza from hamlet@type4.lit to the example.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 4 to Type 5' anchor='type4-type5'>
+    <p>In this scenario, an XMPP user hamlet@type4.lit attempts to send an XML stanza to bill@type5.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='hamlet@type4.lit/foo'
+    id='t4_t5'
+    to='user@type4.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type4.lit service (which requires encrypted connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type3.lit service (which also requires encrypted connections and has a CA-issued certificate).</p>
+    <p>First, the type4.lit service sends an initial stream header to type5.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type4.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt4_t5o'
+        to='type4.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because the type4.lit service requires encryption, it attempts STARTTLS negotiation.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type4.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type4.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt4_t5o2'
+        to='type4.lit'>
+    ]]></example>
+    <p>Because the type4.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <dialback xmlns='urn:xmpp:features:dialback'>
+    <required/>
+  </dialback>
+</stream:features>
+    ]]></example>
+    <p>Notice that type5.lit requires dialback here (perhaps because of some local service policy). Therefore type4.lit sends a dialback key to type5.lit.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type4.lit'
+    to='type5.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type5.lit service then performs a DNS lookup on the type4.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type4.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type4.lit'>
+    ]]></example>
+    <p>The authoritative server for the type4.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt4_t5r'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type5.lit service then sends a dialback verification request to the authoritative server for the type4.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type5.lit'
+    id='idt4_t5o'
+    to='type4.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type4.lit domain notifies the type5.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type4.lit'
+    id='idt4_t5o'
+    to='type5.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type5.lit service then returns a positive server dialback result to the originating server (i.e., type4.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type5.lit'
+    to='type4.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type4.lit service routes the XML stanza from hamlet@type4.lit to the type5.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 4 to Type 6' anchor='type4-type6'>
+    <p>In this scenario, an XMPP user hamlet@type4.lit attempts to send an XML stanza to chris@type6.lit.</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='hamlet@type4.lit/foo'
+    id='t4_t6'
+    to='chris@type6.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type4.lit service (which requires encrypted connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type6.lit service (which accepts only trusted connections, has a CA-issued certificate, and does not support Server Dialback).</p>
+    <p>First, the type4.lit service sends an initial stream header to type6.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type6.lit'>
+    ]]></example>
+    <p>Next the type6.lit service sends a response stream header to type4.lit. Notice that the response stream header does not include the dialback namespace, since the type6.lit service does not support Server Dialback.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        id='idt4_t6o'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type6.lit service also sends stream features. Because the type6.lit service does not accept untrusted connections, it returns stream features with a notation that STARTTLS is required.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+</stream:features>
+    ]]></example>
+    <p>Because type6.lit requires encryption, type4.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then attempt negotiate TLS. We assume the negotiation fails because type4.lit presents a self-signed certificate but type6.lit requires trusted federation relying on a common root CA.</p>
+    <p>Because the connection is unsuccessful, the type4.lit service returns a stanza error to hamlet@type4.lit, which should be &timeout;.</p>
+    <example caption="Error Stanza"><![CDATA[
+<iq from='chris@type6.lit'
+    id='t4_t6'
+    to='hamlet@type4.lit/foo'
+    type='error'>
+  <error type='cancel'>
+    <remote-server-timeout
+        xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+
+</section1>
+
+<section1 topic='Connections from Type 5 Services' anchor='type5'>
+
+  <section2 topic='Type 5 to Type 1' anchor='type5-type1'>
+    <p>In this scenario, an XMPP user bill@type5.lit attempts to send an XML stanza to citizen@type1.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='bill@type5.lit/foo'
+    id='t5_t1'
+    to='citizen@type1.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type5.lit service (which requires encrypted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type1.lit service (which supports verified connections only and does not have a certificate).</p>
+    <p>First, the type5.lit service sends an initial stream header to type1.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type1.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        id='idt5_t1o'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type1.lit service does not support XMPP 1.0, it does not send stream features. Because the type5.lit service requires encryption via TLS, it cannot proceed further with the stream negotiation and closes the stream.</p>
+    <example caption="Stream Close"><![CDATA[
+</stream:stream>
+    ]]></example>
+    <p>The type1.lit service closes the stream as well.</p>
+    <example caption="Stream Close"><![CDATA[
+</stream:stream>
+    ]]></example>
+    <p>Because the connection is unsuccessful, the type5.lit service returns a stanza error to hamlet@type5.lit, which should be &timeout;.</p>
+    <example caption="Error Stanza"><![CDATA[
+<iq from='citizen@type1.lit'
+    id='t5_t1'
+    to='bill@type5.lit/foo'
+    type='error'>
+  <error type='cancel'>
+    <remote-server-timeout
+        xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Type 5 to Type 2' anchor='type5-type2'>
+    <p>In this scenario, an XMPP user bill@type5.lit attempts to send an XML stanza to juliet@type2.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='bill@type5.lit/foo'
+    id='t5_t2'
+    to='juliet@type2.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type5.lit service (which requires encrypted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type2.lit service (which supports verified connections and has a self-signed certificate).</p>
+    <p>First, the type5.lit service sends an initial stream header to type2.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type2.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type2.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt5_t2o'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type2.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because the type5.lit service requires encryption, it attempts STARTTLS negotiation.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type5.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type2.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type2.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt5_t2o2'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <dialback xmlns='urn:xmpp:features:dialback'>
+    <required/>
+  </dialback>
+</stream:features>
+    ]]></example>
+    <p>Notice that type2.lit requires dialback here (perhaps because of some local service policy). Therefore type5.lit sends a dialback key to type2.lit.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type5.lit'
+    to='type2.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type2.lit service then performs a DNS lookup on the type5.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type5.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        to='type5.lit'>
+    ]]></example>
+    <p>The authoritative server for the type5.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt5_t2r'
+        to='type2.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type2.lit service then sends a dialback verification request to the authoritative server for the type5.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type2.lit'
+    id='idt5_t2o'
+    to='type5.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type5.lit domain notifies the type2.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type5.lit'
+    id='idt5_t2o'
+    to='type2.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type2.lit service then returns a positive server dialback result to the originating server (i.e., type5.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type2.lit'
+    to='type5.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type5.lit service routes the XML stanza from hamlet@type4.lit to the type2.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 5 to Type 3' anchor='type5-type3'>
+    <p>In this scenario, an XMPP user bill@type5.lit attempts to send an XML stanza to romeo@type3.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='bill@type5.lit/foo'
+    id='t5_t3'
+    to='romeo@type3.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type5.lit service (which requires encrypted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type3.lit service (which accepts verified connections and has a CA-issued certificate).</p>
+    <p>First, the type5.lit service sends an initial stream header to type3.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type3.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt5_t3o'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type3.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because type3.lit advertises encryption and type5.lit requires encryption, type5.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type5.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type3.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt5_t3o2'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type3.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    <mechanism>EXTERNAL</mechanism>
+    <required/>
+  </mechanisms>
+</stream:features>
+    ]]></example>
+    <p>Notice that type3.lit requires use of SASL EXTERNAL here (because the certificate presented by type5.lit was issued by a common root CA). Therefore type5.lit attempts to complete SASL negotiation.</p>
+    <example caption="SASL Mechanism Selection"><![CDATA[
+<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl'
+      mechanism='EXTERNAL'/>dHlwZTMubGl0</auth>
+    ]]></example>
+    <p>The type3.lit service determines that the authorization identity provided by type5.lit matches the information in the presented certificate and therefore returns success.</p>
+    <example caption="SASL Success"><![CDATA[
+<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+    ]]></example>
+    <p>The type5.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type3.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt5_t3o3'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type3.lit service supports XMPP 1.0, it also sends stream features (which in this case are empty).</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features/>
+    ]]></example>
+    <p>Because the connection is successful, the type5.lit service routes the XML stanza from bill@type5.lit to the type3.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 5 to Type 4' anchor='type5-type4'>
+    <p>In this scenario, an XMPP user bill@type5.lit attempts to send an XML stanza to hamlet@type4.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='bill@type4.lit/foo'
+    id='t5_t4'
+    to='hamlet@type4.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type5.lit service (which requires encrypted connections and has a self-signed certificate) attempts to initiate a server-to-server connection with the type4.lit service (which also requires encrypted connections and has a self-signed certificate).</p>
+    <p>First, the type5.lit service sends an initial stream header to type4.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type4.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt5_t4o'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type4.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because the type5.lit service requires encryption, it attempts STARTTLS negotiation.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type5.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type4.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt5_t4o2'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <dialback xmlns='urn:xmpp:features:dialback'>
+    <required/>
+  </dialback>
+</stream:features>
+    ]]></example>
+    <p>Notice that type4.lit requires dialback here (perhaps because of some local service policy). Therefore type5.lit sends a dialback key to type4.lit.</p>
+    <example caption="Dialback Key"><![CDATA[
+<db:result
+    from='type5.lit'
+    to='type4.lit'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>The type4.lit service then performs a DNS lookup on the type5.lit domain, opens a TCP connection at the discovered IP address and port, and establishes a stream with the authoritative server for the type5.lit service.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        to='type5.lit'>
+    ]]></example>
+    <p>The authoritative server for the type5.lit service then returns a response stream header.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt5_t4r'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>The type4.lit service then sends a dialback verification request to the authoritative server for the type5.lit domain.</p>
+    <example caption="Verification Request"><![CDATA[
+<db:verify
+    from='type4.lit'
+    id='idt5_t4o'
+    to='type5.lit'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>Here we assume that the authoritative server for the type5.lit domain notifies the type4.lit service that the key is valid.</p>
+    <example caption="Key is Valid"><![CDATA[
+<db:verify
+    from='type5.lit'
+    id='idt5_t4o'
+    to='type4.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:verify>
+    ]]></example>
+    <p>The type4.lit service then returns a positive server dialback result to the originating server (i.e., type5.lit).</p>
+    <example caption="Server Dialback Result"><![CDATA[
+<db:result
+    from='type4.lit'
+    to='type5.lit'
+    type='valid'>
+  some-long-dialback-key
+</db:result>
+    ]]></example>
+    <p>Because the connection is successful, the type5.lit service routes the XML stanza from hamlet@type4.lit to the type4.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 5 to Type 5' anchor='type5-type5'>
+    <p>In this scenario, an XMPP user bill@type5.lit attempts to send an XML stanza to user@example.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='bill@type5.lit/foo'
+    id='t5_t5'
+    to='user@example.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type5.lit service (which requires encrypted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the example.lit service (which also requires encrypted connections and has a CA-issued certificate).</p>
+    <p>First, the type5.lit service sends an initial stream header to example.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt5_t5o'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the example.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because both example.lit requires encryption and type5.lit also requires encryption, type5.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type5.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt5_t5o2'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the example.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    <mechanism>EXTERNAL</mechanism>
+    <required/>
+  </mechanisms>
+</stream:features>
+    ]]></example>
+    <p>Notice that example.lit requires use of SASL EXTERNAL here (because the certificate presented by type5.lit was issued by a common root CA). Therefore type5.lit attempts to complete SASL negotiation.</p>
+    <example caption="SASL Mechanism Selection"><![CDATA[
+<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl'
+      mechanism='EXTERNAL'/>dHlwZTMubGl0</auth>
+    ]]></example>
+    <p>The example.lit service determines that the authorization identity provided by type5.lit matches the information in the presented certificate and therefore returns success.</p>
+    <example caption="SASL Success"><![CDATA[
+<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+    ]]></example>
+    <p>The type5.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt5_t5o3'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the example.lit service supports XMPP 1.0, it also sends stream features (which in this case are empty).</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features/>
+    ]]></example>
+    <p>Because the connection is successful, the type5.lit service routes the XML stanza from bill@type5.lit to the example.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 5 to Type 6' anchor='type5-type6'>
+    <p>In this scenario, an XMPP user bill@type5.lit attempts to send an XML stanza to chris@type6.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='bill@type5.lit/foo'
+    id='t5_t6'
+    to='chris@type6.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type5.lit service (which requires encrypted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type6.lit service (which requires trusted communications and has a CA-issued certificate).</p>
+    <p>First, the type5.lit service sends an initial stream header to type6.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type6.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type6.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        id='idt5_t6o'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type6.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because type6.lit requires encryption, type5.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type5.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type6.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type6.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        id='idt5_t6o2'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type6.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    <mechanism>EXTERNAL</mechanism>
+    <required/>
+  </mechanisms>
+</stream:features>
+    ]]></example>
+    <p>Notice that type6.lit requires use of SASL EXTERNAL here (because the certificate presented by type5.lit was issued by a common root CA). Therefore type5.lit attempts to complete SASL negotiation.</p>
+    <example caption="SASL Mechanism Selection"><![CDATA[
+<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl'
+      mechanism='EXTERNAL'/>dHlwZTMubGl0</auth>
+    ]]></example>
+    <p>The type6.lit service determines that the authorization identity provided by type5.lit matches the information in the presented certificate and therefore returns success.</p>
+    <example caption="SASL Success"><![CDATA[
+<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+    ]]></example>
+    <p>The type5.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        to='type6.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type6.lit service sends a response stream header to type5.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        id='idt5_t6o3'
+        to='type5.lit'>
+    ]]></example>
+    <p>Because the type6.lit service supports XMPP 1.0, it also sends stream features (which in this case are empty).</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features/>
+    ]]></example>
+    <p>Because the connection is successful, the type5.lit service routes the XML stanza from bill@type5.lit to the type6.lit service.</p>
+  </section2>
+
+</section1>
+
+<section1 topic='Connections from Type 6 Services' anchor='type6'>
+
+  <section2 topic='Type 6 to Type 1' anchor='type6-type1'>
+    <p>In this scenario, an XMPP user chris@type6.lit attempts to send an XML stanza to citizen@type1.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='chris@type6.lit/foo'
+    id='t6_t1'
+    to='citizen@type1.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type6.lit service (which requires trusted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type1.lit service (which supports verified connections only and does not have a certificate).</p>
+    <p>First, the type6.lit service sends an initial stream header to type1.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='type1.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type1.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type1.lit'
+        id='idt6_t1o'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the type1.lit service does not support XMPP 1.0, it does not send stream features. Because the type6.lit service requires encryption via TLS, it cannot proceed further with the stream negotiation and closes the stream.</p>
+    <example caption="Stream Close"><![CDATA[
+</stream:stream>
+    ]]></example>
+    <p>The type1.lit service closes the stream as well.</p>
+    <example caption="Stream Close"><![CDATA[
+</stream:stream>
+    ]]></example>
+    <p>Because the connection is unsuccessful, the type6.lit service returns a stanza error to chris@type6.lit, which should be &timeout;.</p>
+    <example caption="Error Stanza"><![CDATA[
+<iq from='citizen@type1.lit'
+    id='t6_t1'
+    to='bill@type5.lit/foo'
+    type='error'>
+  <error type='cancel'>
+    <remote-server-timeout
+        xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Type 6 to Type 2' anchor='type6-type2'>
+    <p>In this scenario, an XMPP user chris@type6.lit attempts to send an XML stanza to juliet@type2.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='chris@type6.lit/foo'
+    id='t6_t2'
+    to='juliet@type2.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type6.lit service (which requires encrypted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type2.lit service (which supports verified connections and has a self-signed certificate).</p>
+    <p>First, the type6.lit service sends an initial stream header to type2.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='type2.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type2.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type2.lit'
+        id='idt6_t2o'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the type2.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because the type6.lit service requires encryption, it attempts STARTTLS negotiation.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then attempt negotiate TLS. We assume the negotiation fails because type2.lit presents a self-signed certificate but type6.lit requires trusted federation relying on a common root CA.</p>
+    <p>Because the connection is unsuccessful, the type6.lit service returns a stanza error to chris@type6.lit, which should be &timeout;.</p>
+    <example caption="Error Stanza"><![CDATA[
+<iq from='juliet@type2.lit'
+    id='t4_t6'
+    to='chris@type6.lit/foo'
+    type='error'>
+  <error type='cancel'>
+    <remote-server-timeout
+        xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Type 6 to Type 3' anchor='type6-type3'>
+    <p>In this scenario, an XMPP user chris@type6.lit attempts to send an XML stanza to romeo@type3.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='chris@type6.lit/foo'
+    id='t6_t3'
+    to='romeo@type3.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type6.lit service (which requires trusted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type3.lit service (which accepts verified connections and has a CA-issued certificate).</p>
+    <p>First, the type6.lit service sends an initial stream header to type3.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type3.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt6_t3o'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the type3.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because type3.lit advertises encryption and type6.lit requires encryption, type6.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type6.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type3.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt6_t3o2'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the type3.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    <mechanism>EXTERNAL</mechanism>
+    <required/>
+  </mechanisms>
+</stream:features>
+    ]]></example>
+    <p>Notice that type3.lit requires use of SASL EXTERNAL here (because the certificate presented by type6.lit was issued by a common root CA). Therefore type6.lit attempts to complete SASL negotiation.</p>
+    <example caption="SASL Mechanism Selection"><![CDATA[
+<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl'
+      mechanism='EXTERNAL'/>dHlwZTMubGl0</auth>
+    ]]></example>
+    <p>The type3.lit service determines that the authorization identity provided by type6.lit matches the information in the presented certificate and therefore returns success.</p>
+    <example caption="SASL Success"><![CDATA[
+<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+    ]]></example>
+    <p>The type6.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='type3.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type3.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type3.lit'
+        id='idt6_t3o3'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the type3.lit service supports XMPP 1.0, it also sends stream features (which in this case are empty).</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features/>
+    ]]></example>
+    <p>Because the connection is successful, the type6.lit service routes the XML stanza from chris@type6.lit to the type3.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 6 to Type 4' anchor='type6-type4'>
+    <p>In this scenario, an XMPP user chris@type6.lit attempts to send an XML stanza to hamlet@type4.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='chris@type6.lit/foo'
+    id='t6_t4'
+    to='hamlet@type4.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type6.lit service (which requires encrypted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type4.lit service (which supports verified connections and has a self-signed certificate).</p>
+    <p>First, the type6.lit service sends an initial stream header to type4.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='type4.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type4.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type4.lit'
+        id='idt6_t4o'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the type4.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because the type6.lit service requires encryption, it attempts STARTTLS negotiation.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then attempt negotiate TLS. We assume the negotiation fails because type4.lit presents a self-signed certificate but type6.lit requires trusted federation relying on a common root CA.</p>
+    <p>Because the connection is unsuccessful, the type6.lit service returns a stanza error to chris@type6.lit, which should be &timeout;.</p>
+    <example caption="Error Stanza"><![CDATA[
+<iq from='juliet@type4.lit'
+    id='t6_t4'
+    to='chris@type6.lit/foo'
+    type='error'>
+  <error type='cancel'>
+    <remote-server-timeout
+        xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Type 6 to Type 5' anchor='type6-type5'>
+    <p>In this scenario, an XMPP user chris@type6.lit attempts to send an XML stanza to bill@type5.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='chris@type6.lit/foo'
+    id='t6_t5'
+    to='bill@type5.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type6.lit service (which requires trusted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the type5.lit service (which requires encrypted connections and has a CA-issued certificate).</p>
+    <p>First, the type6.lit service sends an initial stream header to type5.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt6_t5o'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because type5.lit advertises encryption and type6.lit requires encryption, type6.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type6.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt6_t5o2'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    <mechanism>EXTERNAL</mechanism>
+    <required/>
+  </mechanisms>
+</stream:features>
+    ]]></example>
+    <p>Notice that type5.lit requires use of SASL EXTERNAL here (because the certificate presented by type6.lit was issued by a common root CA). Therefore type6.lit attempts to complete SASL negotiation.</p>
+    <example caption="SASL Mechanism Selection"><![CDATA[
+<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl'
+      mechanism='EXTERNAL'/>dHlwZTMubGl0</auth>
+    ]]></example>
+    <p>The type5.lit service determines that the authorization identity provided by type6.lit matches the information in the presented certificate and therefore returns success.</p>
+    <example caption="SASL Success"><![CDATA[
+<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+    ]]></example>
+    <p>The type6.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='type5.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the type5.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type5.lit'
+        id='idt6_t5o3'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the type5.lit service supports XMPP 1.0, it also sends stream features (which in this case are empty).</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features/>
+    ]]></example>
+    <p>Because the connection is successful, the type6.lit service routes the XML stanza from chris@type6.lit to the type5.lit service.</p>
+  </section2>
+
+  <section2 topic='Type 6 to Type 6' anchor='type6-type6'>
+    <p>In this scenario, an XMPP user chris@type6.lit attempts to send an XML stanza to user@example.lit:</p>
+    <example caption="Test Stanza"><![CDATA[
+<iq from='chris@type6.lit/foo'
+    id='t6_t6'
+    to='user@example.lit'
+    type='get'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+    ]]></example>
+    <p>Therefore the type6.lit service (which requires trusted connections and has a CA-issued certificate) attempts to initiate a server-to-server connection with the example.lit service (which requires encrypted connections and has a CA-issued certificate).</p>
+    <p>First, the type6.lit service sends an initial stream header to example.lit.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt6_t6o'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the example.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+  <dialback xmlns='urn:xmpp:features:dialback'/>
+</stream:features>
+    ]]></example>
+    <p>Because example.lit advertises encryption and type6.lit requires encryption, type6.lit attempts to negotiate a STARTTLS upgrade to the stream.</p>
+    <example caption="STARTTLS Request"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <example caption="STARTTLS Response"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+    ]]></example>
+    <p>The servers then negotiate TLS. We assume the negotiation is successful.</p>
+    <p>The type6.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt6_t6o2'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the example.lit service supports XMPP 1.0, it also sends stream features.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    <mechanism>EXTERNAL</mechanism>
+    <required/>
+  </mechanisms>
+</stream:features>
+    ]]></example>
+    <p>Notice that example.lit requires use of SASL EXTERNAL here (because the certificate presented by type6.lit was issued by a common root CA). Therefore type6.lit attempts to complete SASL negotiation.</p>
+    <example caption="SASL Mechanism Selection"><![CDATA[
+<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl'
+      mechanism='EXTERNAL'/>dHlwZTMubGl0</auth>
+    ]]></example>
+    <p>The example.lit service determines that the authorization identity provided by type6.lit matches the information in the presented certificate and therefore returns success.</p>
+    <example caption="SASL Success"><![CDATA[
+<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+    ]]></example>
+    <p>The type6.lit service then opens a new stream over the encrypted connection.</p>
+    <example caption="Initial Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='type6.lit'
+        to='example.lit'
+        version='1.0'>
+    ]]></example>
+    <p>Next the example.lit service sends a response stream header to type6.lit.</p>
+    <example caption="Response Stream Header"><![CDATA[
+<stream:stream
+        xmlns='jabber:server'
+        xmlns:db='jabber:server:dialback'
+        xmlns:stream='http://etherx.jabber.lit/streams'
+        from='example.lit'
+        id='idt6_t6o3'
+        to='type6.lit'>
+    ]]></example>
+    <p>Because the example.lit service supports XMPP 1.0, it also sends stream features (which in this case are empty).</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features/>
+    ]]></example>
+    <p>Because the connection is successful, the type6.lit service routes the XML stanza from chris@type6.lit to the example.lit service.</p>
+  </section2>
+
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>As explained in <cite>RFC 3920</cite> and <cite>XEP-0220</cite>, Server Dialback does not provide authentication.</p>
+  <p>In the absence of out-of-band key exchange, acceptance of a self-signed certificate does not result in authentication of a peer and therefore should be followed by Server Dialback to weakly verify peer identity.</p>
+  <p>Acceptance of a certificate issued by a trusted root CA results in some level of authentication and therefore should be followed by SASL negotiation using the EXTERNAL mechanism.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p> 
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This document requires no interaction with the &REGISTRAR;.</p> 
+</section1>
+
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>Thanks to Philipp Hancke, Norman Rasmussen, and Tomasz Sterna for their feedback.</p> 
+</section1>
+
+</xep>
