@@ -148,7 +148,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <xsl:variable name='thestatus' select='/xep/header/status'/>
         <xsl:variable name='thetype' select='/xep/header/type'/>
         <xsl:if test='$thestatus = "Active" and $thetype = "Historical"'>
-          <p style='color:green'>NOTICE: This Historical specification provides canonical documentation of a protocol that is in use within the Jabber/XMPP community. This document is not a standards-track specification within the XMPP Standards Foundation's standards process; however, it may be converted to standards-track in the future or may be obsoleted by a more modern protocol.</p>
+          <p style='color:green'>NOTICE: This Historical specification provides canonical documentation of a protocol that is in use within the Jabber/XMPP community. This document is not a standards-track specification within the XMPP Standards Foundation's standards process; however, it might be converted to standards-track in the future or might be obsoleted by a more modern protocol.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Active" and $thetype = "Humorous"'>
           <p style='color:green'>NOTICE: This document is Humorous. It MAY provide amusement but SHOULD NOT be taken seriously.</p>
@@ -160,31 +160,31 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           <p style='color:green'>NOTICE: This Procedural document defines a process or activity of the XMPP Standards Foundation (XSF) that has been approved by the XMPP Council and/or the XSF Board of Directors. The XSF is currently following the process or activity defined herein and will do so until this document is deprecated or obsoleted.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Deferred"'>
-          <p style='color:red'>WARNING: Consideration of this document has been Deferred by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended.</p>
+          <p style='color:red'>WARNING: Consideration of this document has been <strong>Deferred</strong> by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Deprecated"'>
-          <p style='color:red'>WARNING: This document has been deprecated by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been <strong>Deprecated</strong> by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one (if any).</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Draft"'>
-          <p style='color:green'>NOTICE: The protocol defined herein is a Draft Standard of the XMPP Standards Foundation. Implementations are encouraged and the protocol is appropriate for deployment in production systems, but some changes to the protocol are possible before it becomes a Final Standard.</p>
+          <p style='color:green'>NOTICE: The protocol defined herein is a <strong>Draft Standard</strong> of the XMPP Standards Foundation. Implementations are encouraged and the protocol is appropriate for deployment in production systems, but some changes to the protocol are possible before it becomes a Final Standard.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Historical"'>
-          <p style='color:red'>NOTICE: This Historical document attempts to provide canonical documentation of a protocol that is in use within the Jabber/XMPP community. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. This document is not a standards-track specification within the XMPP Standards Foundation's standards process; however, it may be converted to standards-track in the future or may be obsoleted by a more modern protocol.</p>
+          <p style='color:red'>NOTICE: This Historical document attempts to provide canonical documentation of a protocol that is in use within the Jabber/XMPP community. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. This document is not a standards-track specification within the XMPP Standards Foundation's standards process; however, it might be converted to standards-track in the future or might be obsoleted by a more modern protocol.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Informational"'>
-          <p style='color:red'>WARNING: This Informational document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. Implementation of the best practice or protocol profile described herein is encouraged in exploratory implementations, although production systems should not deploy implementations of this protocol until it advances to a status of Draft.</p>
+          <p style='color:red'>WARNING: This Informational document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. Implementation of the best practice or protocol profile described herein is encouraged in exploratory implementations, although production systems are advised to carefully consider whether it is appropriate to deploy implementations of this protocol before it advances to a status of Draft.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Procedural"'>
           <p style='color:red'>NOTICE: This Procedural document proposes that the process or activity defined herein shall be followed by the XMPP Standards Foundation (XSF). However, this process or activity has not yet been approved by the XMPP Council and/or the XSF Board of Directors and is therefore not currently in force.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Experimental" and $thetype = "Standards Track"'>
-          <p style='color:red'>WARNING: This Standards-Track document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. Implementation of the protocol described herein is encouraged in exploratory implementations, but production systems should not deploy implementations of this protocol until it advances to a status of Draft.</p>
+          <p style='color:red'>WARNING: This Standards-Track document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. Implementation of the protocol described herein is encouraged in exploratory implementations, but production systems are advised to carefully consider whether it is appropriate to deploy implementations of this protocol before it advances to a status of Draft.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Final"'>
-          <p style='color:green'>NOTICE: The protocol defined herein is a Final Standard of the XMPP Standards Foundation and may be considered a stable technology for implementation and deployment.</p>
+          <p style='color:green'>NOTICE: The protocol defined herein is a <strong>Final Standard</strong> of the XMPP Standards Foundation and can be considered a stable technology for implementation and deployment.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Obsolete"'>
-          <p style='color:red'>WARNING: This document has been obsoleted by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been obsoleted by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one (if any).</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Proposed"'>
           <p style='color:red'>NOTICE: This document is currently within Last Call or under consideration by the XMPP Council for advancement to the next stage in the XSF standards process.</p>
@@ -196,7 +196,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           <p style='color:red'>WARNING: This document has been Rejected by the XMPP Council. Implementation of the protocol described herein is not recommended under any circumstances.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Retracted"'>
-          <p style='color:red'>WARNING: This document has been retracted by the author(s). Implementation of the protocol described herein is not recommended. Developers desiring similar functionality should implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been retracted by the author(s). Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one (if any).</p>
         </xsl:if>
         <!-- TABLE OF CONTENTS -->
         <hr />
