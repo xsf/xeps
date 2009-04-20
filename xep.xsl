@@ -190,7 +190,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           <p style='color:red'>NOTICE: This document is currently within Last Call or under consideration by the XMPP Council for advancement to the next stage in the XSF standards process.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "ProtoXEP"'>
-          <p style='color:red'>WARNING: This document has not yet been accepted for consideration or approved in any official manner by the XMPP Standards Foundation, and this document must not be referred to as an XMPP Extension Protocol (XEP). If this document is accepted as a XEP by the XMPP Council, it will be published at &lt;<a href="http://www.xmpp.org/extensions/">http://www.xmpp.org/extensions/</a>&gt; and announced on the &lt;standards@xmpp.org&gt; mailing list.</p>
+          <p style='color:red'>WARNING: This document has not yet been accepted for consideration or approved in any official manner by the XMPP Standards Foundation, and this document is not yet an XMPP Extension Protocol (XEP). If this document is accepted as a XEP by the XMPP Council, it will be published at &lt;<a href="http://www.xmpp.org/extensions/">http://www.xmpp.org/extensions/</a>&gt; and announced on the &lt;standards@xmpp.org&gt; mailing list.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Rejected"'>
           <p style='color:red'>WARNING: This document has been Rejected by the XMPP Council. Implementation of the protocol described herein is not recommended under any circumstances.</p>
@@ -354,7 +354,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <xsl:choose>
           <xsl:when test='$Approver = "Board"'>
             <p class='indent'>The primary venue for discussion of XMPP Extension Protocols is the &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">standards@xmpp.org</a>&gt; discussion list.</p>
-            <p class='indent'>Discussion by the membership of the XSF may also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/members">http://mail.jabber.org/mailman/listinfo/members</a>&gt; for details).</p>
+            <p class='indent'>Discussion by the membership of the XSF might also be appropriate (see &lt;<a href="http://mail.jabber.org/mailman/listinfo/members">http://mail.jabber.org/mailman/listinfo/members</a>&gt; for details).</p>
           </xsl:when>
           <xsl:otherwise>
             <p class='indent'>The primary venue for discussion of XMPP Extension Protocols is the &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">standards@xmpp.org</a>&gt; discussion list.</p>
@@ -364,7 +364,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
             </xsl:if>
           </xsl:otherwise>
         </xsl:choose>
-        <p class='indent'>Errata may be sent to &lt;<a href='mailto:editor@xmpp.org'>editor@xmpp.org</a>&gt;.</p>
+        <p class='indent'>Errata can be sent to &lt;<a href='mailto:editor@xmpp.org'>editor@xmpp.org</a>&gt;.</p>
         <hr />
         <!-- CONFORMANCE TERMS-->
         <a name='appendix-conformance'></a>
