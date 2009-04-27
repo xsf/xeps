@@ -7,7 +7,7 @@
 <xep>
 <header>
   <title>Roster Versioning</title>
-  <abstract>This specification defines a proposed modification to the XMPP roster protocol that enables versioning of rosters such that the server will not send the roster to the client if the roster has not changed, thus saving bandwidth during session establishment.</abstract>
+  <abstract>This specification defines a proposed modification to the XMPP roster protocol that enables versioning of rosters such that the server will not send the roster to the client if the roster has not been modified, thus saving bandwidth during session establishment.</abstract>
   &LEGALNOTICE;
   <number>0237</number>
   <status>Proposed</status>
@@ -22,6 +22,12 @@
   <supersededby/>
   <shortname>N/A</shortname>
   &stpeter;
+  <revision>
+    <version>0.10</version>
+    <date>2009-04-27</date>
+    <initials>psa</initials>
+    <remark><p>Modified ver attribute to be an opaque identifier instead of (necessarily) a strictly-increasing sequence number; specified that an empty version ID indicates that the client wishes to bootstrap the use of roster versioning.</p></remark>
+  </revision>
   <revision>
     <version>0.9</version>
     <date>2009-04-22</date>
@@ -44,7 +50,7 @@
     <version>0.6</version>
     <date>2009-03-31</date>
     <initials>psa</initials>
-    <remark><p>Clarified definition of sequence number.</p></remark>
+    <remark><p>Clarified definition of ver attribute.</p></remark>
   </revision>
   <revision>
     <version>0.5</version>
@@ -97,51 +103,50 @@
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
-  <p>Although XMPP rosters can become quite large, they change infrequently. Therefore it can be inefficient for the server to send the roster to the client during session establishment if the roster has not changed. This document defines a small modification to the XMPP roster protocol specified in &xmppim; that enables "versioning" of roster information.</p>
-  <p>The basic model is that if the client specifies a version number when it requests the roster, the server returns an empty IQ-result. If the roster has changed, the server sends numbered roster pushes for each roster item that has been touched in any way since the version specified by the client. The client processes each roster push as it normally would, incrementing its local version number with each roster push. Therefore the client can receive only the items that have been modified, not the entire roster.</p>
+  <p>Although XMPP rosters can become quite large, they tend to change infrequently. Therefore it can be inefficient for the server to send the roster to the client during session establishment if the roster has not been modified. This document defines a small modification to the XMPP roster protocol specified in &xmppim; that enables "versioning" of roster information.</p>
+  <p>The basic model is that if the client specifies a version ID when it requests the roster, the server returns an empty IQ-result. If the roster has been modified, the server sends versioned roster pushes for each roster item that has been touched in any way since the version specified by the client. The client processes each roster push as it normally would, modifying its local version ID with each roster push it receives. This enables the client to receive only the items that have been modified, not the entire roster.</p>
   &RFC3921BISNOTE;
 </section1>
 
 <section1 topic='Protocol' anchor='proto'>
   <section2 topic='Data Format' anchor='format'>
     <p>This document adds a new 'ver' attribute to the &QUERY; element qualified by the 'jabber:iq:roster' namespace, defined as follows.</p>
-    <p class='def'><strong>Definition:</strong> The <strong>'ver' attribute</strong> is a strictly increasing sequence number that is increased (but not necessarily incremented-by-one) with any modification to the roster data. The value of the attribute MUST be a non-negative 64-bit integer, MUST be changed only by the server, and MUST be treated by the client as opaque. The server MUST ensure that each change to the roster data will result in a different sequence number and that the sequence number associated with a given roster modification will be greater than the sequence number associated with any previous roster modification for this session.</p>
-    <p>An XMPP server cannot guarantee that a timestamp will be strictly increasing (e.g., the system time might change because of an adjustment based on an update triggered by the user of the Network Time Protocol (&rfc0958;); therefore, because the 'ver' attribute is defined as a strictly increasing sequence number, server implementations are advised to employ a method other than timestamps for generation of the 'ver' attribute.</p>
-    <p class='def'><strong>Definition:</strong> A <strong>"roster modification"</strong> is any change to the roster data that would result in a roster push to a connected client. Therefore internal states related to roster processing within the server that would not result in a roster push do not necessitate a increase in the sequence number. If a series of roster modifications result in a roster item that does not differ from the version cached by the client (e.g., a change to the item's 'name' attribute and then a change back to the original value), the server MUST consider the item to have been modified and therefore MUST send the item to the client (typically via a roster push as described below).</p>
+    <p class='def'><strong>Definition:</strong> The <strong>'ver' attribute</strong> is a string that identifies a particular version of the roster information. The value MUST be generated only by the server and MUST be treated by the client as opaque. The server MUST ensure that each roster modification will result in a different version and that the version associated with a given roster modification will be different from version associated with any previous roster modification for this session. (The server can use any appropriate method for generating the version ID, such as a hash of the roster data or a strictly-increasing sequence number.)</p>
+    <p class='def'><strong>Definition:</strong> A <strong>"roster modification"</strong> is any modification to the roster data that would result in a roster push to a connected client. Therefore internal states related to roster processing within the server that would not result in a roster push do not necessitate a change to the version. If a series of roster modifications result in a roster item that does not differ from the version cached by the client (e.g., a modification to the item's 'name' attribute and then a modification back to the original value), the server MAY consider the item to have been modified and therefore MAY send the item to the client (typically via a roster push as described below).</p>
   </section2>
   <section2 topic='Client Request' anchor='request'>
-    <p>If a client supports roster versioning, it SHOULD include the 'ver' element in its request for the roster, where the 'ver' attribute is set to the sequence number associated with its last cache of the roster.</p>
-    <example caption="Roster get with sequence number"><![CDATA[
+    <p>If a client supports roster versioning, it MUST include the 'ver' element in its request for the roster, where the 'ver' attribute is set to the version ID associated with its last cache of the roster.</p>
+    <example caption="Roster get with version ID"><![CDATA[
 C: <iq from='romeo@montague.lit/home' id='r1h3vzp7' to='romeo@montague.lit' type='get'>
-     <query xmlns='jabber:iq:roster' ver='299'/>
+     <query xmlns='jabber:iq:roster' ver='qAxdnWNcA+lYf7CoN5wpBsvVVno='/>
    </iq>
     ]]></example>
-    <p>If the client has not yet cached the roster or the cache is lost or corrupted, but the client wishes to bootstrap the use of roster versioning, it MUST set the 'ver' attribute to a value of zero (0).</p>
+    <p>If the client has not yet cached the roster or the cache is lost or corrupted, but the client wishes to bootstrap the use of roster versioning, it MUST set the 'ver' attribute to the empty string (i.e., <strong>ver=""</strong>).</p>
     <p>Naturally, if the client does not support roster versioning or does not wish to bootstrap the use of roster versioning, it will behave like an RFC-3921-compliant client by not including the 'ver' attribute.</p>
   </section2>
   <section2 topic='Server Response' anchor='response-result'>
-    <p>Whether or not the roster has changed since the version enumerated by the client, the server MUST either return the complete roster as described in RFC 3921 or return an empty IQ-result (thus indicating that any roster modifications will be sent via roster pushes, as described below). In general, unless returning the complete roster would use less bandwidth than sending individual roster pushes to the client (e.g., if the roster contains only a few items), the server SHOULD send an empty IQ-result and then send the modifications (if any) via roster pushes. In addition, if the client signals a sequence number that is greater than the sequence number currently on file at the server for that JID, the server MUST return the whole current roster as if client announced its version to be zero, thus bootstrapping the client's local cache.</p>
+    <p>Whether or not the roster has been modified since the version ID enumerated by the client, the server MUST either return the complete roster as described in RFC 3921 or return an empty IQ-result (thus indicating that any roster modifications will be sent via roster pushes, as described below). In general, unless returning the complete roster would use less bandwidth than sending individual roster pushes to the client (e.g., if the roster contains only a few items), the server SHOULD send an empty IQ-result and then send the modifications (if any) via roster pushes. In addition, if the client signals a version ID that is different from the version currently on file at the server for that JID, the server MUST return the whole current roster as if client announced its version to be the empty string, thus bootstrapping the client's local cache.</p>
     <example caption="Empty roster result"><![CDATA[
 S: <iq from='romeo@montague.lit' id='r1h3vzp7' to='romeo@montague.lit/home' type='result'/>
     ]]></example>
     <p>Note: This empty IQ-result is different from an empty &QUERY;, thus disambiguating this usage from an empty roster.</p>
-    <p>If the roster has not changed since the version enumerated by the client, the server will simply not send any roster pushes to the client (until and unless some relevant event triggers a roster push during the lifetime of the client's session).</p>
-    <p>If the roster has changed since the version enumerated by the client, the server MUST then send one roster push to the client for each roster item that has been modified since the version enumerated by the client.</p>
+    <p>If the roster has not been modified since the version ID enumerated by the client, the server will simply not send any roster pushes to the client (until and unless some relevant event triggers a roster push during the lifetime of the client's session).</p>
+    <p>If the roster has been modified since the version ID enumerated by the client, the server MUST then send one roster push to the client for each roster item that has been modified since the version ID enumerated by the client.</p>
     <example caption="Roster pushes"><![CDATA[
 S: <iq from='romeo@montague.lit' id='ah382g67' to='romeo@montague.lit/home' type='set'>
-     <query xmlns='jabber:iq:roster' ver='303'>
-       <item jid='shylock@shakespeare.lit' subscription='remove'/>
+     <query xmlns='jabber:iq:roster' ver='qAxdnWNcA+lYf7CoN5wpBsvVVno='>
+       <item jid='tybalt@shakespeare.lit' subscription='remove'/>
      </query>
    </iq>
 
 S: <iq from='romeo@montague.lit' id='b2gs90j5' to='romeo@montague.lit/home' type='set'>
-     <query xmlns='jabber:iq:roster' ver='307'>
+     <query xmlns='jabber:iq:roster' ver='18sl3M/tdcyd1mwtn1hKmKOnacE='>
        <item jid='bill@shakespeare.lit' subscription='both'/>
      </query>
    </iq>
 
 S: <iq from='romeo@montague.lit' id='c73gs419' to='romeo@montague.lit/home' type='set'>
-     <query xmlns='jabber:iq:roster' ver='311'>
+     <query xmlns='jabber:iq:roster' ver='kkmqpuunFM5obGuZLN9ZgyKEVSs='>
        <item jid='nurse@shakespeare.lit' name='Nurse' subscription='to'>
          <group>Servants</group>
        </item>
@@ -149,22 +154,21 @@ S: <iq from='romeo@montague.lit' id='c73gs419' to='romeo@montague.lit/home' type
    </iq>
 
 S: <iq from='romeo@montague.lit' id='dh361f35' to='romeo@montague.lit/home' type='set'>
-     <query xmlns='jabber:iq:roster' ver='315'>
+     <query xmlns='jabber:iq:roster' ver='/gAR2erxkF5xLkRGaHJziC7B3LE='>
        <item jid='juliet@shakespeare.lit' name='Juliet' subscription='both'>
-         <group>Friends</group>
+         <group>VIPs</group>
        </item>
      </query>
    </iq>
     ]]></example>
     <p>These "interim roster pushes" can be understood as follows:</p>
     <ol>
-      <li>Imagine that the client had an active presence session for the entire time between its cached roster version (say, 299) and the new roster version (say, 315).</li>
-      <li>During that time, the client might have received roster pushes related to roster version numbers 301, 303, 305, 307, 309, 311, 313, and 315 (the version numbers must be strictly increasing but there is no requirement that the sequence shall be continuous).</li>
-      <li>However, some of those roster pushes might have contained intermediate updates to the same roster item (e.g., changes in the subscription state for bill@shakespeare.lit from "none" to "to" and from "to" to "both").</li>
-      <li>The interim roster pushes would not include all of the intermediate steps, only the final result of all changes applied while the client was in fact offline (say, 303, 307, 311, and 315).</li>
+      <li>Imagine that the client had an active presence session for the entire time between its cached roster version (say, "qAxdnWNcA+lYf7CoN5wpBsvVVno=") and the new roster version (say, "/gAR2erxkF5xLkRGaHJziC7B3LE=").</li>
+      <li>During that time, the client might have received roster pushes related to varous roster versions. However, some of those roster pushes might have contained intermediate updates to the same roster item (e.g., modifications to the subscription state for bill@shakespeare.lit from "none" to "to" and from "to" to "both").</li>
+      <li>The interim roster pushes would not include all of the intermediate steps, only the final result of all modifications applied to each item while the client was in fact offline (say, "qAxdnWNcA+lYf7CoN5wpBsvVVno=", "18sl3M/tdcyd1mwtn1hKmKOnacE=", "kkmqpuunFM5obGuZLN9ZgyKEVSs=", and "/gAR2erxkF5xLkRGaHJziC7B3LE=").</li>
     </ol>
     <p>The client MUST handle an "interim roster push" in the same way it handles any roster push (indeed, from the client's perspective it cannot tell the difference between an "interim" roster push and a "live" roster push). If the client's session ends before it receives all of the interim roster pushes, when requesting the roster after reconnection it SHOULD request the version associated with the last roster <em>push</em> it received during the session that was disconnected, not the version associated with the roster <em>result</em> it received at the start of the session that was disconnected.</p>
-    <p>When roster versioning is enabled, the server MUST include the updated roster sequence number with each roster push. Roster pushes MUST occur in sequence order and the sequence number contained in a roster push MUST be unique.</p>
+    <p>When roster versioning is enabled, the server MUST include the updated roster version with each roster push. Roster pushes MUST occur in order of modification and the version contained in a roster push MUST be unique.</p>
   </section2>
 </section1>
 
@@ -172,19 +176,19 @@ S: <iq from='romeo@montague.lit' id='dh361f35' to='romeo@montague.lit/home' type
   <p>This section provides a detailed scenario that illustrates the use of roster versioning. In this example the client gets disconnected before the server has had a chance to send all of its roster pushes, but this is immaterial to the synchronization process.</p>
   <example caption="The roster synchronization process"><![CDATA[
 C: <iq from='romeo@montague.lit/home' id='r1h3vzp7' to='romeo@montague.lit' type='get'>
-     <query xmlns='jabber:iq:roster' ver='299'/>
+     <query xmlns='jabber:iq:roster' ver='qAxdnWNcA+lYf7CoN5wpBsvVVno='/>
    </iq>
 
 S: <iq from='romeo@montague.lit' id='r1h3vzp7' to='romeo@montague.lit/home' type='result'/>
 
 S: <iq from='romeo@montague.lit' id='ah382g67' to='romeo@montague.lit/home' type='set'>
-     <query xmlns='jabber:iq:roster' ver='303'>
-       <item jid='shylock@shakespeare.lit' subscription='remove'/>
+     <query xmlns='jabber:iq:roster' ver='qAxdnWNcA+lYf7CoN5wpBsvVVno='>
+       <item jid='tybalt@shakespeare.lit' subscription='remove'/>
      </query>
    </iq>
 
 S: <iq from='romeo@montague.lit' id='b2gs90j5' to='romeo@montague.lit/home' type='set'>
-     <query xmlns='jabber:iq:roster' ver='307'>
+     <query xmlns='jabber:iq:roster' ver='18sl3M/tdcyd1mwtn1hKmKOnacE='>
        <item jid='bill@shakespeare.lit' subscription='both'/>
      </query>
    </iq>
@@ -194,13 +198,13 @@ S: </stream:stream>
 [ reconnection ]
 
 C: <iq from='romeo@montague.lit/home' id='r2xa7gf9' to='romeo@montague.lit' type='get'>
-     <query xmlns='jabber:iq:roster' ver='307'/>
+     <query xmlns='jabber:iq:roster' ver='18sl3M/tdcyd1mwtn1hKmKOnacE='/>
    </iq>
 
 S: <iq from='romeo@montague.lit' id='r2xa7gf9' to='romeo@montague.lit/home' type='result'/>
 
 S: <iq from='romeo@montague.lit' id='c73gs419' to='romeo@montague.lit/home' type='set'>
-     <query xmlns='jabber:iq:roster' ver='311'>
+     <query xmlns='jabber:iq:roster' ver='kkmqpuunFM5obGuZLN9ZgyKEVSs='>
        <item jid='nurse@shakespeare.lit' name='Nurse' subscription='to'>
          <group>Servants</group>
        </item>
@@ -208,9 +212,9 @@ S: <iq from='romeo@montague.lit' id='c73gs419' to='romeo@montague.lit/home' type
    </iq>
 
 S: <iq from='romeo@montague.lit' id='dh361f35' to='romeo@montague.lit/home' type='set'>
-     <query xmlns='jabber:iq:roster' ver='315'>
+     <query xmlns='jabber:iq:roster' ver='/gAR2erxkF5xLkRGaHJziC7B3LE='>
        <item jid='juliet@shakespeare.lit' name='Juliet' subscription='both'>
-         <group>Friends</group>
+         <group>VIPs</group>
        </item>
      </query>
    </iq>
@@ -287,7 +291,7 @@ S: <iq from='romeo@montague.lit' id='dh361f35' to='romeo@montague.lit/home' type
 </section1>
 
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>Thanks to Dave Cridland, Richard Dobson, Leonid Evdokimov, Fabio Forno, Alexander Gnauck, Juha Hartikainen, Joe Hildebrand, Justin Karneges, Sachin Khandelwal, Curtis King, Pedro Melo, Matthew Wild, and Jiří Zárevúcký for their comments. The definition of a sequence number borrows some concepts from the definition of the CONDSTORE extension to IMAP as provided in &rfc4551;</p>
+  <p>Thanks to Dave Cridland, Richard Dobson, Leonid Evdokimov, Fabio Forno, Alexander Gnauck, Juha Hartikainen, Joe Hildebrand, Justin Karneges, Sachin Khandelwal, Curtis King, Jonas Lindberg, Pedro Melo, Matthew Wild, and Jiří Zárevúcký for their comments.</p>
 </section1>
 
 </xep>
