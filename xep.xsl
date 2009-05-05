@@ -190,7 +190,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           <p style='color:red'>NOTICE: This document is currently within Last Call or under consideration by the XMPP Council for advancement to the next stage in the XSF standards process.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "ProtoXEP"'>
-          <p style='color:red'>WARNING: This document has not yet been accepted for consideration or approved in any official manner by the XMPP Standards Foundation, and this document is not yet an XMPP Extension Protocol (XEP). If this document is accepted as a XEP by the XMPP Council, it will be published at &lt;<a href="http://www.xmpp.org/extensions/">http://www.xmpp.org/extensions/</a>&gt; and announced on the &lt;standards@xmpp.org&gt; mailing list.</p>
+          <p style='color:red'>WARNING: This document has not yet been accepted for consideration or approved in any official manner by the XMPP Standards Foundation, and this document is not yet an XMPP Extension Protocol (XEP). If this document is accepted as a XEP by the XMPP Council, it will be published at &lt;<a href="http://xmpp.org/extensions/">http://xmpp.org/extensions/</a>&gt; and announced on the &lt;standards@xmpp.org&gt; mailing list.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Rejected"'>
           <p style='color:red'>WARNING: This document has been Rejected by the XMPP Council. Implementation of the protocol described herein is not recommended under any circumstances.</p>
@@ -215,18 +215,18 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <a name='appendix-docinfo'></a>
         <h3>Appendix A: Document Information</h3>
           <p class='indent'>
-            Series: <a href='http://www.xmpp.org/extensions/'>XEP</a><br />
+            Series: <a href='http://xmpp.org/extensions/'>XEP</a><br />
             Number: <xsl:value-of select='/xep/header/number'/><br />
             Publisher: <a href='/xsf/'>XMPP Standards Foundation</a><br />
             Status: 
             <a>
-              <xsl:attribute name='href'><xsl:text>http://www.xmpp.org/extensions/xep-0001.html#states-</xsl:text><xsl:value-of select='/xep/header/status'/></xsl:attribute>
+              <xsl:attribute name='href'><xsl:text>http://xmpp.org/extensions/xep-0001.html#states-</xsl:text><xsl:value-of select='/xep/header/status'/></xsl:attribute>
               <xsl:value-of select='/xep/header/status'/>
             </a>
             <br />
             Type:
             <a>
-              <xsl:attribute name='href'><xsl:text>http://www.xmpp.org/extensions/xep-0001.html#types-</xsl:text><xsl:value-of select='/xep/header/type'/></xsl:attribute>
+              <xsl:attribute name='href'><xsl:text>http://xmpp.org/extensions/xep-0001.html#types-</xsl:text><xsl:value-of select='/xep/header/type'/></xsl:attribute>
               <xsl:value-of select='/xep/header/type'/>
             </a>
             <br />
@@ -239,10 +239,10 @@ OR OTHER DEALINGS IN THE SOFTWARE.
             <xsl:variable name='ApprovingBody' select='/xep/header/approver'/>
             <xsl:choose>
               <xsl:when test='$ApprovingBody = "Board"'>
-                Approving Body: <a href='http://www.xmpp.org/xsf/board/'>XSF Board of Directors</a><br />
+                Approving Body: <a href='http://xmpp.org/xsf/board/'>XSF Board of Directors</a><br />
               </xsl:when>
               <xsl:otherwise>
-                Approving Body: <a href='http://www.xmpp.org/council/'>XMPP Council</a><br />
+                Approving Body: <a href='http://xmpp.org/council/'>XMPP Council</a><br />
               </xsl:otherwise>
             </xsl:choose>
             <xsl:variable name='dependencies.count' select='count(/xep/header/dependencies/spec)'/>
@@ -293,7 +293,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
             <xsl:if test='$reg.count=1'>
               Registry: 
               <xsl:variable name='registryURL'>
-                <xsl:text>http://www.xmpp.org/registrar/</xsl:text>
+                <xsl:text>http://xmpp.org/registrar/</xsl:text>
                 <xsl:value-of select='/xep/header/shortname'/>
                 <xsl:text>.html</xsl:text>
               </xsl:variable>

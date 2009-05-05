@@ -95,7 +95,7 @@ THE SOFTWARE.
       </seriesInfo>
       <format>
         <xsl:attribute name='type'><xsl:text>HTML</xsl:text></xsl:attribute>
-        <xsl:attribute name='target'><xsl:text>http://www.xmpp.org/extensions/xep-</xsl:text><xsl:value-of select='/xep/header/number'/><xsl:text>.html</xsl:text></xsl:attribute>
+        <xsl:attribute name='target'><xsl:text>http://xmpp.org/extensions/xep-</xsl:text><xsl:value-of select='/xep/header/number'/><xsl:text>.html</xsl:text></xsl:attribute>
       </format>
     </reference>
   </xsl:template>

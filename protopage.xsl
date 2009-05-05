@@ -36,7 +36,7 @@ THE SOFTWARE.
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
         <link>
           <xsl:attribute name='rel'><xsl:text>alternate</xsl:text></xsl:attribute>
-          <xsl:attribute name='href'><xsl:text>http://www.xmpp.org/extensions/xep-</xsl:text><xsl:value-of select='/xep/header/number'/><xsl:text>.html</xsl:text></xsl:attribute>
+          <xsl:attribute name='href'><xsl:text>http://xmpp.org/extensions/xep-</xsl:text><xsl:value-of select='/xep/header/number'/><xsl:text>.html</xsl:text></xsl:attribute>
         </link>
         <!-- BEGIN META TAGS FOR DUBLIN CORE -->
         <meta>
@@ -58,13 +58,13 @@ THE SOFTWARE.
         <p>This page provides information about the XML namespaces defined in 
         <a>
           <xsl:attribute name='href'>
-            <xsl:text>http://www.xmpp.org/extensions/xep-</xsl:text>
+            <xsl:text>http://xmpp.org/extensions/xep-</xsl:text>
             <xsl:value-of select='/xep/header/number'/>
             <xsl:text>.html</xsl:text>
           </xsl:attribute>
           <xsl:text>XEP-</xsl:text><xsl:value-of select='/xep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' />
         </a>
-        (part of the <a href="http://www.xmpp.org/extensions/">XEP series</a> published by the <a href="http://www.xmpp.org/xsf/">XMPP Standards Foundation</a>).</p>
+        (part of the <a href="http://xmpp.org/extensions/">XEP series</a> published by the <a href="http://xmpp.org/xsf/">XMPP Standards Foundation</a>).</p>
 
         <xsl:variable name='schema.count' select='count(/xep/header/schemaloc)'/>
         <xsl:if test='$schema.count &gt; 0'>
