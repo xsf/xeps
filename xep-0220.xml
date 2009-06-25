@@ -7,10 +7,10 @@
 <xep>
 <header>
   <title>Server Dialback</title>
-  <abstract>This specification defines the Server Dialback protocol, which is used between XMPP servers to provide identity verification. Server Dialback uses the Domain Name System (DNS) as the basis for verifying identity; the basic approach is that when a receiving server receives a server-to-server connection request from an originating server, it does not accept the request until it has verified a key with an authoritative server for the domain asserted by the originating server. Although Server Dialback does not provide strong authentication or trusted federation and although it is subject to DNS poisoning attacks, it has effectively prevented most instances of address spoofing on the XMPP network since its development in the year 2000.</abstract>
+  <abstract>This specification defines the Server Dialback protocol, which is used between XMPP servers to provide identity verification. Server Dialback uses the Domain Name System (DNS) as the basis for verifying identity; the basic approach is that when a receiving server accepts a server-to-server connection from an originating server, it does not process traffic over the connection until it has verified a key with an authoritative server for the domain asserted by the originating server. Although Server Dialback does not provide strong authentication or trusted federation and although it is subject to DNS poisoning attacks, it has effectively prevented most instances of address spoofing on the XMPP network since its development in the year 2000.</abstract>
   &LEGALNOTICE;
   <number>0220</number>
-  <status>Proposed</status>
+  <status>Experimental</status>
   <type>Standards Track</type>
   <sig>Standards</sig>
   <approver>Council</approver>
@@ -22,6 +22,28 @@
   <shortname>dialback</shortname>
   &stpeter;
   &jer;
+  <author>
+    <firstname>Philipp</firstname>
+    <surname>Hancke</surname>
+    <jid>fippo@psyced.org</jid>
+  </author>
+  <revision>
+    <version>0.4rc4</version>
+    <date>in progress, last updated 2009-06-25</date>
+    <initials>ph/psa</initials>
+    <remark>
+      <ul>
+        <li>Changed description and order of steps.</li>
+        <li>Made clear that dialback consists of two mostly independent subprotocols.</li>
+        <li>Further piggybacking clarifications.</li>
+        <li>Defined extended usage of dialback errors, obsoleting stream errors.</li>
+        <li>Specified extended error conditions.</li>
+        <li>Added stream feature details for new-style error behavior.</li>
+        <li>Added multiplexing notes.</li>
+        <li>Updated schemas.</li>
+      </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.3</version>
     <date>2008-10-16</date>
@@ -63,814 +85,361 @@
 </header>
 
 <section1 topic="Introduction" anchor="intro">
-
   <section2 topic="Why Dialback?" anchor="intro-why">
     <p>When Jabber technologies were first developed in 1998, they were conceived of as a client-server system similar to email, wherein a client would connect to a server in order to communicate with other clients. Similarly, servers would connect with peer servers to provide inter-domain communication (often called "federation"). In a system that allows federation, it is important for a server to be able to determine the identity of a peer server; accepting a connection from any peer without determining its identity would result in the use of merely asserted identities and a completely uncontrolled approach to federation, which on the open Internet would rapidly devolve into chaos. Clearly such a state of affairs would be unsustainable for a network protocol aiming for widespread deployment.</p>
-    <p>Unfortunately, that was the state of affairs on the Jabber network during the earliest releases of the original &jabberd; server codebase (up through the 1.0 release in May 2000). Therefore the open-source developer community designed a protocol ("Server Dialback") for weak identity verification based on the Domain Name System (DNS), built support for that protocol into the jabberd 1.2 server (released in October 2000), and mandated support for that protocol on the emerging Jabber server network.</p>
-    <p>When the core Jabber protocols were formalized by the XMPP Working Group of the &IETF; in 2002-2004, support for strong identity verification was added. That support takes the form of Transport Layer Security (TLS) for encryption of server-to-server XML streams and the Simple Authentication and Security Layer (SASL) for authentication of such streams, using digital certificates issued by trusted root certificate authorities (CAs). Documentation of TLS and SASL within XMPP is provided in &xmppcore;. However, the Server Dialback protocol is still in wide use, and probably will be for the foreseeable future given the difficulty (real or perceived) of obtaining digital certificates issued by common CAs. (The &XSF; has worked to make certificates easier to obtain by running the &XMPPICA;.)</p>
-    <p>Therefore it is important to maintain accurate documentation of the Server Dialback protocol. Such documentation was originally provided in &rfc3920;. Although that documentation was removed from &rfc3920bis;, it is still provided in this specification for the sake of interoperability.</p>
-  </section2>
-
-  <section2 topic="Federation Models" anchor="intro-models">
-    <p>There are at least four levels of server-to-server federation in Jabber/XMPP networks:</p>
-    <ol start='1'>
-      <li><p>Permissive Federation -- a server accepts a connection from any other peer on the network, even without verifiying the identity of the peer based on DNS lookups. The lack of peer verification or authentication means that domains can be spoofed.</p></li>
-      <li><p>Verified Federation -- a server accepts a connection from a peer only after the identity of the peer has been weakly verified based on information obtained via the Domain Name System (DNS). However, the connection is not encrypted or authenticated. The use of identity verification effectively prevents domain spoofing, but federation requires proper DNS setup and is still subject to DNS poisoning attacks.</p></li>
-      <li><p>Encrypted Federation -- a server accepts a connection from a peer only if the peer supports Transport Layer Security (TLS) as defined for XMPP in <cite>RFC 3920</cite> and the peer presents a digital certificate. However, the certificate can be self-signed, in which case mutual authentication is typically not possible. Therefore, after STARTTLS negotiation the parties proceed to weakly verify identity based on DNS information as under Verified Federation. This combination results in an encrypted connection with weak identity verification.</p></li>
-      <li><p>Trusted Federation -- a server accepts a connection from a peer only if the peer supports Transport Layer Security (TLS) and the peer presents a digital certificate issued by a trusted root certificate authority (CA). The list of trusted root CAs is determined by local service policy, as is the level of trust accorded to various types of certificates (e.g., Class 1, Class 2, or Class 3). The use of trusted domain certificates effectively prevents DNS poisoning attacks and results in mutual authentication.</p></li>
-    </ol>
-    <p>This specification documents the technology that enabled the Jabber server network to advance beyond Permissive Federation to Verified Federation. Combined with the use of TLS, Server Dialback can also result in Encrypted Federation. However, Trusted Federation is not possible with Server Dialback.</p>
-    <p>Note: For detailed examples showing the protocol flows and outcomes of dialback negotiation for a wide variety of federation scenarios, refer to &xep0238;.</p>
+    <p>Such potential chaos was the state of affairs on the Jabber network during the earliest releases of the original &jabberd; server codebase (up through the 1.0 release in May 2000). Therefore the Jabber developer community designed a protocol ("Server Dialback") for weak identity verification based on the Domain Name System (DNS), built support for that protocol into the jabberd 1.2 server (released in October 2000), and mandated support for that protocol on the emerging Jabber server network.</p>
+    <p>When the early Jabber protocols were formalized by the XMPP Working Group of the &IETF; in 2002-2004, support for strong identity verification was added. That support takes the form of Transport Layer Security (TLS) for encryption of server-to-server XML streams and the Simple Authentication and Security Layer (SASL) for authentication of such streams, using digital certificates issued by trusted root certificate authorities (CAs). However, the Server Dialback protocol is still in wide use, and probably will be for the foreseeable future given the perceived difficulty of obtaining digital certificates issued by common CAs (although this problem is mitigated by the &XMPPICA; run by the &XSF;). Therefore it is important to maintain accurate documentation of the Server Dialback protocol. Such documentation was originally provided in &rfc3920;. Although that documentation was removed from &rfc3920bis;, it is still provided in this specification for the sake of interoperability.</p>
   </section2>
 
   <section2 topic="What Dialback Accomplishes" anchor="intro-what">
-    <p>Server Dialback is a method for weak identify verification. Such verification depends on the Domain Name System (DNS) and the use of keys based on a shared secret known to all XMPP servers within a given trust domain (e.g., the trust domain associated with a given second-level DNS domain such as "example.com" and all of its subdomains).</p>
+    <p>Server Dialback is a method for weak identify verification. Such verification depends on the Domain Name System (DNS) and the use of keys based on a shared secret known to all XMPP servers within a given trust domain.</p>
     <p>Since October 2000, the use of Server Dialback has made it more difficult to spoof the hostnames of servers (and therefore the addresses of sent messages) on the XMPP network. However, Server Dialback does not provide authentication between servers and is not a security mechanism. Domains requiring high security are advised to use TLS and SASL with certificates issued by trusted roots.</p>
     <p>Server Dialback is uni-directional, and results in weak identity verification for one XML stream in one direction. Because Server Dialback is not an authentication mechanism, mutual authentication is not possible via dialback. Therefore, Server Dialback must be completed in each direction in order to enable bi-directional communication between two domains.</p>
+    <p>Dialback does not verify that the IP address returned by a DNS lookup of the originating domain is the same as the source IP address of the incoming TCP connection. While this might often be true, not performing this check enables large deployments to separate incoming and outgoing message routing.</p>
   </section2>
 
   <section2 topic="When Dialback Is Used" anchor="intro-when">
     <p>Server Dialback is typically used in two scenarios:</p>
     <ol start='1'>
       <li><p>When a peer service does not support XMPP 1.0 as defined in <cite>RFC 3920</cite> or, more generally, does not offer negotiation of TLS.</p></li>
-      <li><p>When STARTTLS negotiation succeeds with a peer service but the peer's certificate is not strong enough to result in mutual authentication via SASL (e.g., because the certificate presented by the peer service during TLS negotiation is self-signed and local service policies stipulate that it is preferable to weakly identify the peer service via Server Dialback rather than depend on the self-signed certificate for identity verification).</p></li>
+      <li><p>When STARTTLS negotiation succeeds with a peer service but the peer's certificate cannot be be used to establish the peer's identity.</p></li>
     </ol>
-    <p>Both of these scenarios result in an untrusted connection (verified federation in the first scenario and encrypted federation in the second scenario). However, depending on local security policies, a server might accept such an untrusted connection if the use of Server Dialback results in weak identity verification.</p>
-    <p>Dialback is not used if SASL is used for server-to-server authentication, since SASL provides strong authentication using certificates, pre-established passwords, or other credentials.</p>
-    <p>A service cannot begin negotiation of Server Dialback unless its peer advertises support for the Server Dialback protocol. As described under <link url='#o2r-processinitial'>Receiving Server Processes Initial Stream Header</link>, a peer advertises support through inclusion of the Server Dialback namespace declaration in its response stream header and (for XMPP 1.0 servers) through inclusion of the Server Dialback stream feature.</p>
+    <p>Both of these scenarios result in an untrusted connection. However, depending on local security policies, a server might accept such an untrusted connection if the use of Server Dialback results in weak identity verification.</p>
   </section2>
 
   <section2 topic="How Dialback Works" anchor="intro-howitworks">
     <p>The basic idea behind Server Dialback is that a receiving server does not accept XMPP traffic from a sending server until it has "called back" the authoritative server for the domain asserted by the sending server, and verified that the sending server is truly authorized to generate XMPP traffic for that domain.</p>
     <p>A helpful analogy might be the following telephone scenario:</p>
     <ol start='1'>
-      <li>A representative from your electric utility company knocks on your front door and says he needs to enter your house.</li>
+      <li>A worker from your electric utility company knocks on your front door and says he needs to enter your house to check your usage meter.</li>
       <li>Rather than letting him in, you ask for his employee ID number and politely close the door for a few moments.</li>
       <li>You open the phone book, find the authoritative phone number for the utility company's headquarters, and call them on the phone.</li>
-      <li>After being transferred to the customer service department, you ask if a rep with that particular ID number is authorized to be visiting your house.</li>
-      <li>The company tells you that the rep is authorized, so you thank them and hang up.</li>
-      <li>You then reopen the front door and allow the rep to enter your house.</li>
+      <li>After being transferred to the customer service department, you ask if a worker with that particular ID number is authorized to be visiting your house.</li>
+      <li>The company tells you that the worker is authorized, so you thank them and hang up.</li>
+      <li>You then reopen the front door and allow the worker to enter your house.</li>
     </ol>
-    <p>In Server Dialback, the equivalent of the utility company representative is the ORIGINATING SERVER, i.e., the machine that wants to send a message to an entity at a destination domain and thus is attempting to establish a connection between the two servers. The equivalent of the person at the house is the RECEIVING SERVER, i.e., the machine to which the originating server has opened a connection for the purpose of sending the message and thus is trying to authenticate that the Originating Server represents the domain which it claims to be. And the equivalent of the company headquarters is the AUTHORITATIVE SERVER, i.e., the machine that answers to a DNS lookup for the domain asserted by the originating server (which is not necessarily the machine associated with the originating server); for basic environments this will be the Originating Server, but it could be a separate machine in the Originating Server's network (where "network" is defined by knowledge of a shared secret for verification of dialback keys).</p>
+    <p>In Server Dialback, the equivalent of the utility company worker is the ORIGINATING SERVER, i.e., the machine that wants to send a message from an entity at the SENDER DOMAIN to an entity at the TARGET DOMAIN and thus is attempting to establish a connection between the two servers. The equivalent of the person at the house is the RECEIVING SERVER, i.e., the machine to which the Originating Server has opened a connection for the purpose of sending a message from the Sender Domain to the Target Domain (and thus the machine that is trying to verify that the Originating Server represents the Sender Domain). And the equivalent of the company headquarters is the AUTHORITATIVE SERVER, i.e., the machine that is discovered from a DNS lookup for the Sender Domain; for basic environments this will be the Originating Server, but it could be a separate machine in the Originating Server's network (where "network" is defined by knowledge of a shared secret for verification of dialback keys).</p>
     <p>The basic flow of events in Server Dialback is as follows:</p>
     <ol start='1'>
-      <li>The Originating Server performs a DNS lookup on the hostname of the Receiving Server, opens a TCP connection to the discovered IP address and port, and establishes an XML stream with the Receiving Server.</li>
-      <li>The Originating Server generates a dialback key and sends that value over its XML stream with the Receiving Server.</li>
-      <li>The Receiving Server does not immediately accept the connection but instead performs a DNS lookup on the hostname of the Authoritative Server, opens a TCP connection to the discovered IP address and port, and establishes an XML stream with the Authoritative Server.</li>
-      <li>The Receiving Server sends the same dialback key over its XML stream with the Authoritative Server for verification.</li>
-      <li>The Authoritative Server replies that the key is valid or invalid.</li>
+      <li>The Originating Server generates a dialback key and sends that value over its XML stream with the Receiving Server. (If the Originating Server does not yet have an XML stream to the Receiving Server, it will first need to perform a DNS lookup on the Target Domain and thus discover the Receiving Server, open a TCP connection to the discovered IP address and port, and establish an XML stream with the Receiving Server.)</li>
+      <li>Instead of immediately accepting XML stanzas on the connectiom from the Originating Server, the Receiving Server sends the same dialback key over its XML stream with the Authoritative Server for verification.  (If the Receiving Server does not yet have an XML stream to the Authoritative Server, it will first need to perform a DNS lookup on the Sender Domain and thus discover the Authoritative Server, open a TCP connection to the discovered IP address and port, and establish an XML stream with the Authoritative Server.)</li>
+      <li>The Authoritative Server informs the Receiving Server whether the key is valid or invalid.</li>
       <li>The Receiving Server informs the Originating Server whether its identify has been verified or not.</li>
     </ol>
+    <p>After step 4, the Originating Server is authorized to send stanzas from the Sender Domain to the Target Domain as communicated in the 'to' and 'from' attributes of the dialback negotiation. In addition to a weak identity verification of the Sender Domain, this also ensures that the Receiving Server is accepting stanzas for the Target Domain.</p>
     <p>We can represent this flow of events graphically as follows.</p>
+
     <code><![CDATA[
 Originating               Receiving
   Server                    Server
 -----------               ---------
-    |                         |
-    |   perform DNS lookup,   |
-    |   open TCP connection,  |
-    |   and establish stream  |
-    | ----------------------> |
-    |                         |                   Authoritative
-    |   send dialback key     |                       Server
-    | ----------------------> |                   -------------
-    |                         |                         |
-    |                         |   perform DNS lookup,   |
-    |                         |   open TCP connection,  |
-    |                         |   and establish stream  |
-    |                         | ----------------------> |
-    |                         |                         |
-    |                         |   send verify request   |
-    |                         | ----------------------> |
-    |                         |                         |
-    |                         |   send verify response  |
-    |                         | <---------------------- |
-    |                         |
-    |  report dialback result |
-    | <---------------------- |
-    |                         |
+    |                          |
+    |  [if necessary,          |
+    |   perform DNS lookup     |
+    |   on Target Domain,      |
+    |   open TCP connection,   |
+    |   and establish stream]  |
+    | -----------------------> |
+    |                          |                   Authoritative
+    |   send dialback key      |                       Server
+    | -------(STEP 1)--------> |                   -------------
+    |                          |                          |
+    |                          |  [if necessary,          |
+    |                          |   perform DNS lookup,    |
+    |                          |   on Sender Domain,      |
+    |                          |   open TCP connection,   |
+    |                          |   and establish stream]  |
+    |                          | -----------------------> |
+    |                          |                          |
+    |                          |   send verify request    |
+    |                          | -------(STEP 2)--------> |
+    |                          |                          |
+    |                          |   send verify response   |
+    |                          | <------(STEP 3)--------- |
+    |                          |
+    |  report dialback result  |
+    | <-------(STEP 4)-------- |
+    |                          |
     ]]></code>
-    <p>Note: In Steps 1 and 3, it is not always necessary to open a new TCP connection and establish a new stream; for details, see the section on <link url='#piggybacking'>Reuse of Negotiated Connections (&quot;Piggybacking&quot;)</link>.</p>
   </section2>
-
 </section1>
 
 <section1 topic="Protocol" anchor="protocol">
-
-  <p>This section describes the detailed protocol interaction between the Originating Server, the Receiving Server, and the Authoritative Server.</p>
-  <p>The examples in this section use the following domain names, IP addresses, stream IDs, and shared secret:</p>
+  <p>This section describes the protocol in detail.</p>
+  <p>Assumptions used in the examples:</p>
   <ul>
-    <li>The Originating Server is "example.org" (there is no IP address associated with this domain since it is merely asserted by the Originating Server).</li>
-    <li>The Receiving Server is "xmpp.example.com" and the discovered IP address for the XMPP service at that domain is "192.0.2.1" or "192.0.2.2" (see below).</li>
-    <li>The Authoritative Server is "example.org" and the discovered IP address for the XMPP service at that domain is "192.0.2.23".</li>
-    <li>The stream ID of the stream from the Originating Server to the Receiving Server is "D60000229F".</li>
-    <li>The shared secret known by the Authoritative Server's network is "s3cr3tf0rd14lb4ck".</li>
+    <li>The Sender Domain is "sender.tld". A DNS lookup on this domain resolves to the machine "authority.sender.tld".</li>
+    <li>The Target Domain is "target.tld". A DNS lookup on this domain resolves to the machine "receiver.target.tld".</li>
+    <li>The stream ID of the stream from the Originating Server (some IP address) to the Receiving Server (receiver.target.tld) is "D60000229F".</li>
+    <li>The stream ID of the stream from the Receiving Server (receiver.target.tld) to the Authoritative Server (authority.sender.tld) is "417GAF25".</li>
+    <li>The shared secret of the Sender Domain (sender.tld) is "s3cr3tf0rd14lb4ck".</li>
+    <li>The shared secret of the Target Domain (target.tld) is "d14lb4ck43v3r".</li>
   </ul>
-  <p>To assist the reader, the following conventions are used to clarify the flow of packets:</p>
-  <ul>
-    <li>"O2R:" -- packets sent from the Originating Server to the Receiving Server.</li>
-    <li>"R2O:" -- packets sent from the Receiving Server to the Originating Server.</li>
-    <li>"R2A:" -- packets sent from the Receiving Server to the Authoritative Server.</li>
-    <li>"A2R:" -- packets sent from the Authoritative Server to the Receiving Server.</li>
-  </ul>
-  <p>Note: Any error that occurs during dialback negotiation MUST be considered a stream error, resulting in termination of the stream and potentially of the underlying TCP connection. The possible error conditions are specified in the protocol description below.</p>
-  <p>The flow of events is as follows.</p>
+  <p>Note: All XML elements qualified by the Server Dialback namespace MUST be prefixed with the namespace prefix for the 'jabber:server:dialback' namespace as advertised on the stream header originally sent by the entity sending the element. <note>RFC 3920 stipulated that "an implementation SHOULD generate only the 'db:' prefix for such elements and MAY accept only the 'db:' prefix." This restriction was included for the sake of backward compatibility with the jabberd 1.x codebase and is no longer necessary.</note></p>
+  <p>Section 2.1 describes the protocol from the point of view of an active, outgoing connection from the Originating Server. Section 2.2 describes the protocol from the point of view of an incoming connection on the Receiving Server. Note that both parts can be implemented, tested, and used separately.</p>
 
-  <section2 topic='Stream Setup Between Originating Server and Receiving Server' anchor='o2r'>
-
-    <section3 topic='Originating Server Resolves Receiving Server' anchor='o2r-resolve'>
-      <p>Before opening a TCP connection to the Receiving Server, the Originating Server first needs to determine the appropriate IP address and port at which to connect. This is done by resolving the Receiving Server's hostname ("xmpp.example.com") using the Domain Name System. As described in <cite>XMPP Core</cite>, the Originating Server will first attempt to resolve a TCP service of _xmpp-server for that hostname using DNS SRV records. Here we assume that example.com has the following records in its DNS configuration:</p>
-      <example caption="DNS SRV Record for Receiving Server"><![CDATA[
-_xmpp-server._tcp.xmpp.example.com. 86400 IN SRV 10 0 5269 x1.example.com
-_xmpp-server._tcp.xmpp.example.com. 86400 IN SRV 20 0 9625 x2.example.com
-      ]]></example>
-      <p>These records show that server-to-server connections for the XMPP service "xmpp.example.com" are serviced by two machines: x1.example.com at port 5269 and x2.example.com at port 9625.</p>
-      <p>Based on the SRV record weights, the Originating Server would then attempt to resolve one of these machines further. Here the Originating Server resolves x2.example.com, for which a standard A lookup yields an IP address of "192.0.2.2".</p>
-      <p>Note: As described in <cite>XMPP Core</cite>, if the Receiving Server does not provide appropriate DNS SRV records then in order to resolve the hostname of the Receiving Server the Originating Server can fall back to normal IPv4/IPv6 address record resolution to determine the IP address and assume a port of 5269 as registered with the IANA.</p>
-    </section3>
-
-    <section3 topic='Originating Server Opens TCP Connection' anchor='o2r-connect'>
-      <p>Once the Originating Server has resolved "xmpp.example.com" to an IP address of 192.0.2.2 and port of 9625, it opens a TCP connection to that IP and port.</p>
-      <p>Note: Instead of opening a new TCP connection to the Receiving Server, the Originating Server MAY reuse an existing TCP connnection; for details, see the <link url='#piggybacking'>Reuse of Negotiated Connections (&quot;Piggybacking&quot;)</link> section of this document.</p>
-    </section3>
-
-    <section3 topic='Originating Server Sends Initial Stream Header' anchor='o2r-sendinitial'>
-      <p>Once the Originating Server has opened a TCP connection to the resolved IP address and port of the Receiving Server, it sends an initial stream header to the Receiving Server as described in <cite>XMPP Core</cite>.</p>
-      <example caption="Initial Stream Header"><![CDATA[
-O2R: <stream:stream
-          xmlns='jabber:server'
-          xmlns:db='jabber:server:dialback'
-          xmlns:stream='http://etherx.jabber.org/streams'
-          from='example.org'
-          to='xmpp.example.com'
-          version='1.0'>
-      ]]></example>
-      <p>In addition to the core XMPP rules regarding initial stream headers, the following dialback-related rules apply to the initial stream header:</p>
-      <ol start='1'>
-        <li>It MUST include a declaration for the Server Dialback namespace.</li>
-        <li>The Server Dialback namespace MUST be 'jabber:server:dialback'.</li>
-        <li>The prefix for the Server Dialback namespace SHOULD be 'db:'.</li>
-      </ol>
-      <p>Until the initial stream has been validated, the Originating Server MUST NOT send any further XML data to the Receiving Server over that stream.</p>
-      <p>Note: If the Receiving Server receives any XML stanzas from the Originating Server before the initial stream has been validated, the Receiving Server MUST silently drop those stanzas.</p>
-    </section3>
-
-    <section3 topic='Receiving Server Processes Initial Stream Header' anchor='o2r-processinitial'>
-      <p>When the Receiving Server receives the initial stream header from the Originating Server, it MUST proceed as follows.</p>
-      <section4 topic='Success Case' anchor='o2r-processinitial-success'>
-        <p>If the Receiving Server can successfully process the initial stream header, it MUST return a response stream header to the Originating Server over the same TCP connection.</p>
-        <example caption="Response Stream Header"><![CDATA[
-R2O: <stream:stream
-         xmlns='jabber:server'
-         xmlns:db='jabber:server:dialback'
-         xmlns:stream='http://etherx.jabber.org/streams'
-         from='xmpp.example.com'
-         id='D60000229F'
-         to='example.org'
-         version='1.0'>
-        ]]></example>
-        <p>In addition to the core XMPP rules regarding response stream headers, the following dialback-related rules apply to the response stream header:</p>
-        <ol start='1'>
-          <li>If the initial stream header included a Server Dialback namespace declaration and the Receiving Server supports the Server Dialback protocol, the response stream header also MUST include a declaration for the Server Dialback namespace.</li>
-          <li>If the initial stream header did not include a Server Dialback namespace declaration and the Receiving Server supports the Server Dialback protocol, the response stream header MAY include a Server Dialback namespace declaration.</li>
-          <li>If the response stream header includes a Server Dialback namespace declaration, the Server Dialback namespace MUST be 'jabber:server:dialback' and the prefix for the Server Dialback namespace SHOULD be 'db:'.</li>
-        </ol>
-        <p>After sending the response stream header, the Receiving Server also sends stream features to the Originating Server. The Receiving Server SHOULD include the dialback feature in its initial stream features advertisement, including an indication of whether Server Dialback negotiation is optional or required.</p>
-        <example caption="Stream Features"><![CDATA[
-R2O: <stream:features>
-       <dialback xmlns='urn:xmpp:features:dialback'>
-         <required/>
-       </dialback>
-     </stream:features>
-        ]]></example>
-        <p>Note: Typically, Server Dialback negotiation is required for server-to-server communication unless SASL is used for strong authentication.</p>
-      </section4>
-      <section4 topic='Error Cases' anchor='o2r-processinitial-error'>
-        <p>There are several reasons why the Receiving Server's processing of the initial stream header might fail:</p>
-        <ol start='1'>
-          <li>The Server Dialback namespace name provided by the Originating Server is incorrect.</li>
-          <li>The Server Dialback namespace prefix provided by the Originating Server is not supported by the Receiving Server (note: an implementation MAY accept only the 'db:' namespace prefix).</li>
-          <li>The value of the 'to' address provided by the Originating Server does not match a hostname serviced by the Receiving Server.</li>
-          <li>The Receiving Server does not accept communication with the hostname of the 'from' address provided by the Originating Server.</li>
-        </ol>
-        <p>These error cases are described more fully in the remainder of this section.</p>
-        <p>If the Server Dialback namespace name is incorrect, then the Receiving Server SHOULD generate an &lt;invalid-namespace/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Invalid Namespace"><![CDATA[
-R2O: <stream:error>
-       <invalid-namespace
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2O: </stream:stream>
-        ]]></example>
-        <p>If the Server Dialback namespace prefix is not supported by the Receiving Server, then the Receiving Server SHOULD generate a &lt;bad-namespace-prefix/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Bad Namespace Prefix"><![CDATA[
-R2O: <stream:error>
-       <bad-namespace-prefix
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2O: </stream:stream>
-        ]]></example>
-        <p>If the value of the 'to' address provided by the Originating Server does not match a hostname serviced by the Receiving Server, then the Receiving Server SHOULD generate a &lt;host-unknown/&gt; or &lt;host-gone/&gt; stream error condition (as appropriate) and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Host Unknown"><![CDATA[
-R2O: <stream:error>
-       <host-unknown
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2O: </stream:stream>
-        ]]></example>
-        <p>If the Receiving Server does not allow communication with the hostname of the 'from' address provided by the Originating Server, then the Receiving Server SHOULD generate a &lt;not-authorized/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Not Authorized"><![CDATA[
-R2O: <stream:error>
-       <not-authorized
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2O: </stream:stream>
-        ]]></example>
-        <p class='box'>Note Well: The foregoing error flows specify that the Receiving Server SHOULD return a stream error. However, depending on local security policies, the Receiving Server MAY silently terminate the XML stream and underlying TCP connection instead of returning a stream error (e.g., to prevent certain denial of service attacks).</p>
-      </section4>
-    </section3>
-
-    <section3 topic='Originating Server Processes Response Stream Header' anchor='o2r-processresponse'>
-
-      <p>When the Originating Server receives the response stream header from the Receiving Server, it MUST proceed as follows.</p>
-
-      <section4 topic='Success Case' anchor='o2r-processresponse-success'>
-        <p>If the response stream header can be successfully processed, the Originating Server MUST generate and send a dialback key as described under <link url='#key'>Generation and Exchange of Dialback Key</link>.</p>
-      </section4>
-
-      <section4 topic='Error Cases' anchor='o2r-response-error'>
-        <p>There are several reasons why the Originating Server's processing of the response stream header and stream features might fail:</p>
-        <ol start='1'>
-          <li>The Server Dialback namespace name provided by the Receiving Server is incorrect.</li>
-          <li>The Server Dialback namespace prefix provided by the Receiving Server is not supported by the Originating Server (note: an implementation MAY accept only the 'db:' namespace prefix).</li>
-          <li>The value of the 'to' address provided by the Receiving Server does not match a hostname serviced by the Originating Server.</li>
-          <li>The Originating Server does not accept communication with the hostname of the 'from' address provided by the Receiving Server.</li>
-          <li>The Receiving Server does not advertise support for Server Dialback via a Server Dialback namespace declaration or stream feature.</li>
-        </ol>
-        <p>These error cases are described more fully in the remainder of this section.</p>
-        <p>If the Server Dialback namespace name is incorrect, then the Originating Server SHOULD generate an &lt;invalid-namespace/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Invalid Namespace"><![CDATA[
-O2R: <stream:error>
-       <invalid-namespace
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-O2R: </stream:stream>
-        ]]></example>
-        <p>If the Server Dialback namespace prefix is not supported by the Originating Server, then the Originating Server SHOULD generate a &lt;bad-namespace-prefix/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Bad Namespace Prefix"><![CDATA[
-O2R: <stream:error>
-       <bad-namespace-prefix
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-O2R: </stream:stream>
-        ]]></example>
-        <p>If the value of the 'to' address provided by the Receiving Server does not match a hostname serviced by the Originating Server, then the Originating Server SHOULD generate a &lt;host-unknown/&gt; or &lt;host-gone/&gt; stream error condition (as appropriate) and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Host Unknown"><![CDATA[
-O2R: <stream:error>
-       <host-unknown
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-O2R: </stream:stream>
-        ]]></example>
-        <p>If the Originating Server does not allow communication with the hostname of the 'from' address provided by the Receiving Server, then the Originating Server SHOULD generate a &lt;not-authorized/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Not Authorized"><![CDATA[
-O2R: <stream:error>
-       <not-authorized
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-O2R: </stream:stream>
-        ]]></example>
-        <p class='box'>Note Well: The foregoing error flows specify that the Originating Server SHOULD return a stream error. However, depending on local security policies, the Originating Server MAY silently terminate the XML stream and underlying TCP connection instead of returning a stream error (e.g., to prevent certain denial of service attacks).</p>
-        <p>If the Receiving Server does not advertise support for Server Dialback via a Server Dialback namespace declaration or stream feature, then the Originating Server's attempt to negotiate Server Dialback also fails.</p>
-        <p class='box'>Note Well: In all of the foregoing error cases, the Originating Server SHOULD consider the Server Dialback negotiation attempt to have failed in an unrecoverable fashion and therefore it SHOULD return a &timeout; stanza error to the local entity that generated the stanza that triggered the Server Dialback negotiation attempt in the first place (if any).</p>
-      </section4>
-
-    </section3>
-
-  </section2>
-
-  <section2 topic='Generation and Exchange of Dialback Key' anchor='key'>
-
-    <section3 topic='Originating Server Generates Dialback Key' anchor='key-gen'>
-      <p>Once the Originating Server has established an XML stream with the Receiving Server, it MUST generate a dialback key for verification by the Authoritative Server.</p>
-      <p>The method for generating (and verifying) the keys used in Server Dialback MUST take into account the following pieces of information:</p>
-      <ul>
-        <li>the hostname of the Originating Server</li>
-        <li>the hostname of the Receiving Server</li>
-        <li>the Stream ID</li>
-        <li>a shared secret known by the Authoritative Server's network</li>
-      </ul>
-      <p>The stream ID is security-critical in Server Dialback and therefore MUST be both unpredictable and non-repeating (see &rfc4086; for recommendations regarding randomness for security purposes).</p>
-      <p>It is RECOMMENDED for the dialback key to be the hexadecimal representation of a Keyed-Hash Message Authentication Code (see &nistfips198a;) generated using the SHA256 hashing algorithm (see &nistfips180-2;), as follows.</p>
-      <example caption="HMAC"><![CDATA[
-HMAC-SHA256
-( 
-  SHA256(secret), 
-  {Receiving Server, ' ', Originating Server, ' ', Stream ID} 
-)
-      ]]></example>
-      <p>The shared secret SHOULD either be set up in a configuration option for each host or process within the Authoritative Server's network or generated as a random string when starting each host or process. The secret's length SHOULD be at least 128 bits or 16 characters long.</p>
-      <p>Consider the following scenario:</p>
-      <ul>
-        <li>The Originating Server is "example.org"</li>
-        <li>The Receiving Server is "xmpp.example.com"</li>
-        <li>The Stream ID is "D60000229F"</li>
-        <li>The secret is "s3cr3tf0rd14lb4ck"</li>
-      </ul>
-      <p>The resulting dialback key would be:</p>
-      <example caption="A Key"><![CDATA[
-HMAC-SHA256
-( 
-  SHA256(secret), 
-  {Receiving Server, ' ', Originating Server, ' ', Stream ID} 
-)
-
-that is,
-
-HMAC-SHA256
-(SHA256('s3cr3tf0rd14lb4ck'),
-{'xmpp.example.net',' ','example.org',' ','D60000229F'})
-
-that is,
-
-HMAC-SHA256
-('a7136eb1f46c9ef18c5e78c36ca257067c69b3d518285f0b18a96c33beae9acc',
-{'xmpp.example.com chat.example.org D60000229F'})
-
-that is,
-
-37c69b1cf07a3f67c04a5ef5902fa5114f2c76fe4a2686482ba5b89323075643
-      ]]></example>
-    </section3>
-
-    <section3 topic='Originating Server Sends Dialback Key' anchor='key-send'>
-      <p>Once the Originating Server has processed the response stream header from the Receiving Server and has generated a dialback key for verification by the Receiving Server, it MUST then send that key to the Receiving Server. This is done by creating a &lt;db:result/&gt; element whose XML character data is the dialback key; the element MUST possess a 'from' attribute whose value is the hostname of the Originating Server and MUST possess a 'to' attribute whose value is the hostname of the Receiving Server.</p>
-      <p>Note: All XML elements qualified by the Server Dialback namespace MUST be prefixed with the namespace prefix advertised on the stream header originally sent by the entity sending the element.</p>
-      <example caption="Originating Server Sends Dialback Key"><![CDATA[
-O2R: <db:result
-         from='example.org'
-         to='xmpp.example.com'>
+  <section2 topic="Outgoing Connection">
+    <p>Dialback usually takes place after the TCP connection and the XML stream to the Receiving Server have been established, but the Originating Server has not yet provided identification. Apart from reusing connections this can also happen if the stream was first used to send a verification request to the Authoritative Server. This section describes the handling of an outgoing connection from the Sender Domain 'sender.tld' to the Target Domain 'target.tld'.</p>
+    <section3 topic="Dialback Request and Response">
+      <p>This subsection describes the interaction between the Originating Server and the Receiving Server, from the perspective of the Originating Server.</p>
+      <p>When the Originating Server has stanzas to send for the domain pair (Sender Domain/Target Domain), does not have a verified connection, or is currently attempting to get a verified connection for this domain pair, it sends a new dialback key to the Receiving Server.</p>
+      <p>This is done by creating a &lt;db:result/&gt; element whose XML character data is the dialback key; the element MUST possess a 'from' attribute whose value is the Sender Domain and MUST possess a 'to' attribute whose value is the Target Domain.</p>
+      <example caption="Originating Server Sends Dialback Key (step 1)"><![CDATA[
+send: <db:result
+          from='sender.tld'
+          to='target.tld'>
        37c69b1cf07a3f67c04a5ef5902fa5114f2c76fe4a2686482ba5b89323075643
      </db:result>
       ]]></example>
-    </section3>
-
-    <section3 topic='Receiving Server Processes Dialback Key' anchor='key-process'>
-      <p>When the Receiving Server receives the dialback key, it MUST proceed as follows.</p>
-      <section4 topic='Success Case' anchor='key-process-success'>
-        <p>If the dialback key can be successfully processed, the Receiving Server MUST attempt to open a connection to the Authoritative Server and then ask the Authoritative Server to validate the key provided by the Originating Server, as described in under <link url='#r2a'>Stream Setup Between Receiving Server and Authoritative Server</link>.</p>
-        <p>Note: The dialback key is not examined by the Receiving Server, since the key is validated by the Authoritative Server.</p>
-      </section4>
-
-      <section4 topic='Error Cases' anchor='key-process-error'>
-        <p>There are several reasons why the Receiving Server's processing of the dialback key might fail:</p>
-        <ol start='1'>
-          <li>The Server Dialback namespace prefix provided by the Originating Server is not supported by the Receiving Server (note: an implementation MAY accept only the 'db:' namespace prefix).</li>
-          <li>The value of the 'to' address provided by the Originating Server does not match a hostname serviced by the Receiving Server.</li>
-          <li>The Receiving Server does not accept communication with the hostname of the 'from' address provided by the Originating Server.</li>
-        </ol>
-        <p>These error cases are described more fully in the remainder of this section.</p>
-        <p>If the Server Dialback namespace prefix is not supported by the Receiving Server, then the Receiving Server SHOULD generate a &lt;bad-namespace-prefix/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Bad Namespace Prefix"><![CDATA[
-R2O: <stream:error>
-       <bad-namespace-prefix
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2O: </stream:stream>
-        ]]></example>
-        <p>If the value of the 'to' address provided by the Originating Server does not match a hostname serviced by the Receiving Server, then the Receiving Server SHOULD generate a &lt;host-unknown/&gt; or &lt;host-gone/&gt; stream error condition (as appropriate) and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Host Unknown"><![CDATA[
-R2O: <stream:error>
-       <host-unknown
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2O: </stream:stream>
+      <p>The key sent is generated as described in &xep0185;:</p>
+      <code>
+key = HMAC-SHA256( 
+        SHA256('s3cr3tf0rd14lb4ck'), 
+          {'target.tld', ' ', 'sender.tld', ' ', 'D60000229F'}
+      )
+      </code>
+      <p>Note: the Receiving Server MAY use any method to determine the validity of the dialback key and the identity of the Originating Sever. The Originating Server MUST NOT make any assumptions about how the Receiving Server verifies the key. This includes the assumption that the key is ever verified by the Receiving Server.</p><!-- FIXME: belongs into 0185? -->
+      <p>After that, the Originating Server waits for the verification result. Any stanzas for this domain pair have to be queued. The Originating Server MUST NOT attempt to reverify this domain pair on this connection.</p> 
+      <p>Note: While waiting for the verification result, the Originating Server SHOULD continue to send stanzas for any pair of domains that have been verified on that connection. It MAY send out additional dialback keys for different domain pairs and issue dialback verification requests as described in section 2.1.2. To avoid Denial-of-Service attacks, the Originating Server MAY impose a timeout on key verification.</p>
+      <p>If the stream or the underlying TCP connection is closed by the remote side while waiting for the verification result, this is to be handled similar to receiving a negative result as described below.</p>
+      <p>After the Receiving Server has verified the request, the Originating Server receives the verification result.</p>
+      <example caption="Originating Server Receives Valid Verification Result from Receiving Server (step 4)"><![CDATA[
+recv: <db:result
+          from='target.tld'
+          to='sender.tld'
+          type='valid'/>
       ]]></example>
-        <p>If the Receiving Server does not allow communication with the hostname of the 'from' address provided by the Originating Server, then the Receiving Server SHOULD generate a &lt;not-authorized/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Not Authorized"><![CDATA[
-R2O: <stream:error>
-       <not-authorized
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2O: </stream:stream>
-        ]]></example>
-        <p class='box'>Note Well: In all of the foregoing error cases, the Originating Server SHOULD consider the Server Dialback negotiation attempt to have failed in an unrecoverable fashion and therefore it SHOULD return a &timeout; stanza error to the local entity that generated the stanza that triggered the Server Dialback negotiation attempt in the first place (if any).</p>
-      </section4>
-
-    </section3>
-
-  </section2>
-
-  <section2 topic='Stream Setup Between Receiving Server and Authoritative Server' anchor='r2a'>
-
-    <section3 topic='Receiving Server Resolves Authoritative Server' anchor='r2a-resolve'>
-      <p>Before opening a TCP connection to the Authoritative Server, the Receiving Server first needs to determine the appropriate IP address and port at which to connect. This is done by resolving the Authoritative Server's hostname ("example.org") using the Domain Name System. As described in <cite>XMPP Core</cite>, the Receiving Server will first attempt to resolve a TCP service of _xmpp-server for that hostname using DNS SRV records. Here we assume that example.org has the following records in its DNS configuration:</p>
-      <example caption="DNS SRV Record for Authoritative Server"><![CDATA[
-_xmpp-server._tcp.example.org. 86400 IN SRV 10 0 5269 foo.example.org
+      <example caption="Originating Server Receives Invalid Verification Result from Receiving Server (step 4)"><![CDATA[
+recv: <db:result
+          from='target.tld'
+          to='sender.tld'
+          type='invalid'/>
       ]]></example>
-      <p>These records show that server-to-server connections for the XMPP service "example.org" are serviced by the physical machine foo.example.org at port 5269.</p>
-      <p>The Receiving Server would then resolve that machine to an IP address, in this case "192.0.2.23".</p>
-      <p>Note: As described in <cite>XMPP Core</cite>, if the Authoritative Server does not provide appropriate DNS SRV records then in order to resolve the hostname of the Authoritative Server the Receiving Server can fall back to normal IPv4/IPv6 address record resolution to determine the IP address and assume a port of 5269 as registered with the IANA.</p>
-    </section3>
-
-    <section3 topic='Receiving Server Opens TCP Connection' anchor='r2a-connect'>
-      <p>Once the Receiving Server has resolved "example.org" to an IP address of 192.0.2.23 and port of 5269, it opens a TCP connection to that IP and port.</p>
-      <p>Note: Instead of opening a new TCP connection to the Authoritative Server, the Receiving Server MAY reuse an existing TCP connnection; for details, see the <link url='#piggybacking'>Reuse of Negotiated Connections (&quot;Piggybacking&quot;)</link> section of this document.</p>
-    </section3>
-
-    <section3 topic='Receiving Server Sends Initial Stream Header' anchor='r2a-sendinitial'>
-      <p>Once the Receiving Server has opened a TCP connection to the resolved IP address and port of the Authoritative Server, it sends an initial stream header to the Authoritative Server as described in <cite>XMPP Core</cite>.</p>
-      <example caption="Initial Stream Header"><![CDATA[
-R2A: <stream:stream
-          xmlns='jabber:server'
-          xmlns:db='jabber:server:dialback'
-          xmlns:stream='http://etherx.jabber.org/streams'
-          from='xmpp.example.com'
-          to='example.org'
-          version='1.0'>
+      <p>If the value of the 'type' attribute is "valid", then the connection between the domain pair is considered verified and the Originating Server can send any queued stanzas. If the value of the 'type' attribute is "invalid", this means that the Originating Server's identity (as valid for the Sender Domain) could not be verified by the Receiving Server. Queued stanzas MUST be bounced back to the respective senders with a &lt;internal-server-error&gt; stanza error and the underlying stream MAY be closed unless it is being used by other domain pairs.</p>
+      <!-- FIXME: is it valid to re-attempt validation on the same connection after it has failed? -->
+      <p>If the value of the 'type' attribute is "error", this indicates a problem which is not related to the validity of the dialback key provided. The error conditions are explained in detail in section 2.4. Such an error is to be considered non-fatal for the XML stream, but queued stanzas MUST be bounced to the respective senders with a &timeout; stanza error.</p>
+      <example caption="Originating Server Receives Dialback Error from Receiving Server (step 4)"><![CDATA[
+recv: <db:result
+          from='target.tld'
+          to='sender.tld'
+          type='error'>
+        <error type='modify' xmlns='jabber:server'>
+          <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+        </error>
+      </db:result>    
       ]]></example>
-      <p>In addition to the core XMPP rules regarding initial stream headers, the following dialback-related rules apply to the initial stream header:</p>
-      <ol start='1'>
-        <li>It MUST include a declaration for the Server Dialback namespace.</li>
-        <li>The Server Dialback namespace MUST be 'jabber:server:dialback'.</li>
-        <li>The prefix for the Server Dialback namespace SHOULD be 'db:'.</li>
-      </ol>
-      <p>Note: An implementation MAY accept only the 'db:' namespace prefix.</p>
     </section3>
 
-    <section3 topic='Authoritative Server Processes Initial Stream Header' anchor='r2a-processinitial'>
-      <p>When the Authoritative Server receives the initial stream header from the Receiving Server, it MUST proceed as follows.</p>
-      <section4 topic='Success Case' anchor='r2a-processinitial-success'>
-        <p>If the Authoritative Server can successfully process the initial stream header, it MUST return a response stream header to the Receiving Server over the same TCP connection.</p>
-        <example caption="Response Stream Header"><![CDATA[
-A2R: <stream:stream
-         xmlns='jabber:server'
-         xmlns:db='jabber:server:dialback'
-         xmlns:stream='http://etherx.jabber.org/streams'
-         from='example.org'
-         id='D60000229F'
-         to='xmpp.example.com'
-         version='1.0'>
-        ]]></example>
-        <p>In addition to the core XMPP rules regarding response stream headers, the following dialback-related rules apply to the response stream header:</p>
-        <ol start='1'>
-          <li>If the initial stream header included a Server Dialback namespace declaration and the Authoritative Server supports the Server Dialback protocol, the response stream header also MUST include a declaration for the Server Dialback namespace.</li>
-          <li>If the initial stream header did not include a Server Dialback namespace declaration and the Authoritative Server supports the Server Dialback protocol, the response stream header MAY include a Server Dialback namespace declaration.</li>
-          <li>If the response stream header includes a Server Dialback namespace declaration, the Server Dialback namespace MUST be 'jabber:server:dialback' and the prefix for the Server Dialback namespace SHOULD be 'db:'.</li>
-        </ol>
-        <p>After sending the response stream header, the Authoritative Server also sends stream features to the Receiving Server. The Authoritative Server SHOULD include the dialback feature in its initial stream features advertisement, including an indication of whether Server Dialback negotiation is optional or required.</p>
-        <example caption="Stream Features"><![CDATA[
-A2R: <stream:features>
-       <dialback xmlns='urn:xmpp:features:dialback'>
-         <optional/>
-       </dialback>
-     </stream:features>
-        ]]></example>
-      </section4>
-      <section4 topic='Error Cases' anchor='r2a-processinitial-error'>
-        <p>There are several reasons why the Authoritative Server's processing of the initial stream header might fail:</p>
-        <ol start='1'>
-          <li>The Server Dialback namespace name provided by the Receiving Server is incorrect.</li>
-          <li>The Server Dialback namespace prefix provided by the Receiving Server is not supported by the Authoritative Server (note: an implementation MAY accept only the 'db:' namespace prefix).</li>
-          <li>The value of the 'to' address provided by the Receiving Server does not match a hostname serviced by the Authoritative Server.</li>
-          <li>The Authoritative Server does not accept communication with the hostname of the 'from' address provided by the Receiving Server.</li>
-        </ol>
-        <p>These error cases are described more fully in the remainder of this section.</p>
-        <p class='box'>Note Well: If </p>
-
-
-        <p>If the Server Dialback namespace name is incorrect, then the Authoritative Server SHOULD generate an &lt;invalid-namespace/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Invalid Namespace"><![CDATA[
-A2R: <stream:error>
-       <invalid-namespace
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-A2R: </stream:stream>
-        ]]></example>
-        <p>If the Server Dialback namespace prefix is not supported by the Authoritative Server, then the Authoritative Server SHOULD generate a &lt;bad-namespace-prefix/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Bad Namespace Prefix"><![CDATA[
-A2R: <stream:error>
-       <bad-namespace-prefix
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-A2R: </stream:stream>
-        ]]></example>
-        <p>If the value of the 'to' address provided by the Receiving Server does not match a hostname serviced by the Authoritative Server, then the Authoritative Server SHOULD generate a &lt;host-unknown/&gt; or &lt;host-gone/&gt; stream error condition (as appropriate) and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Host Unknown"><![CDATA[
-A2R: <stream:error>
-       <host-unknown
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-A2R: </stream:stream>
-        ]]></example>
-        <p>If the Authoritative Server does not allow communication with the hostname of the 'from' address provided by the Receiving Server, then the Authoritative Server SHOULD generate a &lt;not-authorized/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Not Authorized"><![CDATA[
-A2R: <stream:error>
-       <not-authorized
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-A2R: </stream:stream>
-        ]]></example>
-        <p class='box'>Note Well: The foregoing error flows specify that the Authoritative Server SHOULD return a stream error. However, depending on local security policies, the Authoritative Server MAY silently terminate the XML stream and underlying TCP connection instead of returning a stream error (e.g., to prevent certain denial of service attacks).</p>
-      </section4>
-    </section3>
-
-    <section3 topic='Receiving Server Processes Response Stream Header' anchor='r2a-processresponse'>
-
-      <p>When the Receiving Server receives the response stream header from the Authoritative Server, it MUST proceed as follows.</p>
-
-      <section4 topic='Success Case' anchor='r2a-processresponse-success'>
-        <p>If the response stream header can be successfully processed, the Receiving Server MUST send the dialback key it received from the Originating Server as described under <link url='#verify'>Exchange of Verification Request between Receiving Server and Authoritative Server</link>.</p>
-      </section4>
-
-      <section4 topic='Error Cases' anchor='r2a-response-error'>
-        <p>There are several reasons why the Receiving Server's processing of the response stream header and stream features might fail:</p>
-        <ol start='1'>
-          <li>The Server Dialback namespace name provided by the Authoritative Server is incorrect.</li>
-          <li>The Server Dialback namespace prefix provided by the Authoritative Server is not supported by the Receiving Server (note: an implementation MAY accept only the 'db:' namespace prefix).</li>
-          <li>The value of the 'to' address provided by the Authoritative Server does not match a hostname serviced by the Receiving Server.</li>
-          <li>The Receiving Server does not accept communication with the hostname of the 'from' address provided by the Authoritative Server.</li>
-          <li>The Authoritative Server does not advertise support for Server Dialback via a Server Dialback namespace declaration or stream feature.</li>
-        </ol>
-        <p>These error cases are described more fully in the remainder of this section.</p>
-        <p>If the Server Dialback namespace name is incorrect, then the Receiving Server SHOULD generate an &lt;invalid-namespace/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Invalid Namespace"><![CDATA[
-R2A: <stream:error>
-       <invalid-namespace
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2A: </stream:stream>
-        ]]></example>
-        <p>If the Server Dialback namespace prefix is not supported by the Receiving Server, then the Receiving Server SHOULD generate a &lt;bad-namespace-prefix/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Bad Namespace Prefix"><![CDATA[
-R2A: <stream:error>
-       <bad-namespace-prefix
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2A: </stream:stream>
-        ]]></example>
-        <p>If the value of the 'to' address provided by the Authoritative Server does not match a hostname serviced by the Receiving Server, then the Receiving Server SHOULD generate a &lt;host-unknown/&gt; or &lt;host-gone/&gt; stream error condition (as appropriate) and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Host Unknown"><![CDATA[
-R2A: <stream:error>
-       <host-unknown
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2A: </stream:stream>
-        ]]></example>
-        <p>If the Receiving Server does not allow communication with the hostname of the 'from' address provided by the Authoritative Server, then the Receiving Server SHOULD generate a &lt;not-authorized/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Not Authorized"><![CDATA[
-R2A: <stream:error>
-       <not-authorized
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2A: </stream:stream>
-        ]]></example>
-        <p class='box'>Note Well: The foregoing error flows specify that the Receiving Server SHOULD return a stream error. However, depending on local security policies, the Receiving Server MAY silently terminate the XML stream and underlying TCP connection instead of returning a stream error (e.g., to prevent certain denial of service attacks).</p>
-        <p>If the Authoritative Server does not advertise support for Server Dialback via a Server Dialback namespace declaration or stream feature, then the Receiving Server's attempt to request verification of the Originating Server's dialback key also fails.</p>
-        <p>Note: In all of the foregoing error cases, the Receiving Server SHOULD consider the Server Dialback negotiation attempt to have failed in an unrecoverable fashion and therefore it SHOULD return a &remoteconnection; stream error to the Originating Server.</p>
-        <example caption="Remote Server Timeout"><![CDATA[
-R2O: <stream:error>
-       <remote-server-timeout
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2O: </stream:stream>
-        ]]></example>
-      </section4>
-
-    </section3>
-
-  </section2>
-
-  <section2 topic='Exchange of Verification Request' anchor='verify'>
-    <section3 topic='Receiving Server Sends Verification Request' anchor='verify-send'>
-      <p>Once the Receiving Server has established an XML stream with the Authoritative Server, it MUST send to the Authoritative Server the dialback key it received from the Originating Server. This is done by creating a &lt;db:verify/&gt; element whose XML character data is the dialback key; the element MUST possess a 'from' attribute whose value is the hostname of the Receiving Server, MUST possess a 'to' attribute whose value is the hostname of the Originating Server, and MUST possess an 'id' attribute whose value is the stream identifier from the Receiving Server's response stream header to the Originating Server.</p>
-      <p>Note: All XML elements qualified by the Server Dialback namespace MUST be prefixed with the namespace prefix advertised on the stream header originally sent by the entity sending the element.</p>
-      <example caption="Receiving Server Sends Verification Request"><![CDATA[
-R2A: <db:verify
-         from='xmpp.example.com'
-         id='D60000229F'
-         to='example.org'>
-       37c69b1cf07a3f67c04a5ef5902fa5114f2c76fe4a2686482ba5b89323075643
+    <section3 topic="Verify Request and Response">
+      <p>This subsection describes the interaction between the Receiving Server and the Authoritative Server, from the perspective of the Receiving Server.</p>
+      <p>To determine the validity of a dialback key, the Receiving Server needs to establish communications with the Authoritative Server. To do so, either it can reuse an existing XML stream or it needs to establish a new connection. To establish a new connection, the Receiving Server performs a DNS lookup on the Sender Domain, thus finding the IP address and port for server-to-server communication at an authoritative machine for the Sender Domain (here the machine is authority.sender.tld).</p>
+      <p>After the XML stream is established from the Receiving Server to the Authoritative Server, the Receiving Server sends a verification request for the domain pair. This is done by creating a &lt;db:verify/&gt; element whose XML character data is the dialback key; the element MUST possess a 'from' attribute whose value is the Target Domain, MUST possess a 'to' attribute whose value is the Sender Domain as provided in the 'from' attribute of step 1, and MUST possess an 'id' attribute whose value is the stream identifier from the Receiving Server's response stream header to the Originating Server. The combination of 'from', 'to', and 'id' attributes makes it possible for the Receiving Server to uniquely identify the TCP connection on which it received the original request in step 1.</p>
+      <p>Note: An implementation can open a separate connection to the Authoritative Server for the sole purpose of doing key verification.</p>
+      <example caption="Receiving Server Sends Verification Request to Authoritative Server (step 2)"><![CDATA[
+send: <db:verify
+          from='target.tld'
+          id='417GAF25'
+          to='sender.tld'>
+       38b501ec606752318f72ad53de17ac6d15f86257485b0d8f5d54e1f619e6b869
      </db:verify>
       ]]></example>
-    </section3>
-
-    <section3 topic='Authoritative Server Processes Verification Request' anchor='verify-process'>
-
-      <section4 topic='Success Case' anchor='verify-process-success'>
-        <p>If the verification request can be successfully processed, the Authoritative Server MUST validate the dialback key it received from the Receiving Server as described under <link url='#validate'>Validation of Dialback Key by Authoritative Server</link>.</p>
-      </section4>
-
-      <section4 topic='Error Cases' anchor='verify-process-error'>
-        <p>There are several reasons why the Authoritative Server's processing of the verification request might fail:</p>
-        <ol start='1'>
-          <li>The value of the 'to' address provided by the Receiving Server does not match a hostname serviced by the Authoritative Server's network.</li>
-          <li>The value of the 'from' address provided by the Receiving Server does not match the hostname sent by the Receiving Server in the 'from' address of the initial stream header it sent to the Authoritative Server.</li>
-        </ol>
-        <p>These error cases are described more fully in the remainder of this section.</p>
-        <p>If the value of the 'to' address provided by the Receiving Server does not match a hostname serviced by the Authoritative Server's network, then the Authoritative Server MUST generate a &lt;host-unknown/&gt; or &lt;host-gone/&gt; stream error condition (as appropriate) and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Host Unknown"><![CDATA[
-A2R: <stream:error>
-       <host-unknown
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-A2R: </stream:stream>
-        ]]></example>
-        <p>If the value of the 'from' address provided by the Receiving Server does not match the hostname sent by the Receiving Server in the 'from' address of the initial stream header it sent to the Authoritative Server, then the Authoritative Server MUST generate an &lt;invalid-from/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Invalid From"><![CDATA[
-A2R: <stream:error>
-       <invalid-from
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-A2R: </stream:stream>
-        ]]></example>
-        <p>Note: In all of the foregoing error cases, the Receiving Server SHOULD consider the Server Dialback negotiation attempt to have failed in an unrecoverable fashion and therefore it SHOULD return a &remoteconnection; stream error to the Originating Server.</p>
-        <example caption="Remote Server Timeout"><![CDATA[
-R2O: <stream:error>
-       <remote-server-timeout
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2O: </stream:stream>
-        ]]></example>
-      </section4>
-
-    </section3>
-
-  </section2>
-
-  <section2 topic='Validation of Dialback Key and Exchange of Validation Result' anchor='validate'>
-
-    <section3 topic='Authoritative Server Determines Validity of Dialback Key' anchor='validate-determine'>
-      <p>If the Authoritative Server can successfully process the verification request, it MUST determine whether the key is valid or invalid.</p>
-    <p>The key shall be considered <strong>valid</strong> if the Authoritative Server determines that the key matches the output it would have produced using its key generation algorithm with the inputs specified in the XML attributes of the verification request along with its shared secret.</p>
-      <p>The key shall be considered <strong>invalid</strong> if the Authoritative Server determines that the key does not match the output it would have produced using its key generation algorithm with the inputs specified in the XML attributes of the verification request along with its shared secret.</p>
-    </section3>
-
-    <section3 topic='Authoritative Server Sends Validation Result' anchor='validate-send'>
-      <p>Once the Authoritative Server determines whether the key is valid or invalid, it MUST inform the Receiving Server of its determination. This is done by creating a &lt;db:verify/&gt; element whose XML character data is the dialback key; the element MUST possess a 'from' attribute whose value is the hostname of the Originating Server, MUST possess a 'to' attribute whose value is the hostname of the Receiving Server, MUST possess an 'id' attribute whose value is the stream identifier from the Receiving Server's response stream header to the Originating Server as communicated in the verification request, and MUST possess a 'type' attribute whose value is either "valid" or "invalid".</p>
-      <example caption="Key is Valid"><![CDATA[
-A2R: <db:verify
-         from='example.org'
-         id='D60000229F'
-         to='xmpp.example.com'
-         type='valid'>
-       37c69b1cf07a3f67c04a5ef5902fa5114f2c76fe4a2686482ba5b89323075643
+      <p>After that, the Receiving Server waits for the verification result. While doing so, it can still use the connection to send any valid stanzas or dialback packets.</p>
+      <example caption="Receiving Server is Informed by Authoritative Server that Key is Valid (step 3)"><![CDATA[
+recv: <db:verify
+          from='sender.tld'
+          id='417GAF25'
+          to='target.tld'
+          type='valid'>
      </db:verify>
       ]]></example>
       <p>Or:</p>
-      <example caption="Key is Invalid"><![CDATA[
-A2R: <db:verify
-         from='example.org'
-         id='D60000229F'
-         to='xmpp.example.com'
-         type='invalid'>
-       37c69b1cf07a3f67c04a5ef5902fa5114f2c76fe4a2686482ba5b89323075643
+      <example caption="Receiving Server is Informed by Authoritative Server that Key is Invalid (step 3)"><![CDATA[
+recv: <db:verify
+          from='target.tld'
+          id='417GAF25'
+          to='sender.tld'
+          type='invalid'>
      </db:verify>
       ]]></example>
+      <p>In addition to the values "valid" and "invalid", the 'type' attribute can also have a value of "error"; see section 2.4 for a detailed explanation.</p>
+      <example caption="Receiving Server Receives Dialback Error from Authoritative Server (step 3)"><![CDATA[
+recv: <db:verify
+          from='sender.tld'
+          to='target.tld'
+          id='417GAF25'
+          type='error'>
+        <error type='modify' xmlns='jabber:server'>
+          <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+        </error>
+      </db:result>    
+     </db:verify>
+      ]]></example>
+      <p>Note: if the underlying TCP connection is closed by the remote side while there are pending verification requests, those requests SHOULD be considered failed and therefore be treated like an error response.</p>
+      <p>After receiving the validation result from the Authoritative Server, the Receiving Server determines the incoming connection that the dialback key was originally received on. This connection is uniquely identified by the combination of the 'from', 'to', and 'id' attributes. If no incoming connection is found that matches this combination, the verification result can be dropped silently. If an incoming connection is found, the Receiving Server uses it to communicate the verification result to the Originating Server. A positive result indicates the willingness of the Receiving Server to accept stanzas from the Originating Server for this domain pair.</p>
     </section3>
-
-    <section3 topic='Receiving Server Processes Validation Result' anchor='validate-process'>
-
-      <section4 topic='Success Case' anchor='validate-process-success'>
-        <p>If the validation result can be successfully processed, the Receiving Server MUST inform the Originating Server of the Server Dialback results described under <link url='#result'>Communication of Result from Receiving Server to Originating Server</link>. The Receiving Server then SHOULD also terminate the XML stream and the underlying TCP connection between the Receiving Server and the Authoritative Server.</p>
-      </section4>
-
-      <section4 topic='Error Cases' anchor='validate-process-error'>
-        <p>There are several reasons why the Receiving Server's processing of the validation result might fail:</p>
-        <ol start='1'>
-          <li>The value of the 'id' attribute does not match that provided by the Receiving Server in the verification request.</li>
-          <li>The value of the 'from' address does not match the hostname represented by the Originating Server in the 'from' address of the initial stream header it sent to the Receiving Server.</li>
-          <li>The value of the 'to' address does not match a hostname serviced by the Receiving Server.</li>
-        </ol>
-        <p>These error cases are described more fully in the remainder of this section.</p>
-        <p>If the value of the 'id' attribute does not match that provided by the Receiving Server in the verification request, then the Receiving Server MUST generate an &lt;invalid-id/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection between it and the Authoritative Server.</p>
-        <example caption="Invalid ID"><![CDATA[
-R2A: <stream:error>
-       <invalid-id
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2A: </stream:stream>
-        ]]></example>
-        <p>The value of the 'from' address does not match the hostname represented by the Originating Server in the 'from' address of the initial stream header it sent to the Receiving Server, then the Receiving Server MUST generate an &lt;invalid-from/&gt; stream error condition and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Invalid From"><![CDATA[
-R2A: <stream:error>
-       <invalid-from
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2A: </stream:stream>
-        ]]></example>
-        <p>If the value of the 'to' address does not match a hostname serviced by the Receiving Server, then the Receiving Server MUST generate a &lt;host-unknown/&gt; or &lt;host-gone/&gt; stream error condition (as appropriate) and terminate both the XML stream and the underlying TCP connection.</p>
-        <example caption="Host Unknown"><![CDATA[
-R2A: <stream:error>
-       <host-unknown
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2A: </stream:stream>
-        ]]></example>
-        <p>Note: In all of the foregoing error cases, the Receiving Server SHOULD consider the Server Dialback negotiation attempt to have failed in an unrecoverable fashion and therefore it SHOULD return a &remoteconnection; stream error to the Originating Server.</p>
-        <example caption="Remote Server Timeout"><![CDATA[
-R2O: <stream:error>
-       <remote-server-timeout
-           xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>
-     </stream:error>
-
-R2O: </stream:stream>
-        ]]></example>
-      </section4>
-
-    </section3>
-
   </section2>
 
-  <section2 topic='Communication and Handling of Verification Result' anchor='result'>
-
-    <section3 topic='Receiving Server Communicates Verification Result' anchor='result-communicate'>
-      <p>Once the Receiving Server successfully processes the validation result it received from the Authoritative Server, it informs the Originating Server of the result. This is done by creating a &lt;db:result/&gt; element whose XML character data is the dialback key; the element MUST possess a 'from' attribute whose value is the hostname of the Receiving Server, MUST possess a 'to' attribute whose value is the hostname of the Originating Server, MUST possess an 'id' attribute whose value is the stream identifier from the Receiving Server's response stream header to the Originating Server, and MUST possess a 'type' attribute whose value is either "valid" or "invalid".</p>
-      <example caption="Receiving Server Sends Verification Result"><![CDATA[
-R2O: <db:result
-         from='xmpp.example.com'
-         to='example.org'
-         type='valid'>
+  <section2 topic="Incoming Connection">
+    <p>This section describes the handling of an incoming connection from the Sender Domain 'sender.tld' to the Target Domain 'target.tld'.</p>
+    <section3 topic="Dialback Request and Response">
+      <p>This subsection describes the interaction between the Originating Server and the Receiving Server, from the perspective of the Receiving Server.</p>
+      <example caption="Receiving Server Receives Dialback Key from Originating Server (step 1)"><![CDATA[
+recv: <db:result
+          from='sender.tld'
+          to='target.tld'>
        37c69b1cf07a3f67c04a5ef5902fa5114f2c76fe4a2686482ba5b89323075643
      </db:result>
       ]]></example>
+      <p>This key MUST be verified before the Sender Domain ('sender.tld') is authorized to send stanzas. The verification process might fail prematurely, for example, if the Receiving Server's policy states that connections from the Sender Domain are not allowed.</p>
+      <p>The usual method for verifying that the Originating Server is authorized to send stanzas for the Sender Domain is to "dial back" the Authoritative Server for the Sender Domain and asking it to validate the dialback key which is contained in the XML character data of the request. Other methods can be used for verifying the identity of the Originating Server, but are out of scope for this document.</p>
+      <p>Note: the Receiving Server MUST continue to accept and process stanzas for already verified domain pairs, and MUST continue to process both &lt;db:result/&gt; and &lt;db:verify/&gt; elements.</p>
+      <p>If the Target Domain as given in the 'to' attribute of the element is not a configured domain of the Receiving Server, this results in a dialback error. This error, which is explained further in section 2.4, is not a stream error and therefore MUST NOT result in termination of the stream and the underlying TCP connection, which might already be used for sending XML stanzas for other domain pairs.</p>
+      <example caption="Receiving Server Sends Dialback Error to Originating Server (step 4)"><![CDATA[
+send: <db:result
+          from='target.tld'
+          to='sender.tld'
+          type='error'>
+        <error type='modify' xmlns='jabber:server'>
+          <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+        </error>
+      </db:result>    
+      ]]></example>
+      <p>After the validity of the key has been established (for example, by the Authoritative Server), the domain pair is to be considered as verified and the Receiving Server MUST accept stanzas from the Originating Server.</p>
+      <p>In addition, the Originating Server is notified of the result. This is done by creating a &lt;db:result/&gt; element which MUST possess a 'from' attribute whose value is the Target Domain, MUST possess a 'to' attribute whose value is the Sender Domain, and MUST possess a 'type' attribute whose value is either "valid" or "invalid".</p>
+      <example caption="Receiving Server Sends Valid Verification Result to Originating Server (step 4)"><![CDATA[
+send: <db:result
+          from='target.tld'
+          to='sender.tld'
+          type='valid'/>
+      ]]></example>
+      <p>Or:</p> 
+      <example caption="Receiving Server Sends Invalid Verification Result to Originating Server (step 4)"><![CDATA[
+send: <db:result
+          from='target.tld'
+          to='sender.tld'
+          type='invalid'/>
+      ]]></example>
+      <p>If the type is 'invalid', the Originating Server is attempting to spoof the Sender Domain. The Receiving Server MUST terminate the XML stream and the underlying TCP connection and SHOULD log the attempt.</p>
     </section3>
 
-    <section3 topic='Receiving Server Handles Verification Result' anchor='result-handle'>
-
-      <section4 topic='Invalid Connection' anchor='result-handle-invalid'>
-        <p>If the Authoritative Server reported the dialback key as invalid, then the Receiving Server MUST terminate both the XML stream and the underlying TCP connection between itself and the Originating Server.</p>
-      </section4>
-
-      <section4 topic='Valid Connection' anchor='result-handle-valid'>
-        <p>If the Authoritative Server reported the dialback key as valid, the Receiving Server has verified the identity of the Originating Server. As a result, the Receiving Server can now accept XML stanzas from the Originating Server over the validated connection (i.e., over the "initial stream" from the Originating Server to the Receiving Server). However, in accordance with <cite>XMPP Core</cite>, the Receiving Server MUST follow the rules specified therein regarding inclusion and checking of 'from' and 'to' attributes on all XML stanzas it receives from the Originating Server. These checks help to prevent address spoofing.</p>
-        <p class='box'>Note Well: If the Receiving Server receives any XML stanzas from the Originating Server before the initial stream has been validated, the Receiving Server MUST silently drop those stanzas.</p>
-        <p>As mentioned, Server Dialback results in weak identity verification in one direction only (in the foregoing text, verification of the Originating Server by the Receiving Server). In order to proceed with bi-directional communication so that the Receiving Server can send XML stanzas to the Originating Server, the Receiving Server MUST now also initiate a dialback negotiation with the Originating Server (i.e., assume the role of an originating server in a new dialback negotiation).</p>
-      </section4>
-
+    <section3 topic="Verify Request and Response">
+      <p>This subsection describes the interaction between the Receiving Server and the Authoritative Server, from the perspective of the Authoritative Server.</p>
+      <example caption="Authoritative Server Receives Verification Request from Receiving Server (step 2)"><![CDATA[
+recv: <db:verify
+          from='target.tld'
+          id='417GAF25'
+          to='sender.tld'>
+       38b501ec606752318f72ad53de17ac6d15f86257485b0d8f5d54e1f619e6b869
+     </db:verify>
+      ]]></example>
+      <p>If the Target Domain as given in the 'to' attribute of the element does not match a configured local domain, this results in a dialback error. This error, which is explained further in section 2.4, is not a stream error and therefore MUST NOT result in termination of the stream and the underlying TCP connection, which might already be used for sending XML stanzas for other domain pairs.</p>
+      <example caption="Authoritative Server Sends Dialback Error to Receiving Server (step 3)"><![CDATA[
+send: <db:verify
+          from='sender.tld'
+          to='target.tld' 
+          id='417GAF25'
+          type='error'>
+        <error type='modify' xmlns='jabber:server'>
+          <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+        </error>
+      </db:result>    
+      ]]></example>
+      <p>Upon receiving this &lt;db:verify/&gt; element, the Authoritative Server determines the validity of the dialback key provided in the XML character data of the element. This can be achieved for example by comparing the character data with the output of applying the same key generation mechanism that was (presumably) used for the generation of the key, using as input the values of the 'from', 'to', and 'id' attributes contained in the verification request and the secret known only to the Sender Domain:</p>
+      <code>
+key = HMAC-SHA256( 
+        SHA256('d14lb4ck43v3r'), 
+          { 'sender.tld', ' ', 'target.tld', ' ', '417GAF25'}
+      )
+    = 38b501ec606752318f72ad53de17ac6d15f86257485b0d8f5d54e1f619e6b869
+      </code>
+      <p>The Authoritative Server then notifies the Receiving Server whether the key is valid. This is done by creating a &lt;db:verify/&gt; element which MUST possess 'from' and 'to' attributes whose values are swapped from the request, MUST possess an 'id' attribute whose value is copied from the 'id' value of the request, and MUST possess a 'type' attribute whose value is either "valid" or "invalid".</p>
+      <example caption="Authoritative Server Informs Receiving Server that Key is Valid (step 3)"><![CDATA[
+send: <db:verify
+          from='sender.tld'
+          id='417GAF25'
+          to='target.tld'
+          type='valid'/>
+      ]]></example>
+      <p>Or:</p>
+      <example caption="Authoritative Server Informs Receiving Server that Key is Invalid (step 3)"><![CDATA[
+send: <db:verify
+          from='sender.tld'
+          id='417GAF25'
+          to='target.tld'
+          type='invalid'/>
+      ]]></example>
     </section3>
-
   </section2>
 
-</section1>
+  <section2 topic="Advertisement" anchor='advertisement'>
+    <p>Support for the server dialback protocol can be indicated in two ways:</p>
+    <ul>
+      <li>By inclusion of the server dialback feature in a given set of stream features.</li>
+      <li>By inclusion of the dialback namespace declaration in the stream header.</li>
+    </ul>
+    <p>The former method is preferred, but the latter method is also specified herein for the purpose of backward-compatibility with older "XMPP 0.9" deployments.</p>
+    <p>The server dialback stream feature is advertised by including in any given set of stream features a &lt;dialback/&gt; element qualified by the 'urn:xmpp:features:dialback' namespace; the <dialback/> element MAY also include an empty &lt;errors/&gt; element, indicating that the entity sending the stream features supports graceful handling of dialback errors as described in section 2.4.</p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <dialback xmlns='urn:xmpp:features:dialback'>
+    <optional/>
+    <errors/>
+  </dialback>
+</stream:features>
+    ]]></example>
+    <p>As mentioned, support for the server dialback protocol can also be advertised by including the dialback namespace declaration in a stream header.</p>
+    <example caption="Stream Header"><![CDATA[
+<stream:stream 
+    xmlns='jabber:server'
+    xmlns:db='jabber:server:dialback'
+    xmlns:stream='http://etherx.jabber.org/streams'
+    from='target.tld'
+    to='sender.tld'>
+    ]]></example>
+  </section2>
+  <section2 topic="Dialback Error Conditions" anchor='errors'>
+    <!-- credits: Matthias in http://mail.jabber.org/pipermail/standards/2007-June/015662.html -->
+    <p>RFC 3920 introduced stream errors for any errors related to dialback. However, this turned out to be overly aggressive, particulary if the XML stream was used to multiplex stanzas from more than one originating or receiving domain. Therefore this specification introduces a third value for the 'type' attribute, with the value "error"./</p>
+    <p>This usage of the 'error' value for the 'type' attribute is not backward compatible with RFC 3920. However, the server that generates the error SHOULD still attempt to send the dialback error instead of terminating the stream, as the worst thing that can happen is that the remote server terminates the stream if it does not understand the error. Those dialback errors are to be considered non-fatal for the XML stream, but queued stanzas MUST be bounced to the respective senders with a &timeout; stanza error. If the error is encountered in step 3, the Receiving Server must send an authoritative-host-unknown error to the Originating Server.</p>
+     <p>When the &lt;db:verify/&gt; or &lt;db:result/&gt; element is of type "error", the element MUST contain an &lt;error/&gt; element qualified by the 'jabber:server' namespace, i.e., a "stanza error" as specified in &xmppcore;. This specification re-uses the following stanza error conditions.</p>
+    <table caption='Dialback error conditions'>
+      <tr>
+        <th>Condition</th>
+        <th>Description</th>
+        <th>When Occurs</th>
+      </tr>
+      <tr>
+        <td>&notfound;</td>
+        <td>The domain given in the 'to' attribute of the request is not hosted on the Receiving Server. The domain is used in the 'from' attribute nonetheless with the purpose of identifying the original request.</td>
+        <td>Step 3 or 4</td>
+      </tr>
+      <tr>
+        <td>&remoteconnection;</td>
+        <td>The Receiving Server was unable to establish a connection to the Authoritative Server and therefore could not validate the identity of the Originating Server.</td>
+        <td>Step 4</td>
+      </tr>
+      <tr>
+        <td>&remoteserver;</td>
+        <td>The Receiving Server encountered an &notfound; error condition or a 'host-unknown' stream error when attempting to contact the Authoritative Server.</td>
+        <td>Step 4</td>
+      </tr>
+      <tr>
+        <td>&timeout;</td>
+        <td>The Receiving Server encountered a problem with the connection to the Authoritative Server, for example if the Authoritative Server unexpectedly closed the stream without verifying the dialback key.</td>
+        <td>Step 4</td>
+      </tr>
+    </table>
+  </section2>
 
-<section1 topic="Reuse of Negotiated Connections (&quot;Piggybacking&quot;)" anchor="piggybacking">
-  <p>After the Receiving Server has validated a connection from the Originating Server, the Originating Server might wish to reuse that connection for validation of additional domains. This feature is called PIGGYBACKING. Support for piggybacking is OPTIONAL.</p>
-  <p>One common motivation for such reuse is the existence of additional services associated with the Originating Server but hosted at subdomains of the Originating Server (the use of subdomains helps to ensure proper routing of XML stanzas to the hosted services). For example, the "example.org" XMPP server might host a groupchat service at "chat.example.org". In order to accept XML stanzas from rooms at "chat.example.org" intended for addresses at "xmpp.example.com", the "xmpp.example.com" domain will need to validate the "chat.example.org" domain (just as it already did for the "example.org" domain). Thus the "example.org" server would now initiate a dialback negotiation with "xmpp.example.com" but specify the Originating Server as "chat.example.org".</p>
-  <p>However, because the "example.org" server already has a validated connection open to the Receiving Server ("xmpp.example.com"), it MAY send a &lt;db:result/&gt; element with the key to be validated for the new Originating Server ("chat.example.org") over the XML stream that has already been negotiated, rather than opening a new TCP connection and XML stream.</p>
-  <example caption="Piggybacked Key"><![CDATA[
-O2R: <db:result
-         from='chat.example.org'
-         to='xmpp.example.com'>
-       88a96894060d5f4258c37cd51b772e5a483430d8203f71d3782cac72a0866458
-     </db:result>
-  ]]></example>
-  <p>The Receiving Server SHOULD accept this &lt;db:result/&gt; element (as it did for the first &lt;db:result/&gt; element) and process it according to the rules already specified. If that process is successful, it would eventually result in sending of a &lt;db:result/&gt; element from the Receiving Server to the Originating Server.</p>
-  <example caption="Piggybacked Result"><![CDATA[
-R2O: <db:result
-         from='xmpp.example.com'
-         to='chat.example.org'
-         type='valid'>
-       88a96894060d5f4258c37cd51b772e5a483430d8203f71d3782cac72a0866458
-     </db:result>
-  ]]></example>
-  <p>However, if the Receiving Server does not allow reuse of the existing connection, it MUST return an error of the following form to the Originating Server.</p>
-  <example caption="Piggybacking Not Supported"><![CDATA[
-R2O: <db:result
-         from='xmpp.example.com'
-         to='chat.example.org'
-         type='error'>
-       88a96894060d5f4258c37cd51b772e5a483430d8203f71d3782cac72a0866458
-     </db:result>
-  ]]></example>
-  <p>Note: a &lt;db:result/&gt; element of type "error" MUST NOT be considered a stream error and therefore MUST NOT result in termination of the stream and the underlying TCP connection, which presumably is being used for sending XML stanzas from the Originating Server to the Receiving Server.</p>
-  <p class='box'>Note Well: Use of the "error" value was unspecified in <cite>RFC3920</cite>.</p>
+  <section2 topic="Multiplexing" anchor='multiplex'>
+    <p>A single XML stream between Originating and Receiving Server can be used to multiplex stanzas for more than one domain pair. This usage is for historical reasons called "piggybacking". There are two variants of this:</p>
+    <ul>
+      <li>Origin Piggybacking, which employs different originating domains.</li>
+      <li>Destination Piggybacking, which employs different receiving domains.</li>
+    </ul>
+    <p>The Originating Server SHOULD NOT use Destination Piggybacking unless the Receiving Server has signalled support for dialback error handling via &lt;stream:features/&gt;. The Originating Server MAY then attempt to multiplex a domain 'B' on the stream to the Receiving Server that is already used for domain 'A' if the hostname and port resolution results in the same IP address and port combination.</p>
+    <p>The Originating Server MAY use Origin Piggybacking even if the Receiving Server has not signalled support for graceful dialback error handling.</p>
+  </section2>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
@@ -890,8 +459,13 @@ R2O: <db:result
   </section2>
 </section1>
 
+<section1 topic='Acknowledgments' anchor='ack'>
+  <p>Thanks to Dave Cridland, Joe Hildebrand, Justin Karneges, Nina Kirchner, Carlo von Loesch, Ralph Meijer, Rob Norris, Matthew Wild, and Matthias Wimmer for their comments.</p>
+</section1>
+
 <section1 topic='XML Schema' anchor='schema'>
   <section2 topic="Dialback" anchor="schema-dialback">
+    <p>Note Well: the 'error' value for the 'type' attribute was added since RFC 3920.</p>
     <code><![CDATA[
 <?xml version='1.0' encoding='UTF-8'?>
 
@@ -931,6 +505,7 @@ R2O: <db:result
           <xs:attribute name='type' use='optional'>
             <xs:simpleType>
               <xs:restriction base='xs:NCName'>
+                <xs:enumeration value='error'/>
                 <xs:enumeration value='invalid'/>
                 <xs:enumeration value='valid'/>
               </xs:restriction>
@@ -944,7 +519,7 @@ R2O: <db:result
 </xs:schema>
     ]]></code>
   </section2>
-  <section2 topic="Stream Feature" anchor="schema-dialbackfeature">
+  <section2 topic="Stream Feature" anchor="schema-feature">
     <code><![CDATA[
 <?xml version='1.0' encoding='UTF-8'?>
 
@@ -954,19 +529,17 @@ R2O: <db:result
     xmlns='urn:xmpp:features:dialback'
     elementFormDefault='qualified'>
 
-  <xs:element name='dialback'>
+  <xs:element name='sm'>
     <xs:complexType>
-      <xs:choice minOccurs='1' maxOccurs='1'>
-        <xs:element name='optional' type='empty'/>
-        <xs:element name='required' type='empty'/>
-      </xs:choice>
+      <xs:sequence>
+        <xs:choice>
+          <xs:element name='optional' type='empty'/>
+          <xs:element name='required' type='empty'/>
+        </xs:choice>
+        <xs:element name='errors' minOccurs='0' type='empty'/>
+      </xs:sequence>
     </xs:complexType>
-
-  <xs:simpleType name='empty'>
-    <xs:restriction base='xs:string'>
-      <xs:enumeration value=''/>
-    </xs:restriction>
-  </xs:simpleType>
+  </xs:element>
 
 </xs:schema>
     ]]></code>
