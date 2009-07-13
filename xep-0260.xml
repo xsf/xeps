@@ -25,6 +25,12 @@
   &stpeter;
   &dmeyer;
   <revision>
+    <version>0.3</version>
+    <date>2009-07-13</date>
+    <initials>dm</initials>
+    <remark><p>Major update to make Jingle S5B inherit more features from ICE and ICE-TCP. This includes priorities and candidate identifier and the renaming of the streamhost element to candidate. The candidate selection was updated to the use of priorities and it is now required for both clients to send a candidate-used or candidate-error information. Due to incompatibilities to previous version the namespace changed to urn:xmpp:jingle:transports:s5b:1.</p></remark>
+  </revision>
+  <revision>
     <version>0.2</version>
     <date>2009-03-09</date>
     <initials>psa</initials>
@@ -57,8 +63,8 @@
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
-  <p>&xep0166; defines a framework for negotiating and managing data sessions over XMPP. In order to provide a flexible framework, the base Jingle specification defines neither data transport methods nor application formats, leaving that up to separate specifications. The current document defines a transport method for establishing and managing data exchanges between XMPP entities using the existing SOCKS5 Bytestreams (S5B) protocol specified in &xep0065;. This "jingle-s5b" method results in a streaming transport method suitable for use in Jingle application types where packet loss cannot be tolerated (e.g., file transfer).</p>
-  <p>It is RECOMMENDED that a client offers as much &lt;streamhost/&gt; elements with itself as StreamHost as possible. This includes opening the TCP port on all available interfaces the user wants to use (e.g. maybe not an expensive UMTS link), both the IPv4 and IPv6 of that interface (if available), and using an assisting NAT protocol if possible. If the client knows it is behind and the router announces UPnP IGD or NAT-PMP support, the client SHOULD map the open port to the external interface of the router and include the public IP address and port information in the &lt;streamhost/&gt; offers. To increase the chance of success without using a proxy, this specification allows the responder to also send offers.</p>
+  <p>&xep0166; defines a framework for negotiating and managing data sessions over XMPP. In order to provide a flexible framework, the base Jingle specification defines neither data transport methods nor application formats, leaving that up to separate specifications. The current document defines a transport method for establishing and managing data exchanges between XMPP entities using the existing SOCKS5 Bytestreams (S5B) protocol specified in &xep0065;. This "jingle-s5b" method results in a streaming transport method suitable for use in Jingle application types where packet loss cannot be tolerated (e.g., file transfer). Jingle-S5B reuses the protocol flow from <cite>XEP-0065</cite> for the communication with a SOCKS5 streamhost; the communication between two clients to negotiate the possible candidates differ from <cite>XEP-0065</cite> and share similarities to &xep0176;</p>
+  <p>It is RECOMMENDED that a client offers as much &lt;candidate/&gt; elements with itself as host as possible. This includes opening the TCP port on all available interfaces the user wants to use (e.g. maybe not an expensive UMTS link), both the IPv4 and IPv6 of that interface (if available), and using an assisting NAT protocol if possible. If the client knows it is behind and the router announces UPnP IGD or NAT-PMP support, the client SHOULD map the open port to the external interface of the router and include the public IP address and port information in the &lt;candidate/&gt; offers. To increase the chance of success without using a proxy, this specification allows the responder to also send offers.</p>
 </section1>
 
 <section1 topic='Protocol' anchor='protocol'>
@@ -76,11 +82,11 @@ Romeo                               Juliet
   |<---------------------------------|
   |  ack                             |
   |--------------------------------->|
-  |  streamhost transport-info       |
+  |  candidate-used transport-info   |
   |<---------------------------------|
   |  ack                             |
   |--------------------------------->|
-  |  streamhost-used transport-info  |
+  |  candidate-used transport-info   |
   |--------------------------------->|
   |  ack                             |
   |<---------------------------------|
@@ -93,8 +99,9 @@ Romeo                               Juliet
   |                                  |
   ]]></code>
   <p>This flow is illustrated in the following examples (to prevent confusion these use a "stub" transport instead of a real application type).</p>
-  <p>First the initiator sends a Jingle session-initiate request that contains one or more transport candidates, which in jingle-s5b are XEP-0065 streamhosts.</p>
-  <example caption="Initiator sends session-initiate (stub)"><![CDATA[
+  <section2 topic='Exchange Candidates'>
+    <p>First the initiator sends a Jingle session-initiate request that contains one or more transport candidates which are a mixture of <cite>XEP-0065</cite> streamhosts and ICE candidates used in <cite>XEP-0176</cite>.</p>
+    <example caption="Initiator sends session-initiate (stub)"><![CDATA[
 <iq from='romeo@montague.lit/orchard'
     id='xn28s7gk'
     to='juliet@capulet.lit/balcony'
@@ -105,33 +112,35 @@ Romeo                               Juliet
           sid='a73sjjvkla37jfea'>
     <content creator='initiator' name='stub'>
       <description xmlns='urn:xmpp:jingle:apps:stub:0'/>
-      <transport xmlns='urn:xmpp:jingle:transports:s5b:0'
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
                  sid='vj3hs98y'
         	 mode='tcp'>
-        <streamhost
-            jid='romeo@montague.lit/orchard'
-            host='192.168.4.1'
-            port='5086'/>
-        <streamhost
-            jid='streamhostproxy.example.net'
-            host='24.24.24.1'
-            zeroconf='_jabber.bytestreams'/>
+        <candidate cid='hft54dqy'
+                   jid='romeo@montague.lit/orchard'
+                   host='192.168.4.1'
+                   port='5086'
+                   priority='8257636'/>
+        <candidate cid='hutr46fe'
+                   jid='romeo@montague.lit/orchard'
+                   host='24.24.24.1'
+                   port='5086'
+                   priority='8258636'/>
       </transport>
     </content>
   </jingle>
 </iq>
   ]]></example>
-  <p>The responder immediately acknowledges receipt.</p>
-  <example caption="Responder acknowledges session-initiate"><![CDATA[
+    <p>The responder immediately acknowledges receipt.</p>
+    <example caption="Responder acknowledges session-initiate"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
     id='xn28s7gk'
     to='romeo@montague.lit/orchard'
     type='result'/>
   ]]></example>
-  <p>Depending on the application type, a user agent controlled by a human user might need to wait for the user to affirm a desire to proceed with the session before continuing. When the user agent has received such affirmation (or if the user agent can automatically proceed for any reason, e.g. because no human intervention is expected or because a human user has configured the user agent to automatically accept sessions with a given entity), it returns a Jingle session-accept message. This message MUST contain a &TRANSPORT; element qualified by the 'urn:xmpp:jingle:transports:s5b:0' namespace, which SHOULD in turn contain one &lt;streamhost/&gt; element for each SOCKS5 Bytestreams candidate generated by or known to the responder, but MAY instead be empty if the responder does not wish to offer any streamhosts or wishes to send each candidate as the payload of a transport-info message.</p>
-  <p>Note: If the responder sends streamhost candidates, the chances of a successful connection are increased. For example, the initiator might be behind a NAT or might have no access to a proxy, whereas the responder might have a public IP address, might know about a streamhost proxy, or might have NAT penetration support like NAT-PMP in the router.</p>
-  <p>In the following example, Juliet's client is the StreamHost and opens one port. The provided &lt;streamhost/&gt; elements are the (private) IPv4 address of the interface, a (public) IPv6 address, and the public IPv4 address created by mapping the private IP address/port using NAT-PMP.</p>
-  <example caption="Responder sends session-accept with streamhost candidates"><![CDATA[
+    <p>Depending on the application type, a user agent controlled by a human user might need to wait for the user to affirm a desire to proceed with the session before continuing. When the user agent has received such affirmation (or if the user agent can automatically proceed for any reason, e.g. because no human intervention is expected or because a human user has configured the user agent to automatically accept sessions with a given entity), it returns a Jingle session-accept message. This message MUST contain a &TRANSPORT; element qualified by the 'urn:xmpp:jingle:transports:s5b:1' namespace, which SHOULD in turn contain one &lt;candidate/&gt; element for each SOCKS5 Bytestreams candidate generated by or known to the responder, but MAY instead be empty if the responder does not wish to offer any candidates or wishes to send each candidate as the payload of a transport-info message.</p>
+    <p>Note: If the responder sends candidates, the chances of a successful connection are increased. For example, the initiator might be behind a NAT or might have no access to a proxy, whereas the responder might have a public IP address, might know about a proxy, or might have NAT penetration support like NAT-PMP in the router.</p>
+    <p>In the following example, Juliet's client opens one port. The provided &lt;candidates/&gt; are the (private) IPv4 address of the interface, a (public) IPv6 address, and the public IPv4 address created by mapping the private IP address/port using NAT-PMP.</p>
+    <example caption="Responder sends session-accept with candidates"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
     id='hwd987h'
     to='romeo@montague.lit/orchard'
@@ -142,35 +151,68 @@ Romeo                               Juliet
           sid='a73sjjvkla37jfea'>
     <content creator='initiator' name='stub'>
       <description xmlns='urn:xmpp:jingle:apps:stub:0'/>
-      <transport xmlns='urn:xmpp:jingle:transports:s5b:0'
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
                  sid='vj3hs98y'
         	 mode='tcp'>
-        <streamhost
-            jid='juliet@capulet.lit/balcony'
-            host='192.169.1.10'
-            port='6539'/>
-        <streamhost
-            jid='juliet@capulet.lit/balcony'
-            host='134.102.201.180'
-            port='16453'/>
-        <streamhost
-            jid='juliet@capulet.lit/balcony'
-            host='2001:638:708:30c9:219:d1ff:fea4:a17d'
-            port='6539'/>
+        <candidate cid='ht567dq'
+                   jid='juliet@capulet.lit/balcony'
+                   host='192.169.1.10'
+                   port='6539'/>
+                   priority='8257636'/>
+        <candidate cid='hr65dqyd'
+                   jid='juliet@capulet.lit/balcony'
+                   host='134.102.201.180'
+                   port='16453'/>
+                   priority='7929856'/>
+        <candidate cid='grt654q2'
+                   jid='juliet@capulet.lit/balcony'
+                   host='2001:638:708:30c9:219:d1ff:fea4:a17d'
+                   port='6539'/>
+                   priority='8257606'/>
       </transport>
     </content>
   </jingle>
 </iq>
   ]]></example>
-  <p>The initiator acknowledges receipt and tries to connect to the offered StreamHosts.</p>
-  <example caption="Initiator acknowledges streamhost transport-info"><![CDATA[
+    <p>The initiator acknowledges receipt and tries to connect to the offered candidates.</p>
+    <example caption="Initiator acknowledges session-accept"><![CDATA[
 <iq from='romeo@montague.lit/orchard'
     id='hwd987h'
     to='juliet@capulet.lit/balcony'
     type='result'/>
   ]]></example>
-  <p>Once one client has successfully created a connection with a StreamHost, it sends the &lt;streamhost-used/&gt; element defined in XEP-0065 to the peer; as a result, both clients will stop trying to connect to other candidates. <note>If both clients happen to send the streamhost-used message at the same time (two connections are open), the StreamHost chosen by the initiator wins (consistent with the rules in <cite>XEP-0166</cite>) and the responder closes the streamhost connection it was able to establish.</note></p>
-  <example caption="Initiator sends streamhost-used in Jingle transport-info"><![CDATA[
+    <p>A client SHOULD check the offered candidates in order of their priority, starting with the highest value. How the priority is calculated depends on the actual available interfaces. It is RECOMMENDED to use the following formula:</p>
+    <example caption="Priority Calculation"><![CDATA[
+priority = (2^16)*(type preference) + (local preference)
+     ]]></example>
+    <p>The type preference is an integer value between 0 and 127. The following types and their preference are defined here:</p>
+    <table caption='Possible Types'>
+      <tr>
+	<th>Description</th>
+	<th>Value</th>
+      </tr>
+      <tr>
+	<td>Direct connection using the given interface</td>
+	<td>126</td>
+      </tr>
+      <tr>
+	<td>Direct connection using NAT assisting technologies like NAT-PMP or UPnP-IGD</td>
+	<td>120</td>
+      </tr>
+      <tr>
+	<td>Tunnel protocols such as Teredo</td>
+	<td>110</td>
+      </tr>
+      <tr>
+	<td>SOCKS5 Relay</td>
+	<td>10</td>
+      </tr>
+    </table>
+    <p>The local preference is used to rate different candidates of the same type, e.g. a DSL link may be preferred over a VPN connection. The value of the local preference SHOULD be between 0 and 65535. The proposed values are only guidelines. If a client wants to increase or decrease the value of a specific candidate it is free to do so. For instance, a client may have an expensive UMTS link as last resort and may rate this link lower than all SOCKS5 relays.</p>
+  </section2>
+  <section2 topic='Connecting to Candidates'>
+    <p>After receiving its peer's candidates, a client start to connect to them in order of the priority. The protocol is described in <cite>XEP-0065</cite> in detail. Once one client has successfully created a connection, it sends the &lt;candidate-used/&gt; element to the peer inside a transport-info Jingle message. If a client receives a candidate-used information it SHOULD continue trying to connect to candidates of its peer while it has not tried all candidates with a higher priority than the one successfully used by the peer.</p>
+    <example caption="Initiator sends candidate-used in Jingle transport-info"><![CDATA[
 <iq from='romeo@montague.lit/orchard'
     id='hjdi8'
     to='juliet@capulet.lit/balcony'
@@ -180,28 +222,52 @@ Romeo                               Juliet
           initiator='romeo@montague.lit/orchard'
           sid='a73sjjvkla37jfea'>
     <content creator='initiator' name='stub'>
-      <transport xmlns='urn:xmpp:jingle:transports:s5b:0'
-                 sid='vj3hs98y'
-        	 mode='tcp'>
-        <streamhost-used
-            jid='juliet@capulet.lit/balcony'
-            host='134.102.201.180'
-            port='16453'/>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
+                 sid='vj3hs98y'>
+        <candidate-used cid='hr65dqyd'/>
       </transport>
     </content>
   </jingle>
 </iq>
   ]]></example>
-  <p>The peer immediately acknowledges receipt.</p>
-  <example caption="Responder acknowledges streamhost-used message"><![CDATA[
+    <p>The peer immediately acknowledges receipt.</p>
+    <example caption="Responder acknowledges candidate-used message"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
     id='hjdi8'
     to='romeo@montague.lit/orchard'
     type='result'/>
   ]]></example>
-  <p>The initiator can then immediately begin sending data over the SOCKS5 bytestream as described in XEP-0065 (in fact the streamhost is bidirectional, so the responder can use it as well).</p>
-  <p>Once the parties have finished using the bytestream (e.g., because a complete file has been sent), either party can send a Jingle session-terminate action.</p>
-  <example caption="Initiator terminates the session"><![CDATA[
+    <p>If a client was unable to connect to any candidate of its peer or stopped trying because the peer already send a candidate-used information with a priority higher than its remaining candidates, it sends a candidate-error Jingle transport-info message. If both clients happen to send a candidates-used message with candidates with the same priority, the candidate chosen by the initiator wins (consistent with the rules in <cite>XEP-0166</cite>) and the responder closes the connection it was able to establish.</p>
+    <example caption="Responder sends candidate-error in Jingle transport-info"><![CDATA[
+<iq from='juliet@capulet.lit/balcony'
+    id='gft65ewd'
+    to='romeo@montague.lit/orchard'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'>
+          action='transport-info'
+          initiator='romeo@montague.lit/orchard'
+          sid='a73sjjvkla37jfea'>
+    <content creator='initiator' name='stub'>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
+                 sid='vj3hs98y'>
+        <candidate-error'/>
+      </transport>
+    </content>
+  </jingle>
+</iq>
+  ]]></example>
+    <p>The peer immediately acknowledges receipt.</p>
+    <example caption="Responder acknowledges candidate-error message"><![CDATA[
+<iq from='romeo@montague.lit/orchard'
+    id='gft65ewd'
+    to='juliet@capulet.lit/balcony'
+    type='result'/>
+  ]]></example>
+    <p>Once both clients sent their candidate-error or candidate-used message to the peer and at least one made a successful connection, both clients can begin sending data over the SOCKS5 bytestream as described in XEP-0065.</p>
+  </section2>
+  <section2 topic='Closing the Bytestream'>
+    <p>Once the parties have finished using the bytestream (e.g., because a complete file has been sent), either party can send a Jingle session-terminate action.</p>
+    <example caption="Initiator terminates the session"><![CDATA[
 <iq from='romeo@montague.lit/orchard'
     id='hz81vf48'
     to='juliet@capulet.lit/balcony'
@@ -214,17 +280,18 @@ Romeo                               Juliet
   </jingle>
 </iq>
   ]]></example>
-  <p>The other party then acknowledges the session-terminate and the Jingle session is finished.</p>
-  <example caption="Responder acknowledges session-terminate"><![CDATA[
+    <p>The other party then acknowledges the session-terminate and the Jingle session is finished.</p>
+    <example caption="Responder acknowledges session-terminate"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
     id='hz81vf48'
     to='romeo@montague.lit/orchard'
     type='result'/>
   ]]></example>
+  </section2>
 </section1>
 
 <section1 topic='Fallback to IBB' anchor='fallback'>
-  <p>The session flow is as follows.</p>
+  <p>The protocol flow is as follows.</p>
   <code><![CDATA[
 Romeo                               Juliet
   |                                  |
@@ -250,109 +317,7 @@ Romeo                               Juliet
   |--------------------------------->|
   |                                  |
   ]]></code>
-  <p>The protocol flow is as follows.</p>
-  <p>First the initiator sends a Jingle session-initiate, in this case with a transport of SOCKS5 Bytestreams.</p>
-  <example caption="Initiator sends session-initiate"><![CDATA[
-<iq from='romeo@montague.lit/orchard'
-    id='jingle1'
-    to='juliet@capulet.lit/balcony'
-    type='set'>
-  <jingle xmlns='urn:xmpp:jingle:1'
-          action='session-initiate'
-          initiator='romeo@montague.lit/orchard'
-          sid='851ba2'>
-    <content creator='initiator' name='a-file-offer'>
-      <description xmlns='urn:xmpp:jingle:apps:stub:0'/>
-      <transport xmlns='urn:xmpp:jingle:transports:s5b:0'
-                 sid='vj3hs98y' 
-        	 mode='tcp'>
-        <streamhost 
-            jid='romeo@montague.lit/orchard' 
-            host='192.168.4.1' 
-            port='5086'/>
-        <streamhost 
-            jid='streamer.shakespeare.lit' 
-            host='24.24.24.1' 
-            zeroconf='_jabber.bytestreams'/>
-      </transport>
-    </content>
-  </jingle>
-</iq>
-  ]]></example>
-  <p>The responder acknowledges receipt of the session-initiate and sends a session-accept.</p>
-  <example caption="Responder acknowledges session-initiate"><![CDATA[
-<iq from='juliet@capulet.lit/balcony'
-    id='jingle1'
-    to='romeo@montague.lit/orchard'
-    type='result'/>
-  ]]></example>
-  <example caption="Responder sends session-accept with streamhost candidates"><![CDATA[
-<iq from='juliet@capulet.lit/balcony'
-    id='hwd987h'
-    to='romeo@montague.lit/orchard'
-    type='set'>
-  <jingle xmlns='urn:xmpp:jingle:1'>
-          action='session-accept'
-          initiator='romeo@montague.lit/orchard'
-          sid='a73sjjvkla37jfea'>
-    <content creator='initiator' name='stub'>
-      <description xmlns='urn:xmpp:jingle:apps:stub:0'/>
-      <transport xmlns='urn:xmpp:jingle:transports:s5b:0'
-                 sid='vj3hs98y'
-        	 mode='tcp'>
-        <streamhost
-            jid='juliet@capulet.lit/balcony'
-            host='192.169.1.10'
-            port='6539'/>
-        <streamhost
-            jid='juliet@capulet.lit/balcony'
-            host='134.102.201.180'
-            port='16453'/>
-        <streamhost
-            jid='juliet@capulet.lit/balcony'
-            host='2001:638:708:30c9:219:d1ff:fea4:a17d'
-            port='6539'/>
-      </transport>
-    </content>
-  </jingle>
-</iq>
-  ]]></example>
-  <p>The initiator acknowledges receipt and tries to connect to the offered StreamHosts.</p>
-  <example caption="Initiator acknowledges streamhost transport-info"><![CDATA[
-<iq from='romeo@montague.lit/orchard'
-    id='hwd987h'
-    to='juliet@capulet.lit/balcony'
-    type='result'/>
-  ]]></example>
-  <p>If initiator or responder is unable to connect to any of the StreamHosts, it MUST send a &lt;streamhost-error/&gt; transport-info to the peer.</p>
-  <example caption="Responder was unable to connect to any StreamHosts"><![CDATA[
-<iq from='juliet@capulet.lit/balcony'
-    id='jfd75jk'
-    to='romeo@montague.lit/orchard'
-    type='set'>
-  <jingle xmlns='urn:xmpp:jingle:1'
-          action='transport-info'
-          initiator='romeo@montague.lit/orchard'
-          responder='juliet@capulet.lit/balcony'
-          sid='a73sjjvkla37jfea'>
-    <content creator='initiator' name='stub'>
-      <transport xmlns='urn:xmpp:jingle:transports:s5b:0'
-                 sid='vj3hs98y'
-        	 mode='tcp'>
-        <streamhost-error/>
-      </transport>
-    </content>
-  </jingle>
-</iq>
-  ]]></example>
-  <p>The peer immediately acknowledges receipt.</p>
-  <example caption="Initiator acknowledges streamhost-error"><![CDATA[
-<iq from='romeo@montague.lit/orchard'
-    id='jfd75jk'
-    to='juliet@capulet.lit/balcony'
-    type='result'/>
-  ]]></example>
-  <p>If the initiator receives such an error message from the responder and was also unable to connect to any StreamHosts (or did not receive any from the responder), it MUST either terminate the Jingle session with a Jingle reason of &lt;connectivity-error/&gt; or replace the transport by something else using the transport-replace action. Typically the fallback option is &xep0047;. Therefore the initiator sends a transport-replace action including a transport of IBB.</p>
+  <p>First the initiator sends a Jingle session-initiate, in this case with a transport of SOCKS5 Bytestreams. The protocol flow is exactly the same as described above. If both clients are unable to connect to a candidate provided by the peer, both send candidate-error messages and SOCKS5 as failed. The initiator MUST either terminate the Jingle session with a Jingle reason of &lt;connectivity-error/&gt; or replace the transport by something else using the transport-replace action. Typically the fallback option is &xep0047;. Therefore the initiator sends a transport-replace action including a transport of IBB.</p>
     <example caption="Initiator replaces transport with IBB"><![CDATA[
 <iq from='romeo@montague.lit/orchard'
     id='hs92n57'
@@ -408,15 +373,15 @@ Romeo                               Juliet
 <section1 topic='Processing Rules and Usage Guidelines' anchor='rules'>
   <p>The same processing rules and usage guidelines defined in XEP-0065 apply to the Jingle S5B Transport Method. Additional implementation suggestions are:</p>
   <ol>
-    <li>A client should try the offered StreamHosts in the given order.</li>
-    <li>If more than one &lt;streamhost/&gt; element is present a client should wait 200ms before trying the next one.</li>
-    <li>If the JID of a StreamHosts is not the one of the peer it indicates the usage of a proxy. If the client had offered direct connection information it MAY want to wait a little bit longer than 200ms before trying the first proxy to allow the peer to connect without the usage of a proxy.</li>
-    <li>A client should NOT wait for a TCP timeout on connect. If it is unable to connect to any StreamHost within 5 seconds it should send the streamhost-error.</li>
+    <li>A client SHOULD try the offered candidates in the order of their priority.</li>
+    <li>If more than one &lt;candidate/&gt; element is present a client should wait 200ms before trying the next one.</li>
+    <li>If the candidate has a JID attribute and that JID is not the one of the peer it indicates the usage of a proxy. If the client had offered direct connection information it MAY want to wait a little bit longer than 200ms before trying the first proxy.</li>
+    <li>A client should NOT wait for a TCP timeout on connect. If it is unable to connect to any candidate within 5 seconds it should send the candidate-error.</li>
   </ol>
 </section1>
 
 <section1 topic='Determining Support' anchor='support'>
-  <p>To advertise its support for the Jingle SOCKS5 Bytestreams Transport Method, when replying to &xep0030; information requests an entity MUST return URNs for any version of this protocol that the entity supports -- e.g., "urn:xmpp:jingle:transports:s5b:0" for this version &VNOTE;.</p>
+  <p>To advertise its support for the Jingle SOCKS5 Bytestreams Transport Method, when replying to &xep0030; information requests an entity MUST return URNs for any version of this protocol that the entity supports -- e.g., "urn:xmpp:jingle:transports:s5b:1" for this version &VNOTE;.</p>
   <example caption="Service discovery information request"><![CDATA[
 <iq from='romeo@montague.lit/orchard'
     id='uw72g176'
@@ -441,7 +406,7 @@ Romeo                               Juliet
 
 <section1 topic='Security Considerations' anchor='security'>
   <section2 topic='Sharing IP Addresses' anchor='security-sharing'>
-    <p>The exchange of StreamHosts might result in exposure of the sender's IP addresses, which comprise a form of personally identifying information. A Jingle client MUST enable a user to control which entities will be allowed to receive such information. If a human user explicitly accepts a session request, then the client SHOULD consider that action to imply approval of IP address sharing. However, waiting for a human user to explicitly accept the session request can result in delays during session setup, since it is more efficient to immediately begin sharing transport candidates. Therefore, it is RECOMMENDED for the client to immediately send transport candidates to a contact (without waiting for explicit user approval of the session request) in the following cases:</p>
+    <p>The exchange of candidates might result in exposure of the sender's IP addresses, which comprise a form of personally identifying information. A Jingle client MUST enable a user to control which entities will be allowed to receive such information. If a human user explicitly accepts a session request, then the client SHOULD consider that action to imply approval of IP address sharing. However, waiting for a human user to explicitly accept the session request can result in delays during session setup, since it is more efficient to immediately begin sharing transport candidates. Therefore, it is RECOMMENDED for the client to immediately send transport candidates to a contact (without waiting for explicit user approval of the session request) in the following cases:</p>
     <ol>
       <li>The user has permanently and formally authorized the contact to view the user's presence information via a presence subscription as reflected in an XMPP roster item (see &xmppim;).</li>
       <li>The user has temporarily and dynamically shared presence with the contact via "directed presence" as described in <cite>RFC 3921</cite>.</li>
@@ -477,14 +442,14 @@ Romeo                               Juliet
 
 <xs:schema
     xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='urn:xmpp:jingle:transports:s5b:0'
-    xmlns='urn:xmpp:jingle:transports:s5b:0'
+    targetNamespace='urn:xmpp:jingle:transports:s5b:1'
+    xmlns='urn:xmpp:jingle:transports:s5b:1'
     elementFormDefault='qualified'>
 
   <xs:element name='transport'>
     <xs:complexType>
       <xs:choice>
-        <xs:element ref='streamhost' minOccurs='0' maxOccurs='unbounded'/>
+        <xs:element ref='candidate' minOccurs='0' maxOccurs='unbounded'/>
       </xs:choice>
       <xs:attribute name='sid' type='xs:string' use='optional'/>
       <xs:attribute name='mode' use='optional' default='tcp'>
@@ -498,30 +463,32 @@ Romeo                               Juliet
     </xs:complexType>
   </xs:element>
 
-  <xs:element name='streamhost'>
+  <xs:element name='candidate'>
     <xs:complexType>
       <xs:simpleContent>
         <xs:extension base='empty'>
-          <xs:attribute name='jid' type='xs:string' use='required'/>
+          <xs:attribute name='jid' type='xs:string' use='optional'/>
+          <xs:attribute name='cid' type='xs:string' use='required'/>
+          <xs:attribute name='priority' type='xs:positiveInteger' use='required'/>
           <xs:attribute name='host' type='xs:string' use='required'/>
           <xs:attribute name='zeroconf' type='xs:string' use='optional'/>
-          <xs:attribute name='port' type='xs:string' use='optional'/>
+          <xs:attribute name='port' type='xs:positiveInteger' use='optional'/>
         </xs:extension>
       </xs:simpleContent>
     </xs:complexType>
   </xs:element>
 
-  <xs:element name='streamhost-used'>
+  <xs:element name='candidate-used'>
     <xs:complexType>
       <xs:simpleContent>
         <xs:extension base='empty'>
-          <xs:attribute name='jid' type='xs:string' use='required'/>
+          <xs:attribute name='cid' type='xs:string' use='required'/>
         </xs:extension>
       </xs:simpleContent>
     </xs:complexType>
   </xs:element>
 
-  <xs:element name='streamhost-error'/>
+  <xs:element name='candidate-error'/>
 
   <xs:simpleType name='empty'>
     <xs:restriction base='xs:string'>
