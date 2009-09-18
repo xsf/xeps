@@ -50,8 +50,8 @@
   &ralphm;
 
   <revision>
-    <version>1.13rc3</version>
-    <date>in progress, 2009-04-20</date>
+    <version>1.13rc4</version>
+    <date>in progress, 2009-09-18</date>
     <initials>psa</initials>
     <remark>
       <ul>
@@ -64,6 +64,13 @@
         <li>Added optional &lt;redirect/&gt; child to &lt;delete/&gt; element.</li>
         <li>Clarified meaning of filtered notifications (they are based on NodeIDs, not payload namespaces).</li>
         <li>Added pubsub-on-a-jid service discovery feature for explicit discovery that an IM and presence account also functions as a virtual pubsub service.</li>
+        <li>Added purge_offline node configuration option for purging the node when the owner goes offline, for use in certain extended presence applications.</li>
+        <li>Added item_expire node configuration option for automatically removing items after a certain number of seconds.</li>
+        <li>Added notification_type node configuration option for defining which value of the &lt;message/&gt; type attribute shall be used for notifications.</li>
+        <li>Added retrieve-default-sub feature for retrieving default subscription configuration from a node (as you can retrieve default node configuration from the service).</li>
+        <li>Clarified suggested rules for payload definitions.</li>
+        <li>Mentioned that singleton pattern can be enforced by setting max_items to 1.</li>
+        <li>Removed subids from subscription approval forms because subscribers can have only one unapproved subscription request at a time.</li>
       </ul>
     </remark>
   </revision>
@@ -145,7 +152,7 @@
         <li>Harmonized error conditions for unsubscribe if entity is not subscribed (unexpected-request rather than not-found)</li>
         <li>Further defined error conditions related to item publication</li>
         <li>Specified structure of &lt;affiliations/&gt;, &lt;delete/&gt;, &lt;purge/&gt;, and &lt;subscriptions/&gt; elements qualified by pubsub#owner namespace</li>
-        <li>Changed retrieval of default configuration options to use &lt;default/&gt; element, not &lt;configure/&gt; element</li>
+        <li>Changed retrieval of default node configuration options to use &lt;default/&gt; element, not &lt;configure/&gt; element</li>
         <li>Allowed caching of last published item</li>
         <li>Added pubsub#deliver subscription option</li>
         <li>Added meta-data fields for pubsub#owners and pubsub#contact</li>
@@ -313,7 +320,7 @@
     <version>0.3</version>
     <date>2003-01-20</date>
     <initials>pgm</initials>
-    <remark><p>Added subscription attribute for entities. Removed subscriber from the affiliations table. Clarified configuration details. Clarified JabberID usages. Added XMPP Registrar Considerations. Added link to XEP-0068 about the FORM_TYPE element in subscription request notifications. Fixed some typos in examples. Added unsupported configuration namespace to example.  Added a default configuration example. </p></remark>
+    <remark><p>Added subscription attribute for entities. Removed subscriber from the affiliations table. Clarified configuration details. Clarified JabberID usages. Added XMPP Registrar Considerations. Added link to XEP-0068 about the FORM_TYPE element in subscription request notifications. Fixed some typos in examples. Added unsupported configuration namespace to example.  Added a default node configuration example. </p></remark>
   </revision>
   <revision>
     <version>0.2</version>
@@ -330,12 +337,12 @@
 </header>
 <section1 topic='Introduction' anchor='intro'>
   <section2 topic='Overview' anchor='intro-overview'>
-    <p>As Jabber/XMPP technologies have matured, the need for a generic publish-subscribe ("pubsub") mechanism has arisen in a number of domains. These include (but are not limited to): news feeds, content syndication, extended presence, geolocation, avatar management, shared bookmarks, auction and trading systems, workflow systems, network management systems, NNTP gateways, profile management, and any other application that requires event notifications.</p>
-    <p>In all of these domains, it is desirable for data communication to follow the classic "publish-subscribe" or "observer" design pattern: a person or application publishes information, and an event notification (with or without payload) is broadcasted to all authorized subscribers. In general, the relationship between the publisher and subscriber is mediated by a service that receives publication requests, broadcasts event notifications to subscribers, and enables privileged entities to manage lists of people or applications that are authorized to publish or subscribe. In most pubsub services, the focal point for publication and subscription is a "topic" or "node" to which publishers send data and from which subscribers receive notifications. Additionally, some nodes may also maintain a history of events and provide other services that supplement the pure pubsub model.</p>
-    <p>This document defines a single, cohesive, generic protocol that all forms of pubsub can use. While compliant implementations are not required to implement all of the features defined herein, this document addresses most use cases that may be requested of a pubsub service. (For information about which features are required and which are recommended or optional, consult the <link url='#features'>Feature Summary</link>.) Other specifications may define "subsets" or "profiles" of publish-subscribe for use in specialized contexts, but such profiles are out of scope for this document.</p>
+    <p>The XMPP publish-subscribe extension defined in this document provides a framework for a wide variety of applications, including news feeds, content syndication, extended presence, geolocation, avatar management, shared bookmarks, auction and trading systems, workflow systems, network management systems, NNTP gateways, profile management, and any other application that requires event notifications.</p>
+    <p>This technology uses the classic "publish-subscribe" or "observer" design pattern: a person or application publishes information, and an event notification (with or without payload) is broadcasted to all authorized subscribers. In general, the relationship between the publisher and subscriber is mediated by a service that receives publication requests, broadcasts event notifications to subscribers, and enables privileged entities to manage lists of people or applications that are authorized to publish or subscribe. The focal point for publication and subscription is a "node" to which publishers send data and from which subscribers receive notifications. Nodes can also maintain a history of events and provide other services that supplement the pure pubsub model.</p>
+    <p>This document defines a generic protocol that all pubsub applications can use. Compliant implementations are not required to implement all of the features defined here (see the <link url='#features'>Feature Summary</link>.) Other specifications may define "subsets" or "profiles" of publish-subscribe for use in specialized contexts, but such profiles are out of scope for this document.</p>
   </section2>
   <section2 topic='How It Works' anchor='intro-howitworks'>
-    <p>This specification is large. However, the basic idea behind pubsub is rather simple (see <link url='#publisher-publish'>Publish an Item to a Node</link>):</p>
+    <p>Although this specification is large because it defines many side use cases and possible error flows, the basic idea is simple:</p>
     <ol>
       <li>An entity publishes information to a node at a publish-subscribe service.</li>
       <li>The pubsub service pushes a notification to all entities that are authorized to learn about the published information.</li>
@@ -437,12 +444,13 @@ And by opposing end them?
     <di><dt>ItemID</dt><dd>A unique identifier for an item in the context of a specific node.</dd></di>
     <di><dt>Leaf Node</dt><dd>A type of node that contains published items only. It is NOT a container for other nodes.</dd></di>
     <di><dt>Node</dt><dd>A virtual location to which information can be published and from which event notifications and/or payloads can be received (in other pubsub systems, this may be labelled a "topic").</dd></di>
-    <di><dt>NodeID</dt><dd>The unique identifier for a node within the context of a pubsub service. The NodeID is either supplied by the node creator or generated by the pubsub service (if the node creator requests an Instant Node). The NodeID MAY have semantic meaning, but such meaning is OPTIONAL.</dd></di>
+    <di><dt>NodeID</dt><dd>The unique identifier for a node within the context of a pubsub service. The NodeID is either supplied by the node creator or generated by the pubsub service (if the node creator requests an Instant Node). The NodeID MAY have semantic meaning (e.g., in some systems or in pubsub profiles such as PEP the NodeID might be an XML namespace for the associated payload), but such meaning is OPTIONAL. If a document defines a given NodeID as unique within the realm of XMPP pubsub systems, it MUST specify the XML namespace of the associated payload.</dd></di>
     <di><dt>Notification</dt><dd>A message sent to a subscriber informing them of an event.</dd></di>
     <di><dt>Outcast</dt><dd>An entity that is disallowed from subscribing or publishing to a node.</dd></di>
     <di><dt>Owner</dt><dd>The manager of a node, of which there may be more than one; often but not necessarily the node creator.</dd></di>
     <di><dt>Payload</dt><dd>The full data associated with an event rather than just the event notification itself.</dd></di>
     <di><dt>Open Access Model</dt><dd>A node access model under which any entity may subscribe and retrieve items without approval.</dd></di>
+    <di><dt>Paylod</dt><dd>The XML data that is contained within the &lt;item/&gt; element of a publication request or a notification event. A given payload is defined by an XML namespace and associated schema. A document that defines a payload format SHOULD specify whether the payload can be used only for a NodeID whose value is the same as the XML namespace, or whether the payload can be used for any NodeID. Such a document also SHOULD specify whether it is suggested that node at which such payloads are published are best configured as <link url='#impl-singleton'>Singleton Nodes</link>.</dd></di>
     <di><dt>Personal Eventing</dt><dd>A simplified subset of Publish-Subscribe for use in the context of instant messaging and presence applications, whereby each IM user's JID is a virtual pubsub service; for details, see &xep0163;.</dd></di>
     <di><dt>Presence Access Model</dt><dd>A node access model under which any entity that is subscribed to the owner's presence with a subscription of type "from" or "both" (see &rfc3921;) may subscribe to the node and retrieve items from the node; this access model applies mainly to instant messaging systems.</dd></di>
     <di><dt>Publisher</dt><dd>An entity that is allowed to publish items to a node.</dd></di>
@@ -1042,8 +1050,8 @@ And by opposing end them?
     ]]></example>
   </section2>
   <section2 topic='Retrieve Affiliations' anchor='entity-affiliations'>
-    <p>An entity may want to query the service to retrieve its affiliations for all nodes at the service. Support for this feature ("retrieve-affiliations") is RECOMMENDED.</p>
-    <p>In order to make the request, the requesting entity includes an empty &lt;affiliations/&gt; element with no attributes.</p>
+    <p>An entity may want to query the service to retrieve its affiliations for all nodes at the service, or query a specific node for its affiliation with that node. Support for this feature ("retrieve-affiliations") is RECOMMENDED.</p>
+    <p>In order to make the request of the service, the requesting entity includes an empty &lt;affiliations/&gt; element with no attributes.</p>
     <example caption='Entity requests all current affiliations'><![CDATA[
 <iq type='get'
     from='francisco@denmark.lit/barracks'
@@ -1093,6 +1101,29 @@ And by opposing end them?
     <unsupported xmlns='http://jabber.org/protocol/pubsub#errors'
                  feature='retrieve-affiliations'/>
   </error>
+</iq>
+    ]]></example>
+    <p>In order to make an affiliations request of a specific node, the requesting entity includes an empty &lt;affiliations/&gt; element with a 'node' attribute.</p>
+    <example caption='Entity requests affiliation at a specific node'><![CDATA[
+<iq type='get'
+    from='francisco@denmark.lit/barracks'
+    to='pubsub.shakespeare.lit'
+    id='affil2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <affiliations node='node6'/>
+  </pubsub>
+</iq>
+    ]]></example>
+    <example caption='Service replies with current affiliation'><![CDATA[
+<iq type='result'
+    from='pubsub.shakespeare.lit'
+    to='francisco@denmark.lit'
+    id='affil2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <affiliations node='node6'>
+      <affiliation node='node6' affiliation='owner'/>
+    </affiliations>
+  </pubsub>
 </iq>
     ]]></example>
   </section2>
@@ -1834,6 +1865,89 @@ And by opposing end them?
       ]]></example>
     </section3>
   </section2>
+  <section2 topic='Request Default Subscription Configuration Options' anchor='subscribe-default'>
+    <p>An entity may want to request information about the default subscription configuration. Support for this feature is OPTIONAL.</p>
+    <section3 topic='Request' anchor='subscriber-default-request'>
+      <p>To get the default subscription options, the entity MUST send an empty &lt;default/&gt; element to the node (not the service); in response, the node SHOULD return the default subscription options.</p>
+      <example caption='Entity requests default subscription configuration options'><![CDATA[
+<iq type='get'
+    from='francisco@denmark.lit/barracks'
+    to='pubsub.shakespeare.lit'
+    id='def1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'
+    <default node='princely_musings'/>
+  </pubsub>
+</iq>
+      ]]></example>
+      <p>Note: Here the namespace is 'http://jabber.org/protocol/pubsub' (not 'http://jabber.org/protocol/pubsub#owner' as for retrieval of the default node configuration options).</p>
+    </section3>
+    <section3 topic='Success Case' anchor='subscriber-default-success'>
+      <p>If no error occurs, the node MUST return the default subscription configuration options.</p>
+      <example caption='Service responds with default subscription configuration options'><![CDATA[
+<iq type='result'
+    from='pubsub.shakespeare.lit'
+    to='francisco@denmark.lit/barracks'
+    id='def1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub#owner'
+    <default node='princely_musings'>
+      <x xmlns='jabber:x:data' type='result'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#subscribe_options</value>
+        </field>
+        <field var='pubsub#deliver'><value>1</value></field>
+        <field var='pubsub#digest'><value>0</value></field>
+        <field var='pubsub#include_body'><value>false</value></field>
+        <field var='pubsub#show-values'>
+          <value>chat</value>
+          <value>online</value>
+          <value>away</value>
+        </field>
+      </x>
+    </options>
+    </default>
+  </pubsub>
+</iq>
+      ]]></example>
+    </section3>
+    <section3 topic='Error Cases' anchor='subscriber-default-error'>
+      <p>There are several reasons why the default subscription configuration options request might fail:</p>
+      <ol>
+        <li>The service does not support subscription configuration.</li>
+        <li>The service does not support retrieval of default subscription configuration.</li>
+      </ol>
+      <p>These error cases are described more fully in the following sections.</p>
+      <section4 topic='Node Configuration Not Supported' anchor='subscriber-default-error-noconfig'>
+        <p>If the node does not support subscription configuration, it MUST return a &feature; error, specifying a pubsub-specific error condition of &lt;unsupported/&gt; and a feature of "subscription-options".</p>
+        <example caption='Service does not support subscription configuration'><![CDATA[
+<iq type='error'
+    from='pubsub.shakespeare.lit'
+    to='francisco@denmark.lit/barracks'
+    id='def1'>
+  <error type='cancel'>
+    <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <unsupported xmlns='http://jabber.org/protocol/pubsub#errors'
+                 feature='subscription-options'/>
+  </error>
+</iq>
+        ]]></example>
+      </section4>
+      <section4 topic='Default Subscription Configuration Retrieval Not Supported' anchor='subscriber-default-error-notsupported'>
+        <p>If the node does not support retrieval of default subscription configuration options, it MUST return a &feature; error, specifying a pubsub-specific error condition of &lt;unsupported/&gt; and a feature of "retrieve-default-sub".</p>
+        <example caption='Service does not support retrieval of default subscription configuration options'><![CDATA[
+<iq type='error'
+    from='pubsub.shakespeare.lit'
+    to='francisco@denmark.lit/barracks'
+    id='def1'>
+  <error type='cancel'>
+    <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <unsupported xmlns='http://jabber.org/protocol/pubsub#errors'
+                 feature='retrieve-default-sub'/>
+  </error>
+</iq>
+        ]]></example>
+      </section4>
+    </section3>
+  </section2>
   <section2 topic='Retrieve Items from a Node' anchor='subscriber-retrieve'>
     <p>Implementations of pubsub that choose to persist items MAY allow entities to request existing items from a node (e.g., an entity may wish to do this after successfully subscribing in order to receive all the items in the publishing history for the node).</p>
     <section3 topic='Permissions' anchor='subscriber-retrieve-perms'>
@@ -1860,7 +1974,7 @@ And by opposing end them?
       ]]></example>
     </section3>
     <section3 topic='Returning All Items' anchor='subscriber-retrieve-returnall'>
-      <p>The service then SHOULD return all items published to the node, although it MAY truncate the result set if a large number of items has been published (see next section).</p>
+      <p>The service then SHOULD return all available items at the node, although it MAY truncate the result set if a large number of items has been published (see next section) and naturally it cannot return items that have been deleted, expired, etc.</p>
       <example caption='Service returns all items'><![CDATA[
 <iq type='result'
     from='pubsub.shakespeare.lit'
@@ -3001,7 +3115,7 @@ And by opposing end them?
       <p>Note: When a service successfully creates a node on behalf of the requesting entity, it MUST return an IQ result. If the node creation request did not specify a NodeID and the service supports creation of instant nodes, the service MUST specify the created NodeID in the IQ result. Similarly, if the node creation request specified a NodeID but the service modified the NodeID before creating the node, the service MUST also specify the modified node in the IQ result. In all other cases, the service MUST NOT specify the NodeID in the IQ result (since the node creator can determine which node was created by tracking the 'id' attribute that it specified for the IQ-set).</p>
     </section3>
     <section3 topic='Create a Node With Default Configuration' anchor='owner-create-default'>
-      <p>As explained above, each node type has its own default configuration. By asking the service to create a node with default configuration, the node creator accepts the default configuration. If the service allows node configuration, the owner may reconfigure the node after creating the node (as described in the <link url='#owner-configure'>Configure a Node</link> section of this document). In addition, a service MAY allow entities to determine the default configuration options for a given node type before creating a node (as described in the <link url='#owner-default'>Request Default Configurations</link> section of this document).</p>
+      <p>As explained above, each node type has its own default configuration. By asking the service to create a node with default configuration, the node creator accepts the default configuration. If the service allows node configuration, the owner may reconfigure the node after creating the node (as described in the <link url='#owner-configure'>Configure a Node</link> section of this document). In addition, a service MAY allow entities to determine the default configuration options for a given node type before creating a node (as described in the <link url='#owner-default'>Request Default Node Configurations</link> section of this document).</p>
       <p>In order to create a node with default configuration, the node creator can simply include an empty &lt;create/&gt; child element.</p>
       <p>In the following example, the node creator requests a leaf node (the default type) with an open access model (assumed to be the default type for this service).</p>
       <example caption='Entity requests leaf node with (default) open access model'><![CDATA[
@@ -3075,10 +3189,13 @@ And by opposing end them?
         <field var='pubsub#deliver_payloads'><value>1</value></field>
         <field var='pubsub#persist_items'><value>1</value></field>
         <field var='pubsub#max_items'><value>10</value></field>
+        <field var='pubsub#item_expire'><value>604800</value></field>
         <field var='pubsub#access_model'><value>open</value></field>
         <field var='pubsub#publish_model'><value>publishers</value></field>
+        <field var='pubsub#purge_offline'><value>0</value></field>
         <field var='pubsub#send_last_published_item'><value>never</value></field>
         <field var='pubsub#presence_based_delivery'><value>false</value></field>
+        <field var='pubsub#notification_type'><value>headline</value></field>
         <field var='pubsub#notify_config'><value>0</value></field>
         <field var='pubsub#notify_delete'><value>0</value></field>
         <field var='pubsub#notify_retract'><value>0</value></field>
@@ -3158,11 +3275,15 @@ And by opposing end them?
         </field>
         <field var='pubsub#persist_items' type='boolean'
                label='Persist items to storage'>
-        <value>1</value>
+          <value>1</value>
         </field>
         <field var='pubsub#max_items' type='text-single'
                label='Max # of items to persist'>
           <value>10</value>
+        </field>
+        <field var='pubsub#item_expire' type='text-single'
+               label='Time after which to automatically purge items'>
+          <value>604800</value>
         </field>
         <field var='pubsub#subscribe' type='boolean'
                label='Whether to allow subscriptions'>
@@ -3191,6 +3312,10 @@ And by opposing end them?
           <option><value>open</value></option>
           <value>publishers</value>
         </field>
+        <field var='pubsub#purge_offline' type='boolean'
+               label='Purge all items when owner goes offline?'>
+          <value>0</value>
+        </field>
         <field var='pubsub#max_payload_size' type='text-single'
                label='Max Payload size in bytes'>
           <value>1028</value>
@@ -3207,6 +3332,12 @@ And by opposing end them?
         <field var='pubsub#presence_based_delivery' type='boolean'
                label='Deliver notifications only to available users'>
           <value>0</value>
+        </field>
+        <field var='pubsub#notification_type' type='list-single'
+               label='Specify the message type for notifications'>
+          <option><value>normal</value></option>
+          <option><value>headline</value></option>
+          <value>headline</value>
         </field>
         <field var='pubsub#type' type='text-single'
                label='Specify the type of payload data to be provided at this node'>
@@ -3317,6 +3448,7 @@ And by opposing end them?
         <field var='pubsub#deliver_payloads'><value>1</value></field>
         <field var='pubsub#persist_items'><value>1</value></field>
         <field var='pubsub#max_items'><value>10</value></field>
+        <field var='pubsub#item_expire'><value>604800</value></field>
         <field var='pubsub#access_model'><value>roster</value></field>
         <field var='pubsub#roster_groups_allowed'>
           <value>friends</value>
@@ -3324,8 +3456,10 @@ And by opposing end them?
           <value>courtiers</value>
         </field>
         <field var='pubsub#publish_model'><value>publishers</value></field>
+        <field var='pubsub#purge_offline'><value>0</value></field>
         <field var='pubsub#send_last_published_item'><value>never</value></field>
         <field var='pubsub#presence_based_delivery'><value>false</value></field>
+        <field var='pubsub#notification_type'><value>headline</value></field>
         <field var='pubsub#notify_config'><value>0</value></field>
         <field var='pubsub#notify_delete'><value>0</value></field>
         <field var='pubsub#notify_retract'><value>0</value></field>
@@ -3403,12 +3537,15 @@ And by opposing end them?
         <field var='pubsub#notify_sub'><value>0</value></field>
         <field var='pubsub#persist_items'><value>1</value></field>
         <field var='pubsub#max_items'><value>10</value></field>
+        <field var='pubsub#item_expire'><value>604800</value></field>
         <field var='pubsub#subscribe'><value>1</value></field>
         <field var='pubsub#access_model'><value>open</value></field>
         <field var='pubsub#publish_model'><value>publishers</value></field>
+        <field var='pubsub#purge_offline'><value>0</value></field>
         <field var='pubsub#max_payload_size'><value>9216</value></field>
         <field var='pubsub#send_last_published_item'><value>never</value></field>
         <field var='pubsub#presence_based_delivery'><value>0</value></field>
+        <field var='pubsub#notification_type'><value>headline</value></field>
         <field var='pubsub#type'><value>http://www.w3.org/2005/Atom</value></field>
         <field var='pubsub#body_xslt'>
           <value>http://jabxslt.jabberstudio.org/atom_body.xslt</value>
@@ -3421,11 +3558,11 @@ And by opposing end them?
       </section4>
     </section3>
   </section2>
-  <section2 topic='Request Default Configuration Options' anchor='owner-default'>
+  <section2 topic='Request Default Node Configuration Options' anchor='owner-default'>
     <p>An entity may want to request information about the default node configuration, e.g. in order to determine whether to perform create-and-configure as previously described. Support for this feature is OPTIONAL.</p>
     <section3 topic='Request' anchor='owner-default-request'>
-      <p>To get the options, the entity MUST send an empty &lt;default/&gt; element to the service with no NodeID; in response, the service SHOULD return the default node options.</p>
-      <example caption='Entity requests default configuration options'><![CDATA[
+      <p>To get the node options, the entity MUST send an empty &lt;default/&gt; element to the service with no NodeID; in response, the service SHOULD return the default node options.</p>
+      <example caption='Entity requests default node configuration options'><![CDATA[
 <iq type='get'
     from='hamlet@denmark.lit/elsinore'
     to='pubsub.shakespeare.lit'
@@ -3437,10 +3574,11 @@ And by opposing end them?
       ]]></example>
     </section3>
     <section3 topic='Success Case' anchor='owner-default-success'>
-      <p>If no error occurs, the service MUST return the default configuration options.</p>
-      <example caption='Service responds with default configuration options'><![CDATA[
+      <p>If no error occurs, the service MUST return the default node configuration options.</p>
+      <example caption='Service responds with default node configuration options'><![CDATA[
 <iq type='result'
-    from='hamlet@denmark.lit/elsinore'
+    from='pubsub.shakespeare.lit'
+    to='hamlet@denmark.lit/elsinore'
     id='def1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub#owner'>
     <default>
@@ -3484,6 +3622,10 @@ And by opposing end them?
                label='Max # of items to persist'>
           <value>10</value>
         </field>
+        <field var='pubsub#item_expire' type='text-single'
+               label='Time after which to automatically purge items'>
+          <value>604800</value>
+        </field>
         <field var='pubsub#subscribe' type='boolean'
                label='Whether to allow subscriptions'>
           <value>1</value>
@@ -3511,6 +3653,10 @@ And by opposing end them?
           <option><value>open</value></option>
           <value>publishers</value>
         </field>
+        <field var='pubsub#purge_offline' type='boolean'
+               label='Purge all items when owner goes offline?'>
+          <value>0</value>
+        </field>
         <field var='pubsub#max_payload_size' type='text-single'
                label='Max payload size in bytes'>
           <value>9216</value>
@@ -3527,6 +3673,12 @@ And by opposing end them?
         <field var='pubsub#presence_based_delivery' type='boolean'
                label='Deliver notifications only to available users'>
           <value>0</value>
+        </field>
+        <field var='pubsub#notification_type' type='list-single'
+               label='Specify the message type for notifications'>
+          <option><value>normal</value></option>
+          <option><value>headline</value></option>
+          <value>headline</value>
         </field>
       </x>
     </default>
@@ -3556,9 +3708,9 @@ And by opposing end them?
 </iq>
         ]]></example>
       </section4>
-      <section4 topic='Default Configuration Retrieval Not Supported' anchor='owner-default-error-notsupported'>
+      <section4 topic='Default Node Configuration Retrieval Not Supported' anchor='owner-default-error-notsupported'>
         <p>If the service does not support retrieval of default node configuration options, it MUST return a &feature; error, specifying a pubsub-specific error condition of &lt;unsupported/&gt; and a feature of "retrieve-default".</p>
-        <example caption='Service does not support retrieval of default configuration options'><![CDATA[
+        <example caption='Service does not support retrieval of default node configuration options'><![CDATA[
 <iq type='error'
     from='pubsub.shakespeare.lit'
     to='hamlet@denmark.lit/elsinore'
@@ -3762,7 +3914,7 @@ And by opposing end them?
   </section2>
 
   <section2 topic='Manage Subscription Requests' anchor='owner-subreq'>
-    <p>A service MAY send subscription approval requests to the node owner(s) at any time. An approval request consists of a message stanza containing a Data Form scoped by the "http://jabber.org/protocol/pubsub#subscribe_authorization" FORM_TYPE. The form MUST contain a boolean field that has a 'var' attribute of "pubsub#allow", which is the field that designates whether or not to allow the subscription request. The form SHOULD include fields that specify the node identifier, the subscription id (if applicable), and the JID of the pending subscriber. The message MAY include a &BODY; element that contains natural-language text explaining that the message contains a pending subscription form.</p>
+    <p>A service MAY send subscription approval requests to the node owner(s) at any time. An approval request consists of a message stanza containing a Data Form scoped by the "http://jabber.org/protocol/pubsub#subscribe_authorization" FORM_TYPE. The form MUST contain a boolean field that has a 'var' attribute of "pubsub#allow", which is the field that designates whether or not to allow the subscription request. The form SHOULD include fields that specify the node identifier and the JID of the pending subscriber. The message MAY include a &BODY; element that contains natural-language text explaining that the message contains a pending subscription form.</p>
     <example caption='Service sends authorization request to node owner'><![CDATA[
 <message to='hamlet@denmark.lit' from='pubsub.shakespeare.lit' id='approve1'>
   <x xmlns='jabber:x:data' type='form'>
@@ -3775,7 +3927,6 @@ And by opposing end them?
     <field var='FORM_TYPE' type='hidden'>
       <value>http://jabber.org/protocol/pubsub#subscribe_authorization</value>
     </field>
-    <field var='pubsub#subid' type='hidden'><value>123-abc</value></field>
     <field var='pubsub#node' type='text-single' label='Node ID'>
       <value>princely_musings</value>
     </field>
@@ -3795,9 +3946,6 @@ And by opposing end them?
   <x xmlns='jabber:x:data' type='submit'>
     <field var='FORM_TYPE' type='hidden'>
       <value>http://jabber.org/protocol/pubsub#subscribe_authorization</value>
-    </field>
-    <field var='pubsub#subid'>
-      <value>123-abc</value>
     </field>
     <field var='pubsub#node'>
       <value>princely_musings</value>
@@ -3828,9 +3976,6 @@ And by opposing end them?
   <x xmlns='jabber:x:data' type='submit'>
     <field var='FORM_TYPE' type='hidden'>
        <value>http://jabber.org/protocol/pubsub#subscribe_authorization</value>
-    </field>
-    <field var='pubsub#subid'>
-       <value>123-abc</value>
     </field>
     <field var='pubsub#node'>
       <value>princely_musings</value>
@@ -3895,6 +4040,9 @@ And by opposing end them?
            status='executing'
            action='execute'>
     <x xmlns='jabber:x:data' type='form'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>http://jabber.org/protocol/pubsub#subscribe_authorization</value>
+      </field>
       <field type='list-single' var='pubsub#node'>
         <option><value>princely_musings</value></option>
         <option><value>news_from_elsinore</value></option>
@@ -4757,7 +4905,13 @@ And by opposing end them?
       <td>retrieve-default</td>
       <td>Retrieval of default node configuration is supported.</td>
       <td>RECOMMENDED</td>
-      <td><link url='#owner-default'>Request Default Configuration Options</link></td>
+      <td><link url='#owner-default'>Request Default Node Configuration Options</link></td>
+    </tr>
+    <tr>
+      <td>retrieve-default-sub</td>
+      <td>Retrieval of default subscription configuration is supported.</td>
+      <td>OPTIONAL</td>
+      <td><link url='#subscribe-default'>Request Default Subscription Configuration Options</link></td>
     </tr>
     <tr>
       <td>retrieve-items</td>
@@ -4926,7 +5080,7 @@ And by opposing end them?
         </ul>
       </li>
     </ul>
-    <p>When a subscription state change occurs, a service SHOULD send a message to the (new, former, or denied) subscriber informing it of the change, where the message contains an &lt;event/&gt; element with a single &lt;subscription/&gt; child that specifies the node, JID, and subscription state. The notification MAY contain a &BODY; element specifying natural-language text regarding the subscription change. Examples are shown below.</p>
+    <p>When a subscription state change occurs, a service SHOULD send a message to the (new, former, or denied) subscriber informing it of the change, where the message contains an &lt;event/&gt; element with a single &lt;subscription/&gt; child that specifies the node, JID, and subscription state. The notification MAY contain a &BODY; element specifying natural-language text regarding the subscription change. The JID to which the service sends the notification is the address that was set in the 'jid' attribute of the subscription request. Examples are shown below.</p>
     <example caption='Subscription approval notification'><![CDATA[
 <message
     from='pubsub.shakespeare.lit'
@@ -5287,6 +5441,7 @@ O, what a rogue and peasant slave am I!
   </pubsub>
 </iq>
     ]]></example>
+    <p>Naturally, the node owner can enforce the singleton node pattern by setting the max_items configuration option to "1".</p>
   </section2>
   <section2 topic='PubSub URIs' anchor='impl-uri'>
     <p>An XMPP URI (see &rfc5122;) can be used for the purpose of identification or interaction. Some examples are provided below.</p>
@@ -5316,9 +5471,24 @@ xmpp:pubsub.shakespeare.lit?pubsub;action=retrieve;node=princely_musings;item=ae
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
-  <p>Because the data published to a pubsub node may contain sensitive information (e.g., a user's geolocation), node owners SHOULD exercise care in approving subscription requests. Security considerations regarding particular kinds of information are the responsibility of the "using protocol".</p>
-  <p>A service MUST NOT allow non-owners or other unauthorized entities to complete any actions defined under the <link url='#owner'>Owner Use Cases</link> section of this document.</p>
-  <p>A service MUST adhere to the defined access model in determining whether to send event notifications or payloads to an entity, or allow an entity to retrieve items from a node. A service MAY enforce additional privacy and security policies when determining whether an entity is allowed to subscribe to a node or retrieve items from a node; however, any such policies shall be considered specific to an implementation or deployment and are out of scope for this document.</p>
+  <section2 topic='Private Information' anchor='security-privacy'>
+    <p>The data published to a pubsub node might contain sensitive information (e.g., a user's geolocation). Therefore, node owners SHOULD exercise care in approving subscription requests. Security considerations regarding particular kinds of information are the responsibility of the "using protocol".</p>
+  </section2>
+  <section2 topic='Authorization' anchor='security-authorization'>
+    <p>XMPP PubSub contains a hierarchy of affiliations for the purpose of authorization and access control. A service MUST NOT allow non-owners or other unauthorized entities to complete any actions defined under the <link url='#owner'>Owner Use Cases</link> section of this document.</p>
+  </section2>
+  <section2 topic='Access Models' anchor='security-access'>
+    <p>A service MUST adhere to the defined access model in determining whether to send event notifications or payloads to an entity, or allow an entity to retrieve items from a node. A service MAY enforce additional privacy and security policies when determining whether an entity is allowed to subscribe to a node or retrieve items from a node; however, any such policies shall be considered specific to an implementation or deployment and are out of scope for this document.</p>
+  </section2>
+  <section2 topic='Presence Leaks' anchor='security-presence'>
+    <p>In the context of instant messaging systems it is possible for the act of publishing an item to reveal the node owner or item publisher's network availability. However, this risk is mitigated by the following factors:</p>
+    <ol>
+      <li>A node does not necessarily reveal the existing of the publishing entity.</li>
+      <li>XMPP PubSub systems are not necessarily tied to instant messaging systems.</li>
+      <li>Even in the context of IM systems, a node provides information distinct from network availability (e.g., user tunes).</li>
+      <li>Even then, the actual publisher might not be an IM user (e.g., an automated calendaring or geolocation system).</li>
+    </ol>
+  </section2>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -5614,10 +5784,6 @@ xmpp:pubsub.shakespeare.lit?pubsub;action=retrieve;node=princely_musings;item=ae
       type='boolean'
       label='Whether to allow the subscription'/>
   <field
-      var='pubsub#subid'
-      type='text-single'
-      label='The SubID of the subscription'/>
-  <field
       var='pubsub#node'
       type='text-single'
       label='The NodeID of the relevant node'/>
@@ -5845,6 +6011,18 @@ xmpp:pubsub.shakespeare.lit?pubsub;action=retrieve;node=princely_musings;item=ae
       <value>collection</value>
     </option>
   </field>
+  <field var='pubsub#notification_type' type='list-single'
+         label='Specify the message type for notifications'>
+    <option label='Messages of type normal'>
+      <value>normal</value>
+    </option>
+    <option label='Messages of type headline'>
+      <value>headline</value>
+    </option>
+    <option label='Anyone may publish'>
+      <value>open</value>
+    </option>
+  </field>
   <field var='pubsub#notify_config'
          type='boolean'
          label='Whether to notify subscribers when the node configuration changes'/>
@@ -5876,6 +6054,9 @@ xmpp:pubsub.shakespeare.lit?pubsub;action=retrieve;node=princely_musings;item=ae
       <value>open</value>
     </option>
   </field>
+  <field var='pubsub#purge_offline' 
+         type='boolean'
+         label='Whether to purge all items when the node owner goes offline'/>
   <field var='pubsub#roster_groups_allowed'
          type='list-multi'
          label='The roster group(s) allowed to subscribe and retrieve items'/>
@@ -5892,6 +6073,9 @@ xmpp:pubsub.shakespeare.lit?pubsub;action=retrieve;node=princely_musings;item=ae
       <value>on_sub_and_presence</value>
     </option>
   </field>
+  <field var='pubsub#item_expire' 
+         type='text-single'
+         label='Number of seconds after which to automatically purge items'/>
   <field var='pubsub#subscribe' type='boolean'
          label='Whether to allow subscriptions'>
     <value>1</value>
