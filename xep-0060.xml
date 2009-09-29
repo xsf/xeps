@@ -73,6 +73,7 @@
         <li>Mentioned that singleton pattern can be enforced by setting max_items to 1.</li>
         <li>Removed subids from subscription approval forms because subscribers can have only one unapproved subscription request per node at a given time.</li>
         <li>Added optional support for delivery of notifications via XMPP IQ stanzas.</li>
+        <li>Removed the notion of batch publishing because it makes information coherence and atom handling excessively difficult.</li>
       </ul>
     </remark>
   </revision>
@@ -2462,7 +2463,7 @@ And by opposing end them?
       <p>The syntax is as follows:</p>
       <ul>
         <li>The &lt;publish/&gt; element MUST possess a 'node' attribute, specifying the NodeID of the node.</li>
-        <li>Depending on the node configuration, the &lt;publish/&gt; element MAY contain no &ITEM; elements, one &ITEM; element, or (for <link url='#impl-batch'>Batch Processing</link>) more than one &ITEM; element. <note>It is not necessary for a publication request to include a payload or even an &ITEM; element in order to trigger a notification. For example, the result of publishing to a transient, notification-only node will be a notification that does not include even an &ITEM; element. However, for the sake of convenience we refer to the act of publication as "publishing an item" (rather than, say, "triggering a notification") even though a publication request will not always contain an &ITEM; element.</note></li>
+        <li>Depending on the node configuration, the &lt;publish/&gt; element MAY contain no &ITEM; elements or one &ITEM; element. <note>The inclusion of more than one &ITEM; element is no longer allowed, given the removal of batch publishing from version 1.13 of this specification.</note> <note>It is not necessary for a publication request to include a payload or even an &ITEM; element in order to trigger a notification. For example, the result of publishing to a transient, notification-only node will be a notification that does not include even an &ITEM; element. However, for the sake of convenience we refer to the act of publication as "publishing an item" (rather than, say, "triggering a notification") even though a publication request will not always contain an &ITEM; element.</note></li>
         <li>The &lt;item/&gt; element provided by the publisher MAY possess an 'id' attribute, specifying a unique ItemID for the item. If an ItemID is not provided in the publish request, the pubsub service MUST generate one and MUST ensure that it is unique for that node.</li>
       </ul>
       <p>An example follows.</p>
@@ -2848,7 +2849,7 @@ And by opposing end them?
   <section2 topic='Delete an Item from a Node' anchor='publisher-delete'>
     <p>A publisher might want to delete an item once it has been published to a node that supports persistent items. Support for this feature ("delete-items") is RECOMMENDED.</p>
     <section3 topic='Request' anchor='publisher-delete-request'>
-      <p>To delete an item, the publisher sends a retract request as shown in the following examples. The &lt;retract/&gt; element MUST possess a 'node' attribute, MAY possess a 'notify' attribute, and SHOULD contain one &ITEM; element (but MAY contain more than one &ITEM; element for <link url='#impl-batch'>Batch Processing</link> of item retractions); the &ITEM; element MUST be empty and MUST possess an 'id' attribute.</p>
+      <p>To delete an item, the publisher sends a retract request as shown in the following examples. The &lt;retract/&gt; element MUST possess a 'node' attribute, MAY possess a 'notify' attribute, and MUST contain one &ITEM; element; the &ITEM; element MUST be empty and MUST possess an 'id' attribute.</p>
       <example caption='Entity deletes an item from a node'><![CDATA[
 <iq type='set'
     from='hamlet@denmark.lit/elsinore'
@@ -5018,11 +5019,17 @@ And by opposing end them?
     </ul>
   </section2>
 
+  <section2 topic='Temporary Subscriptions' anchor='impl-tempsub'>
+    <p>Implementations of pubsub MAY enable an entity to subscribe to a node temporarily, i.e., only for as long as the subscriber is online in its current presence session. To subscribe temporarily, the subscriber sets the "pubsub#expire" subscription configuration option to a value of "presence".  The service will then automatically cancel the subscription when it receives presence of type "unavailable" from the subscriber.</p>
+  </section2>
+
   <section2 topic='Presence-Based Delivery of Events' anchor='impl-presence'>
     <p>Implementations of pubsub MAY deliver event notifications only when the subscriber is online. In these cases, the option may be a node configuration option as shown in the examples above. To facilitate this, the pubsub service needs to subscribe to the subscriber's presence and check the subscriber's current presence information before sending any event notifications (as described in <cite>RFC 3921</cite>). Presence subscriptions MUST be based on the subscribed JID.</p>
-    <section3 topic='IQ Notifications' anchor='impl-presence-iq'>
-      <p>If the pubsub service supports presence-based delivery and a node is configured to enable such delivery, the service MAY offer a value of "iq" for the "pubsub#notification_type" node configuration option. If this value is chosen, the service shall deliver notifications in XMPP IQ stanzas instead of in XMPP message stanzas. Because IQ stanzas are addressed to full JIDs &LOCALFULL;, if the service does not know the full JID of a given subscriber then it MAY send notifications to the bare JID &LOCALBARE; of the subscriber via the usual message stanza, or MAY not send a notification at all. The IQ stanza containing a notification shall be of type "set", and in accordance with the semantics of the IQ stanza defined in <cite>RFC 3920</cite> the recipient MUST return either an IQ stanza of type "result" or an IQ stanza of type "error". An example follows</p>
-      <example caption='Service Notifies Subscriber via IQ'><![CDATA[
+  </section2>
+
+  <section2 topic='IQ Notifications' anchor='impl-iqnotify'>
+    <p>If the pubsub service supports presence-based delivery and a node is configured to enable such delivery, the service MAY offer a value of "iq" for the "pubsub#notification_type" node configuration option. If this value is chosen, the service shall deliver notifications in XMPP IQ stanzas instead of in XMPP message stanzas. Because IQ stanzas are addressed to full JIDs &LOCALFULL;, if the service does not know the full JID of a given subscriber then it MAY send notifications to the bare JID &LOCALBARE; of the subscriber via the usual message stanza, or MAY not send a notification at all. The IQ stanza containing a notification shall be of type "set", and in accordance with the semantics of the IQ stanza defined in <cite>RFC 3920</cite> the recipient MUST return either an IQ stanza of type "result" or an IQ stanza of type "error". An example follows</p>
+    <example caption='Service Notifies Subscriber via IQ'><![CDATA[
 <iq from='pubsub.shakespeare.lit'
     id='jc9jn253'
     to='francisco@denmark.lit/barracks'
@@ -5035,14 +5042,13 @@ And by opposing end them?
     </items>
   </event>
 </iq>
-      ]]></example>
-      <example caption='Subscriber Indicates Success'><![CDATA[
+    ]]></example>
+    <example caption='Subscriber Indicates Success'><![CDATA[
 <iq from='francisco@denmark.lit/barracks'
     id='jc9jn253'
     to='pubsub.shakespeare.lit'
     type='result'/>
-      ]]></example>
-    </section3>
+    ]]></example>
   </section2>
 
   <section2 topic='Not Routing Events to Offline Storage' anchor='impl-offline'>
@@ -5069,15 +5075,7 @@ And by opposing end them?
 
   <section2 topic='Item Caching' anchor='impl-caching'>
     <p>A service MAY cache the last item published to a node, even if the node is configured for transient publication (i.e., configured to not persist items). The last published item SHOULD be sent to new subscribers upon successful processing of a subscription request or approval by a node owner.</p>
-    <p>Note: If a publisher requests <link url='#impl-batch'>Batch Processing</link> of item publications, the concept of "last published item" is undefined; therefore, if information coherence is needed, a publisher SHOULD publish items in separate requests rather than in batch mode.</p>
     <p>Note: Particular profiles of the generic publish-subscribe protocol MAY define more stringent requirements regarding the "cache-last-item" feature.</p>
-  </section2>
-
-  <section2 topic='Batch Processing' anchor='impl-batch'>
-    <p>A publisher MAY include multiple &ITEM; elements in a publish request and MAY include multiple &ITEM; elements in a retract request. This results in "batch processing" of publications or retractions.</p>
-    <p>If the service cannot process any one of the items to be published or retracted, the entire batch MUST fail and the service MUST NOT publish or retract any of the items.</p>
-    <p>If a batch publish contains so many items that publication of all the items would exceed the maximum number of items for the node, the service MUST return a &notallowed; error, which SHOULD also include a pubsub-specific error condition of &lt;max-items-exceeded/&gt;.</p>
-    <p>Note: Batch publication renders the concept of "last published item" problematic; therefore, if information coherence is needed, a publisher SHOULD publish items in separate requests rather than in batch mode.</p>
   </section2>
 
   <section2 topic='Auto-Subscribing Owners and Publishers' anchor='impl-autosubscribe'>
