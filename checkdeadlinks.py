@@ -6,7 +6,7 @@
 # Last Modified: 2009-04-06
 # Author: Tobias Markmann (tm@ayena.de)
 # License: public domain
-# HowTo: ./checkdeadlinks.py xepnum
+# HowTo: ./checkdeadlinks.py --xep=xepnum
 
 ## LICENSE ##
 #
@@ -36,31 +36,74 @@ import glob
 import os
 from select import select
 import socket
+import getopt
 from string import split,strip,join,find
 import sys
 import time
 import re
 import urllib
+import urllib2
 
 from xml.dom.minidom import parse,parseString,Document
 
-xepnum = sys.argv[1];
+def usage():
+	print "checkdeadlinks.py"
+	print ""
+	print "-h, --help			Print this help message"
+	print "-x, --xep [number]	Defines the number of the XEP to check"
+	print "-v, --verbose		Enables more verbosity"
 
-xepfile = 'xep-' + xepnum + '.xml'
-thexep = parse(xepfile)
+def main(argv):
+	try:
+		opts, args = getopt.gnu_getopt(argv, "hv:x", ["help", "verbose", "xep="])
+	except getopt.GetoptError:
+		usage()
+		sys.exit(2)
 
-links = thexep.getElementsByTagName("link")
-deadlinks = 0
-
-for link in links:
-	url = link.getAttribute("url")
-	if re.match("^(http|https)", url):
-		try:
-			urllib.urlopen(url)
-		except:
-			print "dead-url: " + url
-			deadlinks = deadlinks + 1
-
-if deadlinks < 1:
-	print "all http/https links are good"
+	global verbose
+	verbose = 0
+	for opt, arg in opts:
+		if opt in ("-h", "--help"):
+			usage()
+			sys.exit()
+		elif opt in ("-x", "--xep"):
+			global xepnum
+			xepnum = arg
+		elif opt in ("-v", "--verbose"):
+			verbose = 1
 	
+	xepfile = 'xep-' + xepnum + '.xml'
+	thexep = parse(xepfile)
+	
+	links = thexep.getElementsByTagName("link")
+	deadlinks = 0
+	if verbose:
+		print 'Checking XEP-' + xepnum + ':'
+	
+	for link in links:
+		url = link.getAttribute("url")
+		if re.match("^(http|https)", url):
+			if verbose:
+				print url + ' :',
+			page = 0
+			try:
+				request = urllib2.Request(url)
+				request.add_header('User-Agent', "Mozilla/5.001 (windows; U; NT4.0; en-US; rv:1.0) Gecko/25250101")
+				opener = urllib2.build_opener()
+				page = opener.open(request).read()
+			except Exception, e:
+				reason = str(e)
+				if verbose:
+					print "DEAD"
+				else:
+					print "XEP-" + xepnum + " - DEAD: " + url + " [" + reason + "]"
+				deadlinks = deadlinks + 1
+			else:
+				if verbose:
+					print 'OK'
+					
+	#if deadlinks = 0:
+		#print "all http/https links are good"
+
+if __name__ == "__main__":
+	main(sys.argv[1:])
