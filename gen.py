@@ -166,11 +166,20 @@ def buildXEP( filename ):
 	else:
 		print "PDF(ERROR)"
 
+def usage():
+	print "gen.py: generate nice XHTML and beatuy PDF out of the XEP XML"
+	print ""
+	print "Usage:"
+	print "gen.py xep-####.xml"
+	print ""
+	print "Options:"
+	print "-v  Enable verbose output for debugging."
+
 def main(argv):
 	try:
-		options, remainder = getopt.gnu_getopt(argv, "x")
+		options, remainder = getopt.gnu_getopt(argv, "v")
 	except getopt.GetoptError:
-		print "Error"
+		usage()
 		sys.exit(2)
 	
 	for opt, arg in options:
