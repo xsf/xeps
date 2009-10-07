@@ -167,8 +167,8 @@ def main(argv):
 	
 	commands.getstatusoutput("rm /tmp/xepbuilder")
 	commands.getstatusoutput("mkdir /tmp/xepbuilder")
-	commands.getstatusoutput("cp ../images/logo.pdf /tmp/xepbuilder/logo.pdf")
-	commands.getstatusoutput("cp ../images/logo-text.pdf /tmp/xepbuilder/logo-text.pdf")
+	commands.getstatusoutput("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
+	commands.getstatusoutput("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
 	
 	buildXEP( xep )
 	

@@ -103,13 +103,13 @@
 \newcommand{\XEPVersion}[0]{<xsl:value-of select="$maxXEPVersion"/>}
 
 \fancyhead[LE,RO]{\slshape \rightmark}
-\fancyhead[LO,RE]{\includegraphics[totalheight=10pt]{logo.pdf} \slshape \leftmark}
+\fancyhead[LO,RE]{\includegraphics[totalheight=10pt]{xmpp.pdf} \slshape \leftmark}
 \fancyfoot[CO,CE]{\thepage}
 
 \pretitle{
 \begin{figure*}[h]
 \begin{center}
-\includegraphics[totalheight=7.5cm]{logo-text.pdf}
+\includegraphics[totalheight=7.5cm]{xmpp-text.pdf}
 \end{center}
 \end{figure*}
 \begin{center}\LARGE
