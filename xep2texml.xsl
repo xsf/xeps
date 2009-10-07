@@ -83,10 +83,10 @@ pdfauthor={XMPP Standards Foundation}]{hyperref}
 
 
 \usepackage{fontspec,xltxtra,xunicode}
-\defaultfontfeatures{Mapping=tex-text}
-\setromanfont[Mapping=tex-text, Ligatures={Common}]{Hoefler Text}
-\setsansfont[Scale=MatchLowercase,Mapping=tex-text]{Gill Sans}
-\setmonofont[Scale=MatchLowercase]{Monaco}
+%\defaultfontfeatures{Mapping=tex-text}
+%\setromanfont[Mapping=tex-text, Ligatures={Common}]{Hoefler Text}
+%\setsansfont[Scale=MatchLowercase,Mapping=tex-text]{Gill Sans}
+%\setmonofont[Scale=MatchLowercase]{Monaco}
 
 \setkomafont{descriptionlabel}{\normalfont\bfseries}
 
