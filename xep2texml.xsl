@@ -60,19 +60,21 @@
     <TeXML escape="0">
 %!TEX TS-program = xelatex
 %!TEX encoding = UTF-8 Unicode
-\documentclass[a4paper]{scrartcl}
+\documentclass[]{scrartcl}
+\KOMAoptions{paper=a4}
 
 \usepackage[
-pdftitle={XEP-<xsl:value-of select="/xep/header/number"/>: <xsl:value-of select="/xep/header/title"/>},
-pdfauthor={XMPP Standards Foundation}]{hyperref}
+	pdftitle={XEP-<xsl:value-of select="/xep/header/number"/>: <xsl:value-of select="/xep/header/title"/>},
+	pdfauthor={XMPP Standards Foundation},
+	breaklinks = true, 
+	unicode, 
+	pagebackref, 
+	xetex]{hyperref}
 \usepackage{color}
 \usepackage{graphicx}
 \usepackage{fancyhdr}
 \usepackage{tabularx}
 \usepackage{listings}
-
-\usepackage[breaklinks = true, unicode, pagebackref, xetex]{hyperref} 
-
 \usepackage{varwidth}
 \usepackage{titling}
 \usepackage{titletoc}
@@ -107,7 +109,7 @@ pdfauthor={XMPP Standards Foundation}]{hyperref}
 \pretitle{
 \begin{figure*}[h]
 \begin{center}
-\includegraphics[totalheight=7.5cm]{XMPP_Logo.pdf}
+\includegraphics[totalheight=7.5cm]{logo-text.pdf}
 \end{center}
 \end{figure*}
 \begin{center}\LARGE
