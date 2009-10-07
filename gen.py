@@ -42,12 +42,21 @@ import getopt
 XEPPATH = "/var/www/vhosts/xmpp.org/extensions"
 BUILDDICT = "/var/xsf/xepbuild.dict"
 
-verbose = 0
+VERBOSE = False
 last_build = {}
 
 def filebase( filename ):
 	return os.path.splitext(os.path.basename(filename))[0]
 
+
+def checkError( error, desc):
+	global verbose
+	
+	if error != 0:
+		if verbose:
+			print "Error: ", desc
+		return False
+	return True
 
 def fileHash( filename ):
 	f = open(filename, "rb") 
@@ -76,19 +85,19 @@ def saveDict( filename, di ):
 def buildXHTML( file ):
 	nr = re.match("xep-(\d\d\d\d).xml", file).group(1)
 	error, desc = commands.getstatusoutput("xsltproc xep.xsl xep-" + nr + ".xml > " + XEPPATH + "/xep-" + nr + ".html")
-	if error != 0:
+	if not checkError(error, desc):
 		return False
 		
 	error, desc = commands.getstatusoutput("xsltproc ref.xsl xep-" + nr + ".xml > " + XEPPATH + "/refs/reference.XSF.XEP-" + nr + ".xml")
-	if error != 0:
+	if not checkError(error, desc):
 		return False
 	
 	error, desc = commands.getstatusoutput("xsltproc examples.xsl xep-" + nr + ".xml > " + XEPPATH + "/examples/" + nr + ".xml")
-	if error != 0:
+	if not checkError(error, desc):
 		return False
 	
 	error, desc = commands.getstatusoutput(" cp xep-" + nr + ".xml " + XEPPATH + "/")
-	if error != 0:
+	if not checkError(error, desc):
 		return False
 	return True
 
@@ -96,22 +105,16 @@ def buildPDF( file ):
 	nr = re.match("xep-(\d\d\d\d).xml", file).group(1)
 	
 	error, desc = commands.getstatusoutput("xsltproc -o /tmp/xepbuilder/xep-" + nr + ".tex.xml xep2texml.xsl xep-" + nr + ".xml")
-	if error != 0:
-		if verbose == 1:
-			print "Error: ", desc
+	if not checkError(error, desc):
 		return False
 	
 	error, desc = commands.getstatusoutput("texml -e utf8 /tmp/xepbuilder/xep-" + nr + ".tex.xml /tmp/xepbuilder/xep-" + nr + ".tex")
-	if error != 0:
-		if verbose == 1:
-			print "Error: ", desc
+	if not checkError(error, desc):
 		return False
 	
 	#detect http urls and escape them to make them breakable
 	error, desc = commands.getstatusoutput('''sed -i 's|\([\s"]\)\(http://[^ "]*\)|\1\\path{\2}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
-	if error != 0:
-		if verbose == 1:
-			print "Error: ", desc
+	if not checkError(error, desc):
 		return False
 	
 	#adjust references
@@ -122,34 +125,26 @@ def buildPDF( file ):
 		return False
 	
 	error, desc = commands.getstatusoutput('''sed -i 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
-	if error != 0:
-		if verbose == 1:
-			print "Error: ", desc
+	if not checkError(error, desc):
 		return False
 	
 	olddir = os.getcwd()
 	os.chdir("/tmp/xepbuilder")
 	
 	error, desc = commands.getstatusoutput("xelatex -interaction=batchmode xep-" + nr + ".tex")
-	if error != 0:
-		if verbose == 1:
-			print "Error: ", desc
+	if not checkError(error, desc):
 		os.chdir(olddir)
 		return False
 		
 	error, desc = commands.getstatusoutput("xelatex -interaction=batchmode xep-" + nr + ".tex")
-	if error != 0:
-		if verbose == 1:
-			print "Error: ", desc
+	if not checkError(error, desc):
 		os.chdir(olddir)
 		return False
 	
 	os.chdir(olddir)
 	
 	error, desc = commands.getstatusoutput("cp /tmp/xepbuilder/xep-" + nr + ".pdf " + XEPPATH + "/")
-	if error != 0:
-		if verbose == 1:
-			print "Error: ", desc
+	if not checkError(error, desc):
 		return False
 		
 	return True
@@ -176,6 +171,8 @@ def usage():
 	print "-v  Enable verbose output for debugging."
 
 def main(argv):
+	global verbose
+	
 	try:
 		options, remainder = getopt.gnu_getopt(argv, "v")
 	except getopt.GetoptError:
@@ -183,9 +180,9 @@ def main(argv):
 		sys.exit(2)
 	
 	for opt, arg in options:
-	    if opt in ('-v'):
-	        verbose = 1
-	
+		if opt in ('-v'):
+			verbose = True
+
 	xep = remainder[0]
 		
 	last_build = loadDict(BUILDDICT)
