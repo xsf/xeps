@@ -42,6 +42,7 @@ import getopt
 XEPPATH = "/var/www/vhosts/xmpp.org/extensions"
 BUILDDICT = "/var/xsf/xepbuild.dict"
 
+verbose = 0
 last_build = {}
 
 def filebase( filename ):
@@ -155,6 +156,10 @@ def main(argv):
 	except getopt.GetoptError:
 		print "Error"
 		sys.exit(2)
+	
+	for opt, arg in options:
+	    if opt in ('-v'):
+	        verbose = 1
 	
 	xep = remainder[0]
 		
