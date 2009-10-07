@@ -97,24 +97,34 @@ def buildPDF( file ):
 	
 	error, desc = commands.getstatusoutput("xsltproc -o /tmp/xepbuilder/xep-" + nr + ".tex.xml xep2texml.xsl xep-" + nr + ".xml")
 	if error != 0:
+		if verbose == 1:
+			print "Error: ", desc
 		return False
 	
 	error, desc = commands.getstatusoutput("texml -e utf8 /tmp/xepbuilder/xep-" + nr + ".tex.xml /tmp/xepbuilder/xep-" + nr + ".tex")
 	if error != 0:
+		if verbose == 1:
+			print "Error: ", desc
 		return False
 	
 	#detect http urls and escape them to make them breakable
 	error, desc = commands.getstatusoutput('''sed -i 's|\([\s"]\)\(http://[^ "]*\)|\1\\path{\2}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
 	if error != 0:
+		if verbose == 1:
+			print "Error: ", desc
 		return False
 	
 	#adjust references
 	error, desc = commands.getstatusoutput('''sed -i 's|\\hyperref\[#\([^}]*\)\]|\\hyperref\[\1\]|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
 	if error != 0:
+		if verbose == 1:
+			print "Error: ", desc
 		return False
 	
 	error, desc = commands.getstatusoutput('''sed -i 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
 	if error != 0:
+		if verbose == 1:
+			print "Error: ", desc
 		return False
 	
 	olddir = os.getcwd()
@@ -122,11 +132,15 @@ def buildPDF( file ):
 	
 	error, desc = commands.getstatusoutput("xelatex -interaction=batchmode xep-" + nr + ".tex")
 	if error != 0:
+		if verbose == 1:
+			print "Error: ", desc
 		os.chdir(olddir)
 		return False
 		
 	error, desc = commands.getstatusoutput("xelatex -interaction=batchmode xep-" + nr + ".tex")
 	if error != 0:
+		if verbose == 1:
+			print "Error: ", desc
 		os.chdir(olddir)
 		return False
 	
@@ -134,6 +148,8 @@ def buildPDF( file ):
 	
 	error, desc = commands.getstatusoutput("cp /tmp/xepbuilder/xep-" + nr + ".pdf " + XEPPATH + "/")
 	if error != 0:
+		if verbose == 1:
+			print "Error: ", desc
 		return False
 		
 	return True
