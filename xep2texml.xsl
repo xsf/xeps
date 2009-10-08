@@ -102,7 +102,7 @@
 \newcommand{\XEPNumber}[0]{<xsl:value-of select="/xep/header/number"/>}
 \newcommand{\XEPVersion}[0]{<xsl:value-of select="$maxXEPVersion"/>}
 
-\fancyhead[L,R]{\includegraphics[totalheight=10pt]{xmpp.pdf} \slshape \leftmark}
+\fancyhead[L,L]{\includegraphics[totalheight=10pt]{xmpp.pdf} \slshape \leftmark}
 \fancyfoot[C,C]{\thepage}
 
 \pretitle{
