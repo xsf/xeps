@@ -38,6 +38,7 @@ import os
 import re
 import sys
 import getopt
+import glob
 
 XEPPATH = "/var/www/vhosts/xmpp.org/extensions"
 BUILDDICT = "/var/xsf/xepbuild.dict"
@@ -132,14 +133,14 @@ def buildPDF( file ):
 	os.chdir("/tmp/xepbuilder")
 	
 	error, desc = commands.getstatusoutput("xelatex -interaction=batchmode xep-" + nr + ".tex")
-	if not checkError(error, desc):
-		os.chdir(olddir)
-		return False
+	#if not checkError(error, desc):
+	#	os.chdir(olddir)
+	#	return False
 		
 	error, desc = commands.getstatusoutput("xelatex -interaction=batchmode xep-" + nr + ".tex")
-	if not checkError(error, desc):
-		os.chdir(olddir)
-		return False
+	#if not checkError(error, desc):
+	#	os.chdir(olddir)
+	#	return False
 	
 	os.chdir(olddir)
 	
@@ -161,6 +162,11 @@ def buildXEP( filename ):
 	else:
 		print "PDF(ERROR)"
 
+def buildAll():
+	files = glob.glob('xep-????.xml')
+	for file in files:
+		buildXEP( file )
+
 def usage():
 	print "gen.py: generate nice XHTML and beatuy PDF out of the XEP XML"
 	print ""
@@ -172,9 +178,10 @@ def usage():
 
 def main(argv):
 	global verbose
+	buildall = False
 	
 	try:
-		options, remainder = getopt.gnu_getopt(argv, "v")
+		options, remainder = getopt.gnu_getopt(argv, "va")
 	except getopt.GetoptError:
 		usage()
 		sys.exit(2)
@@ -182,8 +189,11 @@ def main(argv):
 	for opt, arg in options:
 		if opt in ('-v'):
 			verbose = True
-
-	xep = remainder[0]
+		elif opt in ('-a'):
+			buildall = True
+	
+	if len(remainder) > 0:
+		xep = remainder[0]
 		
 	last_build = loadDict(BUILDDICT)
 	
@@ -192,7 +202,10 @@ def main(argv):
 	commands.getstatusoutput("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
 	commands.getstatusoutput("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
 	
-	buildXEP( xep )
+	if buildall:
+		buildAll()
+	else:
+		buildXEP( xep )
 	
 	saveDict(BUILDDICT, last_build)
 	
