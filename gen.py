@@ -164,6 +164,7 @@ def buildXEP( filename ):
 
 def buildAll():
 	files = glob.glob('xep-????.xml')
+	files.sort(key=lambda x: x.lower())
 	for file in files:
 		buildXEP( file )
 
