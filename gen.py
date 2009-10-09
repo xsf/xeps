@@ -109,7 +109,7 @@ class XEPTable:
 	<th align='left'>Status</th>
 	<th align='left'>Date</th>
 </tr>''')
-			self.tableFile.getElementsByTagName("table")[0].appendChild(col.getElementsByTagName("td")[0])
+			self.tableFile.getElementsByTagName("table")[0].appendChild(header.getElementsByTagName("tr")[0])
 			
 	def save(self):
 		f = open(self.filename, "wb")
