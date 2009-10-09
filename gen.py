@@ -131,7 +131,7 @@ class XEPTable:
 			self.tableFile.getElementsByTagName("table")[0].appendChild(self.tableFile.createTextNode('''
 '''))
 			xeprow.setAttribute("id", "xep" + info.getNr())
-			xeprow.setAttribute("class", "tablebody " + info.getStatus())
+			xeprow.setAttribute("class", "tablebody XEP-" + info.getStatus())
 		else:
 			while(xeprow.hasChildNodes()):
 				xeprow.removeChild(xeprow.firstChild)
