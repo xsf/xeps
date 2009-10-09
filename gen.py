@@ -45,7 +45,7 @@ from xml.dom.minidom import parse,parseString,Document,getDOMImplementation
 XEPPATH = "/var/www/vhosts/xmpp.org/extensions"
 BUILDDICT = "/var/xsf/xepbuild.dict"
 
-VERBOSE = False
+verbose = False
 last_build = {}
 
 def getText(nodelist):
@@ -95,6 +95,21 @@ class XEPTable:
 		except:
 			impl = getDOMImplementation()
 			self.tableFile = impl.createDocument(None, "table", None)
+			self.tableFile.getElementsByTagName("table")[0].setAttribute("class", "sortable")
+			self.tableFile.getElementsByTagName("table")[0].setAttribute("id", "xeplist")
+			self.tableFile.getElementsByTagName("table")[0].setAttribute("cellspacing", "0")
+			self.tableFile.getElementsByTagName("table")[0].setAttribute("cellpadding", "3")
+			self.tableFile.getElementsByTagName("table")[0].setAttribute("border", "1")
+			
+			header = parseString(
+'''<tr class='xepheader'>
+	<th align='left'>Number</th>
+	<th align='left'>Name</th>
+	<th align='left'>Type</th>
+	<th align='left'>Status</th>
+	<th align='left'>Date</th>
+</tr>''')
+			self.tableFile.getElementsByTagName("table")[0].appendChild(col.getElementsByTagName("td")[0])
 			
 	def save(self):
 		f = open(self.filename, "wb")
@@ -121,7 +136,7 @@ class XEPTable:
 			while(xeprow.hasChildNodes()):
 				xeprow.removeChild(xeprow.firstChild)
 		
-		col = parseString('''<td valign='top'><a href='http://xmpp.org/extensions/xep-''' + info.getNr() + ".html'>XEP-" + info.getNr() + '''</a> <a href='http://xmpp.org/extensions/xep-''' + info.getNr() + '''.pdf'>(PDF)</a></td>''')
+		col = parseString('''<td valign='top'><a href='http://newsite.xmpp.org/extensions/xep-''' + info.getNr() + ".html'>XEP-" + info.getNr() + '''</a> <a href='http://newsite.xmpp.org/extensions/xep-''' + info.getNr() + '''.pdf'>(PDF)</a></td>''')
 		xeprow.appendChild(col.getElementsByTagName("td")[0])
 		
 		col = parseString("<td valign='top'>" + info.getTitle() + "</td>")
@@ -303,6 +318,9 @@ def main(argv):
 		buildAll()
 	else:
 		buildXEP( xep )
+	
+	commands.getstatusoutput("cp extensions.xhtml " + XEPPATH + "/../includes/xeplist.txt")
+	commands.getstatusoutput("sed -i '1d' " + XEPPATH + "/../includes/xeplist.txt")
 	
 	saveDict(BUILDDICT, last_build)
 	
