@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# File: all.py
+# File: gen.py
 # Version: 0.1
 # Description: a renewed XEP compilation tool
 # Last Modified: 2009
@@ -40,11 +40,105 @@ import sys
 import getopt
 import glob
 
+from xml.dom.minidom import parse,parseString,Document,getDOMImplementation
+
 XEPPATH = "/var/www/vhosts/xmpp.org/extensions"
 BUILDDICT = "/var/xsf/xepbuild.dict"
 
 VERBOSE = False
 last_build = {}
+
+def getText(nodelist):
+    thisText = ""
+    for node in nodelist:
+        if node.nodeType == node.TEXT_NODE:
+            thisText = thisText + node.data
+    return thisText
+
+class XEPInfo:
+	def __init__(self, filename):
+		thexep = parse(filename)
+		xepNode = (thexep.getElementsByTagName("xep")[0])
+		headerNode = (xepNode.getElementsByTagName("header")[0])
+		titleNode = (headerNode.getElementsByTagName("title")[0])
+		self.title = getText(titleNode.childNodes)
+		self.nr = getText((headerNode.getElementsByTagName("number")[0]).childNodes)
+		abstractNode = (headerNode.getElementsByTagName("abstract")[0])
+		abstract = getText(abstractNode.childNodes)
+		statusNode = (headerNode.getElementsByTagName("status")[0])
+		self.status = getText(statusNode.childNodes)
+		self.type = getText((headerNode.getElementsByTagName("type")[0]).childNodes)
+		revNode = (headerNode.getElementsByTagName("revision")[0])
+		version = getText((revNode.getElementsByTagName("version")[0]).childNodes)
+		self.date = getText((revNode.getElementsByTagName("date")[0]).childNodes)
+	
+	def getNr(self):
+		return self.nr
+	
+	def getTitle(self):
+		return self.title
+	
+	def getStatus(self):
+		return self.status
+	
+	def getType(self):
+		return self.type
+	
+	def getDate(self):
+		return self.date
+
+class XEPTable:
+	def __init__(self, filename):
+		self.filename = filename
+		try:
+			self.tableFile = parse(filename)
+		except:
+			impl = getDOMImplementation()
+			self.tableFile = impl.createDocument(None, "table", None)
+			
+	def save(self):
+		f = open(self.filename, "wb")
+		self.tableFile.getElementsByTagName("table")[0].normalize()
+		f.write(self.tableFile.toxml())
+		f.close()
+		print self.tableFile.toxml()
+
+	def setXEP(self, info):
+		rows = self.tableFile.getElementsByTagName("tr")
+		xeprow = 0
+		for row in rows:
+			if row.getAttribute("id") == "xep" + info.getNr():
+				xeprow = row
+				break
+		
+		if xeprow == 0:
+			print "Row not found."
+			xeprow = self.tableFile.createElement("tr")
+			self.tableFile.getElementsByTagName("table")[0].appendChild(xeprow)
+			self.tableFile.getElementsByTagName("table")[0].appendChild(self.tableFile.createTextNode('''
+'''))
+			xeprow.setAttribute("id", "xep" + info.getNr())
+			xeprow.setAttribute("class", "tablebody")
+		else:
+			print "Row found."
+			while(xeprow.hasChildNodes()):
+				xeprow.removeChild(xeprow.firstChild)
+		
+		col = parseString('''<td valign='top'><a href='http://xmpp.org/extensions/xep-''' + info.getNr() + ".html'>XEP-" + info.getNr() + '''</a> <a href='http://xmpp.org/extensions/xep-''' + info.getNr() + '''.pdf'>(PDF)</a></td>''')
+		xeprow.appendChild(col.getElementsByTagName("td")[0])
+		
+		col = parseString("<td valign='top'>" + info.getTitle() + "</td>")
+		xeprow.appendChild(col.getElementsByTagName("td")[0])
+		
+		col = parseString("<td valign='top'>" + info.getType() + "</td>")
+		xeprow.appendChild(col.getElementsByTagName("td")[0])
+		
+		col = parseString("<td valign='top'>" + info.getStatus() + "</td>")
+		xeprow.appendChild(col.getElementsByTagName("td")[0])
+		
+		col = parseString("<td valign='top'>" + info.getDate() + "</td>")
+		xeprow.appendChild(col.getElementsByTagName("td")[0])
+		
 
 def filebase( filename ):
 	return os.path.splitext(os.path.basename(filename))[0]
@@ -161,6 +255,11 @@ def buildXEP( filename ):
 		print "PDF(OK)"
 	else:
 		print "PDF(ERROR)"
+	
+	x = XEPTable("extensions.xhtml")
+	xinfo = XEPInfo(filename)
+	x.setXEP( xinfo )
+	x.save()
 
 def buildAll():
 	files = glob.glob('xep-????.xml')
@@ -195,7 +294,7 @@ def main(argv):
 	
 	if len(remainder) > 0:
 		xep = remainder[0]
-		
+	
 	last_build = loadDict(BUILDDICT)
 	
 	commands.getstatusoutput("rm /tmp/xepbuilder")
