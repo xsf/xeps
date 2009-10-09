@@ -320,7 +320,7 @@ def main(argv):
 		buildXEP( xep )
 	
 	commands.getstatusoutput("cp extensions.xhtml " + XEPPATH + "/../includes/xeplist.txt")
-	commands.getstatusoutput("sed -i '1d' " + XEPPATH + "/../includes/xeplist.txt")
+	commands.getstatusoutput("sed -i -e '1s/<?[^?]*?>//' " + XEPPATH + "/../includes/xeplist.txt")
 	
 	saveDict(BUILDDICT, last_build)
 	
