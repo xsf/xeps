@@ -101,7 +101,6 @@ class XEPTable:
 		self.tableFile.getElementsByTagName("table")[0].normalize()
 		f.write(self.tableFile.toxml())
 		f.close()
-		print self.tableFile.toxml()
 
 	def setXEP(self, info):
 		rows = self.tableFile.getElementsByTagName("tr")
@@ -112,7 +111,6 @@ class XEPTable:
 				break
 		
 		if xeprow == 0:
-			print "Row not found."
 			xeprow = self.tableFile.createElement("tr")
 			self.tableFile.getElementsByTagName("table")[0].appendChild(xeprow)
 			self.tableFile.getElementsByTagName("table")[0].appendChild(self.tableFile.createTextNode('''
@@ -120,7 +118,6 @@ class XEPTable:
 			xeprow.setAttribute("id", "xep" + info.getNr())
 			xeprow.setAttribute("class", "tablebody")
 		else:
-			print "Row found."
 			while(xeprow.hasChildNodes()):
 				xeprow.removeChild(xeprow.firstChild)
 		
