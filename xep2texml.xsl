@@ -174,9 +174,7 @@
       </env>
       <cmd name="newpage" nl2="1"/>
       <cmd name="section*" nl2="1"><parm>Legal</parm></cmd>
-      <group><cmd name="small" />
-          <xsl:apply-templates select="/xep/header/legal" />
-      </group>
+      <xsl:apply-templates select="/xep/header/legal" />
       <cmd name="newpage" nl2="1"/>
       <cmd name="tableofcontents" nl2="1"/>
       <cmd name="newpage" nl2="1"/>
@@ -190,27 +188,37 @@
 <!-- for legal crap -->
 <xsl:template match="copyright">
   <cmd name="subsection*" nl2="1"><parm>Copyright</parm></cmd>
+  <group><cmd name="small" />
   <xsl:apply-templates/>
+  </group>
 </xsl:template>
 
 <xsl:template match="permissions">
   <cmd name="subsection*" nl2="1"><parm>Permissions</parm></cmd>
+  <group><cmd name="small" />
   <xsl:apply-templates/>
+  </group>
 </xsl:template>
 
 <xsl:template match="warranty">
   <cmd name="subsection*" nl2="1"><parm>Warranty</parm></cmd>
+  <group><cmd name="small" />
   <xsl:apply-templates/>
+  </group>
 </xsl:template>
 
 <xsl:template match="liability">
   <cmd name="subsection*"><parm>Liability</parm></cmd>
+  <group><cmd name="small" />
   <xsl:apply-templates/>
+  </group>
 </xsl:template>
 
 <xsl:template match="conformance">
   <cmd name="subsection*"><parm>Conformance</parm></cmd>
+  <group><cmd name="small" />
   <xsl:apply-templates/>
+  </group>
 </xsl:template>
 
 
