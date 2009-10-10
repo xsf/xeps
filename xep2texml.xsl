@@ -85,10 +85,10 @@
 
 
 \usepackage{fontspec,xltxtra,xunicode}
-%\defaultfontfeatures{Mapping=tex-text}
-%\setromanfont[Mapping=tex-text, Ligatures={Common}]{Hoefler Text}
-%\setsansfont[Scale=MatchLowercase,Mapping=tex-text]{Gill Sans}
-%\setmonofont[Scale=MatchLowercase]{Monaco}
+\defaultfontfeatures{Mapping=tex-text}
+\setromanfont[Mapping=tex-text, Ligatures={Common}]{Gentium}
+\setsansfont[Scale=MatchLowercase,Mapping=tex-text]{Gentium}
+\setmonofont[Scale=MatchLowercase]{Inconsolata}
 
 \setkomafont{descriptionlabel}{\normalfont\bfseries}
 
