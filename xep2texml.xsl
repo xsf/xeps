@@ -66,6 +66,8 @@
 \usepackage[
 	pdftitle={XEP-<xsl:value-of select="/xep/header/number"/>: <xsl:value-of select="/xep/header/title"/>},
 	pdfauthor={XMPP Standards Foundation},
+	pdfcreator={XEP2PDF},
+	pdfproducer={XEP2PDF},
 	breaklinks = true, 
 	unicode, 
 	pagebackref, 
