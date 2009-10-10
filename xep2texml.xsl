@@ -174,7 +174,9 @@
       </env>
       <cmd name="newpage" nl2="1"/>
       <cmd name="section*" nl2="1"><parm>Legal</parm></cmd>
-      <xsl:apply-templates select="/xep/header/legal" />
+      <group><cmd name="small" />
+          <xsl:apply-templates select="/xep/header/legal" />
+      </group>
       <cmd name="newpage" nl2="1"/>
       <cmd name="tableofcontents" nl2="1"/>
       <cmd name="newpage" nl2="1"/>
