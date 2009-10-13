@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
 # File: gen.py
-# Version: 0.1
+# Version: 0.2
 # Description: a renewed XEP compilation tool
 # Last Modified: 2009
 # Author: Tobias Markmann (tm@ayena.de)
 # License: public domain
-# HowTo: ./all.py
+# HowTo: ./gen.py xep-####.xml
 
 ## LICENSE ##
 #
@@ -287,6 +287,7 @@ def usage():
 	print ""
 	print "Options:"
 	print "-v  Enable verbose output for debugging."
+	print "-a  Build all available XEPs."
 
 def main(argv):
 	global verbose
@@ -305,7 +306,11 @@ def main(argv):
 			buildall = True
 	
 	if len(remainder) > 0:
-		xep = remainder[0]
+		try:
+			xep = int(remainder[0])
+			xep = "xep-%04d.xml" % xep
+		except:
+			xep = remainder[0]
 	
 	last_build = loadDict(BUILDDICT)
 	
