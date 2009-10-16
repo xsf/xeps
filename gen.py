@@ -43,7 +43,7 @@ import glob
 from xml.dom.minidom import parse,parseString,Document,getDOMImplementation
 
 XEPPATH = "/var/www/vhosts/xmpp.org/extensions"
-BUILDDICT = "/var/xsf/xepbuild.dict"
+CONFIGPATH = "/var/local/xsf"
 
 verbose = False
 last_build = {}
@@ -136,7 +136,7 @@ class XEPTable:
 			while(xeprow.hasChildNodes()):
 				xeprow.removeChild(xeprow.firstChild)
 		
-		col = parseString('''<td valign='top'><a href='http://newsite.xmpp.org/extensions/xep-''' + info.getNr() + ".html'>XEP-" + info.getNr() + '''</a> <a href='http://newsite.xmpp.org/extensions/xep-''' + info.getNr() + '''.pdf'>(PDF)</a></td>''')
+		col = parseString('''<td valign='top'><a href='xep-''' + info.getNr() + ".html'>XEP-" + info.getNr() + '''<a href='xep-''' + info.getNr() + '''.pdf'>(PDF)</a></td>''')
 		xeprow.appendChild(col.getElementsByTagName("td")[0])
 		
 		col = parseString("<td valign='top'>" + info.getTitle() + "</td>")
@@ -268,7 +268,7 @@ def buildXEP( filename ):
 	else:
 		print "PDF(ERROR)"
 	
-	x = XEPTable("extensions.xhtml")
+	x = XEPTable(CONFIGPATH + "/extensions.xml")
 	xinfo = XEPInfo(filename)
 	x.setXEP( xinfo )
 	x.save()
@@ -291,6 +291,7 @@ def usage():
 
 def main(argv):
 	global verbose
+	global CONFIGPATH
 	buildall = False
 	
 	try:
@@ -312,9 +313,9 @@ def main(argv):
 		except:
 			xep = remainder[0]
 	
-	last_build = loadDict(BUILDDICT)
+	last_build = loadDict(CONFIGPATH + "/xepbuild.dict")
 	
-	commands.getstatusoutput("rm /tmp/xepbuilder")
+	commands.getstatusoutput("rm -rfd /tmp/xepbuilder")
 	commands.getstatusoutput("mkdir /tmp/xepbuilder")
 	commands.getstatusoutput("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
 	commands.getstatusoutput("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
@@ -324,9 +325,9 @@ def main(argv):
 	else:
 		buildXEP( xep )
 	
-	commands.getstatusoutput("sed -e '1s/<?[^?]*?>//' extensions.xhtml > " + XEPPATH + "/../includes/xeplist.txt")
+	commands.getstatusoutput("sed -e '1s/<?[^?]*?>//' " + CONFIGPATH + "/extensions.xml > " + XEPPATH + "/../includes/xeplist.txt")
 	
-	saveDict(BUILDDICT, last_build)
+	saveDict(CONFIGPATH + "/xepbuild.dict", last_build)
 	
 if __name__ == "__main__":
 	main(sys.argv[1:])
