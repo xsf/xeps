@@ -46,6 +46,7 @@ XEPPATH = "/var/www/vhosts/xmpp.org/extensions"
 CONFIGPATH = "/var/local/xsf"
 
 verbose = False
+fast = False
 last_build = {}
 
 def getText(nodelist):
@@ -257,16 +258,17 @@ def buildPDF( file ):
 	return True
 
 def buildXEP( filename ):
-	print "Building " + filename + ": ",
-	if buildXHTML( filename ):
-		print "XHTML(OK) / ",
-	else:
-		print "XHTML(ERROR) / ",
-	
-	if buildPDF( filename ):
-		print "PDF(OK)"
-	else:
-		print "PDF(ERROR)"
+	if not fast:
+		print "Building " + filename + ": ",
+		if buildXHTML( filename ):
+			print "XHTML(OK) / ",
+		else:
+			print "XHTML(ERROR) / ",
+		
+		if buildPDF( filename ):
+			print "PDF(OK)"
+		else:
+			print "PDF(ERROR)"
 	
 	x = XEPTable(CONFIGPATH + "/extensions.xml")
 	xinfo = XEPInfo(filename)
@@ -288,14 +290,16 @@ def usage():
 	print "Options:"
 	print "-v  Enable verbose output for debugging."
 	print "-a  Build all available XEPs."
+	print "-f  Fast; means no actual compiling is done"
 
 def main(argv):
 	global verbose
 	global CONFIGPATH
+	global fast
 	buildall = False
 	
 	try:
-		options, remainder = getopt.gnu_getopt(argv, "va")
+		options, remainder = getopt.gnu_getopt(argv, "vaf")
 	except getopt.GetoptError:
 		usage()
 		sys.exit(2)
@@ -305,6 +309,8 @@ def main(argv):
 			verbose = True
 		elif opt in ('-a'):
 			buildall = True
+		elif opt in ('-f'):
+			fast = True
 	
 	if len(remainder) > 0:
 		try:
