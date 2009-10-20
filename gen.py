@@ -134,6 +134,7 @@ class XEPTable:
 			xeprow.setAttribute("id", "xep" + info.getNr())
 			xeprow.setAttribute("class", "tablebody XEP-" + info.getStatus())
 		else:
+			xeprow.setAttribute("class", "tablebody XEP-" + info.getStatus())
 			while(xeprow.hasChildNodes()):
 				xeprow.removeChild(xeprow.firstChild)
 		
