@@ -136,7 +136,7 @@ class XEPTable:
 			while(xeprow.hasChildNodes()):
 				xeprow.removeChild(xeprow.firstChild)
 		
-		col = parseString('''<td valign='top'><a href='xep-''' + info.getNr() + ".html'>XEP-" + info.getNr() + '''</a>&nbsp;<a href='xep-''' + info.getNr() + '''.pdf'>(PDF)</a></td>''')
+		col = parseString('''<td valign='top'><a href='xep-''' + info.getNr() + ".html'>XEP-" + info.getNr() + '''</a> <a href='xep-''' + info.getNr() + '''.pdf'>(PDF)</a></td>''')
 		xeprow.appendChild(col.getElementsByTagName("td")[0])
 		
 		col = parseString("<td valign='top'>" + info.getTitle() + "</td>")
