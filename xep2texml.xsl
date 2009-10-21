@@ -72,7 +72,7 @@
 	unicode, 
 	pagebackref, 
 	xetex]{hyperref}
-\usepackage{color}
+\usepackage{xcolor}
 \usepackage{graphicx}
 \usepackage{fancyhdr}
 \usepackage{tabularx}
@@ -156,7 +156,17 @@
     <env name="document">
       <TeXML escape="0">
         <cmd name="lstset">
-          <parm>language=XML, basicstyle=\small, frame=single, breaklines=true, emptylines=5</parm>
+			<parm>language=XML,
+				breaklines=true,
+				emptylines=5,
+				frame=single,
+				rulecolor=\color{black},
+				basicstyle=\small\color{darkgray},
+				keywordstyle=\color{cyan},
+				stringstyle=\color{blue},
+				tagstyle=\color{purple},
+				markfirstintag=true
+			</parm>
         </cmd>
         
       </TeXML>
