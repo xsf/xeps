@@ -88,8 +88,8 @@
 
 \usepackage{fontspec,xltxtra,xunicode}
 \defaultfontfeatures{Mapping=tex-text}
-\setromanfont[Mapping=tex-text, Ligatures={Common}]{Gentium}
-\setsansfont[Scale=MatchLowercase,Mapping=tex-text]{Gentium}
+\setromanfont[Ligatures={Common}]{Gentium}
+\setsansfont[Scale=MatchLowercase]{Gentium}
 \setmonofont[Scale=MatchLowercase]{Inconsolata}
 
 \setkomafont{descriptionlabel}{\normalfont\bfseries}
@@ -161,7 +161,7 @@
 				emptylines=5,
 				frame=single,
 				rulecolor=\color{black},
-				basicstyle=\small\color{darkgray},
+				basicstyle=\ttfamily\small\color{darkgray},
 				keywordstyle=\color{cyan},
 				stringstyle=\color{blue},
 				tagstyle=\color{purple},
