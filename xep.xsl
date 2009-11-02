@@ -855,7 +855,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   <xsl:template match='example'>
     <p class='caption'><a><xsl:attribute name='name'><xsl:text>example-</xsl:text><xsl:number level='any' count='example'/></xsl:attribute></a>Example <xsl:number level='any' count='example'/>.<xsl:text> </xsl:text><xsl:value-of select='@caption'/></p>
     <div class='indent'>
-      <pre><xsl:apply-templates/></pre>
+      <pre class='prettyprint'><xsl:apply-templates/></pre>
     </div>
   </xsl:template>
 
