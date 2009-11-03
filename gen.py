@@ -5,7 +5,6 @@
 # Description: a renewed XEP compilation tool
 # Last Modified: 2009
 # Author: Tobias Markmann (tm@ayena.de)
-# License: public domain
 # HowTo: ./gen.py xep-####.xml
 
 ## LICENSE ##
