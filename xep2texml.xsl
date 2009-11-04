@@ -373,12 +373,12 @@
   </xsl:if>
   <xsl:if test='not(@class)'>
     <env name="lstlisting">              
-    <TeXML escape="0" emptylines="1">
+    <TeXML escape="0" emptylines="1" ligatures="1">
       <xsl:value-of select="."/>
     </TeXML>
     </env>                          
-  </xsl:if>                        
-</xsl:template>                             
+  </xsl:if>
+</xsl:template>
 
 <!-- section3 -->
 <xsl:template match="section3">
