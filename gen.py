@@ -321,7 +321,6 @@ def main(argv):
 	
 	last_build = loadDict(CONFIGPATH + "/xepbuild.dict")
 	
-	commands.getstatusoutput("rm -rfd /tmp/xepbuilder")
 	commands.getstatusoutput("mkdir /tmp/xepbuilder")
 	commands.getstatusoutput("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
 	commands.getstatusoutput("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
@@ -332,6 +331,8 @@ def main(argv):
 		buildXEP( xep )
 	
 	commands.getstatusoutput("sed -e '1s/<?[^?]*?>//' " + CONFIGPATH + "/extensions.xml > " + XEPPATH + "/../includes/xeplist.txt")
+	
+	commands.getstatusoutput("rm -rfd /tmp/xepbuilder")
 	
 	saveDict(CONFIGPATH + "/xepbuild.dict", last_build)
 	
