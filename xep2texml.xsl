@@ -33,12 +33,7 @@
 
 <!-- Create a variable named $maxXEPVersiom containing the MAX version -->
 <xsl:variable name="maxXEPVersion">
-  <xsl:for-each select="/xep/header/revision">
-    <xsl:sort select="version" data-type="text" order="descending" />
-      <xsl:if test="position() = 1">
-        <xsl:value-of select="version" />
-      </xsl:if>
-  </xsl:for-each>
+	<xsl:value-of select='/xep/header/revision[position()=1]/version'/>
 </xsl:variable>
 
 <!-- Create a variable named $maxXEPDate containing the MAX date -->
