@@ -55,6 +55,11 @@ def getText(nodelist):
             thisText = thisText + node.data
     return thisText
 
+def executeCommand( cmd ):
+	error, desc = commands.getstatusoutput( cmd )
+	return error, desc + "\n" + "executed cmd: " + cmd
+ 
+
 class XEPInfo:
 	def __init__(self, filename):
 		thexep = parse(filename)
@@ -192,19 +197,19 @@ def saveDict( filename, di ):
 
 def buildXHTML( file ):
 	nr = re.match("xep-(\d\d\d\d).xml", file).group(1)
-	error, desc = commands.getstatusoutput("xsltproc xep.xsl xep-" + nr + ".xml > " + XEPPATH + "/xep-" + nr + ".html")
+	error, desc = executeCommand("xsltproc xep.xsl xep-" + nr + ".xml > " + XEPPATH + "/xep-" + nr + ".html")
 	if not checkError(error, desc):
 		return False
 		
-	error, desc = commands.getstatusoutput("xsltproc ref.xsl xep-" + nr + ".xml > " + XEPPATH + "/refs/reference.XSF.XEP-" + nr + ".xml")
+	error, desc = executeCommand("xsltproc ref.xsl xep-" + nr + ".xml > " + XEPPATH + "/refs/reference.XSF.XEP-" + nr + ".xml")
 	if not checkError(error, desc):
 		return False
 	
-	error, desc = commands.getstatusoutput("xsltproc examples.xsl xep-" + nr + ".xml > " + XEPPATH + "/examples/" + nr + ".xml")
+	error, desc = executeCommand("xsltproc examples.xsl xep-" + nr + ".xml > " + XEPPATH + "/examples/" + nr + ".xml")
 	if not checkError(error, desc):
 		return False
 	
-	error, desc = commands.getstatusoutput(" cp xep-" + nr + ".xml " + XEPPATH + "/")
+	error, desc = executeCommand(" cp xep-" + nr + ".xml " + XEPPATH + "/")
 	if not checkError(error, desc):
 		return False
 	return True
@@ -212,46 +217,46 @@ def buildXHTML( file ):
 def buildPDF( file ):
 	nr = re.match("xep-(\d\d\d\d).xml", file).group(1)
 	
-	error, desc = commands.getstatusoutput("xsltproc -o /tmp/xepbuilder/xep-" + nr + ".tex.xml xep2texml.xsl xep-" + nr + ".xml")
+	error, desc = executeCommand("xsltproc -o /tmp/xepbuilder/xep-" + nr + ".tex.xml xep2texml.xsl xep-" + nr + ".xml")
 	if not checkError(error, desc):
 		return False
 	
-	error, desc = commands.getstatusoutput("texml -e utf8 /tmp/xepbuilder/xep-" + nr + ".tex.xml /tmp/xepbuilder/xep-" + nr + ".tex")
+	error, desc = executeCommand("texml -e utf8 /tmp/xepbuilder/xep-" + nr + ".tex.xml /tmp/xepbuilder/xep-" + nr + ".tex")
 	if not checkError(error, desc):
 		return False
 	
 	#detect http urls and escape them to make them breakable
-	error, desc = commands.getstatusoutput('''sed -i 's|\([\s"]\)\(http://[^ "]*\)|\1\\path{\2}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
+	error, desc = executeCommand('''sed -i 's|\([\s"]\)\(http://[^ "]*\)|\1\\path{\2}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
 	if not checkError(error, desc):
 		return False
 	
 	#adjust references
-	error, desc = commands.getstatusoutput('''sed -i 's|\\hyperref\[#\([^}]*\)\]|\\hyperref\[\1\]|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
+	error, desc = executeCommand('''sed -i 's|\\hyperref\[#\([^}]*\)\]|\\hyperref\[\1\]|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
 	if error != 0:
 		if verbose == 1:
 			print "Error: ", desc
 		return False
 	
-	error, desc = commands.getstatusoutput('''sed -i 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
+	error, desc = executeCommand('''sed -i 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
 	if not checkError(error, desc):
 		return False
 	
 	olddir = os.getcwd()
 	os.chdir("/tmp/xepbuilder")
 	
-	error, desc = commands.getstatusoutput("xelatex -interaction=batchmode xep-" + nr + ".tex")
+	error, desc = executeCommand("xelatex -interaction=batchmode xep-" + nr + ".tex")
 	#if not checkError(error, desc):
 	#	os.chdir(olddir)
 	#	return False
 		
-	error, desc = commands.getstatusoutput("xelatex -interaction=batchmode xep-" + nr + ".tex")
+	error, desc = executeCommand("xelatex -interaction=batchmode xep-" + nr + ".tex")
 	#if not checkError(error, desc):
 	#	os.chdir(olddir)
 	#	return False
 	
 	os.chdir(olddir)
 	
-	error, desc = commands.getstatusoutput("cp /tmp/xepbuilder/xep-" + nr + ".pdf " + XEPPATH + "/")
+	error, desc = executeCommand("cp /tmp/xepbuilder/xep-" + nr + ".pdf " + XEPPATH + "/")
 	if not checkError(error, desc):
 		return False
 		
@@ -321,18 +326,18 @@ def main(argv):
 	
 	last_build = loadDict(CONFIGPATH + "/xepbuild.dict")
 	
-	commands.getstatusoutput("mkdir /tmp/xepbuilder")
-	commands.getstatusoutput("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
-	commands.getstatusoutput("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
+	executeCommand("mkdir /tmp/xepbuilder")
+	executeCommand("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
+	executeCommand("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
 	
 	if buildall:
 		buildAll()
 	else:
 		buildXEP( xep )
 	
-	commands.getstatusoutput("sed -e '1s/<?[^?]*?>//' " + CONFIGPATH + "/extensions.xml > " + XEPPATH + "/../includes/xeplist.txt")
+	executeCommand("sed -e '1s/<?[^?]*?>//' " + CONFIGPATH + "/extensions.xml > " + XEPPATH + "/../includes/xeplist.txt")
 	
-	commands.getstatusoutput("rm -rfd /tmp/xepbuilder")
+	executeCommand("rm -rfd /tmp/xepbuilder")
 	
 	saveDict(CONFIGPATH + "/xepbuild.dict", last_build)
 	
