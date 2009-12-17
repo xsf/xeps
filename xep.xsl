@@ -383,6 +383,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <hr />
         <a name="appendix-revs"></a>
         <h3>Appendix H: Revision History</h3>
+          <p>Note: Older versions of this specification might be available at <a href='http://xmpp.org/extensions/attic/'>http://xmpp.org/extensions/attic/</a></p>
           <div class='indent'>
             <xsl:apply-templates select='/xep/header/revision'/>
           </div>
