@@ -41,9 +41,9 @@ OR OTHER DEALINGS IN THE SOFTWARE.
       <head>
         <title>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></title>
         <link rel='stylesheet' type='text/css' href='../xmpp.css' />
-        <link href="/prettify.css" type="text/css" rel="stylesheet" />
+        <link href="../prettify.css" type="text/css" rel="stylesheet" />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
-        <script type="text/javascript" src="/prettify.js"></script>
+        <script type="text/javascript" src="../prettify.js"></script>
         <!-- BEGIN META TAGS FOR DUBLIN CORE -->
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Title</xsl:text></xsl:attribute>
