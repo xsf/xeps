@@ -39,6 +39,8 @@ import sys
 import getopt
 import glob
 
+from xepinfo import XEPInfo
+
 from xml.dom.minidom import parse,parseString,Document,getDOMImplementation
 
 XEPPATH = "/var/www/vhosts/xmpp.org/extensions"
@@ -59,39 +61,6 @@ def executeCommand( cmd ):
 	error, desc = commands.getstatusoutput( cmd )
 	return error, desc + "\n" + "executed cmd: " + cmd
  
-
-class XEPInfo:
-	def __init__(self, filename):
-		thexep = parse(filename)
-		xepNode = (thexep.getElementsByTagName("xep")[0])
-		headerNode = (xepNode.getElementsByTagName("header")[0])
-		titleNode = (headerNode.getElementsByTagName("title")[0])
-		self.title = getText(titleNode.childNodes)
-		self.nr = getText((headerNode.getElementsByTagName("number")[0]).childNodes)
-		abstractNode = (headerNode.getElementsByTagName("abstract")[0])
-		abstract = getText(abstractNode.childNodes)
-		statusNode = (headerNode.getElementsByTagName("status")[0])
-		self.status = getText(statusNode.childNodes)
-		self.type = getText((headerNode.getElementsByTagName("type")[0]).childNodes)
-		revNode = (headerNode.getElementsByTagName("revision")[0])
-		version = getText((revNode.getElementsByTagName("version")[0]).childNodes)
-		self.date = getText((revNode.getElementsByTagName("date")[0]).childNodes)
-	
-	def getNr(self):
-		return self.nr
-	
-	def getTitle(self):
-		return self.title
-	
-	def getStatus(self):
-		return self.status
-	
-	def getType(self):
-		return self.type
-	
-	def getDate(self):
-		return self.date
-
 class XEPTable:
 	def __init__(self, filename):
 		self.filename = filename
