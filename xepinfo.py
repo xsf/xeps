@@ -53,12 +53,6 @@ class XEPInfo:
 		revNode = (headerNode.getElementsByTagName("revision")[0])
 		version = getText((revNode.getElementsByTagName("version")[0]).childNodes)
 		self.date = getText((revNode.getElementsByTagName("date")[0]).childNodes)
-		self.authors = []
-		print len(headerNode.getElementsByTagName("author"))
-		print headerNode.getElementsByTagName("author")
-		for author in headerNode.getElementsByTagName("author"):
-			print getText((author.getElementsByTagName("firstname")[0]).childNodes),
-			print getText((author.getElementsByTagName("surname")[0]).childNodes)
 			
 	def getNr(self):
 		return self.nr
