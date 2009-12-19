@@ -254,6 +254,16 @@ def buildAll():
 	files.sort(key=lambda x: x.lower())
 	for file in files:
 		buildXEP( file )
+		
+def makeBundle():
+	print "Creating the bundle...",
+	executeCommand("mkdir /tmp/xepbundle")
+	executeCommand("cp " + XEPPATH + "/*.pdf " + "/tmp/xepbundle")
+	executeCommand("tar -cf /tmp/xepbundle.tar /tmp/xepbundle")
+	executeCommand("pbzip2 -f -9 /tmp/xepbundle.tar")
+	executeCommand("mv -f /tmp/xepbundle.tar.bz2 " + XEPPATH + "/xepbundle.tar.bz2")
+	executeCommand("rm -rfd /tmp/xepbundle")
+	print "DONE"
 
 def usage():
 	print "gen.py: generate nice XHTML and beatuy PDF out of the XEP XML"
@@ -305,6 +315,8 @@ def main(argv):
 	executeCommand("sed -e '1s/<?[^?]*?>//' " + CONFIGPATH + "/extensions.xml > " + XEPPATH + "/../includes/xeplist.txt")
 	
 	executeCommand("rm -rfd /tmp/xepbuilder")
+	
+	makeBundle()
 	
 	
 if __name__ == "__main__":
