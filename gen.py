@@ -259,7 +259,7 @@ def makeBundle():
 	print "Creating the bundle...",
 	executeCommand("mkdir /tmp/xepbundle")
 	executeCommand("cp " + XEPPATH + "/*.pdf " + "/tmp/xepbundle")
-	executeCommand("tar -cf /tmp/xepbundle.tar /tmp/xepbundle")
+	executeCommand("tar --strip 1 -cf /tmp/xepbundle.tar /tmp/xepbundle")
 	executeCommand("pbzip2 -f -9 /tmp/xepbundle.tar")
 	executeCommand("mv -f /tmp/xepbundle.tar.bz2 " + XEPPATH + "/xepbundle.tar.bz2")
 	executeCommand("rm -rfd /tmp/xepbundle")
