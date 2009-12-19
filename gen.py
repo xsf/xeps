@@ -292,9 +292,7 @@ def main(argv):
 			xep = "xep-%04d.xml" % xep
 		except:
 			xep = remainder[0]
-	
-	last_build = loadDict(CONFIGPATH + "/xepbuild.dict")
-	
+		
 	executeCommand("mkdir /tmp/xepbuilder")
 	executeCommand("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
 	executeCommand("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
@@ -308,7 +306,6 @@ def main(argv):
 	
 	executeCommand("rm -rfd /tmp/xepbuilder")
 	
-	saveDict(CONFIGPATH + "/xepbuild.dict", last_build)
 	
 if __name__ == "__main__":
 	main(sys.argv[1:])
