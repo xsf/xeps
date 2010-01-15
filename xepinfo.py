@@ -38,8 +38,12 @@ def getText(nodelist):
     return thisText
 
 class XEPInfo:
-	def __init__(self, filename):
-		thexep = parse(filename)
+	def __init__(self, filename, parseStr):
+		thexep = ""
+		if parseStr:
+			thexep = parseString(filename)
+		else:
+			thexep = parse(filename)
 		xepNode = (thexep.getElementsByTagName("xep")[0])
 		headerNode = (xepNode.getElementsByTagName("header")[0])
 		titleNode = (headerNode.getElementsByTagName("title")[0])
@@ -51,7 +55,7 @@ class XEPInfo:
 		self.status = getText(statusNode.childNodes)
 		self.type = getText((headerNode.getElementsByTagName("type")[0]).childNodes)
 		revNode = (headerNode.getElementsByTagName("revision")[0])
-		version = getText((revNode.getElementsByTagName("version")[0]).childNodes)
+		self.version = getText((revNode.getElementsByTagName("version")[0]).childNodes)
 		self.date = getText((revNode.getElementsByTagName("date")[0]).childNodes)
 			
 	def getNr(self):
@@ -62,6 +66,9 @@ class XEPInfo:
 	
 	def getStatus(self):
 		return self.status
+		
+	def getVersion(self):
+		return self.version
 	
 	def getType(self):
 		return self.type
