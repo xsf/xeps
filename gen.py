@@ -245,7 +245,7 @@ def buildXEP( filename ):
 			print "PDF(ERROR)"
 	
 	x = XEPTable(CONFIGPATH + "/extensions.xml")
-	xinfo = XEPInfo(filename)
+	xinfo = XEPInfo(filename, False)
 	x.setXEP( xinfo )
 	x.save()
 
