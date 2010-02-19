@@ -57,7 +57,15 @@ class XEPInfo:
 		revNode = (headerNode.getElementsByTagName("revision")[0])
 		self.version = getText((revNode.getElementsByTagName("version")[0]).childNodes)
 		self.date = getText((revNode.getElementsByTagName("date")[0]).childNodes)
-			
+		
+		depNode = headerNode.getElementsByTagName("dependencies")
+		self.depends = []
+		if depNode:
+			depNode = depNode[0]
+			for dep in depNode.getElementsByTagName("spec"):
+				self.depends.append(getText(dep.childNodes))
+		
+		
 	def getNr(self):
 		return self.nr
 	
@@ -75,4 +83,8 @@ class XEPInfo:
 	
 	def getDate(self):
 		return self.date
+	
+	def getDepends(self):
+		return self.depends
+	
 	
