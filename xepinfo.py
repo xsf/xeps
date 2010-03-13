@@ -58,13 +58,21 @@ class XEPInfo:
 		self.version = getText((revNode.getElementsByTagName("version")[0]).childNodes)
 		self.date = getText((revNode.getElementsByTagName("date")[0]).childNodes)
 		
+		titleNode = (headerNode.getElementsByTagName("interim"))
+		if titleNode:
+		    self.interim = True;
+		else:
+		    self.interim = False;
+		
 		depNode = headerNode.getElementsByTagName("dependencies")
 		self.depends = []
 		if depNode:
 			depNode = depNode[0]
 			for dep in depNode.getElementsByTagName("spec"):
 				self.depends.append(getText(dep.childNodes))
-		
+	
+	def getInterim(self):
+	    return self.interim
 		
 	def getNr(self):
 		return self.nr
