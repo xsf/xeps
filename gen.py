@@ -38,8 +38,10 @@ import re
 import sys
 import getopt
 import glob
+import tempfile
 
 from xepinfo import XEPInfo
+from xeputil import getLatestXEPContent
 
 from xml.dom.minidom import parse,parseString,Document,getDOMImplementation
 
@@ -232,6 +234,8 @@ def buildPDF( file ):
 	return True
 
 def buildXEP( filename ):
+    # get file with content of last non-interim version
+    
 	if not fast:
 		print "Building " + filename + ": ",
 		if buildXHTML( filename ):
