@@ -234,13 +234,13 @@ def buildPDF( file, nr ):
 	return True
 
 def buildXEP( filename ):
-    nr = re.match("xep-(\d\d\d\d).xml", file).group(1)
-    xepfilepath = getLatestXEPContent("", nr);
-    if not xepfilepath:
-        print "getLatestXEPContent (ERROR)"
-        return
-    
-    files_to_delete.append(xepfilepath)
+	nr = re.match("xep-(\d\d\d\d).xml", filename).group(1)
+	xepfilepath = getLatestXEPContent("", nr);
+	if not xepfilepath:
+		print "getLatestXEPContent (ERROR)"
+		return
+	
+	files_to_delete.append(xepfilepath)
 	if not fast:
 		print "Building " + filename + ": ",
 		if buildXHTML( xepfilepath, nr ):
