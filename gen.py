@@ -52,6 +52,8 @@ verbose = False
 fast = False
 last_build = {}
 
+files_to_delete = [];
+
 def getText(nodelist):
     thisText = ""
     for node in nodelist:
@@ -166,9 +168,8 @@ def saveDict( filename, di ):
 	pickle.dump(di, f)
 	f.close()
 
-def buildXHTML( file ):
-	nr = re.match("xep-(\d\d\d\d).xml", file).group(1)
-	error, desc = executeCommand("xsltproc xep.xsl xep-" + nr + ".xml > " + XEPPATH + "/xep-" + nr + ".html")
+def buildXHTML( file, nr ):
+	error, desc = executeCommand("xsltproc xep.xsl " + file + " > " + XEPPATH + "/xep-" + nr + ".html")
 	if not checkError(error, desc):
 		return False
 		
@@ -185,10 +186,9 @@ def buildXHTML( file ):
 		return False
 	return True
 
-def buildPDF( file ):
-	nr = re.match("xep-(\d\d\d\d).xml", file).group(1)
-	
-	error, desc = executeCommand("xsltproc -o /tmp/xepbuilder/xep-" + nr + ".tex.xml xep2texml.xsl xep-" + nr + ".xml")
+def buildPDF( file, nr ):
+    	
+	error, desc = executeCommand("xsltproc -o /tmp/xepbuilder/xep-" + nr + ".tex.xml xep2texml.xsl " + file)
 	if not checkError(error, desc):
 		return False
 	
@@ -234,22 +234,27 @@ def buildPDF( file ):
 	return True
 
 def buildXEP( filename ):
-    # get file with content of last non-interim version
+    nr = re.match("xep-(\d\d\d\d).xml", file).group(1)
+    xepfilepath = getLatestXEPContent("", nr);
+    if not xepfilepath:
+        print "getLatestXEPContent (ERROR)"
+        return
     
+    files_to_delete.append(xepfilepath)
 	if not fast:
 		print "Building " + filename + ": ",
-		if buildXHTML( filename ):
+		if buildXHTML( xepfilepath, nr ):
 			print "XHTML(OK) / ",
 		else:
 			print "XHTML(ERROR) / ",
 		
-		if buildPDF( filename ):
+		if buildPDF( xepfilepath, nr ):
 			print "PDF(OK)"
 		else:
 			print "PDF(ERROR)"
 	
 	x = XEPTable(CONFIGPATH + "/extensions.xml")
-	xinfo = XEPInfo(filename, False)
+	xinfo = XEPInfo(xepfilepath, False)
 	x.setXEP( xinfo )
 	x.save()
 
@@ -315,6 +320,10 @@ def main(argv):
 		buildAll()
 	else:
 		buildXEP( xep )
+	
+	# remove xep temporary files
+	for filename in files_to_delete:
+	    executeCommand("rm " + filename)
 	
 	executeCommand("sed -e '1s/<?[^?]*?>//' " + CONFIGPATH + "/extensions.xml > " + XEPPATH + "/../includes/xeplist.txt")
 	
