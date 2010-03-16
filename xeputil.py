@@ -65,26 +65,26 @@ class XEP:
 
 
 def getLatestXEPFilename(XEPDIR, nr, no_interim=True):
-    try:
-        xep = XEP(XEPDIR, nr)
-        revs = xep.revisions()
-        revs.reverse()
-        content = ""
-        if no_interim:
-            for rev in revs:
-                tmp_content = xep.contentOfRevision(rev)
-		info = XEPInfo(tmp_content, " ")
-                if not info.interim:
-                    content = tmp_content
-                    break;
+	try:
+		xep = XEP(XEPDIR, nr)
+		revs = xep.revisions()
+		revs.reverse()
+		content = ""
+		if no_interim:
+			for rev in revs:
+				tmp_content = xep.contentOfRevision(rev)
+				info = XEPInfo(tmp_content, " ")
+				if not info.interim:
+					content = tmp_content
+					break;
 
-        else:
-            content = xep.contentOfRevision(revs[len(revs)-1])
+		else:
+			content = xep.contentOfRevision(revs[len(revs)-1])
 
-        (fd, name) = tempfile.mkstemp();
-        handle = os.fdopen(fd, "w+b")
-        handle.write(content)
-        handle.close()
-        return name;
-    except:
-        return False;
+		(fd, name) = tempfile.mkstemp();
+		handle = os.fdopen(fd, "w+b")
+		handle.write(content)
+		handle.close()
+		return name;
+	except:
+		return False;
