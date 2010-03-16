@@ -318,6 +318,9 @@ def main(argv):
 	executeCommand("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
 	executeCommand("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
 	
+	executeCommand("cp xep.ent /tmp/xep.ent")
+	files_to_delete.append("/tmp/xep.ent")
+	
 	if buildall:
 		buildAll()
 	else:
