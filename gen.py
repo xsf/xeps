@@ -41,7 +41,7 @@ import glob
 import tempfile
 
 from xepinfo import XEPInfo
-from xeputil import getLatestXEPContent
+from xeputil import getLatestXEPFilename
 
 from xml.dom.minidom import parse,parseString,Document,getDOMImplementation
 
@@ -235,7 +235,7 @@ def buildPDF( file, nr ):
 
 def buildXEP( filename ):
 	nr = re.match("xep-(\d\d\d\d).xml", filename).group(1)
-	xepfilepath = getLatestXEPContent("", nr);
+	xepfilepath = getLatestXEPFilename("", nr);
 	if not xepfilepath:
 		print "getLatestXEPContent (ERROR)"
 		return
