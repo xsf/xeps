@@ -29,6 +29,7 @@
 ## END LICENSE ##
 
 import pysvn
+import os
 import tempfile
 from xepinfo import XEPInfo
 from xml.dom.minidom import parse,parseString,Document,getDOMImplementation
@@ -47,8 +48,8 @@ class XEP:
 
 	def revisions(self):
 		client = pysvn.Client(self.BASEDIR);
-		rev = client.info("xep-" + nr + ".xml").revision.number
-		log = client.log("xep-" + nr + ".xml", pysvn.Revision( pysvn.opt_revision_kind.number, 0 ),pysvn.Revision( pysvn.opt_revision_kind.number, rev ), True)
+		rev = client.info("xep-" + self.nr + ".xml").revision.number
+		log = client.log("xep-" + self.nr + ".xml", pysvn.Revision( pysvn.opt_revision_kind.number, 0 ),pysvn.Revision( pysvn.opt_revision_kind.number, rev ), True)
 
 		revs = []
 		for l in log:
@@ -67,11 +68,12 @@ def getLatestXEPFilename(XEPDIR, nr, no_interim=True):
     try:
         xep = XEP(XEPDIR, nr)
         revs = xep.revisions()
+        revs.reverse()
         content = ""
-        if no_iterim:
-            for rev in revs.reverse():
+        if no_interim:
+            for rev in revs:
                 tmp_content = xep.contentOfRevision(rev)
-                info = XEPInfo("", tmp_content)
+		info = XEPInfo(tmp_content, " ")
                 if not info.interim:
                     content = tmp_content
                     break;
@@ -79,7 +81,8 @@ def getLatestXEPFilename(XEPDIR, nr, no_interim=True):
         else:
             content = xep.contentOfRevision(revs[len(revs)-1])
 
-        handle, name = mkstemp();
+        (fd, name) = tempfile.mkstemp();
+        handle = os.fdopen(fd, "w+b")
         handle.write(content)
         handle.close()
         return name;
