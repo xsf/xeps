@@ -252,6 +252,8 @@ def buildXEP( filename ):
 			print "PDF(OK)"
 		else:
 			print "PDF(ERROR)"
+	else:
+		print "Building " + filename + " (FAST MODE)"
 	
 	x = XEPTable(CONFIGPATH + "/extensions.xml")
 	xinfo = XEPInfo(xepfilepath, False)
