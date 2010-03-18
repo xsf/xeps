@@ -55,7 +55,7 @@
     <TeXML escape="0">
 %!TEX TS-program = xelatex
 %!TEX encoding = UTF-8 Unicode
-\documentclass[]{scrartcl}
+\documentclass[DIV=13]{scrartcl}
 \KOMAoptions{paper=a4}
 
 \usepackage[
