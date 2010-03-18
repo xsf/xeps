@@ -55,7 +55,7 @@
     <TeXML escape="0">
 %!TEX TS-program = xelatex
 %!TEX encoding = UTF-8 Unicode
-\documentclass[DIV=12]{scrartcl}
+\documentclass[DIV=10]{scrartcl}
 \KOMAoptions{paper=a4}
 
 \usepackage[
@@ -167,7 +167,7 @@
             \fancyhead[L,L]{\includegraphics[totalheight=10pt]{xmpp.pdf} \slshape \leftmark}
             \fancyfoot[C,C]{\thepage}
         </TeXML>
-      <cmd name="KOMAoptions"><parm>DIV=12</parm></cmd>
+      <cmd name="KOMAoptions"><parm>DIV=10</parm></cmd>
       <cmd name="section*" nl2="1"><parm>Legal</parm></cmd>
       <xsl:apply-templates select="/xep/header/legal" />
       <cmd name="newpage" nl2="1"/>
