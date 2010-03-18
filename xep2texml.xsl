@@ -111,24 +111,6 @@
 \begin{center}\LARGE
 }
 
-%\titlecontents{section}[0.7cm] 
-%{\vspace{0.3cm}} 
-%{\bfseries\Large\contentslabel{0.7cm}} 
-%{\bfseries\Large\hspace{-0.7cm}} 
-%{\bfseries\Large\hfill\contentspage} 
-%
-%\titlecontents{subsection}[2cm] 
-%{} 
-%{\contentslabel{1.3cm}} 
-%{} 
-%{\titlerule*[1mm]{.}\contentspage}
-%
-%\titlecontents{subsubsection}[2.3cm] 
-%{} 
-%{\contentslabel{1.3cm}} 
-%{} 
-%{}
-
 \sloppy
     </TeXML>
     
