@@ -55,7 +55,7 @@
     <TeXML escape="0">
 %!TEX TS-program = xelatex
 %!TEX encoding = UTF-8 Unicode
-\documentclass[DIV=13]{scrartcl}
+\documentclass[DIV=12]{scrartcl}
 \KOMAoptions{paper=a4}
 
 \usepackage[
@@ -165,6 +165,7 @@
         </cmd>
         
       </TeXML>
+      <cmd name="KOMAoptions"><parm>DIV=24</parm></cmd>
       <cmd name="pagestyle"><parm>empty</parm></cmd>
       <cmd name="maketitle" />
       <cmd name="thispagestyle"><parm>empty</parm></cmd>
@@ -180,6 +181,11 @@
         <xsl:value-of select="/xep/header/abstract"/>
       </env>
       <cmd name="newpage" nl2="1"/>
+      <TeXML escape="0">
+            \fancyhead[L,L]{\includegraphics[totalheight=10pt]{xmpp.pdf} \slshape \leftmark}
+            \fancyfoot[C,C]{\thepage}
+        </TeXML>
+      <cmd name="KOMAoptions"><parm>DIV=12</parm></cmd>
       <cmd name="section*" nl2="1"><parm>Legal</parm></cmd>
       <xsl:apply-templates select="/xep/header/legal" />
       <cmd name="newpage" nl2="1"/>
