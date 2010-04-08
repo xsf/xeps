@@ -316,7 +316,21 @@ OR OTHER DEALINGS IN THE SOFTWARE.
               Source Control: 
                 <a class='standardsButton' href='{$sourceHTML}'>HTML</a>&#160;
                 <a class='standardsButton' href='{$sourceRSS}'>RSS</a>
+                <br />
             </xsl:if>
+            <xsl:variable name='formatXML'>
+                <xsl:text>http://xmpp.org/extensions/xep-</xsl:text>
+                <xsl:value-of select='/xep/header/number'/>
+                <xsl:text>.xml</xsl:text>
+            </xsl:variable>
+            <xsl:variable name='formatPDF'>
+                <xsl:text>http://xmpp.org/extensions/xep-</xsl:text>
+                <xsl:value-of select='/xep/header/number'/>
+                <xsl:text>.pdf</xsl:text>
+            </xsl:variable>
+            This document in other formats: 
+                <a class='standardsButton' href='{$formatXML}'>XML</a>&#160;
+                <a class='standardsButton' href='{$formatPDF}'>PDF</a>
           </p>
         <hr />
         <!-- AUTHOR INFO -->
