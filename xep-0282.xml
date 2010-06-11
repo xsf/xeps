@@ -1,0 +1,666 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>DMUC2: Distributed MUC</title>
+  <abstract>Multi-User Chats, distributed over several nodes in the XMPP network, using a master/slave architecture</abstract>
+  &LEGALNOTICE;
+  <number>0282</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0045</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT-YET-ASSIGNED</shortname>
+  <author>
+    <firstname>Carlo</firstname>
+    <surname>von Loesch</surname>
+    <jid>lynx@psyced.org</jid>
+  </author>
+  <author>
+    <firstname>Philipp</firstname>
+    <surname>Hancke</surname>
+    <jid>fippo@ve.symlynx.com</jid>
+  </author>
+  <revision>
+    <version>0.1</version>
+    <date>2010-06-11</date>
+    <initials>psa</initials>
+    <remark><p>Initial published version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2010-03-15</date>
+    <initials>cvl/ph</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p class='box'><em>This document is one of several proposals for distributing XMPP chat rooms across multiple chat services. It is expected that the various approaches will be refined and harmonized before a final protocol is developed.</em></p>
+  <p>The architecture is that of a single root node, called MASTER and several repeater nodes, each called SLAVE. Every stanza is submitted via the slaves to the master, control is centralized there. The master then sends a copy of the stanza to each of the slaves where it is processed and then distributed to each of the slave's leaf nodes, local users at this point. During redistribution, the slave shall not change the stanza's 'from' attribute, which is only possible if the slave is in the same security domain as the user. The result of that is a decreased number of messages on the server-to-server links between the master's server and each of the slave servers.</p>
+  <code><![CDATA[
+BigCheese ----> vesa.yeggmaex.irc ----> wallops MUC ----> killrc.oulubox.irc ----> Wumpus
+                                                          killrc.oulubox.irc ----> Phaedrus
+							  killrc.oulubox.irc ----> Valdis
+                                        wallops MUC ----> eris.dclxvii.irc   ----> WiZ
+                                                          eris.dclxvii.irc   ----> Troy
+			                wallops MUC ----> vesa.yeggmaex.irc  ----> BigCheese
+					                  vesa.yeggmaex.irc  ----> Efchen
+]]></code>
+  <p>Note that this only applies to stanzas that are directed to all occupants, such as the change of availability status and messages whose 'type' attribute is set to 'groupchat'.</p>
+  <p>While 1-1 stanzas such as in-room private messages or vcard-temp requests may also travel along that path they are currently unaffected by this.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>This specification addresses the following requirements:</p>
+  <ul>
+    <li>The existence of the slave shall be transparent for the user.</li>
+    <li>Enable detection of connection loss.</li>
+    <li>Enable occupants to remain in instance of the conference if connectivity is lost to other instances.</li>
+    <li>Enable occupants to leave a chatroom while connectivity is lost.</li>
+    <li>Enable syncing of history and room rosters on reconnect.</li>
+    <li>Improve distribution of 'broadcast' stanzas'.</li>
+  </ul>
+</section1>
+<section1 topic='Terminology' anchor='terms'>
+<!--
+  <section2 topic='General Terms' anchor='terms-general'>
+    <dl>
+      <di>
+        <dt>Master</dt>
+	<dd></dd>
+      </di>
+      <di>
+        <dt>Slave</dt>
+	<dd></dd>
+      </di>
+      <di>
+        <dt>Netsplit</dt>
+	<dd></dd>
+      </di>
+      <di>
+        <dt>CASTMSG</dt>
+	<dd>wut? you don't need this</dd>
+      </di>
+      <di>
+        <dt>ENTER</dt>
+	<dd>?</dd>
+      </di>
+      <di>
+        <dt>LEAVE</dt>
+	<dd>?</dd>
+      </di>
+     </dl>
+  </section2>
+  -->
+  <section2 topic='Dramatis Personae' anchor='terms-personae'> 
+    <p>Most of the examples in this document use the scenario of the 1990 war that split the <cite>Internet Relay Chat</cite> into several incompatible networks. The battlefield is represented here by the "wallops@channel.avalon.irc" chatroom. The characters are as follows:</p> 
+    <table caption='Dramatis Personae'> 
+      <tr> 
+        <th>Room Nickname</th> 
+        <th>Full JID</th> 
+        <th>Role</th> 
+      </tr> 
+      <tr> 
+        <td>Wumpus</td> 
+        <td>argl@killrc.oulubox.irc/laptop</td> 
+        <td>Moderator</td> 
+      </tr> 
+      <tr> 
+        <td>Valdis</td> 
+        <td>valdis@killrc.oulubox.irc/desktop</td> 
+        <td>Participant</td> 
+      </tr> 
+      <tr> 
+        <td>Phaedrus</td>
+        <td>phaedrus@killrc.oulubox.irc/phone</td> 
+        <td>Participant</td> 
+      </tr> 
+      <tr>
+        <td>WiZ</td> 
+        <td>squit@eris.dclxvii.irc/jupiter</td> 
+        <td>Moderator</td> 
+      </tr> 
+      <tr>
+        <td>Troy</td> 
+        <td>troy@eris.dclxvii.irc/screwdriver</td> 
+        <td>Moderator</td> 
+      </tr> 
+      <tr> 
+        <td>BigCheese</td> 
+        <td>rubenro@vesa.yeggmaex.irc/shaver</td> 
+        <td>Participant</td> 
+      </tr> 
+      <tr> 
+        <td>Efchen</td> 
+        <td>msa@vesa.yeggmaex.irc/bicycle</td> 
+        <td>Participant</td> 
+      </tr> 
+    </table> 
+    <p>In our example we are presuming that three slaves from three hosts have registered with the master for traffic redistribution. They are doing so using slave@host jids, but they could be using any temporary jid the implementor finds useful to choose.</p>
+  </section2>
+</section1>
+<section1 topic='MASTER/SLAVE Protocol' anchor='masterslave'>
+  <p>This section describes the protocol between the master and the slaves, the interaction between each slave and its users are described in the next section.</p>
+  <!--
+  <section2 topic='Narrative Protocol Description'>
+    <p>some blabla</p>
+  </section2>
+  -->
+  <section2 topic='Slave Requirements'>
+    <p>The slave</p>
+    <ul>
+      <li>must be able to intercept any stanzas sent to the masters jid,</li>
+      <li>must be able to verify if a local user has sent directed presence to the masters jid,</li>
+      <li>must store room roster,</li>
+      <li>must store local room roster</li>
+      <li>must store room history (if desired by master)</li>
+    </ul>
+  </section2>
+  <section2 topic='Creating a Slave'>
+    <p>to follow</p>
+    <p>Might include things like negotiation of keepalive frequency and amount of room might be useful to set some things like keepalive frequency, keeping/storing room history etc.</p>
+    <!--
+    <p>maxstanzas / maxbytes attribute</p>
+    <p>PARANOIA: why should the slave let the master create the slave and send room roster and history?</p>
+    -->
+  </section2>
+  <section2 topic='Initial Room Roster'>
+    <p>After the creation of a new slave, the master must send the room roster (which at that time only consists of remote participants) to the slave:</p>
+    <example caption="Master Sends Room Roster to Slave"><![CDATA[
+<presence 
+    from='wallops@channel.avalon.irc/Wumpus'
+    to='slave@vesa.yeggmaex.irc'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='owner' role='moderator'/>
+  </x>
+</presence>
+<presence 
+    from='wallops@channel.avalon.irc/Valdis'
+    to='slave@vesa.yeggmaex.irc'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>
+<presence 
+    from='wallops@channel.avalon.irc/Phaedrus'
+    to='slave@vesa.yeggmaex.irc'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>
+<presence 
+    from='wallops@channel.avalon.irc/WiZ'
+    to='slave@vesa.yeggmaex.irc'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='admin' role='moderator'/>
+  </x>
+</presence>
+<presence 
+    from='wallops@channel.avalon.irc/Troy'
+    to='slave@vesa.yeggmaex.irc'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='participant' role='moderator'/>
+  </x>
+</presence>]]></example>
+    <!--
+    <p>Tricky: if this does not contain the full jid, the (initial) presence information sent to moderators that join later will not be possible... mh!</p>
+    -->
+  </section2>
+  <section2 topic='Initial Room History'>
+    <p>After the creation of a new slave, the master MAY also send the discussion history to the slave. The slave shall store this and deliver it to entering participants.</p> 
+    <p>from=masterjid to=slavejid?</p>
+  </section2>
+  <section2 topic='ENTER'>
+    <p>If a new occupant requests to enter the room, the master first sends a presence update to all participants to inform them of the presence of the new user. Then, the master sends the affected slave a stanza requesting it to add the user to the distribution list</p>
+    <example caption="Master informs Slave of New Occupant"><![CDATA[
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@vesa.yeggmaex.irc'>
+  <x xmlns='urn:xmpp:tmp:dmuc:0'>
+    <enter jid='rubenro@vesa.yeggmaex.irc/shaver'/>
+    <history maxstanzas='20'/>
+  </x>
+  ...
+</presence>]]></example>
+    <p>The slave MUST verify that the user has sent directed presence to the masters JID before. This helps to ensure that the user intended to enter the room. If this is ture, the slave shall add the user to the distribution list and send the room roster, occupants own presence in room and discussion history to the full jid of the added user.</p>
+  </section2>
+  <section2 topic='LEAVE'>
+    <p>If an occupant sends an unavailable presence to the room, the master sends the affected slave a stanza requesting it to remove the user from the distribution list.</p>
+    <example caption="Master informs Slave of Occupant's Departure"><![CDATA[
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@vesa.yeggmaex.irc'
+    type='unavailable'>
+  <x xmlns='urn:xmpp:tmp:dmuc:0'>
+    <leave jid='rubenro@vesa.yeggmaex.irc/shaver'/>
+  </x>
+  ...
+</presence>]]></example>
+    <p>The slave removes user and forwards the stanza to user.</p>
+    <p>The master then sends a presence update to all slaves to announce the occupants departure.</p>
+  </section2>
+  <section2 topic='Presence Update'>
+    <p>Presence updates are distributed by the master to all slaves.</p>
+    <example caption="Master sends presence update"><![CDATA[
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@killrc.oulubox.irc'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none'
+          jid='rubenro@vesa.yeggmaex.irc/shaver'
+          role='participant'/>
+  </x>
+  ...
+</presence>
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@eris.dclxvii.irc'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none'
+          jid='rubenro@vesa.yeggmaex.irc/shaver'
+          role='participant'/>
+  </x>
+  ...
+</presence>
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@vesa.yeggmaex.irc'>
+  ...
+</presence>]]></example>
+    <p>Note that the master MUST NOT send the full jid of the user to any slaves without members that are moderators.</p>
+    <p>When rebroadcasting this stanza to its local occupants, the slave MUST remove the participants full JID subject to the rules of XEP-0045. In addition, the slave stores the resulting changes to the room roster, so that it can send the correct state to entering users.</p>
+  </section2>
+  <section2 topic='Slave Forwards Stanza to Master'>
+    <p>The slave may relay messages from local users to the master. When doing so, it MUST NOT modify the stanzas 'from' attribute but MUST retain the original address of the sender.</p>
+    <!--
+    <p>Die Regel ist relativ einfach... from=fulljid to=masterjid/undevtlresource</p>
+    <p>fulljid deshalb, damit der master nicht checken muss ob der jeweilige user auf dem slave ist und ausserdem der jeweilige user nicht zwangsläufig im Raum sein muss...</p>
+    <p>Beispiele: message submit, presence update, privatchat innerhalb raum, vcard avatar get</p>
+    -->
+    <example caption="Slave Relays a Message to the Master"><![CDATA[
+<message
+    from='rubenro@vesa.yeggmaex.irc/shaver'
+    to='wallops@channel.avalon.irc'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+</message>]]></example>
+    <!--
+    <p>Some rules:</p>
+    <ul>
+      <li>The stanzas 'from' attribute MUST be retained.</li>
+      <li>Stanzas from participants and non-participants must be routed</li>
+    </ul>
+    -->
+  </section2>
+  <section2 topic='Message Broadcast'>
+    <p>When relaying a message, the master SHOULD add a urn:xmpp:delay element inside dmuc element so that the slave can provide proper timestamps to new users. The master then sends a copy of the stanza to each slave.</p>
+    <example caption="Message from Master to all Slaves"><![CDATA[
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@killrc.oulubox.irc'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+  <x xmlns='urn:xmpp:tmp:dmuc:0'>
+      <delay xmlns='urn:xmpp:delay'
+        from='wallops@channel.avalon.irc/BigCheese'
+	stamp='1990-10-13T23:58:37Z'/>
+  </x>
+</message>
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@eris.dclxvii.irc'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+  <x xmlns='urn:xmpp:tmp:dmuc:0'>
+      <delay xmlns='urn:xmpp:delay'
+        from='wallops@channel.avalon.irc/BigCheese'
+	stamp='1990-10-13T23:58:37Z'/>
+  </x>
+</message>
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@vesa.yeggmaex.irc'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+  <x xmlns='urn:xmpp:tmp:dmuc:0'>
+      <delay xmlns='urn:xmpp:delay'
+        from='wallops@channel.avalon.irc/BigCheese'
+	stamp='1990-10-13T23:58:37Z'/>
+  </x>
+</message>]]></example>
+    <p>After saving the stanza for the purpose of keeping a room history, the slave SHOULD remove the urn:xmpp:tmp:dmuc:0 element and send the stanza to each local user.</p>
+  </section2>
+  <section2 topic='Master-Slave Keepalive'>
+    <p>To ensure a working connecting, the master SHOULD send an XMPP Ping stanza to each slave if there has been no traffic for a certain amount of time.</p>
+    <p>Likewise, each slave should ping the master if there has been no traffic for more than the usual amount of time.</p>
+  </section2>
+  <section2 topic='Netsplit' anchor='netsplit'>
+    <section3 topic='Netsplit Detection' anchor='netsplit-detect'>
+      <p>A 'lost connection' can be detected by either slave or master when a stanza sent to the master or a slave respectively bounced.</p>
+      <section4 topic='At the Master'>
+        <p>If the master receives a stanza with type=error from the slave JID, it MUST:</p>
+        <ul>
+          <li>mark the slave as 'split', making sure that any further broadcasts are not sent to the affected slave</li>
+	  <li>start sending pings to the slave with a higher frequency to get a timely notification if the slave reappears</li>
+	  <li>resync when the slave reappears as described below</li>
+        </ul>
+        <p>In addition, the master MAY send a presence update for each user on the affected slave, marking them as away.</p>
+      </section4>
+      <section4 topic='At the Slave'>
+        <p>If the slave receives a stanza with type=error from the master's JID, it MUST:</p>
+	<ul>
+	  <li>stop submitting messages to the master</li>
+	  <li>react to people sending presence updates or leaving the room and broadcast those changes to local users</li>
+	</ul>
+	<p>In addition, the slave MAY (and be careful when using this):</p>
+	<ul>
+	  <li>enable local participants to continue their in-room conversation with other local participants</li>
+	  <li>enable local participants to continue 1-1 messaging in the context of a room (such as private chat or vcard retrieval)</li>
+	  <li>enable local users to enter the room (DANGER!!!)</li>
+	  <li>enable moderators (as designated by the master) to kick participants</li>
+	  <li>mark non-local users as away</li>
+	</ul>
+      </section4>
+    </section3>
+    <section3 topic='Netjoin' anchor='netjoin'>
+      <p>to follow</p>
+    </section3>
+  </section2>
+</section1>
+<section1 topic='Use-Cases' anchor='Uses-Cases'>
+  <p>This section narratively describes the master-slave protocol in context with client interactions.</p>
+  <section2 topic='Entering a Room' anchor='enter'>
+    <p>The user seeks to enter the wallops chatroom with the room nickname BigCheese:</p>
+    <example caption="User Seeks to Enter Room"><![CDATA[
+<presence
+    from='rubenro@vesa.yeggmaex.irc/shaver'
+    to='wallops@channel.avalon.irc/BigCheese'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+</presence>]]></example>
+    <p>The master sends the presence update to each slave to inform the current occupants of BigCheese's arrival:</p>
+    <example caption="Master Sends Presence Update to all Slaves"><![CDATA[
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@killrc.oulubox.irc'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none'
+          jid='rubenro@vesa.yeggmaex.irc/shaver'
+          role='participant'/>
+  </x>
+  ...
+</presence>
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@eris.dclxvii.irc'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none'
+          jid='rubenro@vesa.yeggmaex.irc/shaver'
+          role='participant'/>
+  </x>
+  ...
+</presence>
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@vesa.yeggmaex.irc'>
+  ...
+</presence>]]></example>
+    <p>Each slave then distributes this presence update:</p>
+    <example caption="Slaves Distribute Presence Update to Users - killrc Slave"><![CDATA[
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='argl@killrc.oulubox.irc/laptop'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none'
+          jid='rubenro@vesa.yeggmaex.irc/shaver'
+          role='participant'/>
+  </x>
+  ...
+</presence>
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='valdis@killrc.oulubox.irc/desktop'>
+  ...
+</presence>
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='phaedrus@killrc.oulubox.irc/phone'>
+  ...
+</presence>]]></example>
+    <example caption="Slaves Distribute Presence Update to Users - eris Slave"><![CDATA[
+<presence
+    from='wallops@channel.avalon.irc/WiZ'
+    to='squit@eris.dclxvii.irc/jupiter'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none'
+          jid='rubenro@vesa.yeggmaex.irc/shaver'
+          role='participant'/>
+  </x>
+  ...
+</presence>
+<presence
+    from='wallops@channel.avalon.irc/WiZ'
+    to='troy@eris.dclxvii.irc/screwdriver'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none'
+          jid='rubenro@vesa.yeggmaex.irc/shaver'
+          role='participant'/>
+  </x>
+  ...
+</presence>]]></example>
+    <example caption="Slaves Distribute Presence Update to Users - vesa Slave"><![CDATA[
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='rubenro@vesa.yeggmaex.irc/shaver'>
+  ...
+</presence>]]></example>
+    <p>The master then informs the slave of the entered user about a new occupant:</p>
+    <example caption="Master Informs Slave of New Occupant"><![CDATA[
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@vesa.yeggmaex.irc'>
+  <x xmlns='urn:xmpp:tmp:dmuc:0'>
+    <enter jid='rubenro@vesa.yeggmaex.irc/shaver'/>
+  </x>
+  ...
+</presence>]]></example>
+    <p>The slave sends presence from existing occupants to new occupant:</p>
+    <example caption='Slave Sends Presence from Existing Occupants to New Occupant'><![CDATA[
+<presence 
+    from='wallops@channel.avalon.irc/Wumpus'
+    to='rubenro@vesa.yeggmaex.irc/shaver'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='owner' role='moderator'/>
+  </x>
+</presence>
+<presence 
+    from='wallops@channel.avalon.irc/Valdis'
+    to='rubenro@vesa.yeggmaex.irc/shaver'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>
+<presence 
+    from='wallops@channel.avalon.irc/Phaedrus'
+    to='rubenro@vesa.yeggmaex.irc/shaver'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>
+<presence 
+    from='wallops@channel.avalon.irc/WiZ'
+    to='rubenro@vesa.yeggmaex.irc/shaver'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='admin' role='moderator'/>
+  </x>
+</presence>
+<presence 
+    from='wallops@channel.avalon.irc/Troy'
+    to='rubenro@vesa.yeggmaex.irc/shaver'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='participant' role='moderator'/>
+  </x>
+</presence>
+<presence 
+    from='wallops@channel.avalon.irc/Efchen'
+    to='rubenro@vesa.yeggmaex.irc/shaver'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>]]></example>
+    <p>and concludes the room roster by sending the new occupant's presence to the new occupant:</p>
+    <example caption="Slave Sends New Occupant's Presence to New Occupant"><![CDATA[
+<presence
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='rubenro@vesa.yeggmaex.irc/shaver'
+  ...
+</presence>]]></example>
+    <p>After that, the slave will send the discussion history to the new occupant:</p>
+    <example caption='Slave Sends Discussion History to New Occupant'><![CDATA[
+<message from='wallops@channel.avalon.irc/Trillian'
+    to='rubenro@vesa.yeggmaex.irc/shaver'
+    type='groupchat'>
+    <body>Honest! He did!!</body>
+    <delay xmlns='urn:xmpp:delay'
+      from='wallops@channel.avalon.irc/Trillian'
+      stamp='1990-01-23T19:50:01Z'/>
+</message>
+<message from='wallops@channel.avalon.irc/BlondeBoy'
+    to='rubenro@vesa.yeggmaex.irc/shaver'
+    type='groupchat'>
+    <body>Was that absolutely necessary????????</body>
+    <delay xmlns='urn:xmpp:delay'
+      from='wallops@channel.avalon.irc/BlondeBoy'
+      stamp='1990-01-23T19:50:30Z'/>
+</message>
+<message from='wallops@channel.avalon.irc/DCLXVI'
+    to='rubenro@vesa.yeggmaex.irc/shaver'
+    type='groupchat'>
+    <body>SUUUUUUURE he did</body>
+    <delay xmlns='urn:xmpp:delay'
+      from='wallops@channel.avalon.irc/DCLXVI'
+      stamp='1990-01-23T19:50:51Z'/>
+</message>
+<message from='wallops@channel.avalon.irc/Cerebus'
+    to='rubenro@vesa.yeggmaex.irc/shaver'
+    type='groupchat'>
+    <body>He did.  really truly he did.</body>
+    <delay xmlns='urn:xmpp:delay'
+      from='wallops@channel.avalon.irc/Cerebus'
+      stamp='1990-01-23T19:51:20Z'/>
+</message>
+]]></example>
+  </section2>
+  <section2 topic='Sending a Message to All Occupants' anchor='msg'>
+    <example caption="Occupant Sends a Message to All Occupants"><![CDATA[
+<message
+    from='rubenro@vesa.yeggmaex.irc/shaver'
+    to='wallops@channel.avalon.irc'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+</message>]]></example>
+    <p>The master will broadcast this message to all slaves:</p>
+    <example caption="Master Distributes Message to all Slaves"><![CDATA[
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@killrc.oulubox.irc'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+  <x xmlns='urn:xmpp:tmp:dmuc:0'>
+      <delay xmlns='urn:xmpp:delay'
+        from='wallops@channel.avalon.irc/BigCheese'
+	stamp='1990-10-13T23:58:37Z'/>
+  </x>
+</message>
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@eris.dclxvii.irc'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+  <x xmlns='urn:xmpp:tmp:dmuc:0'>
+      <delay xmlns='urn:xmpp:delay'
+        from='wallops@channel.avalon.irc/BigCheese'
+	stamp='1990-10-13T23:58:37Z'/>
+  </x>
+</message>
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='slave@vesa.yeggmaex.irc'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+  <x xmlns='urn:xmpp:tmp:dmuc:0'>
+      <delay xmlns='urn:xmpp:delay'
+        from='wallops@channel.avalon.irc/BigCheese'
+	stamp='1990-10-13T23:58:37Z'/>
+  </x>
+</message>]]></example>
+    <p>And each slave distributes to local occupants</p>
+    <example caption="Slave Distributes Message to Occupants - killrc Slave"><![CDATA[
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='argl@killrc.oulubox.irc/laptop'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+</message>
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='valdis@killrc.oulubox.irc/desktop'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+</message>
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='phaedrus@killrc.oulubox.irc/phone'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+</message>]]></example>
+    <example caption="Slave Distributes Message to Occupants - eris Slave"><![CDATA[
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='squit@eris.dclxvii.irc/jupiter'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+</message>
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='troy@eris.dclxvii.irc/screwdriver'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+</message>]]></example>
+    <example caption="Slave Distributes Message to Occupants - vesa Slave"><![CDATA[
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='rubenro@vesa.yeggmaex.irc/shaver'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+</message>
+<message
+    from='wallops@channel.avalon.irc/BigCheese'
+    to='msa@vesa.yeggmaex.irc/bicycle'
+    type='groupchat'>
+  <body>Phaedrus, we're all having a truly rotten time.</body>
+</message>]]></example>
+  </section2>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>to follow</p>
+  <p>Careful with channel overtakes :-)</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p> 
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This document requires no interaction with the &REGISTRAR;.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>to follow</p>
+</section1>
+</xep>
