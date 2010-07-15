@@ -25,6 +25,12 @@
   &dmeyer;
   &ianpaterson;
   <revision>
+    <version>0.14</version>
+    <date>2010-07-15</date>
+    <initials>psa</initials>
+    <remark><p>Defined an RSA-specific child element of the pubkey element to contain the modulus, public exponent, and fingerprint directly (rather than a DER-encoded format that depends on ASN.1); specified that the public exponent should be 65537; clarified the fingerprint generation method and updated all of the fingerprint formats to enable hash agility; incremented namespaces from version 1 to version 2.</p></remark>
+  </revision>
+  <revision>
     <version>0.13</version>
     <date>2010-01-12</date>
     <initials>psa</initials>
@@ -116,18 +122,18 @@
 
 <section1 topic='Approach' anchor='approach'>
   <p>This document assumes that each user will have a privately-generated key. A user <strong>might</strong> have more than one key (e.g., different keys for different clients) and the user's key <strong>might</strong> be signed by other entities, such as a certification authority (CA) or another user. However, the simplest case is a single key per user.</p>
-  <p>The data formats defined here are deliberately kept very simple, with the key itself represented as ASCII output (of the kind supported by most cryptographic libraries) and any metadata represented using a few straightforward XML elements and attributes. This document does not use the 'http://www.w3.org/2000/09/xmldsig#' namespace as specified in &w3xmlsig;; although that format is quite powerful, it introduces unnecessary levels of complexity for this use case.</p>
+  <p>The data formats defined here are deliberately kept very simple, with the key itself represented as by the modulus and the public exponent, and any metadata represented using a few straightforward XML elements and attributes. This document does not use the 'http://www.w3.org/2000/09/xmldsig#' namespace as specified in &w3xmlsig;; although that format is quite powerful, it introduces unnecessary levels of complexity for this use case. In addition, this document has no dependency on ASN.1, whose use is problematic on some computing platforms and languages (e.g., JavaScript).</p>
   <p>We define three payload elements:</p>
   <ol>
-    <li>The &lt;pubkey/&gt; element (qualified by the 'urn:xmpp:pubkey:1' namespace) specifies a single public key for a user.</li>
-    <li>The &lt;revoke/&gt; element (qualified by the 'urn:xmpp:revoke:1' namespace) specifies old keys that a user once used but has now revoked.</li>
-    <li>The &lt;attest/&gt; element (qualified by the 'urn:xmpp:attest:1' namespace) specifies one or more signed copies of a user's public key.</li>
+    <li>The &lt;pubkey/&gt; element (qualified by the 'urn:xmpp:pubkey:2' namespace) specifies a single public key for a user.</li>
+    <li>The &lt;revoke/&gt; element (qualified by the 'urn:xmpp:revoke:2' namespace) specifies old keys that a user once used but has now revoked.</li>
+    <li>The &lt;attest/&gt; element (qualified by the 'urn:xmpp:attest:2' namespace) specifies one or more signed copies of a user's public key.</li>
   </ol>
-  <p>An entity MAY support only public key publishing (the 'urn:xmpp:pubkey:1' namespace) and not support revocations and attestations.</p>
+  <p>An entity MAY support only public key publishing (the 'urn:xmpp:pubkey:2' namespace) and not support revocations and attestations.</p>
 </section1>
 
 <section1 topic='Public Keys' anchor='keys'>
-  <p>A single public key is contained in a &lt;pubkey/&gt; element qualified by the 'urn:xmpp:pubkey:1' namespace &VNOTE;, for which the defined child elements are as follows:</p>
+  <p>A single public key is contained in a &lt;pubkey/&gt; element qualified by the 'urn:xmpp:pubkey:2' namespace &VNOTE;, for which the defined child elements are as follows:</p>
   <table caption='Children of the &lt;pubkey/&gt; Element'>
     <tr>
       <th>Element</th>
@@ -146,40 +152,56 @@
       <td>The XMPP address associated with this key.</td>
     </tr>
     <tr>
-      <td>&lt;key/&gt;</td>
-      <td>The ASCII output representation of an RSA public key generated in accordance with &rfc3447;.</td>
-    </tr>
-    <tr>
-      <td>&lt;print/&gt;</td>
-      <td>The SHA-256 fingerprint for this key, where the input string to the hash function is the concatenation of the begin date, the end date, the JID, and the public key itself.</td>
+      <td>&lt;rsakey/&gt;</td>
+      <td>An element with three defined children for the modulus, public exponent, and fingerprint, where the input string to the hash function is the concatenation of the begin date, the end date, the JID, the string representation of the modulus, and the string representation of the public exponent, all encoded according to UTF-8 -- e.g., Base64(SHA-256(UTF8-encode(begin + end + jid + str(modulus) + str(exponent))).</td>
     </tr>
     <tr>
       <td>&lt;uri/&gt;</td>
       <td>A URI at which the key can be retrieved outside the XMPP network; this element is OPTIONAL.</td>
     </tr>
   </table>
+  <p>The children of the &lt;rsakey/&gt; element are as follows.</p>
+  <table caption='Children of the &lt;rsakey/&gt; Element'>
+    <tr>
+      <th>Element</th>
+      <th>Description</th>
+    </tr>
+    <tr>
+      <td>&lt;modulus/&gt;</td>
+      <td>A large random number used as input to encryption and signing operations.</td>
+    </tr>
+    <tr>
+      <td>&lt;publicExponent/&gt;</td>
+      <td>The public exponent used as input to encryption and signing operations; RECOMMENDED to be "65537".</td>
+    </tr>
+    <tr>
+      <td>&lt;print/&gt;</td>
+      <td>A fingerprint for the key, where the algorithm used to generate the fingerprint is specified by the 'algo' attribute (whose default value is "sha-256").</td>
+    </tr>
+  </table>
   <p>An example follows.</p>
   <example caption='A public key'><![CDATA[
-<pubkey xmlns='urn:xmpp:pubkey:1'>
-  <begin>2009-12-11T20:12:37</begin>
-  <end>2010-12-11T23:59:59</end>
-  <jid>peter@jabber.org</jid>
-  <key>
-    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA25/Y7oonF3+pRjZCk0cQ
-    lQFiUFvyMeUOnn01NLfqfBeT4xjahsxaYFPd+V8jIHtpO3nbkpfrBh5aLPCkqDzS
-    UFvmLaVSIMUt085kcT/Yv72BUWUGaISt7swSNfictRbVZ0k8TbXUDLIAYWN8lsie
-    NVxL13PS9pu3WNoORuKAV5RuzDS3djnjb6fti7fTwEUpQVwRrJXY6jNhv4c4zE3x
-    Pjm48gIlHbZrxuWNrXnKT6uwXnr6PJ6O3YspferJG1oA3kmOwm41yWDkalbKgkNZ
-    WeS+ahB/i9LIG+41CdekPpI0Kr0Ll9X7+zaPV6xzjlG8dYy7ZGm4eTL9STuWlPdL
-    +wIDAQAB
-  </key>
-  <print>13475c8e27399908b4447d7c52ab30822872832eba3a654f0d80e07fb4157673</print>
-</pubkey>
+  <pubkey xmlns='urn:xmpp:pubkey:2'>
+    <begin>2010-01-14T18:44:18Z</begin>
+    <end>2011-01-14T18:44:18Z</end>
+    <jid>alice@example.com</jid>
+    <rsakey>
+      <modulus>
+1379023255526646700594339116162946782578210615394951216941818138582610132470
+1538683909348374935399508656737300036572749687356120324044452513265157631177
+7178489330603814456987700147603113573139002085123800563057708424072367754377
+0906580036148700287401094143051242586181831057271078882862257109043483553172
+66153
+      </modulus>
+      <publicExponent>65537</publicExponent>
+      <print algo='sha-256'>eWGdcl+AzN0treQoRry+/zYqYJ7ZEAzwIvTossTURLw=</print>
+    </rsakey>
+  </pubkey>
   ]]></example>
 </section1>
 
 <section1 topic='Revocations' anchor='revocations'>
-  <p>A user can revoke his own key. The revocation is contained in a &lt;revoke/&gt; element qualified by the 'urn:xmpp:revoke:1' namespace &VNOTE;, for which the defined child elements are as follows:</p>
+  <p>A user can revoke his own key. The revocation is contained in a &lt;revoke/&gt; element qualified by the 'urn:xmpp:revoke:2' namespace &VNOTE;, for which the defined child elements are as follows:</p>
   <table caption='Children of the &lt;revoke/&gt; Element'>
     <tr>
       <th>Element</th>
@@ -191,7 +213,7 @@
     </tr>
     <tr>
       <td>&lt;keyprint/&gt;</td>
-      <td>The SHA-256 fingerprint of the public key that was revoked.</td>
+      <td>The fingerprint of the public key that was revoked, where the algorithm is specified by the 'algo' attribute (which defaults to "sha-256").</td>
     </tr>
     <tr>
       <td>&lt;signature/&gt;</td>
@@ -199,15 +221,15 @@
     </tr>
     <tr>
       <td>&lt;revocationprint/&gt;</td>
-      <td>The SHA-256 fingerprint of the key used to sign the revocation.</td>
+      <td>The fingerprint of the key that was used to sign the revocation, where the algorithm is specified by the 'algo' attribute (which defaults to "sha-256").</td>
     </tr>
     <tr>
       <td>&lt;revocationtime/&gt;</td>
       <td>The UTC DateTime at which the key was revoked, formatted according to <cite>XEP-0082</cite>.</td>
     </tr>
   </table>
-  <p>The data that is signed MUST be the revoked public key (i.e., the XML character data of the &lt;key/&gt; element), the SHA-256 fingerprint of the revoked public key (i.e., the XML character data of the &lt;keyprint/&gt; element), the SHA-256 fingerprint of the key used to sign the revocation (i.e., the XML character data of the &lt;revocationprint/&gt; element), and the time of the revocation (i.e., the XML character data of the &lt;revocationtime/&gt; element), concatenated together with no spaces or other additional characters.</p>
-  <p>As an example, consider a revocation of the key from Example 1, where the SHA-256 fingerprint of the revoked key is 13475c8e27399908b4447d7c52ab30822872832eba3a654f0d80e07fb4157673, the SHA-256 fingerprint of the key used to sign the revocation is becb78566783166f4a1a7c64e28dae288fe1a0f2825f6b593b336ce186c6b056, and the time of the revocation is 2009-12-14T20:49:16Z. The string to be signed would be as follows (where line breaks are not significant).</p>
+  <p>The data that is signed MUST be the revoked public key (i.e., the XML character data of the &lt;key/&gt; element), the fingerprint of the revoked public key (i.e., the XML character data of the &lt;keyprint/&gt; element), the fingerprint of the key used to sign the revocation (i.e., the XML character data of the &lt;revocationprint/&gt; element), and the time of the revocation (i.e., the XML character data of the &lt;revocationtime/&gt; element), concatenated together with no spaces or other additional characters.</p>
+  <p>As an example, consider a revocation of the key from Example 1, where the fingerprint of the revoked key is 13475c8e27399908b4447d7c52ab30822872832eba3a654f0d80e07fb4157673, the fingerprint of the key used to sign the revocation is becb78566783166f4a1a7c64e28dae288fe1a0f2825f6b593b336ce186c6b056, and the time of the revocation is 2009-12-14T20:49:16Z. The string to be signed would be as follows (where line breaks are not significant).</p>
   <code>
     MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA25/Y7oonF3+pRjZCk0cQ
     lQFiUFvyMeUOnn01NLfqfBeT4xjahsxaYFPd+V8jIHtpO3nbkpfrBh5aLPCkqDzS
@@ -221,7 +243,7 @@
   </code>
   <p>An example follows.</p>
   <example caption='A revocation'><![CDATA[
-<revocation xmlns='urn:xmpp:revoke:1'>
+<revocation xmlns='urn:xmpp:revoke:2'>
   <key>
     MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA25/Y7oonF3+pRjZCk0cQ
     lQFiUFvyMeUOnn01NLfqfBeT4xjahsxaYFPd+V8jIHtpO3nbkpfrBh5aLPCkqDzS
@@ -231,7 +253,7 @@
     WeS+ahB/i9LIG+41CdekPpI0Kr0Ll9X7+zaPV6xzjlG8dYy7ZGm4eTL9STuWlPdL
     +wIDAQAB
   </key>
-  <keyprint>60561AEE-4187-4122-8A71-ACF9195DE572</keyprint>
+  <keyprint>iof8LEqhKyItN0TsVgWuIFBhEwHsORgp6nocM1WAUmk=</keyprint>
   <revocationprint>becb78566783166f4a1a7c64e28dae288fe1a0f2825f6b593b336ce186c6b056</revocationprint>
   <revocationtime>2009-12-14T20:49:16Z</revocationtime>
   <signature>
@@ -245,7 +267,7 @@
 
 <section1 topic='Attestations' anchor='attestations'>
   <p>Whether in the context of the public key infrastructure (PKI) or a web of trust, a user might want to publish signed copies of his public key, where the signer might be another user or a trusted third party such as a certification authority (CA). The signing key could even be another key owned by the user (e.g., a primary key used to sign a secondary key associated with a particular device controlled by the user). Furthermore, the signing material might be an RSA key, a DSA key, an X.509 certificate, an OpenPGP key, or any other format.</p>
-  <p>Each signed copy is contained in an &lt;attest/&gt; element qualified by the 'urn:xmpp:attest:1' namespace &VNOTE;, for which the defined child elements are as follows:</p>
+  <p>Each signed copy is contained in an &lt;attest/&gt; element qualified by the 'urn:xmpp:attest:2' namespace &VNOTE;, for which the defined child elements are as follows:</p>
   <table caption='Children of the &lt;attest/&gt; Element'>
     <tr>
       <th>Element</th>
@@ -253,7 +275,7 @@
     </tr>
     <tr>
       <td>&lt;keyprint/&gt;</td>
-      <td>The SHA-256 fingerprint of the public key that was signed.</td>
+      <td>The fingerprint of the key that was signed, where the algorithm is specified by the 'algo' attribute (which defaults to "sha-256").</td>
     </tr>
     <tr>
       <td>&lt;signature/&gt;</td>
@@ -265,14 +287,14 @@
     </tr>
     <tr>
       <td>&lt;signerprint/&gt;</td>
-      <td>The SHA-256 fingerprint of the signer's key.</td>
+      <td>The fingerprint of the signer's key, where the algorithm is specified by the 'algo' attribute (which defaults to "sha-256").</td>
     </tr>
     <tr>
       <td>&lt;signtime/&gt;</td>
       <td>The UTC DateTime at which the key was signed, formatted according to <cite>XEP-0082</cite>.</td>
     </tr>
   </table>
-  <p>The data that is signed MUST be the user's public key (i.e., the XML character data of the &lt;key/&gt; element), the SHA-256 fingerprint of the user's public key (i.e., the XML character data of the &lt;keyprint/&gt; element), the signer's JID (i.e., the XML character data of the &lt;signerjid/&gt; element), the SHA-256 fingerprint of the signer's key (i.e., the XML character data of the &lt;signerprint/&gt; element), and the time of the attestation (i.e., the XML character data of the &lt;signtime/&gt; element), concatenated together with no spaces or other additional characters.</p>
+  <p>The data that is signed MUST be the user's public key (i.e., the XML character data of the &lt;key/&gt; element), the fingerprint of the user's public key (i.e., the XML character data of the &lt;keyprint/&gt; element), the signer's JID (i.e., the XML character data of the &lt;signerjid/&gt; element), the fingerprint of the signer's key (i.e., the XML character data of the &lt;signerprint/&gt; element), and the time of the attestation (i.e., the XML character data of the &lt;signtime/&gt; element), concatenated together with no spaces or other additional characters.</p>
   <p>As an example, consider an attestation of the key from Example 1, where the signer's JID is stpeter@jabber.org, the fingerprint of the signer's key is "becb78566783166f4a1a7c64e28dae288fe1a0f2825f6b593b336ce186c6b056", and the time of the attestation is 2009-12-14T18:43:00Z. The string to be signed would be as follows (where line breaks are not significant).</p>
   <code>
     MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA25/Y7oonF3+pRjZCk0cQ
@@ -286,8 +308,8 @@
     f2825f6b593b336ce186c6b0562009-12-14T18:43:00Z
   </code>
   <example caption='RSA public key signed by OpenPGP key'><![CDATA[
-<attest xmlns='urn:xmpp:attest:1'>
-  <keyprint>60561AEE-4187-4122-8A71-ACF9195DE572</keyprint>
+<attest xmlns='urn:xmpp:attest:2'>
+  <keyprint>iof8LEqhKyItN0TsVgWuIFBhEwHsORgp6nocM1WAUmk=</keyprint>
   <signature>
     iEYEARECAAYFAksnyJ0ACgkQNL8k5A2w/vy9DgCfc1eOYZlp1P456NkjgvCtJaRX
     Wi4AoIGhfzr7XMzeOzOBi9A/bxopH8O4
@@ -307,13 +329,13 @@
 </section1>
 
 <section1 topic='Requesting a Public Key Directly' anchor='request'>
-  <p>If it is not possible for the user to publish his key via PEP, or for a contact to retrieve the user's key via PEP, the contact MAY request the user's key directly by sending an &IQ; of type 'get' to the user's particular full JID, containing an empty &lt;pubkey/&gt; element qualified by the 'urn:xmpp:pubkey:1' namespace &VNOTE;.</p>
+  <p>If it is not possible for the user to publish his key via PEP, or for a contact to retrieve the user's key via PEP, the contact MAY request the user's key directly by sending an &IQ; of type 'get' to the user's particular full JID, containing an empty &lt;pubkey/&gt; element qualified by the 'urn:xmpp:pubkey:2' namespace &VNOTE;.</p>
   <example caption='Public key request'><![CDATA[
 <iq from='maineboy@jabber.org/bar'
     to='peter@jabber.org/foo'
     id='hfgt654s'
     type='get'>
-  <pubkey xmlns='urn:xmpp:pubkey:1'/>
+  <pubkey xmlns='urn:xmpp:pubkey:2'/>
 </iq>
   ]]></example>
   <p>The receiving client then return its public key (which might be different from the overall key for the user, e.g. a key for only a particular device).</p>
@@ -322,7 +344,7 @@
     to='maineboy@jabber.org/bar'
     id='hfgt654s'
     type='result'>
-  <pubkey xmlns='urn:xmpp:pubkey:1'>
+  <pubkey xmlns='urn:xmpp:pubkey:2'>
     <begin>2009-12-11T20:12:37</begin>
     <end>2010-12-11T23:59:59</end>
     <jid>peter@jabber.org</jid>
@@ -346,7 +368,7 @@
   <example caption='Sending a key in a message'><![CDATA[
 <message from='peter@jabber.org/foo'
          to='maineboy@jabber.org/bar'>
-  <pubkey xmlns='urn:xmpp:pubkey:1'>
+  <pubkey xmlns='urn:xmpp:pubkey:2'>
     <begin>2009-12-11T20:12:37</begin>
     <end>2010-12-11T23:59:59</end>
     <jid>peter@jabber.org</jid>
@@ -369,7 +391,7 @@
   <p>There are several situations in which it is helpful for an entity to signal that it is currently generating a key. For example, a client that does not have access to permanent storage might generate a key on startup, but key generation might not be complete when the client sends initial presence upon establishing an XMPP session. In this case the client might signal support for the public key format in the entity capabilities data that it includes in its initial presence broadcast, but also include an indication that it is currently generating a key.</p>
   <example caption='Key generation in progress'><![CDATA[
 <presence from='peter@jabber.org/foo'>
-  <generating xmlns='urn:xmpp:pubkey:1'/>
+  <generating xmlns='urn:xmpp:pubkey:2'/>
 </presence>
   ]]></example>
   <p>After key generation is complete, the entity could publish the new key to the appropriate PEP node (if available) and send updated presence without the &lt;generating/&gt; extension.</p>
@@ -379,7 +401,7 @@
 </section1>
 
 <section1 topic='Determining Support' anchor='support'>
-  <p>To advertise its support for public keys, revocations, and attestations, when replying to &xep0030; information requests an entity MUST return features for 'urn:xmpp:pubkey:1', 'urn:xmpp:revoke:1', and 'urn:xmpp:attest:1' respectively.</p>
+  <p>To advertise its support for public keys, revocations, and attestations, when replying to &xep0030; information requests an entity MUST return features for 'urn:xmpp:pubkey:2', 'urn:xmpp:revoke:2', and 'urn:xmpp:attest:2' respectively.</p>
   <p>In order for an application to determine whether an entity supports this protocol, where possible it SHOULD use the dynamic, presence-based profile of service discovery defined in &xep0115;. However, if an application has not received entity capabilities information from an entity, it SHOULD use explicit service discovery instead.</p>
 </section1>
 
@@ -395,9 +417,9 @@
   <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
     <p>This specification defines the following XML namespaces:</p>
     <ul>
-      <li>urn:xmpp:attest:1</li>
-      <li>urn:xmpp:pubkey:1</li>
-      <li>urn:xmpp:revoke:1</li>
+      <li>urn:xmpp:attest:2</li>
+      <li>urn:xmpp:pubkey:2</li>
+      <li>urn:xmpp:revoke:2</li>
     </ul>
     <p>Upon advancement of this specification to a status of Draft, the &REGISTRAR; shall add these namespaces to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
   </section2>
@@ -407,6 +429,112 @@
 </section1>
 
 <section1 topic='XML Schemas' anchor='schema'>
-  <p>To follow.</p>
+  <section2 topic='attest' anchor='schema-pubkey'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:attest:2'
+    xmlns='urn:xmpp:attest:2'
+    elementFormDefault='qualified'>
+
+  <xs:element name='attest'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='keyprint' type='fingerprintType' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='signature' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='signerjid' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='signerprint' type='fingerprintType' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='signtime' type='xs:dateTime' minOccurs='1' maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name='fingerprintType'>
+    <xs:simpleContent>
+      <xs:extension base='xs:string'>
+        <xs:attribute name='algo' type='xs:NMTOKEN' use='optional' default='sha-256'/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+</xs:schema>
+    ]]></code>
+  </section2>
+  <section2 topic='pubkey' anchor='schema-pubkey'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:pubkey:2'
+    xmlns='urn:xmpp:pubkey:2'
+    elementFormDefault='qualified'>
+
+  <xs:element name='pubkey'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='begin' type='xs:dateTime' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='end' type='xs:dateTime' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='jid' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='rsakey' type='rsaKeyType' minOccurs='1' maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name='rsaKeyType'>
+    <xs:sequence>
+      <xs:element name='modulus' type='xs:string' minOccurs='1' maxOccurs='1'/>
+      <xs:element name='publicExponent' type='xs:string' minOccurs='1' maxOccurs='1'/>
+      <xs:element name='print' type='fingerprintType' minOccurs='1' maxOccurs='1'/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name='fingerprintType'>
+    <xs:simpleContent>
+      <xs:extension base='xs:string'>
+        <xs:attribute name='algo' type='xs:NMTOKEN' use='optional' default='sha-256'/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+</xs:schema>
+    ]]></code>
+  </section2>
+  <section2 topic='revoke' anchor='schema-pubkey'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:pubkey:2'
+    xmlns='urn:xmpp:pubkey:2'
+    elementFormDefault='qualified'>
+
+  <xs:element name='revocation'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='key' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='keyprint' type='fingerprintType' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='signature' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='revocationprint' type='fingerprintType' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='revocationtime' type='xs:dateTime' minOccurs='1' maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name='fingerprintType'>
+    <xs:simpleContent>
+      <xs:extension base='xs:string'>
+        <xs:attribute name='algo' type='xs:NMTOKEN' use='optional' default='sha-256'/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+</xs:schema>
+    ]]></code>
+  </section2>
 </section1>
+
 </xep>
