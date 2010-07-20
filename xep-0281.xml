@@ -24,6 +24,12 @@
   <shortname>NOT-YET-ASSIGNED</shortname>
   &stpeter;
   <revision>
+    <version>0.2</version>
+    <date>2010-07-20</date>
+    <initials>psa</initials>
+    <remark><p>Added protocol flows for finding and joining shadow rooms, thus removing dependency on communication with firsthost; changed examples to mimic XEP-0045.</p></remark>
+  </revision>
+  <revision>
     <version>0.1</version>
     <date>2010-06-11</date>
     <initials>psa</initials>
@@ -44,10 +50,13 @@
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
+
   <p class='box'><em>This document is one of several proposals for distributing XMPP chat rooms across multiple chat services. It is expected that the various approaches will be refined and harmonized before a final protocol is developed.</em></p>
+
   <section2 topic='Motivation' anchor='motivation'>
     <p>&xep0045; defines a full-featured technology for multi-user text conferencing in XMPP. By design, <cite>XEP-0045</cite> assumes that a conference room is hosted at a single service, which can be accessed from any point on the network. However, this assumption introduces a single point of failure for the conference room, since if occupants at a using domain lose connectivity to the hosting domain then they also lose connectivity to the room. In some deployment scenarios (and even on the open Internet) this behavior is suboptimal. Therefore, this document attempts to define a technology for distributing MUC rooms across multiple services.</p>
   </section2>
+
   <section2 topic='Requirements' anchor='requirements'>
     <p>This specification addresses the following requirements:</p>
     <ol start="1">
@@ -58,6 +67,7 @@
       <li>Enable syncing of history, configuration, and room rosters on reconnect.</li>
     </ol>
   </section2>
+
   <section2 topic='Approach' anchor='approach'>
     <p>The basic approach to distribution of MUC rooms is as follows:</p>
     <ol start="1">
@@ -70,36 +80,42 @@
     </ol>
     <p>The room IDs of source rooms SHOULD be opaque to users and unique across all possible peerhosts, for example by generating a UUID in accordance with &rfc4122; or by hashing the human-readable name of the room using the SHA-256 algorithm in accordance with &nistfips180-2;.</p>
   </section2>
+
 </section1>
 
 <section1 topic='Terminology' anchor='terms'>
+
   <section2 topic='General Terms' anchor='terms-general'>
     <p>This document adds the following terms to those defined in <cite>XEP-0045</cite>:</p>
     <ul>
       <li>Firsthost -- The MUC service at which a room is created.</li>
       <li>Peerhost -- Any MUC service (other than the firsthost) that hosts an instance of the room.</li>
-      <li>Shadow -- An instance of the room at a peerhost.</li>
       <li>Source -- The canonical instance of the room at the firsthost.</li>
+      <li>Shadow -- An instance of the room at a peerhost.</li>
     </ul>
   </section2>
+
   <section2 topic='Entities' anchor='terms-entities'>
     <p>In this document, the examples use the following entities.</p>
     <ul>
-      <li>Firsthost: firsthost.example.com</li>
-      <li>Peerhosts: peer1.example.net and peer2.example.org</li>
-      <li>Shadows: f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net and f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer2.example.org</li>
-      <li>Source: f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com</li>
+      <li>Firsthost: chat.shakespeare.lit</li>
+      <li>Peerhosts: rooms.macbeth.lit and conference.marlowe.lit</li>
+      <li>Source: coven@chat.shakespeare.lit</li>
+      <li>Shadows: theroom@rooms.macbeth.lit and theroom@conference.marlowe.lit</li>
     </ul>
   </section2>
+
 </section1>
 
 <section1 topic='Use Cases' anchor='usecases'>
+
   <section2 topic='Creating a Room' anchor='create'>
-    <p>When the original room owner creates the room (or subsequently configures the room), the service MAY offer the option of making the room a "distributed room". This is done by including the "muc#roomconfig_distributed" feature in the room configuration form:</p>
+    <p>When the original room owner creates the room (or subsequently configures the room), the service MAY simply default all rooms to "distributed".</p>
+    <p>Alternatively, the server MAY offer the option of making the room a "distributed room". This is done by including the "muc#roomconfig_distributed" feature in the room configuration form:</p>
     <example caption='Service Sends Configuration Form'><![CDATA[
-<iq from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com'
+<iq from='coven@chat.shakespeare.lit'
     id='create1'
-    to='scott@example.com/desktop'
+    to='crone1@shakespeare.lit/desktop'
     type='result'>
   <query xmlns='http://jabber.org/protocol/muc#owner'>
     <x xmlns='jabber:x:data' type='form'>
@@ -120,9 +136,9 @@
     ]]></example>
     <p>The room owner specifies a value of "1" or "true" &BOOLEANNOTE; if room distribution is desired:</p>
     <example caption='Room Owner Submits Configuration Form'><![CDATA[
-<iq from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com'
+<iq from='coven@chat.shakespeare.lit'
     id='configure1'
-    to='scott@example.com/desktop'
+    to='crone1@shakespeare.lit/desktop'
     type='set'>
   <query xmlns='http://jabber.org/protocol/muc#owner'>
     <x xmlns='jabber:x:data' type='submit'>
@@ -140,23 +156,24 @@
     ]]></example>
     <p>Alternatively, the firsthost can choose to perform room distribution in the background, rather than exposing the 'muc#roomconfig_distributed' option to the user.</p>
   </section2>
+
   <section2 topic='Replicating a Room' anchor='replication'>
     <p>When a firsthost would like a peerhost to provide a shadow, it sends a replication request to the peerhost.</p>
     <example caption='Firsthost Requests Replication of Room'><![CDATA[
-<iq from='firsthost.example.com'
+<iq from='chat.shakespeare.lit'
     id='replicate1'
-    to='peer1.example.net'
+    to='rooms.macbeth.lit'
     type='set'>
   <replicate xmlns='urn:xmpp:dmuc:0'>
-    <room id='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39'/>
+    <room id='theroom'/>
   </replicate>
 </iq>
     ]]></example>
     <p>If the peerhost is willing and able to replicate the room, it returns an IQ-result:</p>
     <example caption='Peerhost Acknowledges Replication Request'><![CDATA[
-<iq to='peer1.example.net'
+<iq to='rooms.macbeth.lit'
     id='replicate1'
-    from='firsthost.example.com'
+    from='chat.shakespeare.lit'
     type='result'/>
     ]]></example>
     <p>Several error cases are possible (the peerhost is resource constrained, the firsthost is forbidden to peer with the peerhost, etc.); these will be specified more fully in a future version of this specification.</p>
@@ -168,9 +185,9 @@
       <li>The firsthost informs other peerhosts about the new peerhost.</li>
     </ol>
     <example caption='Source Sends Room Configuration to Shadow'><![CDATA[
-<iq from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com'
+<iq from='coven@chat.shakespeare.lit'
     id='config1'
-    to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net'
+    to='theroom@rooms.macbeth.lit'
     type='set'>
   <config xmlns='urn:xmpp:dmuc:0'>
     <x xmlns='jabber:x:data' type='form'>
@@ -183,147 +200,170 @@
 </iq>
     ]]></example>
     <example caption='Shadow Acknowledges Receipt of Room Configuration'><![CDATA[
-<iq to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net'
+<iq to='theroom@rooms.macbeth.lit'
     id='config1'
-    from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com'
+    from='coven@chat.shakespeare.lit'
     type='result'/>
     ]]></example>
     <example caption='Source Sends Room Roster to Shadow'><![CDATA[
-<iq from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com'
+<iq from='coven@chat.shakespeare.lit'
     id='roster1'
-    to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net'
+    to='theroom@rooms.macbeth.lit'
     type='set'>
   <roster xmlns='urn:xmpp:dmuc:0'>
-    <item affiliation='owner' jid='scott@example.com/desktop' name='foo'/>
-    <item affiliation='admin' jid='boyd@example.com/laptop' name='bar'/>
-    <item affiliation='none' jid='lorraine@example.com/pda' name='baz'/>
+    <item affiliation='owner' jid='crone1@shakespeare.lit/desktop' name='foo'/>
+    <item affiliation='admin' jid='wiccarocks@shakespeare.lit/laptop' name='bar'/>
+    <item affiliation='none' jid='hag66@shakespeare.lit/pda' name='baz'/>
   </roster>
 </iq>
     ]]></example>
     <example caption='Shadow Acknowledges Receipt of Room Roster'><![CDATA[
-<iq to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net'
+<iq to='theroom@rooms.macbeth.lit'
     id='roster1'
-    from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com'
+    from='coven@chat.shakespeare.lit'
     type='result'/>
     ]]></example>
     <p>The new shadow SHOULD request the room history. This is done by sending an IQ-get from the shadow to the source, containing a &lt;history/&gt; element qualified by the 'http://jabber.org/protocol/muc' namespace (the syntax and semantics of this element are described in <cite>XEP-0045</cite>).</p>
     <example caption='Peerhost Requests Room History'><![CDATA[
-<iq to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net'
+<iq to='theroom@rooms.macbeth.lit'
     id='history1'
-    from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com'
+    from='coven@chat.shakespeare.lit'
     type='get'>
   <room xmlns='urn:xmpp:dmuc:0'
-        id='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39'>
+        id='theroom'>
     <history xmlns='http://jabber.org/protocol/muc'/>
   </room>
 </iq>
     ]]></example>
     <p>The history request MAY include any of the attributes specified in <cite>XEP-0045:</cite>: 'maxchars', 'maxstanzas', 'seconds', and 'since'.</p>
     <example caption='Firsthost Sends Room History to Peerhost'><![CDATA[
-<iq from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com'
+<iq from='coven@chat.shakespeare.lit'
     id='history1'
-    to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net'
+    to='theroom@rooms.macbeth.lit'
     type='result'/>
   <history xmlns='http://jabber.org/protocol/muc'>
     <message
         xmlns='jabber:client'
-        from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com/foo'
+        from='coven@chat.shakespeare.lit/foo'
         type='groupchat'>
       <body>Message 1.</body>
       <delay xmlns='urn:xmpp:delay'
-         from='scott@example.com/desktop'
+         from='crone1@shakespeare.lit/desktop'
          stamp='2002-10-13T23:58:37Z'/>
     </message>
 
     <message
         xmlns='jabber:client'
-        from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com/bar'
+        from='coven@chat.shakespeare.lit/bar'
         type='groupchat'>
       <body>Message 2.</body>
       <delay xmlns='urn:xmpp:delay'
-         from='boyd@example.com/laptop'
+         from='wiccarocks@shakespeare.lit/laptop'
          stamp='2002-10-13T23:58:43Z'/>
     </message>
 
     <message
         xmlns='jabber:client'
-        from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com/baz'
+        from='coven@chat.shakespeare.lit/baz'
         type='groupchat'>
       <body>Message 3.</body>
       <delay xmlns='urn:xmpp:delay'
-         from='lorraine@example.com/pda'
+         from='hag66@shakespeare.lit/pda'
          stamp='2002-10-13T23:58:49Z'/>
     </message>
   </history>
 </iq>
     ]]></example>
     <example caption='Peerhost Acknowledges Receipt of Room History'><![CDATA[
-<iq to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net'
+<iq to='theroom@rooms.macbeth.lit'
     id='history1'
-    from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com'
+    from='coven@chat.shakespeare.lit'
     type='result'/>
     ]]></example>
     <p>The firsthost also informs other connected peerhosts about the new peerhost.</p>
     <example caption='Firsthost Reports New Peerhost'><![CDATA[
-<iq from='firsthost.example.com'
+<iq from='chat.shakespeare.lit'
     id='ph1'
-    to='peer2.example.org'
+    to='conference.marlowe.lit'
     type='set'>
   <peerhost xmlns='urn:xmpp:dmuc:0'>
-    <room id='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39'/>
+    <room id='theroom'/>
   </peerhost>
 </iq>
     ]]></example>
     <example caption='Peerhost Acknowledges Notification of New Peerhost'><![CDATA[
-<iq from='peer2.example.org'
+<iq from='conference.marlowe.lit'
     id='ph1'
-    to='firsthost.example.com'
+    to='chat.shakespeare.lit'
     type='result'/>
     ]]></example>
   </section2>
-  <section2 topic='Joining a Room' anchor='join'>
-    <p>When a user attempts to join a source room, the firsthost determines if it will invite the user to join a shadow at a peerhost instead. The process for determining when to send invitations is implementation specific and might be subject to configuration at the firsthost (e.g., the firsthost might send invitations only to users of a domain associated with the peerhost and only after a certain number of such users have joined the room at the firsthost).</p>
-    <p>To begin, a user at the peerhost attempts to join the source room at the firsthost:</p>
-    <example caption='User Seeks to Join Source Room'><![CDATA[
-<presence
-    from='mike@example.net/office'
-    to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com/krutsch'>
-  <x xmlns='http://jabber.org/protocol/muc'/>
-</presence>
+
+  <section2 topic='Finding a Room' anchor='find'>
+    <p>XEP-0045 specifies that rooms can be found on a chat service using &xep0030;.</p>
+    <p>A user at a peerhost could send a service discovery items ("disco#items") request to the firsthost in order to find the source room. However, this introduces a dependency on communication with the firsthost, and we have stipulated that such communication might not be available.</p>
+    <p>Alternatively, the peerhost could keep a list of the shadow rooms that it hosts. From the perspective of the user at the peerhost, these rooms are local in the sense that the user can join the shadow and thereby interact with the occupants of the shadow (and, if server-to-server communication is working, with the occupants of the source). This approach is RECOMMENDED.</p>
+    <p>Note: If the peerhost frequently loses communications with the firsthost and the list of rooms located at the firsthost is large, the peerhost will want to use a more efficient method of synchronizing its room list than sending disco#items requests and receiving large disco#items results. However, methods for optimizing this synchronization process are out of scope for this specification.</p>
+    <p>To find rooms on the peerhost, the local user sends a "disco#items" request to the peerhost.</p>
+    <example caption='User Queries Peerhost for Rooms'><![CDATA[
+<iq from='somewitch@macbeth.lit/mobile'
+    id='nb2ga51g'
+    to='rooms.macbeth.lit'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#items'/>
+</iq>
     ]]></example>
-    <p>The source room returns a &lt;redirect/&gt; presence error to the user and invites the user to join a shadow room instead.</p>
-    <example caption='Source Informs User of a Shadow'><![CDATA[
-<presence
-    from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com/baz'
-    to='mike@example.net/office'
-    type='error'>
-  <error type='cancel'>
-    <redirect xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>peer1.example.net</redirect>
-  </error>
-</presence>
+    <p>The service returns a list of the public rooms it hosts, which includes any shadow rooms.</p>
+    <example caption='Peerhost Returns Disco Items'><![CDATA[
+<iq from='rooms.macbeth.lit'
+    id='nb2ga51g'
+    to='somewitch@macbeth.lit/mobile'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#items'>
+    <item jid='heath@rooms.macbeth.lit' name='A Lonely Heath'/>
+    <item jid='coven@rooms.macbeth.lit' name='A Dark Cave'/>
+    <item jid='forres@rooms.macbeth.lit' name='The Palace'/>
+    <item jid='inverness@rooms.macbeth.lit' name='Macbeth&apos;s Castle'/>
+  </query>
+</iq>
     ]]></example>
-    <p>Then the source invites the user to the shadow using the protocol defined in &xep0249;.</p>
-    <example caption='Source Invites User to a Shadow'><![CDATA[
-<message
-    from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com'
-    to='mike@example.net/office'
-  <x xmlns='jabber:x:conference'
-     jid='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net'/>
-</message>
+    <p>The user can then send a disco#info request to each room. If the room is a shadow, the service MUST include extended information about the room using the &xep0128; format, specifically with a "http://jabber.org/protocol/muc#roominfo" FORM_TYPE and a (newly-defined) "dmuc-source" field.</p>
+    <example caption='Room Returns Extended Disco Info Results'><![CDATA[
+<iq from='coven@rooms.macbeth.lit'
+    id='hf71vs8m'
+    to='somewitch@macbeth.lit/mobile'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='conference' name='A Dark Cave' type='text'/>
+    <feature var='http://jabber.org/protocol/muc'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>http://jabber.org/protocol/muc#roominfo</value>
+      </field>
+      <field var='dmuc-source' label='Source Room' type='jid-single'>
+        <value>coven@chat.shakespeare.lit</value>
+      </field>
+    </x>
+  </query>
+</iq>
     ]]></example>
-    <p>The user then joins the shadow.</p>
-    <example caption='User Joins Shadow'><![CDATA[
+    <p>This informs the user that the source room is "coven@chat.shakespeare.lit"; as a result, the user's client can trap any outbound requests destined for the source room (service discovery, room join, etc.) and redirect them to the shadow.</p>
+  </section2>
+
+  <section2 topic='Joining a Shadow' anchor='shadowjoin'>
+    <p>The process of joining a shadow is exactly as described in XEP-0045.</p>
+    <example caption='Local User Seeks to Join Shadow Room'><![CDATA[
 <presence
-    from='mike@example.net/office'
-    to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net/krutsch'>
+    from='somewitch@macbeth.lit/mobile'
+    to='coven@rooms.macbeth.lit/anotherwitch'>
   <x xmlns='http://jabber.org/protocol/muc'/>
 </presence>
     ]]></example>
     <p>The shadow then informs the source (and any other shadows) of the user's presence; it does so by sending presence from the roomjid of the user at the shadow to a roomjid with the same roomnick at the source and shadow(s).</p>
     <example caption='Shadow Informs Source of New Occupant'><![CDATA[
 <presence
-    from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net/krutsch'
-    to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com/krutsch'>
+    from='theroom@rooms.macbeth.lit/anotherwitch'
+    to='coven@chat.shakespeare.lit/anotherwitch'>
   <x xmlns='http://jabber.org/protocol/muc#user'>
     <item affiliation='none' role='participant'/>
   </x>
@@ -331,40 +371,95 @@
     ]]></example>
     <p>The source then delivers that presence stanza to its local users. (Note: The shadow needs to send only one presence stanza to the source, thus reducing the number of stanzas sent over the server-to-server link between the peerhost and the firsthost.)</p> 
   </section2>
+
+  <section2 topic='Joining a Room' anchor='sourcejoin'>
+    <p>If there is no local shadow available at the peerhost, or if the peerhost does not support extended service discovery information as described above, then the local user at the peerhost will end up sending a join request to the source room instead of the shadow room.</p>
+    <p>When this happens, the firsthost determines if it will invite the user to join a shadow at a peerhost instead. The process for determining when to send invitations is implementation specific and might be subject to configuration at the firsthost (e.g., the firsthost might send invitations only to users of a domain associated with the peerhost and only after a certain number of such users have joined the room at the firsthost).</p>
+    <p>To begin, a user at the peerhost attempts to join the source room at the firsthost:</p>
+    <example caption='User Seeks to Join Source Room'><![CDATA[
+<presence
+    from='somewitch@macbeth.lit/mobile'
+    to='coven@chat.shakespeare.lit/firstwitch'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+</presence>
+    ]]></example>
+    <p>The source room returns a &lt;redirect/&gt; presence error to the user and invites the user to join a shadow room instead.</p>
+    <example caption='Source Informs User of a Shadow'><![CDATA[
+<presence
+    from='coven@chat.shakespeare.lit/baz'
+    to='somewitch@macbeth.lit/mobile'
+    type='error'>
+  <error type='cancel'>
+    <redirect xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>rooms.macbeth.lit</redirect>
+  </error>
+</presence>
+    ]]></example>
+    <p>Then the source invites the user to the shadow using the protocol defined in &xep0249;.</p>
+    <example caption='Source Invites User to a Shadow'><![CDATA[
+<message
+    from='coven@chat.shakespeare.lit'
+    to='somewitch@macbeth.lit/mobile'
+  <x xmlns='jabber:x:conference'
+     jid='theroom@rooms.macbeth.lit'/>
+</message>
+    ]]></example>
+    <p>The user then joins the shadow.</p>
+    <example caption='User Joins Shadow'><![CDATA[
+<presence
+    from='somewitch@macbeth.lit/mobile'
+    to='theroom@rooms.macbeth.lit/firstwitch'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+</presence>
+    ]]></example>
+    <p>The shadow then informs the source (and any other shadows) of the user's presence; it does so by sending presence from the roomjid of the user at the shadow to a roomjid with the same roomnick at the source and shadow(s).</p>
+    <example caption='Shadow Informs Source of New Occupant'><![CDATA[
+<presence
+    from='theroom@rooms.macbeth.lit/firstwitch'
+    to='coven@chat.shakespeare.lit/firstwitch'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>
+    ]]></example>
+    <p>The source then delivers that presence stanza to its local users. (Note: The shadow needs to send only one presence stanza to the source, thus reducing the number of stanzas sent over the server-to-server link between the peerhost and the firsthost.)</p> 
+  </section2>
+
   <section2 topic='Sending a Message' anchor='send'>
     <p>When a user sends a message to an instance, the instance sends the message to its local occupants and to other instances.</p>
     <example caption='User Sends Message'><![CDATA[
 <message
-    from='mike@example.net/office'
-    to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net'
+    from='somewitch@macbeth.lit/mobile'
+    to='theroom@rooms.macbeth.lit'
     type='groupchat'>
   <body>Message 4.</body>
 </message>
     ]]></example>
     <example caption='Instance Distributes Message'><![CDATA[
 <message
-    from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net/krutsch'
-    to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer2.example.org/krutsch'
+    from='theroom@rooms.macbeth.lit/firstwitch'
+    to='theroom@conference.marlowe.lit/firstwitch'
     type='groupchat'>
   <body>Message 4.</body>
 </message>
 
 <message
-    from='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@peer1.example.net/krutsch'
-    to='f609923deb78718a125b93d32609bd5265dd927242ac93a99eb366109df2bd39@firsthost.example.com/krutsch'
+    from='theroom@rooms.macbeth.lit/firstwitch'
+    to='coven@chat.shakespeare.lit/firstwitch'
     type='groupchat'>
   <body>Message 4.</body>
 </message>
     ]]></example>
     <p>The source then delivers that message stanza to its local users. (Note: The shadow needs to send only one message stanza to the source, thus reducing the number of stanzas sent over the server-to-server link between the peerhost and the firsthost.)</p> 
   </section2>
+
   <section2 topic='sync' anchor='Re-Syncing after Connectivity Loss'>
     <p>To follow.</p>
   </section2>
+
 </section1>
 
 <section1 topic='Determining Support' anchor='support'>
-    <p>If a MUC service supports distributed rooms, it MUST return a feature of "urn:xmpp:dmuc:0" &NSVER; in response to &xep0030; information requests.</p>
+    <p>If a MUC service supports distributed rooms, it MUST return a feature of "urn:xmpp:dmuc:0" &NSVER; in response to service discovery information requests.</p>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
