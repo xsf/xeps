@@ -1,0 +1,608 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Stanza Interception and Filtering Technology</title>
+  <abstract>This specification defines an XMPP protocol extension that enables a client to exercise control over the XML stanzas it will receive from the server by instructing the server to intercept and filter inbound stanzas.</abstract>
+  &LEGALNOTICE;
+  <number>XXXX</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  &hildjj;
+  &metajack;
+  &stpeter;
+  <revision>
+    <version>0.0.8</version>
+    <date>2009-08-14</date>
+    <initials>psa</initials>
+    <remark><p>Clarified service and feature discovery processes, error flows, and other small matters in the text.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.7</version>
+    <date>2009-08-11</date>
+    <initials>psa</initials>
+    <remark><p>Defined IQ-get for retrieving supported SIFT features; added support for sifting based on sender type; removed restriction on matching against only the bare JID of the recipient and defined support for sifting on the bare JID, full JID, or both.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.6</version>
+    <date>2009-05-19</date>
+    <initials>jjh/psa</initials>
+    <remark><p>Added requirements section; clarified relation to negative presence priorities.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.5</version>
+    <date>2009-05-18</date>
+    <initials>jjh/psa</initials>
+    <remark><p>More clearly distinguished between interception and filtering usages; clarified business rules.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.4</version>
+    <date>2009-05-18</date>
+    <initials>psa/jjh</initials>
+    <remark><p>Added information about service discovery; clarified several small matters in the text.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.3</version>
+    <date>2009-05-15</date>
+    <initials>psa/jjh</initials>
+    <remark><p>Clarified that SIFT applies to interception of message and presence stanzas directed to the bare JID and to filtering of IQ stanzas directed to the full JID; corrected syntax to match those semantics; added use cases; defined XML schema.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2009-05-14</date>
+    <initials>psa</initials>
+    <remark><p>Slight clarifications and corrections.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2009-05-14</date>
+    <initials>jjh/jm/psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>In some scenarios a client might want to control the XML stanzas it will receive over its stream with the server. Some potential use cases include:</p>
+  <ul>
+    <li>A mobile client might want to receive messages but not presence notifications, since the latter are quite "chatty" and can run down the battery.</li>
+    <li>A softphone might want to receive IQ stanzas only if the payload is qualified by an XML namespace related to the use of &xep0166; for Internet telephony.</li>
+    <li>A presence compositor might want to receive presence updates but not message stanzas or IQ stanzas, and only from the user's own resources (i.e., not from other entities).</li>
+  </ul>
+  <p>The following taxonomy of client types is not exhaustive but might assist developers in understanding the scenarios in which SIFT might be useful.</p>
+  <table caption='Client Types Categorized by Sending Presence, Receiving Presence, and Receiving Messages'>
+    <tr>
+      <th>Type</th>
+      <th>Sends Presence</th>
+      <th>Receives Presence</th>
+      <th>Receives Messages</th>
+    </tr>
+    <tr>
+      <td>Normal User</td>
+      <td align='center'>Yes</td>
+      <td align='center'>Yes</td>
+      <td align='center'>Yes</td>
+    </tr>
+    <tr>
+      <td>Invisible User</td>
+      <td align='center'>No</td>
+      <td align='center'>Yes</td>
+      <td align='center'>Yes</td>
+    </tr>
+    <tr>
+      <td>Large-Scale Bot</td>
+      <td align='center'>Yes</td>
+      <td align='center'>No</td>
+      <td align='center'>Yes</td>
+    </tr>
+    <tr>
+      <td>Presentity</td>
+      <td align='center'>Yes</td>
+      <td align='center'>Yes</td>
+      <td align='center'>No</td>
+    </tr>
+    <tr>
+      <td>Presence Watcher</td>
+      <td align='center'>No</td>
+      <td align='center'>Yes</td>
+      <td align='center'>No</td>
+    </tr>
+    <tr>
+      <td>Presence Publisher</td>
+      <td align='center'>Yes</td>
+      <td align='center'>No</td>
+      <td align='center'>No</td>
+    </tr>
+    <tr>
+      <td>Message Subscriber</td>
+      <td align='center'>No</td>
+      <td align='center'>No</td>
+      <td align='center'>Yes</td>
+    </tr>
+    <tr>
+      <td>Message Publisher</td>
+      <td align='center'>No</td>
+      <td align='center'>No</td>
+      <td align='center'>No</td>
+    </tr>
+  </table>
+  <p>Note: Although &rfc3921; specifies the use of a negative presence priority to block inbound message delivery, it does not enable the client to block inbound presence notifications, filter inbound IQ stanzas, or otherwise exercise fine-grained control over the delivery of inbound stanzas. While it would be possible to define particular values of negative presence priorities for some delivery control methods (e.g., &lt;priority&gt;-2&lt;priority&gt; could be hardcoded to mean "don't send me messages or presence"), that would be an ugly hack and thus inconsistent with &xep0134;. Therefore, this specification defines a stanza interception and filtering technology (a.k.a. "SIFT") that is more consistent with the underlying design of XMPP.</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The SIFT protocol is designed to meet the following requirements.</p>
+  <ol start='1'>
+    <li>Make it possible for a client to disable receipt of all inbound presence notifications while still receiving message and IQ stanzas if desired.</li>
+    <li>Make it possible for a client to disable receipt of all inbound message stanzas while still receiving presence and IQ stanzas if desired.</li>
+    <li>Make it possible for a client to disable receipt of all inbound IQ stanzas while still receiving presence and message stanzas if desired.</li>
+    <li>Make it possible for a client to receive only inbound presence, message, or IQ stanzas that contain a payload matching a particular element name and XML namespace.</li>
+    <li>Make it possible for a client to "sift" based on all senders, local vs. remote senders, or other senders vs. oneself.</li>
+    <li>Make it possible for a client to "sift" based on whether the recipient is the user's bare JID or the particular client's full JID.</li>
+    <li>Enable future extensibility based on regular expressions, XPath expressions, etc.</li> 
+  </ol>
+</section1>
+
+<section1 topic='Protocol' anchor='protocol'>
+  <p>The SIFT protocol is used to <em>intercept</em> or <em>filter</em> inbound stanzas only, not outbound stanzas sent by the client to the server or other entities. By "intercept" is meant that the server will not deliver any such stanza kind (message, presence, or IQ) to the client, and by "filter" is meant that the server will apply a rule to determine if the specific stanza will be delivered to the client (e.g., matching against a payload namespace); in general we refer to these actions as "sifting". The SIFT protocol enables the server to support only basic interception (even here to support interception only for particular kinds of stanzas), basic filtering as defined by the rules described in this specification, or advanced filtering using extensions to SIFT defined in other specifications. Each of the features supported by the server can be discovered by the client for maximum interoperability. The features, the process for discovering them, and the process for enabling them are described in the following sections.</p>
+  <section2 topic='Features' anchor='features'>
+    <p>SIFT supports the following features.</p>
+    <section3 topic='Stanza Kinds' anchor='features-stanzas'>
+      <p>A server MAY support any combination of sifting IQ, message, or presence stanzas. For each kind of stanza that can be sifted, the server shall include in the features discovery result an &lt;iq-sift/&gt;, &lt;message-sift/&gt;, or &lt;presence-sift/&gt; element, respectively.</p>
+      <dl>
+        <di>
+          <dt>iq-sift</dt>
+          <dd>The server enables the client to sift all &IQ; stanzas or ones that match the specified criteria.</dd>
+          <dt>message-sift</dt>
+          <dd>The server enables the client to sift all &MESSAGE; stanzas or ones that match the specified criteria.</dd>
+          <dt>presence-sift</dt>
+          <dd>The server enables the client to sift all &PRESENCE; stanzas or ones that match the specified criteria.</dd>
+        </di>
+      </dl>
+    </section3>
+    <section3 topic='Sender' anchor='features-sender'>
+      <p>A server MAY enable the client to sift based on sender. The following values are supported.</p>
+      <dl>
+        <di>
+          <dt>all</dt>
+          <dd>The server shall sift this kind of stanza no matter who the sender is. This is the <strong>default</strong>.</dd>
+          <dt>local</dt>
+          <dd>The server shall sift this kind of stanza only from entities associated with the same local domain as the user itself (not from remote domains).</dd>
+          <dt>others</dt>
+          <dd>The server shall sift this kind of stanza only from other entities (not from the user itself).</dd>
+          <dt>remote</dt>
+          <dd>The server shall sift this kind of stanza only from entities associated with remote domains (not from the same local domain as the user itself).</dd>
+          <dt>self</dt>
+          <dd>The server shall sift this kind of stanza only from the user itself (not from other entities).</dd>
+        </di>
+      </dl>
+      <p>These values are child elements of the &lt;iq-sift/&gt;, &lt;message-sift/&gt;, and &lt;presence-sift/&gt; elements when the server returns a features discovery result, whereas they are values of the 'sender' attribute when the client enables sift support.</p>
+    </section3>
+    <section3 topic='Recipient' anchor='features-recipient'>
+      <p>A server MAY enable the client to filter based on recipient. The following values are supported.</p>
+      <dl>
+        <di>
+          <dt>all</dt>
+          <dd>The server shall sift this kind of stanza if the recipient is the bare JID &LOCALBARE; of the user or the full JID &LOCALFULL; of the particular resource. This is the <strong>default</strong>.</dd>
+          <dt>bare</dt>
+          <dd>The server shall sift this kind of stanza only if the recipient is the bare JID &LOCALBARE; of the user.</dd>
+          <dt>full</dt>
+          <dd>The server shall sift this kind of stanza only if the recipient is the full JID &LOCALFULL; of the particular resource.</dd>
+        </di>
+      </dl>
+      <p>These values are child elements of the &lt;iq-sift/&gt;, &lt;message-sift/&gt;, and &lt;presence-sift/&gt; elements when the server returns a features discovery result, whereas they are values of the 'recipient' attribute when the client enables sift support.</p>
+    </section3>
+    <section3 topic='Payload' anchor='features-payload'>
+      <p>A server MAY enable the client to sift based on the XML namespace and element name of the payload(s) that the client allows for delivery. If so, the server shall include in the features discovery result an &lt;allow/&gt; element for the relevant kind of stanza.</p>
+    </section3>
+    <section3 topic='Advanced Matching' anchor='features-advanced'>
+      <p>A server could match based on more complex criteria, e.g. Regular Expressions or XPath Expressions; such functionality is implicitly allowed because the XML schema specifies the &lt;xs:any/&gt; notation, but any such advanced matching shall be defined in separate specifications.</p>
+    </section3>
+  </section2>
+  <section2 topic='Discovering Supported Features' anchor='discovering'>
+    <p>If a server supports the SIFT protocol, it MUST advertise that fact in its responses to &xep0030; information ("disco#info") requests by returning a feature of "urn:xmpp:sift:1":</p>
+    <example caption='A disco#info query'><![CDATA[
+<iq type='get' 
+    from='romeo@montague.lit/pda'
+    to='montague.lit'
+    id='bf4vb167'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+    ]]></example>
+    <example caption='A disco#info response'><![CDATA[
+<iq type='result' 
+    from='montague.lit'
+    to='romeo@montague.lit/pda'
+    id='bf4vb167'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <feature var='urn:xmpp:sift:1'/>
+  </query>
+</iq>
+    ]]></example>
+    <p>This response enables the client to know that the server supports SIFT in general, but particular SIFT features. In order to discover which SIFT features are supported, a client sends an IQ-get containing a &lt;features/&gt; element qualified by the 'urn:xmpp:sift:1' namespace.</p>
+  <example caption="Client requests SIFT support details"><![CDATA[
+<iq from='romeo@montague.lit/pda'
+    id='bn4hf91g'
+    to='montague.lit'
+    type='get'>
+  <features xmlns='urn:xmpp:sift:1'/>
+</iq>
+    ]]></example>
+    <p>The server then returns a list of the particular SIFT features it supports.</p>
+    <example caption="Server provides details regarding SIFT support"><![CDATA[
+<iq from='montague.lit'
+    id='bn4hf91g'
+    to='romeo@montague.lit/pda'
+    type='result'>
+  <features xmlns='urn:xmpp:sift:1'>
+    <message-sift>
+      <recipient>
+        <all/>
+      </recipient>
+      <senders>
+        <all/>
+        <others/>
+      </senders>
+    </message-sift>
+    <presence-sift>
+      <recipient>
+        <all/>
+      </recipient>
+      <senders>
+        <all/>
+        <others/>
+      </senders>
+    </presence-sift>
+  </features>
+</iq>
+    ]]></example>
+    <p>The foregoing IQ-result indicates that montague.net supports only message and presence sifting, allows the client to filter those kinds of stanzas only from all entities or from other entities (but not from local entities, remote entities, or itself), allows the client to filter those kinds of stanzas only to <em>both</em> the bare JID and full JID (but not to the bare JID or the full JID alone), and does not support filtering based on payload.</p>
+    <p>Naturally, the server could return the typical XMPP error conditions, such as &unavailable; if the server does not support the SIFT protocol or the version specified by the client.</p>
+  </section2>
+  <section2 topic='Enabling SIFT' anchor='enabling'>
+    <p>To enable sifting of stanzas, the client sends an IQ-set to the server containing a &lt;sift/&gt; child element that in turn contains an &lt;iq/&gt; element, a &lt;message/&gt; element, a &lt;presence/&gt; element, or some combination of those elements. Each of these elements MAY include a 'recipient' attribute whose value is "all", "bare", or "full" (defaulting to "all"). Each of these elements MAY also include a 'sender' attribute whose value is "all", "local", "others", "remote", or "self" (defaulting to "all").</p>
+    <p>Note: The last SIFT request sent from the client to the server overrides all previous SIFT requests; SIFT requests are not cumulative. Therefore, each SIFT request needs to contain all the SIFT rules that the client wishes the server to enforce, not a delta from the previous request.</p>
+    <example caption="Sifting of message and presence stanzas"><![CDATA[
+<iq from='romeo@montague.lit/pda'
+    id='rv491g37'
+    to='romeo@montague.lit'
+    type='set'>
+  <sift xmlns='urn:xmpp:sift:1'>
+    <message sender='others'/>
+    <presence/>
+  </sift>
+</iq>
+    ]]></example>
+    <p>The foregoing IQ-set means "sift messages from others and presence from all senders, no matter if the recipient is my bare JID or my full JID".</p>
+    <p>Each of the child elements &IQ;, &MESSAGE;, and &PRESENCE; MAY also contain one or more &lt;allow/&gt; children whose 'name' attribute specifies the element name and whose 'ns' attribute specifies the XML namespace of stanza payloads the client would like to allow. If no &lt;allow/&gt; elements are included, then sifting of that kind of stanza is completed without reference to the payload.</p>
+    <example caption="Sifting for particular IQ payloads"><![CDATA[
+<iq from='romeo@montague.lit/pda'
+    id='bs01jg75'
+    to='romeo@montague.lit'
+    type='set'>
+  <sift xmlns='urn:xmpp:sift:1'>
+    <iq>
+      <allow name='jingle' ns='urn:xmpp:jingle:1'/>
+      <allow name='query' ns='http://jabber.org/protocol/disco#info'/>
+    </iq>
+    <message/>
+  </sift>
+</iq>
+    ]]></example>
+    <p>The foregoing IQ-set means "filter out inbound IQ stanzas except if the payload matches &lt;jingle xmlns='urn:xmpp:jingle:1'/&gt; or &lt;query xmlns='http://jabber.org/protocol/disco#info'/&gt;".</p>
+    <p>In XMPP, an IQ stanza can contain only one payload element, so the filtering logic is straightforward. However, a message or presence stanza can contain multiple payload elements (cf. &xep0226;). Therefore, filtering for message and presence stanzas means that if the stanza contains the defined payload or payloads (perhaps in addition to other payloads), the server shall deliver it to the client.</p>
+    <p>For instance, the following example shows how a client would filter inbound messages and IQs to only receive SOAP payloads as specified in &xep0072;.</p>
+    <example caption="Sifting for SOAP"><![CDATA[
+<iq from='romeo@montague.lit/pda'
+    id='cid143n9'
+    to='romeo@montague.lit'
+    type='set'>
+  <sift xmlns='urn:xmpp:sift:1'>
+    <iq>
+      <allow name='Envelope' ns='http://www.w3.org/2003/05/soap-envelope'/>
+    </iq>
+    <message>
+      <allow name='Envelope' ns='http://www.w3.org/2003/05/soap-envelope'/>
+    </message>
+  </sift>
+</iq>
+    ]]></example>
+    <p>Similarly, the following example shows how a client would filter inbound presence notifications to only receive notifications that contain entity capabilities data as specified in &xep0115;.</p>
+    <example caption="Sifting for entity capabilities"><![CDATA[
+<iq from='romeo@montague.lit/pda'
+    id='zl2f36d8'
+    to='romeo@montague.lit'
+    type='set'>
+  <sift xmlns='urn:xmpp:sift:1'>
+    <presence>
+      <allow name='c' ns='http://jabber.org/protocol/caps'/>
+    </presence>
+  </sift>
+</iq>
+    ]]></example>
+    <p>Naturally, the server could return the typical XMPP error conditions, such as &unavailable; if the server does not support the SIFT protocol or the version specified by the client, &feature; if the server does not support a particular feature (e.g., &IQ; sifting) requested by the client, &badrequest; if the request is malformed, &internalserver; if the server experiences a malfunction while attempting to process the request, and so on.</p>
+  </section2>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <section2 topic='Handling Presence Stanzas' anchor='rules-presence'>
+    <p>When the client indicates that it wishes to receive inbound presence notifications, the server SHOULD send outbound presence probes on the client's behalf. Responses to these presence probes are addressed to the bare JID of the account and then broadcasted to all of the resources that have expressed interest in receiving inbound presence notifications.</p>
+    <p>If the client subsequently indicates that it wants the server to intercept inbound presence notifications, the server MUST NOT deliver to the client presence notifications that are addressed to the bare JID or full JID as defined by the 'recipient' attribute.</p>
+    <p>If the client then indicates again that it wishes to receive inbound presence notifications, the server shall resynchronize the client regarding the presence states of its contacts (how it does so is implementation-specific, e.g. whether it queues received presence notifications or re-probes the user's contacts).</p>
+  </section2>
+  <section2 topic='Handling Message Stanzas' anchor='rules-message'>
+    <p>When a client indicates that it wishes to receive messages, the server SHOULD deliver to the client all messages in the offline message queue and MUST deliver to the client any subsequent messages that would normally be delivered to the client in accordance with the rules defined in &xmppcore; and &xmppim;.</p>
+    <p>If the client subsequently indicates that it wants the server to intercept inbound messages (and there are no other connected or available resources that have expressed interest in receiving inbound messages), the server SHOULD treat messages as if there were no connected or available resources (e.g., storing them offline for later delivery); if the client then indicates again that it wishes to receive inbound messages, the server SHOULD send those queued messages to the client so that it can get back in sync regarding messages received from its contacts.</p> 
+  </section2>
+  <section2 topic='Handling IQ Stanzas' anchor='rules-iq'>
+    <p>If the client does not request filtering of inbound IQ stanzas, the server MUST pass through to the client all IQ stanzas that are addressed to the full JID of the client (subject to appropriate security controls as defined in the relevant RFCs and XEPs).</p>
+    <p>If the client requests filtering of inbound IQ stanzas, for unfiltered payload name+namespace combinations the server MUST pass through to the client all IQ stanzas that are addressed to the full JID of the client (subject to appropriate security controls as defined in the relevant RFCs and XEPs), whereas for filtered payload name+namespace combinations the server MUST respond to all IQ stanzas in a way consistent with the specification for the given payload namespace (if defined) or as specified in &xmppcore; and &xmppim; for IQs where no full JID &LOCALFULL; matches; typically that means returning a &unavailable; error.</p>
+  </section2>
+  <section2 topic='Lack of Sifting' anchor='rules-none'>
+    <p>Naturally, if the server advertises support for the SIFT protocol but the client does not send any IQ-set stanzas containing SIFT payloads, the server MUST proceed as it normally would in accordance with the core XMPP specifications.</p>
+  </section2>
+</section1>
+
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Invisibility' anchor='invisibility'>
+    <p>In order to be invisible at the start of a session, a client can register for (i.e., not request interception of) inbound messages and presence notifications without sending initial presence.</p>
+    <example caption="Staying invisible"><![CDATA[
+<iq from='romeo@montague.lit/pda'
+    id='mxi371g9'
+    to='romeo@montague.lit'
+    type='set'>
+  <sift xmlns='urn:xmpp:sift:1'/>
+</iq>
+    ]]></example>
+    <p>The server would then probe the user's contacts and return the resulting presence notifications to the client, as well as allow inbound message and IQ stanzas.</p>
+    <p>If the user wants to "go visible", the client will send initial presence.</p>
+    <example caption="Going visible"><![CDATA[
+<presence/>
+    ]]></example>
+    <p>The user can later go invisible again by sending presence of type "unavailable" without modifying the SIFT rules or closing the stream.</p>
+    <example caption="Going invisible"><![CDATA[
+<presence type='unavailable'/>
+    ]]></example>
+  </section2>
+  <section2 topic='Negative Presence Priority' anchor='priority'>
+    <p>RFC 3921 defines the concept of negative values for the presence &lt;priority/&gt; element, where a negative value instructs the server to not deliver to the client any messages that are directed to the bare JID of the user. This behavior can be emulated using SIFT by asking the server to intercept inbound message stanzas for the bare JID, but not presence notifications or IQ stanzas.</p>
+    <example caption="Emulating negative presence priority"><![CDATA[
+<iq from='romeo@montague.lit/pda'
+    id='zkd71d37'
+    to='romeo@montague.lit'
+    type='set'>
+  <sift xmlns='urn:xmpp:sift:1'>
+    <message recipient='bare'/>
+  </sift>
+</iq>
+    ]]></example>
+    <p>If a client requests message sifting, but sends presence, it SHOULD specify a negative priority as a hint to contacts.</p>
+  </section2>
+  <section2 topic='Presence Hush' anchor='nopresence'>
+    <p>Because inbound presence notifications can be "chatty", mobile clients and other entities with limited battery life might want to "hush" the presence session by asking the server to intercept inbound presence notifications but not message stanzas.</p>
+    <example caption="Hushing the presence session"><![CDATA[
+<iq from='romeo@montague.lit/pda'
+    id='uh2s64g9'
+    to='romeo@montague.lit'
+    type='set'>
+  <sift xmlns='urn:xmpp:sift:1'>
+    <presence/>
+  </sift>
+</iq>
+    ]]></example>
+  </section2>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>To follow.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p> 
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='reg'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:sift:1</li>
+    </ul>
+    <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespace to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
+  </section2>
+  <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:sift:1'
+    xmlns='urn:xmpp:sift:1'
+    elementFormDefault='qualified'>
+
+  <xs:element name='features'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='iq-sift'
+                    type='featureElementType'
+                    minOccurs='0'
+                    maxOccurs='1'/>
+        <xs:element name='message-sift'
+                    type='featureElementType'
+                    minOccurs='0'
+                    maxOccurs='1'/>
+        <xs:element name='presence-sift'
+                    type='featureElementType'
+                    minOccurs='0'
+                    maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='sift'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='iq' 
+                    type='siftElementType'
+                    minOccurs='0' 
+                    maxOccurs='1'/>
+        <xs:element name='message' 
+                    type='siftElementType'
+                    minOccurs='0' 
+                    maxOccurs='1'/>
+        <xs:element name='presence' 
+                    type='siftElementType'
+                    minOccurs='0' 
+                    maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='featureElementType'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='recipient' 
+                    type='recipientElementType' 
+                    minOccurs='0'
+                    maxOccurs='1'/>
+        <xs:element name='sender' 
+                    type='senderElementType' 
+                    minOccurs='0'
+                    maxOccurs='1'/>
+        <xs:element name='allow' 
+                    type='allowElementType' 
+                    minOccurs='0'
+                    maxOccurs='unbounded'/>
+        <xs:any     namespace='##other' 
+                    minOccurs='0' 
+                    maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='siftElementType'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='allow' 
+                    type='allowElementType' 
+                    minOccurs='0'
+                    maxOccurs='unbounded'/>
+        <xs:any     namespace='##other' 
+                    minOccurs='0' 
+                    maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='recipient'
+                    use='optional'
+                    default='all'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='all'/>
+            <xs:enumeration value='bare'/>
+            <xs:enumeration value='full'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name='sender'
+                    use='optional'
+                    default='all'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='all'/>
+            <xs:enumeration value='local'/>
+            <xs:enumeration value='others'/>
+            <xs:enumeration value='remote'/>
+            <xs:enumeration value='self'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='recipientElementType'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='all' 
+                    type='empty' 
+                    minOccurs='0'
+                    maxOccurs='1'/>
+        <xs:element name='bare' 
+                    type='empty' 
+                    minOccurs='0'
+                    maxOccurs='1'/>
+        <xs:element name='full' 
+                    type='empty' 
+                    minOccurs='0'
+                    maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='senderElementType'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='all' 
+                    type='empty' 
+                    minOccurs='0'
+                    maxOccurs='1'/>
+        <xs:element name='local' 
+                    type='empty' 
+                    minOccurs='0'
+                    maxOccurs='1'/>
+        <xs:element name='others' 
+                    type='empty' 
+                    minOccurs='0'
+                    maxOccurs='1'/>
+        <xs:element name='remote' 
+                    type='empty' 
+                    minOccurs='0'
+                    maxOccurs='1'/>
+        <xs:element name='self' 
+                    type='empty' 
+                    minOccurs='0'
+                    maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name='allowElementType'>
+    <xs:simpleContent>
+      <xs:extension base='empty'>
+        <xs:attribute name='name'
+                      type='xs:NCName'
+                      use='required'/>
+        <xs:attribute name='ns'
+                      type='xs:anyURI'
+                      use='required'/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+    ]]></code>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>The authors wish to acknowledge feedback received from Dave Cridland, Jack Erwin, Waqas Hussein, Craig Kaes, Dirk Meyer, Robert Quattlebaum, Mike Taylor, Matthew Wild, and Jiří Zárevúcký, as well as from the participants at XMPP Summit 7 on July 20-21, 2009.</p>
+</section1>
+
+</xep>

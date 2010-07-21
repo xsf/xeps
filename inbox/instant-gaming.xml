@@ -1,0 +1,637 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+  <!ENTITY INVITE "&lt;invite/&gt;">
+  <!ENTITY JOIN "&lt;join/&gt;">
+  <!ENTITY ERROR "&lt;error/&gt;">
+  <!ENTITY TEXT "&lt;text/&gt;">
+  <!ENTITY GAME "&lt;game/&gt;">
+  <!ENTITY TURN "&lt;turn/&gt;">
+  <!ENTITY MOVE "&lt;move/&gt;">
+  <!ENTITY SAVE "&lt;save/&gt;">
+  <!ENTITY SAVED "&lt;saved/&gt;">
+  <!ENTITY FEATURE "&lt;feature/&gt;">
+  <!ENTITY NAME "&lt;name/&gt;">
+  <!ENTITY SET "&lt;set/&gt;">
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Instant Gaming</title>
+  <abstract>This document defines an XMPP protocol extension for serverless instant gaming in a one-to-one context.</abstract>
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+	<spec>XMPP Core</spec>
+	<spec>XMPP IM</spec>
+	<spec>XEP-0004</spec>
+	<spec>XEP-0030</spec>
+	<spec>XEP-0045</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT YET ASSIGNED</shortname>
+  <author>
+    <firstname>Torsten</firstname>
+    <surname>Grote</surname>
+    <email>Torsten.Grote(&#228;t)fsfe.org</email>
+    <jid>Torsten.Grote(&#228;t)jabber.fsfe.org</jid>
+  </author>
+  <author>
+    <firstname>Arne</firstname>
+    <surname>K&#246;nig</surname>
+    <email>arne.ko(&#228;t)23inch.de</email>
+    <jid>arne++(&#228;t)jabber.ccc.de</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2009-03-14</date>
+    <initials>tg</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+  &LEGALNOTICE;
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>
+    Many modern instant messenger networks support playing games.
+	Still, XMPP mostly lacks this kind of support.
+	Therefore, this document describes a base protocol for game playing over XMPP.
+  </p>
+  <p>
+    This protocol is not by itself sufficient to play games.
+	It just describes a basic protocol framework which game-specific protocols can use.
+  </p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>
+    This document addresses the functionality which is needed to play games over the XMPP.
+	In particular this functionality consists of:
+  </p>
+  <ol start='1'>
+    <li>discovering support for games in general and for particular games</li>
+	<li>inviting users to matches</li>
+	<li>exchanging match information (moves, states, etc.)</li>
+	<li>saving and loading of matches</li>
+	<li>terminating matches</li>
+  </ol>
+<!--
+  <p>In addition to these requirements, additional requirements are addressed by Multi-User Gaming</p>
+  <ol start='6'>
+	<li>joining existing games</li>
+	<li>allow spectators to watch the game</li>
+    <li>enable players and spectators to chat</li>
+    <li>validate game moves independently</li>
+  </ol>
+-->
+</section1>
+<section1 topic='One-to-One Gaming Use Cases' anchor='1to1usecases'>
+  <p>
+	The following section describes the use cases associated with one-to-one instant gaming.
+	It is not supposed to provide professional gaming capabilites with independent move validation, spectators, etc.
+	Instead, it only supports two player games without spectators and no move validation.
+  </p>
+  <p>
+	Despite the existence of Multi-User Gaming, Instant Gaming is considered important for making gaming over XMPP popular.
+	Rapid deployment of new two-player games is possible without waiting for server support or finding a suitable server.
+	<!--Move validation is done by the clients and allows the theoretical possibillity of transfering illegal moves.//-->
+  </p>
+  <section2 topic='Discovering Client Game Support' anchor='1to1use-disco'>
+	<p>An implementation of Instant Gaming MUST support &xep0030;.</p>
+	<p>
+	  A Jabber entity may wish to discover if another entity implements the Instant Gaming protocol;
+	  in order to do so, it sends a service discovery information ("disco#info") query to the other entity's full JID:
+	</p>
+    <example caption='User Queries Another User for Instant Gaming via Disco'><![CDATA[
+<iq from='romeo@montague.net/garden'
+    to='juliet@capulet.com/balcony'
+    id='req1'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+
+		<p>
+		  The entity MUST return the features it supports.
+		  Game protocols SHOULD include a &FEATURE; element with their namespace in the response, too.
+		</p>
+
+		<example caption='Entity Returns Disco Info Results'><![CDATA[
+<iq from='juliet@capulet.com/garden'
+    to='romeo@montague.net/balcony'
+    id='req1'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='http://jabber.org/protocol/games'/>
+    <feature var='http://jabber.org/protocol/games/tictactoe'/>
+    <feature var='http://jabber.org/protocol/games/chess'/>
+    ...
+  </query>
+</iq>]]></example>
+	</section2>
+	
+	<section2 topic='Invitation' anchor='1to1-invite'>
+		<p>
+		  In order to invite someone to a game, the initiator sends a message to her/his opponent containing an &INVITE; element,
+		  which MUST specify the invitation type (see <link url='#table-1'>Table 1</link>).
+		</p>
+		<p>
+		  Furthermore, a &GAME; element with a "var" attribute containing the namespace of the game protocol is REQUIRED.
+		  It MAY also contain additional information which SHOULD then be specified using &xep0004;.
+		  Such information might be used to state the rules or other slight variations for the particular game.
+		  If an invitation with unsupported rules or options is received,
+		  a &notacceptable; error of type "modify" SHOULD be send to the inviting entity.
+		</p>
+		<p>
+		  The &THREAD; element MUST be present and it MUST contain a unique ID which identifies the current match.
+		  The ID MAY for example consist of the initiator's and the opponent's (bare) JID,
+		  the game name, the current datetime (which then SHOULD conform to the DateTime profile specified in &xep0082;) and
+		  a random number, all separated by hyphens.
+		  It is not supposed to get parsed and is only used to uniquely identify the game.
+		</p>
+		<example caption='Romeo Invites Juliet to a Game of Checkers'><![CDATA[
+<message
+    from='romeo@montague.net/garden'
+    to='juliet@capulet.com/balcony'>
+  <thread>romeo@montague.net-juliet@capulet.com-checkers-1591-02-21T12:56:15Z-1234</thread>
+  <invite xmlns='http://jabber.org/protocol/games'
+      type='new'>
+    <reason>
+      Hello Juliet,
+      would you like to play a little game?
+    </reason>
+    <game var='http://jabber.org/protocol/games/checkers'/>
+  </invite>
+</message>]]></example>
+		
+		<table caption='Invitation types'>
+		<tr>
+			<th>Invitation Type</th>
+			<th>Meaning</th>
+		</tr>
+		<tr>
+			<td>new</td>
+			<td>The game is totally new and contains no data of previous games.</td>
+		</tr>
+		<tr>
+			<td>renew</td>
+			<td>The game is over and shall be recreated from the beginning with the same match ID.</td>
+		</tr>
+		<tr>
+			<td>adjourned</td>
+			<td>
+				This invitation is to resume an adjourned game.
+				It MUST only be send to the same opponent as from the beginning of the game and MUST contain the same game id.
+				Further information provides <link url='#1to1-load'>Game Loading</link>
+			</td>
+		</tr>
+		<tr>
+			<td>constructed</td>
+			<td>This type states that the game will start with a state which is different from the state new games have.</td>
+		</tr>
+<!--
+		<tr>
+			<td>cancel</td>
+			<td>A previous invitation with the same match ID in the &THREAD; element is no longer valid.</td>
+		</tr>
+-->		</table>
+		
+		<p>
+		  An invitation of type "renew" SHOULD contain the same match ID and &GAME; element as the initial "new" invitation.
+		  It MUST only be send when the previous match with the same match ID has been terminated.
+		  If it is received earlier, an &unexpected; error SOULD be send to the sender of the premature invitation.
+		  Game protocols SHOULD switch the beginning player and leave all other options the same.
+		</p>
+		<p>
+		  In the unlikely but possible event
+		  that an invitation of type "renew" is received immediately after one has been send with the same match ID,
+		  this invitation SHOULD be treated as if it were a &MESSAGE; with a &JOIN; element.
+		  Invitations with match IDs that are already assigned to a running game SHOULD be ignored.
+		</p>
+<!--
+		<p>
+		  An invitation might be canceled by the initiator at any time by sending an invitation with 'type' "cancel" and the same game id.
+		  Mirroring the &GAME; element is OPTIONAL.
+		  Any implementation SHOULD cancel invitations before closing games in a way that nobody can join them anymore.
+		  They also MUST NOT send two invitations with the same game id.
+		</p>
+		<example caption='Romeo Cancels His Invitation to Juliet'><![CDATA[
+<message
+    from='romeo@montague.net/garden'
+    to='juliet@capulet.com/balcony'>
+  <thread>romeo@montague.net-juliet@capulet.com-checkers-1591-02-21T12:56:15Z-1234</thread>
+  <invite xmlns='http://jabber.org/protocol/games'
+      type='cancel'>
+    <reason>Sorry, I decided not to play, now.</reason>
+  </invite>
+</message>]]></example>
+-->
+		<p>
+		  The opponent SHOULD NOT ignore the invitation.
+		  If she/he does not want to play, the invitation SHOULD be declined.
+		  In order to decline the invitation, the opponent MUST send a message of the following form to the initiator.
+		</p>
+		<example caption='Juliet Declines Romeo&#8217;s Invitation'><![CDATA[
+<message
+    from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/garden'>
+  <thread>romeo@montague.net-juliet@capulet.com-checkers-1591-02-21T12:56:15Z-1234</thread>
+  <decline xmlns='http://jabber.org/protocol/games'>
+    <reason>I won't fight you.</reason>
+  </decline>
+</message>]]></example>
+	</section2>
+
+	<section2 topic='Joining a Game' anchor='1to1-join'>
+		<p>
+		  In order to join a game, a &MESSAGE; stanza has to be send to the initiator's full JID.
+		  The &MESSAGE; stanza MUST contain the ID of the match to which the opponent wants to join in the &THREAD; element.
+		  Besides that, a &JOIN; element qualified by the namespace 'http://jabber.org/protocol/games' is REQUIRED
+		  and the &BODY; element is OPTIONAL.
+		</p>
+
+		<example caption='Juliet Joins the Game'><![CDATA[
+<message
+    from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/garden'>
+  <thread>romeo@montague.net-juliet@capulet.com-checkers-1591-02-21T12:56:15Z-1234</thread>
+  <join xmlns='http://jabber.org/protocol/games'/>
+</message>]]></example>
+		
+		<p>
+		  A successful join MUST be confirmed by sending the same message (with different sender and recipient) back to the opponent.
+		</p>
+		<p>
+		  The initiator might refuse the join by sending a &MESSAGE; stanza of 'type' "error".
+		  It then MUST mirror the &THREAD; ID and the original &JOIN; child element.
+		  The &ERROR; element MAY contain a &TEXT; element with a human-readable description of the error.
+		</p>
+		<example caption='Romeo Refuses Juliet'><![CDATA[
+<message from='romeo@montague.net/garden'
+    to='juliet@capulet.com/balcony'
+    type='error'/>
+  <thread>romeo@montague.net-juliet@capulet.com-checkers-1591-02-21T12:56:15Z-1234</thread>
+  <join xmlns='http://jabber.org/protocol/games'/>
+  <error type='cancel'>
+    <not-allowed xmlns='urn:ietf:params:xml:xmpp-stanzas'/>
+    <text>You are not welcome here!</text>
+  </error>
+</message>]]></example>
+	</section2>
+	
+	<section2 topic='Game Play' anchor='1to1-play'>
+		<p>	
+		  A turn in a game is sent in a message (of type "chat") to the other player's full JID.
+		  The &MESSAGE; stanza contains a &TURN; element which contains the element, representing the desired action (e.g. &MOVE;) qualified by the namespace of the particular game.
+		  The action itself can be further described by attributes or child elements (see corresponding game protocol).
+		</p>
+		<p>
+		  A human-readable comment MAY be sent with the move in the &BODY; element of the &MESSAGE;.
+		  In order to track the game to which the move belongs, the match ID is REQUIRED to be in the &THREAD; element.
+		</p>
+		<example caption='Juliet Sends a Game Move to Romeo'><![CDATA[
+<message
+    from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/garden'
+    type='chat'>
+  <thread>juliet@capulet.com-romeo@montague.net-tictactoe-1591-02-23T11:36:25Z-4321</thread>
+  <body>What do you say to this?</body>
+  <turn xmlns='http://jabber.org/protocol/games'>
+    <move xmlns='http://jabber.org/protocol/games/tictactoe'
+        id='1'
+        row='2'
+        col='2'/>
+  </turn>
+</message>]]></example>
+		<p>A receipt for each message MAY be requested in accordance with &xep0184;.</p>
+	</section2>
+
+	<section2 topic='Game Saving' anchor='1to1-save'>
+		<p>
+		  While playing a game, it might be desirable to interrupt playing and resume it at a later time.
+		  Games with complete knowledge can be saved at any time by each of the players without sending messages.
+		  But the client of the saving player SHOULD inform the other player that the game was saved by sending the following message.
+		</p>
+
+		<example caption='Romeo Informs Juliet that he Saved the Game'><![CDATA[
+<message
+    from='romeo@montague.net/garden'>
+    to='juliet@capulet.com/balcony'
+  <thread>juliet@capulet.com-romeo@montague.net-tictactoe-1591-02-23T11:36:25Z-4321</thread>
+  <saved xmlns='http://jabber.org/protocol/games'/>
+</message>]]></example>
+		<p>After receiving such an notification, an implementation MAY decide to save the game, too.</p>
+		
+		<p>
+		  When playing games with incomplete knowledge,
+		  it is desirable that both players save the game at the same time in order to save a clean game state.
+		  The game protocol MUST define whether its game has to be saved independently or mutually.
+		</p>
+		
+		<p>
+		  If a game needs to be saved mutually by both players,
+		  one of the players requests the game to be saved by sending a message with a &SAVE; child element as follows.
+		</p>
+		<example caption='Juliet Issues a Game Saving Process'><![CDATA[
+<message
+    from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/garden'>
+  <thread>juliet@capulet.com-romeo@montague.net-tictactoe-1591-02-23T11:36:25Z-4321</thread>
+  <save xmlns='http://jabber.org/protocol/games'/>
+</message>]]></example>
+		<p>
+		  The recipient of the above message MUST confirm a successful saving process
+		  using a &SAVED; element as above.
+		</p>
+		<p>
+		  To ensure that both players save the same game state,
+		  the sender MUST NOT send any game moves until he receives confirmation from the other player and
+		  the receiver MUST NOT send any game moves after receiving the request for saving until he has responded to it.
+		</p>
+		<p>
+		  If the sender of the saving request receives a game move before getting confirmation of a successful saving process,
+		  she/he MUST NOT save the game and MUST send the following error message.
+		</p>
+		<example caption='A Mutual Game Save between Romeo and Juliet Fails'><![CDATA[
+<message
+    from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/garden'
+    type='error'>
+  <thread>juliet@capulet.com-romeo@montague.net-tictactoe-1591-02-23T11:36:25Z-4321</thread>
+  <save xmlns='http://jabber.org/protocol/games'/>
+  <error type='cancel'>
+    <conflict/>
+  </error>
+</message>]]></example>
+		<p>
+		  If one of the player's client encounters an error during the saving process, it MUST send an error message, too.
+		  This time it SHOULD NOT use a &conflict;, but an &undefined; error condition.
+		</p>
+	</section2>
+
+	<section2 topic='Game Loading' anchor='1to1-load'>
+		<p>	
+		  An XMPP entity that wishes to resume a saved game has to send an invitation
+		  of "type" 'adjourned' to the same opponent it began playing with.
+		  It MAY also resume the game with another opponent, but then it MUST use the "type" 'constructed' and a new match ID.
+		</p>
+		<p>
+		  In case the game requires mutual saving by both players and the game was saved this way,
+		  one of the players simply sends an invitation of "type" 'adjourned' with the match ID of the saved game to the other player.
+		  After the invitee has successfully joined the game, it begins at the point where it was saved.
+		</p>
+		<p>
+		  If the game was only saved by one of the players, the inviting player MUST send the saved game state in the invitation.
+		  This SHOULD be done by including an &X; element in the &MESSAGE; stanza of the 'jabber:x:data' namespace.
+		  The exact representation of the game state is up to the game protocol, but SHOULD use &xep0004;.
+		  E.g. the state MAY also be encoded in a history of game moves.
+		</p>
+		<example caption='Romeo Invites Juliet to a Saved Game'><![CDATA[
+<message
+    from='romeo@montague.net/garden'
+    to='juliet@capulet.com/balcony'>
+  <thread>romeo@montague.net-juliet@capulet.com-tictactoe-1591-02-21T12:56:15Z-1234</thread>
+  <invite xmlns='http://jabber.org/protocol/games'
+      type='adjourned'>
+    <reason>
+      Hello Juliet,
+      would you like to resume our little game?
+    </reason>
+    <game var='http://jabber.org/protocol/games/tictactoe'/>
+    <x xmlns='jabber:x:data'
+        type='submit'>
+      <title>Game of Tic Tac Toe saved on 21st of February 1591 at 1 o'clock</title>
+      <field var='x-player' type='jid-single'>
+        <value>juliet@capulet.com/balcony</value>
+      </field>
+      <field var='o-player' type='jid-single'>
+        <value>romeo@montague.net/garden</value>
+      </field>
+      <field var='move-id'>
+        <value>5</value>
+      </field>
+      <field var='1-1'/>
+      <field var='1-2'/>
+      <field var='1-3'/>
+        <value>o</value>
+      </field>
+      <field var='2-1'>
+        <value>o</value>
+      </field>
+      <field var='2-2'>
+        <value>x</value>
+      </field>
+      <field var='2-3'>
+        <value>x</value>
+      </field>
+      <field var='3-1'/>
+      <field var='3-2'/>
+      <field var='3-3'/>
+    </x>
+  </invite>
+</message>]]></example>
+		<p>
+		  The Tic Tac Toe game state information in this example is entirely fictional and only for demonstration purposes.
+		</p>
+		<p>
+		  An implementation MAY present the game in the saved state to the user along with the invitation.
+		  It MAY also compare the state it received with the state it saved by its own and
+		  inform the user about any mismatches.
+		</p>
+	</section2>
+
+	<section2 topic='Termination' anchor='1to1-term'>
+		<p>
+		  An implementation SHOULD send the following &MESSAGE; to end the game.
+		  The "reason" attribute is always REQUIRED.
+		</p>
+
+		<example caption='Romeo Terminates the Game and Accuses Juliet of Cheating'><![CDATA[
+<message
+    from='romeo@montague.net/garden'
+    to='juliet@capulet.com/balcony'>
+  <thread>juliet@capulet.com-romeo@montague.net-checkers-1591-02-23T11:36:25Z-4321</thread>
+  <body>What devil art thou, that dost torment me thus?</body>
+  <terminate xmlns='http://jabber.org/protocol/games'
+    reason='resign'/>
+</message>
+		]]></example>
+
+		<p>
+		  This &MESSAGE; SHOULD also be send by one of the players
+		  before she/he changes her/his presence to unavailable,
+		  though a different "reason" MAY be used.
+		  For a list of possible reasons and their meaning see <link url='#table-2'>Table 2</link>.
+		</p>
+		<p>
+		  In case one player changes her/his presence to unavailable without sending a termination message,
+		  the other player might just wait or MAY save the game (if possible) and
+		  send a termination message with reason 'adjourn'.
+		</p>
+		<p>
+		  A terminating &MESSAGE; with reason 'cheating' SHOULD be send, if an illegal move is received.
+		  If one entity receives a terminating &MESSAGE; although it already send one by it's own, it MUST ignore it.
+ 		</p>
+		
+		<table caption='Termination reasons'>
+		<tr>
+			<th>Reason</th>
+			<th>Meaning</th>
+		</tr>
+		<tr>
+			<td>won</td>
+			<td>The player sending the message has won the game.</td>
+		</tr>
+		<tr>
+			<td>lost</td>
+			<td>The player sending the message has lost the game.</td>
+		</tr>
+		<tr>
+			<td>draw</td>
+			<td>The game is over and nobody has won.</td>
+		</tr>
+		<tr>
+			<td>resign</td>
+			<td>The player sending the message capitulates and quits.</td>
+		</tr>
+		<tr>
+			<td>adjourn</td>
+			<td>The game is not over and might be resumed at a later time.</td>
+		</tr>
+		<tr>
+			<td>cheating</td>
+			<td>The player receiving the message has submitted an illegel game move.</td>
+		</tr>
+		</table>
+
+	</section2>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+  <p>Initiator -- an entity who started a game.</p>
+  <p>Opponent -- in an One-to-One gaming context, the entity who was invited to play and did not start the game.</p>
+  <p>Spectator -- an entity who does not actually plays the game but watches it.</p>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <p>OPTIONAL.</p>
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>OPTIONAL.</p>
+</section1>
+
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>OPTIONAL.</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>REQUIRED.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>REQUIRED.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>REQUIRED.</p>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='http://jabber.org/protocol/games'
+    xmlns='http://jabber.org/protocol/games'
+    elementFormDefault='qualified'>
+
+<xs:import 
+      namespace='jabber:x:data'
+      schemaLocation='http://www.xmpp.org/schemas/x-data.xsd'/>
+
+<xs:element name='invite'>
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element name='reason' type='xs:string' minOccurs='0'/>
+      <xs:element name='game' type='Game'/>
+      <xs:element ref='xdata:x' minOccurs='0'/>
+    </xs:sequence>
+    <xs:attribute name='type'>
+      <xs:simpleType>
+        <xs:restriction base='xs:string'>
+          <xsd:enumeration value='new'/>
+          <xsd:enumeration value='renew'/>
+          <xsd:enumeration value='adjourned'/>
+          <xsd:enumeration value='constructed'/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name='decline'>
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element name='reason' type='xs:string'/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name='join'>
+  <xs:complexType>
+    <xs:complexContent/>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name='turn'>
+  <xs:complexType>
+    <xs:complexContent/>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name='save'>
+  <xs:complexType>
+    <xs:complexContent/>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name='saved'>
+  <xs:complexType>
+    <xs:complexContent/>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name='terminate'>
+  <xs:complexType>
+    <xs:attribute name='reason'>
+      <xs:simpleType>
+        <xs:restriction base='xs:string'>
+          <xs:enumeration value='won'/>
+          <xs:enumeration value='lost'/>
+          <xs:enumeration value='draw'/>
+          <xs:enumeration value='resign'/>
+          <xs:enumeration value='adjourn'/>
+          <xs:enumeration value='cheating'/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+</xs:element>
+
+<xs:complexType name='Game'>
+  <xs:sequence>
+    <xs:element ref='xdata:x' minOccurs='0'/>
+  </xs:sequence>
+  <xs:attribute name='var' type='xs:string'/>
+</xs:complexType>
+
+</xs:schema>
+  ]]></code>
+</section1>
+
+</xep>

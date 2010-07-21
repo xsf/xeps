@@ -1,0 +1,170 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>Shared BOSH</title>
+    <abstract>This specification defines an extension to BOSH that allows multiple clients to share the same underlying XMPP connection.</abstract>
+    &LEGALNOTICE;
+    <number>xxxx</number>
+    <status>ProtoXEP</status>
+    <type>Standards Track</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XMPP Core</spec>
+      <spec>XEP-0124</spec>
+      <spec>XEP-0206</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>NOT_YET_ASSIGNED</shortname>
+    <author>
+      <firstname>Jack</firstname>
+      <surname>Moffitt</surname>
+      <email>jack@metajack.im</email>
+      <jid>metajack@gmail.com</jid>
+    </author>
+    <revision>
+      <version>0.0.1</version>
+      <date>2009-05-13</date>
+      <initials>Jack</initials>
+      <remark><p>First draft.</p></remark>
+    </revision>
+  </header>
+
+  <section1 topic='Introduction' anchor='intro'>
+    <p>XMPP-powered applications which run inside of Web browsers typically use &xep0124; to create a link to an XMPP server.  Unfortunately Web applications do not have control over some interactions, such as a user opening a link in a new tab.  This means that an application can end up with multiple simultaneous BOSH connections, each of which is a fully addressable XMPP endpoint.  Complex applications often need to share some state, and managing this over an arbitrary number of individual connections can be problematic.</p>
+    <p>This specification defines a mechanism for a connection manager to allow multiple clients to share the same underlying XMPP connection.  Additionally, the connection manager will notify all clients of inbound stanzas.  Similar functionality exists in specific areas of the XMPP protocol; for example, roster changes are broadcast to all connected resources so each resource can keep roster state synchronized.</p>
+    <p>As an example, consider an application which is open in two tabs (or two windows) in a Web browser.  In the first tab, the application subscribes to some pubsub node it is interested in.  The BOSH connection manager would send this subscription request to the other connected clients (in this case, just the second tab) so that they are aware that a subscription has been requested.  When the subscription acknowledgement is received by the connection manager, it will broadcast it to all clients.</p>
+  </section1>
+
+  <section1 topic='Requirements' anchor='reqs'>
+    <p>Shared BOSH must meet the following requirements:</p>
+    <ul>
+      <li>Broadcast outgoing stanzas to all shared clients</li>
+      <li>Broadcast incoming stanzas from a shared client to the other shared clients</li>
+      <li>Protect against unauthorized or uninteded sharing of the underlying connection</li>
+    </ul>
+    <p>In addition to these, the intention is for this extension to be easy to implement in current BOSH implementations.</p>
+  </section1>
+
+  <section1 topic='Protocol Flow' anchor='protoflow'>
+    <p>In order to establish a sharable connection which is then shared across two clients, the following steps take place.  The mechanism for sharing the secret below is just one possible mechanism.</p>
+    <ol start='1'>
+      <li>Client A initiates a BOSH session and indicates that this session is sharable via the 'shared:key' attribute.</li>
+      <li>Client A authenticates with the XMPP server and publishes the secret key to a private PEP node.</li>
+      <li>Client B initiates a BOSH sesion and indicates that this session is sharable via the 'shared:key' attribute.</li>
+      <li>Client B authenticates with the XMPP server and discovers Client A's existing secret key in the PEP node.</li>
+      <li>Client B terminates the BOSH connection and initiates a new one, using the discovered secret key as the value of the 'shared:key' attribute in the initial &lt;body/&gt; tag.</li>
+      <li>The connection manager verifies the key and allows Client B to share Client A's XMPP connection.</li>
+    </ol>
+  </section1>
+
+  <section1 topic='Use Cases' anchor='usecases'>
+    <section2 topic='Creating a Sharable Connection' anchor='creation'>
+      <p>A client can create a sharable BOSH connection by providing the 'shared:key' attribue to the connection manager in the initial &lt;body/&gt; element.</p>
+
+      <example caption='Creating the connection'>
+<![CDATA[POST /webclient HTTP/1.1
+Host: www.example.com
+Accept-Encoding: gzip, deflate
+Content-Type: text/xml; charset=utf-8
+Content-Length: 304
+
+<body content='text/xml; charset=utf-8'
+      hold='1'
+      rid='1573741820'
+      to='example.com'
+      ver='1.6'
+      wait='60'
+      shared:key='3c1d69981b65bfbd641dcb64c82bb613'
+      xmlns:shared='urn:xmpp:tmp:shared-bosh:0'
+      xml:lang='en'
+      xmlns='http://jabber.org/protocol/httpbind'/>]]>
+      </example>
+
+      <p>If the connection manager supports sharable connections, it will include the 'shared:result' attribute in its response.  Since this is a new sharable connection and not an attachment to an existing sharable connection, the value of the 'shared:result' attribute is 'created'.</p>
+
+      <example caption='Sharable connection created succesfully'>
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 354
+
+<body wait='60'
+      inactivity='30'
+      polling='5'
+      requests='2'
+      hold='1'
+      accept='deflate,gzip'
+      maxpause='120'
+      sid='d96c53d08d0d7b96d5d4ac0e402424ab'
+      ver='1.6'
+      from='example.com'
+      shared:result='created'
+      xmlns:shared='urn:xmpp:tmp:shared-bosh:0'
+      xmlns='http://jabber.org/protocol/httpbind'/>]]>
+      </example>
+
+      <p>If the connection manager does not support this extension, it will ignore the 'shared:key' attribute and will not include one in its response.</p>
+    </section2>
+
+    <section2 topic='Attaching to a Shared Connection' anchor='attaching'>
+      <p>Attaching to a connection is performed in the same manner as creating a sharable connection.  The client provides the secret key of an existing connection as the value of the 'shared:key' attribute.  If the key matches, the connection manager will respond with a 'shared:result' attribute with a value of 'attached'.</p>
+      <example caption='Attached to a Shared Connection'>
+
+<![CDATA[HTTP/1.1 200 OK
+Content-Type: text/xml; charset=utf-8
+Content-Length: 355
+
+<body wait='60'
+      inactivity='30'
+      polling='5'
+      requests='2'
+      hold='1'
+      accept='deflate,gzip'
+      maxpause='120'
+      sid='d96c53d08d0d7b96d5d4ac0e402424ab'
+      ver='1.6'
+      from='example.com'
+      shared:result='attached'
+      xmlns:shared='urn:xmpp:tmp:shared-bosh:0'
+      xmlns='http://jabber.org/protocol/httpbind'/>]]>
+      </example>
+    </section2>
+  </section1>
+
+  <section1 topic='Inbound Traffic Delivery' anchor='inbound-delivery'>
+    <p>In order to easily maintain state across shared BOSH clients, the connection manager must deliver inbound traffic to the server from one client to all the other clients sharing the connection.  Applications which use shared connections must be written so that they can deal with this extra traffic; they cannot assume that all stanzas received are outbound.</p>
+  </section1>
+
+  <section1 topic='Security Considerations' anchor='security'>
+    <section2 topic='Shared Secrets' anchor='shared-secret'>
+      <p>In order to protect against unauthorized or unintended connection sharing, this specification uses a shared secret.  It is important that this secret be hard to guess and long enough that it is resistant to brute force attack.</p>
+    </section2>
+
+    <section2 topic='Storage of the Secret' anchor='store-secret'>
+      <p>It is necessary for a client to communicate the shared secret to the other clients.  Since Web browser security policy prevents most ways of achieving this, it is necessary to store the secret somewhere the other clients can find this.  Implementors must be care that this storage is robust to attack.</p>
+      <p>Two options are recommended for secret storage:</p>
+      <ol start='1'>
+        <li><p>Generate the secret on the server side (for example, in the Web application framework that generates your HTML pages).  Please note that the secret should not be transmitted alongside the HTML as this would allow anyone reading the HTML to share the connection.  Instead, the BOSH connection should be bootstrapped before page delivery.</p></li>
+        <li><p>Generate the secret on the client side, and store it within the XMPP server using some available mechanism.  For example, a client could use &xep0049; or a private &xep0163; node.</p></li>
+      </ol>
+    </section2>
+  </section1>
+
+  <section1 topic='IANA Considerations' anchor='iana'>
+    <p>This document requires no interaction with &IANA;.</p>
+  </section1>
+
+  <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <p>This XEP proposes the namespace 'urn:xmpp:tmp:shared-bosh:0' be added to the registry.</p>
+  </section1>
+
+  <section1 topic='XML Schema' anchor='schema'>
+    <p>To follow.</p>
+  </section1>
+</xep>

@@ -1,0 +1,328 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Domain Name Assertions</title>
+  <abstract>An application-level approach to asserting and proving the delegated ownership of a domain name for server-to-server XMPP federation.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>RFC 3920</spec>
+    <spec>RFC 3281</spec>
+  </dependencies>
+  <supersedes>
+    <spec>XEP-0220</spec>
+    <spec>XEP-0238</spec>
+  </supersedes>
+  <supersededby/>
+  <shortname>dna</shortname>
+  <author>
+    <firstname>Joe</firstname>
+    <surname>Hildebrand</surname>
+    <email>jhildebrand@jabber.com</email>
+    <jid>jhildebrand@cor.jabber.com</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2009-07-27</date>
+    <initials>jjh</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>As large hosting providers begin providing XMPP services for multiple domains, several issues with previous mechanisms for server-to-server federation have become apparent.</p>
+  <p>A large number of sockets are currently required between hosting providers.  Although servers MAY attempt to piggyback whenever possible, the possibility exists that 2*N*M sockets will be created (where N is the number of domains on one hosting provider, and M is the number of domains on another hosting provider).  The goal would be that the number of sockets was dependent on load or deployment considerations.</p>
+  <p>In order to enable or require encryption, the hosting provider needs to create a separate socket for each hostname pair and have access to a X.509 certificate that is signed by a widely-trusted CA and includes both the public and private keys.  Customers of hosting providers might be uncomfortable with the level of trust this requires.</p>
+  <p>This document describes an approach known as Domain Name Assertions (DNA) that allows providers to effectively host XMPP services on behalf of other companies, and might be expanded later to support other protocols.</p>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di>
+      <dt>Hosted domain</dt>
+      <dd>An XMPP domain whose network services are delegated to a third party.</dd>
+    </di>
+    <di>
+      <dt>Hosting provider</dt>
+      <dd>A business entity that provides services for one or more domains that it does not directly and fully control.</dd>
+    </di>
+    <di>
+      <dt>Self-hosted domain</dt>
+      <dd>A domain whose owner acts as its hosting provider.</dd>
+    </di>    
+    <di>
+      <dt>Delegation</dt>
+      <dd>A ceremony that acts as proof of the intent of the owner of a hosted domain to cede control to a hosting provider for a given protocol.</dd>
+    </di>
+    <di>
+      <dt>Widely-trusted CA</dt>
+      <dd>For open communities, a Certificate Authority whose certificate that is trusted by multiple web browsers by default.  For closed communities, a Certificate Authority that is trusted by all members of that community.</dd>
+    </di>
+    <di>
+      <dt>Sender Domain</dt>
+      <dd>The domain associated with the <strong>"from"</strong> address on a stanza to be sent across a federation boundary.</dd>
+    </di>
+    <di>
+      <dt>Target Domain</dt>
+      <dd>The domain associated with the <strong>"to"</strong> address on a stanza to be sent across a federation boundary.</dd>
+    </di>
+    <di>
+      <dt>Originating Server</dt>
+      <dd>The machine that wants to send a message from an entity at the Sender Domain to an entity at the Target Domain and thus is attempting to establish a connection between the two servers.</dd>
+    </di>
+    <di>
+      <dt>Receiving Server</dt>
+      <dd>The machine to which the Originating Server has opened a connection for the purpose of sending a message from the Sender Domain to the Target Domain.</dd>
+    </di>
+    <di>
+      <dt>Asserting Entity</dt>
+      <dd>A system element (such as a server) asserting a given domain name as an identity.</dd>
+    </di>
+    <di>
+      <dt>Validating Entity</dt>
+      <dd>A system element (such as a client or server) that checks a given identity asserted by an asserting entity.</dd>
+    </di>
+    <di>
+      <dt>Asserted Domain</dt>
+      <dd>A domain name asserted by either side of a conversation.  Validating entities MAY require assertions to be backed up with proof.</dd>
+    </di>
+    <di>
+      <dt>Proof</dt>
+      <dd>A secure mechanism through which a validating entity can ascertain that an asserting entity has authority for the asserted domain, either directly or indirectly (by delegation).</dd>
+    </di>
+  </dl>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ol>
+    <li>A hosting provider MUST be able to service domains for which it cannot obtain certificates signed by a widely-trusted CA.</li>
+    <li>All server-to-server (except for initial handshakes) MUST be encrypted in a manner not subject to man-in-the-middle attacks.</li>
+    <li>The number of socket connections between hosting providers MUST NOT be a function of the number of domains hosted by either provider.</li>
+    <li>Connections MUST be usable in either direction, if allowed by policy and deployment considerations.</li>
+    <li>The owners of the hosted domain MUST NOT be required to give out private keying material associated with any certificate they own that has been signed by a widely-trusted CA.</li>
+    <li>The owners of the hosted domain MUST be allowed to choose the frequency with which they wish to perform the delegation ceremony.</li>
+    <li>The owners of the hosted domain MUST be allowed to revoke their delegation at any time.</li>
+    <li>Multiple mechanisms for proving delegation MUST be possible.</li>
+    <li>It MUST be possible for new assertions to be added to a stream at any point after the stream is fully established, but before the stream is closed</li>
+  </ol>
+</section1>
+<section1 topic='Generic Use Cases' anchor='genericusecases'>
+  <p>The DNA mechanism can be used for multiple different protocols.  In particular, client-to-server XMPP and server-to-server XMPP are discussed herein, but the general approach could be used for non-XMPP protocols such as SMTP.  As such, the protocol syntax offered here is normative for XMPP, but merely illustrative for other protocols, which will need their own protocol bindings.</p>
+  <p>The following domain names are used in the examples:</p>
+  <dl>   
+    <di>
+      <dt>asserted.tld</dt>
+      <dd>The domain name being asserted.</dd>
+    </di>
+  </dl>
+
+  <section2 topic='Assertions' anchor='assert'>
+    <p>The asserting entity asserts a domain name through the use of an assert element.  Assertions MUST contain a <strong>"from"</strong> attribute naming the domain name that is being asserted.</p>
+    <example caption='Assertion'><![CDATA[<assert xmlns='urn:xmpp:dna:0' from='asserted.tld'/>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Validation' anchor='valid'>
+    <p>When the validating entity has been satisified that the asserting entity is authoritative for the domain name asserted, it MUST send a &lt;valid/&gt; element.  At this point, the asserting entity can send stanzas to the validating entity containing <strong>"from"</strong> addresses in the asserted and validated domain.</p>
+    <p>Validating entities SHOULD respond to a domain name assertion without asking for further proof when the domain name asserted is represented in the certificate offered by the asserting entity according to the rules set out in &rfc3920bis;.</p>
+    <p>Validating entities MAY respond to a domain name assertion without asking for further proof when the domain name asserted is known to be associated with the asserting entity through some other secure means such as DNSSEC (&rfc4033;), caching, or local knowledge.  In the DNSSEC case, the server hostname in the SRV record used to connect SHOULD be looked for in the certificate offered by the asserting entity, according to the rules set out in <strong>rfc3920bis</strong>.</p>
+    <example caption='Valid'><![CDATA[<valid xmlns='urn:xmpp:dna:0' to='asserted.tld'/>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Invalidation' anchor='invalid'>
+    <p>When the validating entity does not accept proof offered by the asserting entity, or it no longer trusts the proof (for example due to the proof timing out or being revoked), it sends the asserting entity an &lt;invalid/&gt; element.  The asserting entity MUST NOT send any stanzas to the validating entity containing <strong>"from"</strong> addresses in the invalidated domain without performing another validation.</p>
+    <p>Invalid responses MAY be given in direct response to an assertion if the validating entity has reason to believe that no proof is possible.  Examples that would cause this response include a blocking list or a negative cache.</p>
+    <example caption='Invalid proof'><![CDATA[<invalid xmlns='urn:xmpp:dna:0' to='asserted.tld'/>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Requesting proof with a challenge' anchor='challenge'>
+    <p>If an assertion cannot be validated immediately, the validating entity MAY ask for further proof.  In the "prove-it" request, at least one form of proof that will be acceptable MUST be disclosed to the asserting entity.</p>
+    <p>A proof type MUST be a valid URI.  A registry of proof types will be created.  Standard proof types will begin with "urn:xmpp:dna:proof:". Custom proofs SHOULD be signaled with a type attribute value containing a full URI under the control of the defining party.  Proof types MUST be compared for equality using the rules for URIs (see &rfc3986;).</p>
+    <p>Some proof types MAY require information or nonces from the validating entity.  If so, the specification for that proof type MUST specify extensions to the proof element in a new namespace.</p>
+    <p>In some protocols, a challenge MAY be sent without an assertion, if the validating entity has reason to believe that the entity with which it is talking is authoritative for a given domain (for example, through a DNS lookup).</p>
+    <example caption='Prove your assertion, one of these ways'><![CDATA[<challenge xmlns='urn:xmpp:dna:0' to='asserted.tld'>
+  <proof type='urn:xmpp:dna:proof:attribute-cert'/>
+  <proof type='http://example.com/proof/custom'/>
+</challenge>
+    ]]></example>
+  </section2>
+
+  <section2 topic='No proof possible' anchor='impossible'>
+    <p>If the validating entity requires proof, but will not accept proof by a means that the asserting entity has available for the asserted domain, the asserting entity MUST respond with an &lt;impossible/&gt; element.  The validating entity MUST NOT send a &lt;valid/&gt; or &lt;invalid/&gt; element in response, and MUST NOT accept stanzas from the asserted domain on this connection unless some other assertion works in the future.</p>
+    <p>The &lt;impossible/&gt; element MAY be sent after full validation, if the asserting entity would like to retract the assertion.</p>
+    <example caption='Impossible response'><![CDATA[<impossible xmlns='urn:xmpp:dna:0' from='asserted.tld'/>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Proving a challenge' anchor='proof'>
+    <p>If an asserting entity thinks it can prove a given assertion when challenged, it sends that proof in a &lt;proof/&gt; element.  The REQUIRED 'type' attribute specifies the chosen proof type, and the REQUIRED 'from' attribute specifies the domain being proved.  Each proof type MUST specify the format of the contents of the proof element.  Suggestions for formats include base64-encoded binary as character data or structured XML in a new namespace.</p>
+    <example caption='Proof'><![CDATA[<proof xmlns='urn:xmpp:dna:0' from='asserted.tld' type='urn:xmpp:dna:proof:attribute-cert'>
+(ascii-armored attribute certificate)
+</proof>
+    ]]></example>
+  </section2>
+</section1>
+<section1 topic='Attribute Certificate Proof' anchor='attribute-cert'>
+  <p><em>This section is preliminary.</em></p>
+  <p>When an asserting entity has been delegated responsibility for hosting a given domain, an Attribute Certificate (as specified in &rfc3281;) can be used to prove the delegation.  The proof type URI associated with attribute certificates SHALL be 'urn:xmpp:dna:proof:attribute-cert' (EDITOR'S NOTE: let's come up with a new, good URN prefix for these.  If we move this to an I-D, it should be an IETF URN.)</p>
+  <p>Each protocol that is delegated will be assigned its own OID for an attribute type. (EDITOR's NOTE: fill in OIDs for xmpp-server and xmpp-client delegation).  The values associated with a given attribute are a list of references to hosting provider certificates, one of which MUST have been offered by the asserting entity and accepted by the validating entity (except for name) during the TLS certificate exchange. (EDITOR's NOTE: normative language required for the form of certificate references).</p>
+  <p>The certificate that signed the attribute certificate MUST have been acceptable as proof of ownership of a given domain for the protocol in question, according to the rules in <strong>rfc3920bis</strong>.  Validating entities SHOULD try prepending the asserted domain with "www." and re-checking for name matches before rejecting the signing certificate, in order to allow for easier deployments using existing web certificates as proof.</p>
+  <p>The attribute certificate is encoded as PKCS12 (see <link url='http://www.rsa.com/rsalabs/node.asp?id=2138'>http://www.rsa.com/rsalabs/node.asp?id=2138</link>), including the signing certificate and all of the CA certificates in the trust chain of the signing certificate, back to a trust anchor.  The certificate is then ascii-armored according to (?), and transmitted as the character data of a proof element.</p>
+</section1>
+<section1 topic='DNA for XMPP Federation' anchor='federation'>
+  <p>Two XMPP servers, each of which hosts multiple domains that they do not directly control, desire to connect in order to exchange traffic for at least two of those domains, one on either side (we call this a "dimain pair").</p>
+  <p>The following domain names are used in the examples:</p>
+  <dl>   
+    <di>
+      <dt>target.tld</dt>
+      <dd>The domain portion of the JID in the <strong>"to"</strong> address of the stanza that caused this connection to be initiated.</dd>
+    </di>
+    <di>
+      <dt>othertarget.tld</dt>
+      <dd>The domain portion of the JID in the <strong>"to"</strong> address of a stanza being sent across a stream that was originally started to talk to target.tld.</dd>
+    </di>
+    <di>
+      <dt>targetprovider.tld</dt>
+      <dd>The hosting provider for target.tld.</dd>
+    </di>
+    <di>
+      <dt>server.targetprovider.tld</dt>
+      <dd>A server with XMPP federation services at the target's hosting provider.</dd>
+    </di>
+    <di>
+      <dt>originator.tld</dt>
+      <dd>The domain portion of the JID in the <strong>"from"</strong> address of the stanza that caused this connection to be initiated.</dd>
+    </di>
+    <di>
+      <dt>originatingprovider.tld</dt>
+      <dd>The hosting provider for target.tld.</dd>
+    </di>
+    <di>
+      <dt>server.originatingprovider.tld</dt>
+      <dd>A server with XMPP federation services at the originator's hosting provider.</dd>
+    </di>
+  </dl>
+  <section2 topic='DNS SRV lookups' anchor='dnssrv'>
+    <p>In a delegated hosting scenario, DNS SRV records are REQUIRED, since otherwise the hosting provider will never be contacted for the target domain.  As specified by &rfc3920; the originating server looks up the target domain to find a list of receiving servers.  If the originating server already has a connection to the IP address represented by one of these servers (perhaps because it is communicating with another domain hosted by this provider), it MAY reuse that stream (see Stream Reuse).  If the originating server does not have a connection it wants to reuse, it performs the SRV algorithm to select an SRV record and makes a TCP connection to the server and port specified by the selected SRV record.</p>
+    <p>Unless assured by a mechanism such as DNSSEC, the originating server MUST NOT trust the information received from the DNS SRV as proof that the target domain has been delegated to the receiving server.</p>
+    <example caption='SRV lookup for target domain'><![CDATA[% dig +short -t SRV _xmpp-server._tcp.target.tld
+0 1 5269 server.targetprovider.tld
+    ]]></example>
+  </section2>
+  <section2 topic='Certificates during Start-TLS' anchor='tls'>
+    <p>The first step during stream negotiation MUST be Start-TLS.  The receiving server MUST offer a certificate signed by a widely-trusted CA.  The receiving server MUST require a client certificate.  The certificate offered by the originating server MUST be signed be a widely-trusted CA.  Each side MUST check the certificate offered to it for validity (e.g. time period, signatures, and trust anchor), but MUST NOT disconnect when the certificate received does not contain a name matching its expectations.</p>
+    <p>The names on these certificates SHOULD be associated with the relevant hosting provider, and need not be related to the domains being hosted.  If the certificates have the name of the server offered in the SRV record, it MAY be possible to use DNSSEC for proof in the future.</p>
+    <example caption='Server certificate'><![CDATA[
+CN=server.targetprovider.tld
+    ]]></example>
+    <example caption='Client certificate'><![CDATA[
+CN=server.originatingprovider.tld
+    ]]></example>
+  </section2>
+
+  <section2 topic='Discovering Support' anchor='disco'>
+    <p>The <strong>"to"</strong> and <strong>"from"</strong> addresses are REQUIRED on the stream:stream tag.  These represent the first domain pair associated with this stream, and are the domain names from the stanza that caused this connection to be established.</p>
+
+    <p>To announce its support for DNA, the receiving server asserts its identity in the stream features following TLS negotiation.  </p>
+    <example caption='Domain name assertion in stream features'><![CDATA[<stream:features> 
+  <assert xmlns='urn:xmpp:dna:0' from='target.tld'/>
+</stream:features>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Turning on DNA' anchor='initiation'>
+    <p>If the originating server supports DNA, it looks for an assertion in the stream features.  If it finds none, it MAY fall back on another means of verifying the identity of the target server, if allowed by local policy.</p>
+    <p>Originating servers that support DNA talking to target servers that declare support for DNA MUST NOT send protocol other than DNA negotations until they are able to validate the assertion offered by the target server in the stream features.  The first validation proves to the originating server that it is talking to a server authoritative for the target domain, so that it is safe to use this domain in <strong>"to"</strong> addresses on this stream.</p>
+    <p>Once an originating server completes this first validation it signals that it is willing and able to participate in bi-directional XMPP federation traffic, as long as all of the domains required have been asserted and validated at least once on this stream.</p>
+    <p>If the originating server does not require more proof (due to a certificate match or DNSSEC-verified delegation), it MAY send a valid element without requesting proof first, as in all DNA interactions.</p>
+    <example caption='Originating server asks for proof, if required'><![CDATA[<challenge xmlns='urn:xmpp:dna:0' to='target.tld'>
+  <proof type='urn:xmpp:dna:proof:attribute-cert'/>
+</challenge>
+    ]]></example>
+    <example caption='Target server provides proof'><![CDATA[<proof xmlns='urn:xmpp:dna:0' from='target.tld' type='urn:xmpp:dna:proof:attribute-cert'>
+(ascii-armored attribute certificate)
+</proof>
+    ]]></example>
+    <example caption='Originating server accepts proof, turns on DNA'><![CDATA[<valid xmlns='urn:xmpp:dna:0' to='target.tld'/>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Asserting new domains' anchor='origin'>
+    <p>Before either side sends stanzas on a given stream, it MUST ensure that the other side will accept those stanzas by asserting the domain in the <strong>"from"</strong> attribute of those stanzas, and waiting for a &lt;valid/&gt; response before sending the stanzas in question.</p>
+    <p>The originating server MUST therefore send its own assertion after accepting the target domain's assertion.</p>
+    <example caption=''><![CDATA[<assert xmlns='urn:xmpp:dna:0' from='originator.tld'/>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Proactive challenges' anchor='proactive-challenge'>
+    <p>Before either side sends stanzas on a given stream, it MUST ensure that the other side is authoritative for the domain in the <strong>"to"</strong> attribute on those stanzas.  If the sender has already accepted an assertion on this stream, and that assertion has not been revoked with an &lt;impossible/&gt; element, no action is required.  Otherwise, the sender can proactively request proof for that domain by sending a challenge even though the other side has not sent an assertion for that domain yet.</p>
+    <example caption='Proactive challenge'><![CDATA[<challenge xmlns='urn:xmpp:dna:0' to='othertarget.tld'>
+  <proof type='urn:xmpp:dna:proof:attribute-cert'/>
+</challenge>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Proactive validation' anchor='proactive-validation'>
+    <p>When two hosting providers connect, they might have previous knowledge (perhaps from a cache) of which domains they will trust on the new connection.  If so, either side MAY send as many &lt;valid/&gt; elements as desired, even though the other side has not sent assertions for those domains.</p>
+    <p>The server receiving these proactive validations MUST NOT change its self-image (i.e., the list of domains for which it is authoritative), but SHOULD NOT send assertions for these domains on this stream.  If the server receiving a proactive validation is no long authoritative for a given domain, it MUST send an &lt;impossible/&gt; element, at which point the sender MUST remove the receiver from any cache and not send any stanzas on this stream to the given domain.</p>
+    <p>Any cache of DNA information SHOULD be associated with the certificate offerred by the relevant server, and SHOULD be checked for revocation if possible, according to local policy.</p>
+    <example caption='Proactive validations'><![CDATA[<valid xmlns='urn:xmpp:dna:0' to='target1.tld'/>
+<valid xmlns='urn:xmpp:dna:0' to='target2.tld'/>
+<valid xmlns='urn:xmpp:dna:0' to='target3.tld'/>
+    ]]></example>
+  </section2>
+
+  <section2 topic='Reusing streams' anchor='reuse'>
+    <p>DNA streams are bi-directional, and might have an arbitrary number of domains validated in either direction, at any point in the lifetime of the stream.  Before sending a stanza on a given stream, the sender MUST ensure that &lt;valid/&gt; elements have been exchanged according to the above rules for both the <strong>"to"</strong> and <strong>"from"</strong> address, and that no &lt;invalid/&gt; or &lt;impossible/&gt; element has revoked an assertion.</p>
+    <p>An &lt;impossible/&gt; or &lt;invalid/&gt; element SHOULD NOT cause the rest of the stream to become invalidated in either directions.  When these elements are seen, they SHOULD merely change the list of domains that are valid on that stream.  If no domains are valid on the stream, the stream MAY be closed immediately, or MAY be left open if desired.  If left open, the stream MUST NOT be used for stanza traffic until domains are asserted as needed for the desired domains.</p>
+    <p>Domains that are marked as &lt;invalid/&gt; or &lt;impossible/&gt; SHOULD NOT be retried on the same stream unless new information has become available, in order to prevent assertion storms.</p>
+  </section2>
+
+  <section2 topic='Implementation notes' anchor='impl'>
+    <p>If the first server-to-server validation exchange fails, the parties MAY keep the connection open (perhaps for a shorter period than is usual) in case another domain pair would need a connection between these servers.</p>
+    <p>The parties SHOULD ensure that only one challenge is outstanding on a given connection for a given domain, and that only one assertion or one proof is outstanding on a given connection for a given domain.</p>
+  </section2>
+</section1>
+<section1 topic='DNA for XMPP client connections' anchor='clients'>
+  <p>Hosting providers have a similar problem for client-to-server connections.  Clients need to ensure that they are talking to an authoritative server for the domain they intend to log in to.  Typically, this is done by examining the certificate offered by the server during TLS negotiation, according to the rules in <strong>rfc3920bis</strong>.  However, hosting providers will typically not have access to a valid certificate for the target domain and its associated private key.  DNA can be used for the hosting provider to prove that hosting services have been delegated to it.</p>
+
+  <section2 topic='Announcing Support' anchor='announce'>
+    <p>To announce its support for DNA, the server asserts its identity in the stream features following TLS negotiation.  The server MUST offer the identity of the domain specified in the client's stream header <strong>"to"</strong> attribute.</p>
+    <example caption='Server assertion'><![CDATA[<stream:features> 
+  <assert xmlns='urn:xmpp:dna:0' from='target.tld'/>
+</stream:features>
+]]></example>
+  </section2>
+
+  <section2 topic='Client challenges for proof' anchor='clientchallenge'>
+    <p>To utilize the server's DNA assertion, the client performs Start-TLS per <strong>rfc3920bis</strong>, however, if the client does not find a name match on the offered certificate, it does not disconnect immediately.  Instead, if the server offers an assertion, it can use the name from that assertion to ask the server for proof of delegation.</p>
+    <p>Subsequent protocol follows the generic use cases above, with the exception that alternate or additional domain names MUST NOT be asserted.  If the server returns an &lt;impossible/&gt; element, the server MUST terminate the stream.  If the client sends an &lt;invalid/&gt; element, the client MUST terminate the stream.</p>
+    <example caption='Client challenges for proof'><![CDATA[<challenge xmlns='urn:xmpp:dna:0' to='asserted.tld'>
+  <proof type='urn:xmpp:dna:proof:attribute-cert'/>
+</challenge>
+]]></example>
+  </section2>
+</section1>
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>The domains offered are International Domain Names, as specified in <strong>rfc3920bis</strong>.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>For the urn:xmpp:dna:proof:attribute-cert proof type, the trust path for an assertion flows from two different trust anchors, one that proves the identity of the hosting provider, and another that proves the identity of the delegating party.</p> 
+  <p>All proof types SHALL have a mechanism to limit the period of availability.</p>
+  <p>All proof types SHALL include a mechanism for revocation.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>A new registry of proof types will be required, which might be maintained by the &REGISTRAR; or by &IANA;.  These proof types have URI syntax.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>To follow.</p>
+</section1>
+</xep>

@@ -1,0 +1,163 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>Out-of-Band Stream Data</title>
+    <abstract>This specification defines how to send parts of an XML stream over a direct connection between peers. This allows to send large stanzas or binary data without blocking the XML stream for other stanzas.</abstract>
+    <legal>
+      <copyright>This XMPP Extension Protocol is copyright (c) 1999 - 2009 by the XMPP Standards Foundation (XSF).</copyright>
+      <permissions>Permission is hereby granted, free of charge, to any person obtaining a copy of this specification (the &quot;Specification&quot;), to make use of the Specification without restriction, including without limitation the rights to implement the Specification in a software program, deploy the Specification in a network service, and copy, modify, merge, publish, translate, distribute, sublicense, or sell copies of the Specification, and to permit persons to whom the Specification is furnished to do so, subject to the condition that the foregoing copyright notice and this permission notice shall be included in all copies or substantial portions of the Specification. Unless separate permission is granted, modified works that are redistributed shall not contain misleading information regarding the authors, title, number, or publisher of the Specification, and shall not claim endorsement of the modified works by the authors, any organization or project to which the authors belong, or the XMPP Standards Foundation.</permissions>
+      <warranty>## NOTE WELL: This Specification is provided on an &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. In no event shall the XMPP Standards Foundation or the authors of this Specification be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the Specification or the implementation, deployment, or other use of the Specification. ##</warranty>
+      <liability>In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall the XMPP Standards Foundation or any author of this Specification be liable for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising out of the use or inability to use the Specification (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if the XMPP Standards Foundation or such author has been advised of the possibility of such damages.</liability>
+      <conformance>This XMPP Extension Protocol has been contributed in full conformance with the XSF's Intellectual Property Rights Policy (a copy of which may be found at &lt;<link url='http://www.xmpp.org/extensions/ipr-policy.shtml'>http://www.xmpp.org/extensions/ipr-policy.shtml</link>&gt; or obtained by writing to XSF, P.O. Box 1641, Denver, CO 80201 USA).</conformance>
+    </legal>
+    <number>xxxx</number>
+    <status>ProtoXEP</status>
+    <type>Standards Track</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XMPP Core</spec>
+      <spec>XEP-0166</spec>
+      <spec>XEP-0260</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>NOT_YET_ASSIGNED</shortname>
+    &dmeyer;
+    <revision>
+      <version>0.0.2</version>
+      <date>2009-03-30</date>
+      <initials>dm</initials>
+      <remark><p>Simplify Example; Restrict Usage; Add abort</p></remark>
+    </revision>
+    <revision>
+      <version>0.0.1</version>
+      <date>2009-03-08</date>
+      <initials>dm</initials>
+      <remark><p>First draft</p></remark>
+    </revision>
+  </header>
+  <section1 topic='Introduction' anchor='intro'>
+    <p>XMPP uses one XML stream between two peers, either between client and server, between servers, or between clients directly. If a client sends a stanza to a client, either routed over the server or directly, it can not send another stanza at the same time. If an XMPP extension defines very large stanzas, the communication is blocked until this stanza is fully sent to the server. A client or server may also define a maximum stanza size for communication. A future extension to query a remote file server could create such huge stanzas: a directory listing with thousands of photos, each with additional metadata, could produce stanzas of one megabyte or longer. The same is true for TV listings of a remote TV tuner device. Besides text data, a stanza may also contain binary data Base64 encoded. This also increases the stanza size.</p>
+    <p>This document defines a mechanism to transmit parts of a stanza over a separate end-to-end connection using Jingle. XML data and binary data (without being Base64 encoded) can be transmitted over the external link to keep the actual XML stanza small.</p>
+  </section1>
+  <section1 topic='Protocol Flow' anchor='proto'>
+    <p>If a client wants to send a large stanza to a peer, it can remove large elements from the stanza and replace it with a &lt;oob/&gt; element of the 'urn:xmpp:jingle:apps:out-of-band:0' namespace.  The definition of "large" depends on the use case and available bandwidth of the stream to the server. It is RECOMMENDED to send stanzas smaller than 4096 Bytes directly because the overhead of the additional stream is too high. If a client knows in advance that it will send or receive several large stanzas or binary data it SHOULD open the out-of-band data stream. One larger chunk may not be worth opening a Jingle session. A client MUST NOT send In-Band Bytestream stanzas out of band because there may be a reason why it is an In-Band Bytestream and not something else such as SOCKS5.</p>
+    <p>Before a client sends such a stanza to its peer, it MUST open the out of band stream first. It has to initiate a Jingle session and MUST NOT send the stanza it wants to send until the out-of-band stream is open.  The following example is based on 'Discovering the Items Associated with a Jabber Entity' &xep0030;.</p>
+    <example caption="Requesting All Items"><![CDATA[
+<iq from='hamlet@example.com/denmark'
+    to='hamlet@example.com/bot'
+    id='hfgte45w'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#items'/>
+</iq>
+  ]]></example>
+    <p>Normally we would expect the peer to answer with an IQ return stanza with the list of items. But if the listing is very large, the client may decide to send it over an extra stream. Instead of sending the IQ result, it opens a Jingle session.</p>
+    <example caption="Home Server Initiates Jingle Session"><![CDATA[
+<iq from='hamlet@example.com/bot'
+    to='hamlet@example.com/denmark'
+    id='xn28s7gk'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:0'>
+          action='session-initiate'
+          initiator='hamlet@example.com/bot'
+          sid='a73sjjvkla37jfea'>
+    <content creator='initiator' name='oob'>
+      <description xmlns='urn:xmpp:jingle:apps:out-of-band:0'/>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:0'
+                 sid='vj3hs98y'
+        	 mode='tcp'>
+        <streamhost
+            jid='hamlet@example.com/bot'
+            host='192.168.4.1'
+            port='5086'/>
+      </transport>
+      <security xmlns='urn:xmpp:jingle:security:xtls:0'>
+        <fingerprint>RomeoX509CertificateHash</fingerprint>
+        <method name='x509'/>
+      </security>
+    </content>
+  </jingle>
+</iq>
+  ]]></example>
+    <p>The clients open a Jingle session according to &xep0166; with a &xep0260;. For the sake of simplicity this protocol flow is not described here. If the clients opened the Out-of-Band Data Stream, the listing is sent over that stream and a reference is returned in the IQ result of the original request.</p>
+    <example caption="IQ Result with Out-of-Band Stream Data Reference"><![CDATA[
+<iq from='hamlet@example.com/bot'
+    to='hamlet@example.com/denmark'
+    id='hfgte45w'
+    type='result'>
+  <oob xmlns='urn:xmpp:jingle:apps:out-of-band:0'
+       id='hfgte45w-1'
+       size='6022'
+       hash='sha1+552da749930852c69ae5d2141d3766b1'
+       type='text/xml'/>
+</iq>
+  ]]></example>
+    <p>The receiver MUST replace the &lt;oob/&gt; element with the content with the given id from the Out-of-Band Data Stream. The size and hash arguments are optional, the type MUST be 'text/xml' since an IQ stanza MUST have one child element. The content send out of band MUST have a valid XML header &lt;?xml version='1.0' ?&gt; with one root element. The XML header is ignored and the root element MUST replace the &lt;oob&gt; element.</p>
+    <p>It is possible to use out of band data everywhere in the XML stream and not only as first element child of the IQ stanza. The XML schema MUST explicit allow the usage of the &lt;oob/&gt; element; it is not possible to replace any arbitrarily part of a stanza with the &lt;oob/&gt; element. The reason for this restriction is to keep implementations simpler if they do not have to expect out of band data everywhere and to keep the stream compliant to the XML schemas.</p>
+    <p>If the &lt;oob/&gt; element is not the top level child of an IQ or message stanza, the type attribute does not has to be 'text/xml' and may even be omitted. In that case the content with the given id send out of band MUST be treated as if it was embedded in the XML stream using Base64 encoding. This is useful for sending larger chunks of binary data.</p>
+  </section1>
+  <section1 topic='Out-of-Band Data Stream' anchor='proto'>
+    <p>The Out-of-Band Data Stream multiplexes several items into one stream to re-use the stream for several XML elements or binary data without blocking the out-of-band stream with one large item. This avoids negotiating a new Jingle session for each piece of data. The syntax is similar to HTTP 1.1 chunked transfer. Each chunk of data has a one line header with the number of bytes in hex of the data and the content identifier. The last chunk of each piece of content is always a chunk with a length of 0.</p>
+    <example caption="Stream Data Definition"><![CDATA[
+stream         = *(chunk | last-chunk)
+chunk          = chunk-size id CRLF chunk-data CRLF
+hexdig-nonzero = %x31-39 ; "1"-"9"
+chunk-size     = hexdig-nonzero *HEXDIG
+id             = *(ALPHA | DIGIT)
+last-chunk     = 1*("0") id CRLF CRLF
+  ]]></example>
+    <p>In the given example the &lt;oob/&gt; element specifies that the query result is sent out of band and has a size of 6022 bytes. The out of band content requires a valid XML header which adds another 23 bytes. If each chunk has 4096 bytes (0x1000 in hex) the data is split into two chunks (4096 and 1949 bytes). The following data is sent over the out of band stream:</p>
+    <example caption="Stream Data with XEP-0030 Items"><![CDATA[
+1000 hfgte45w CRLF
+<?xml version='1.0' ?>
+<query xmlns='http://jabber.org/protocol/disco#items'>
+  ... 4096 Bytes including the XML header ... CRLF
+79d hfgte45w CRLF
+  ... Last 1949 Bytes ... CRLF
+0 hfgte45w CRLF CRLF
+  ]]></example>
+  </section1>
+
+  <section1 topic='Abort Content Sending' anchor='abort'>
+    <p>If a client is not not interested in the out of band data (anymore) it MAY abort the sending of a content with a given identifier to save bandwidth. This may happen for large binary data and the client was only interested in the first bytes, e.g. to detect the file type and that it can not decode it.</p>
+    <example caption="Abort Content"><![CDATA[
+<iq from='hamlet@example.com/denmark'
+    to='hamlet@example.com/bot'
+    id='hfytewp9'
+    type='set'>
+  <abort xmlns='urn:xmpp:jingle:apps:out-of-band:0'
+         id='hfgte45w'/>
+</iq>
+  ]]></example>
+    <p>The peer SHOULD send a last chunk with the length of zero out of band and acknowledge the abortion.</p>
+    <example caption="Acknowledge Abort"><![CDATA[
+<iq from='hamlet@example.com/bot'
+    to='hamlet@example.com/denmark'
+    id='hfytewp9'
+    type='result'/>
+  ]]></example>
+  </section1>
+
+  <section1 topic='Security Considerations' anchor='security'>
+    <p>The Jingle session SHOULD include TLS as specified in &xtls;. Even if the peers can not verify each others certificates, the leap of faith approach provides at least the same amount of security as if the data where send inside the XML stream.</p>
+  </section1>
+
+  <section1 topic='IANA Considerations' anchor='iana'>
+    <p>This document requires no interaction with &IANA;.</p>
+  </section1>
+
+  <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <p>XMPP Registrar considerations will be provided in a later version of
+      this document.</p>
+  </section1>
+
+  <section1 topic='XML Schema' anchor='schema'>
+    <p>The XML schema will be provided in a later version of this document.</p>
+  </section1>
+</xep>

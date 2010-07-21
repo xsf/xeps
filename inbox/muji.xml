@@ -1,0 +1,258 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Muji</title>
+  <abstract>
+    This specification defines an XMPP protocol extension for initiating and
+    managing multiparty voice and video conferences within an XMPP MUC
+  </abstract>
+  &LEGALNOTICE;
+  <number>proto-muji0.2</number>
+
+  <status>ProtoXep</status>
+  <type>Extension</type>
+  <sig>Standards</sig>
+  <approver>Telepathy project</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+
+    <spec>XEP-0045</spec>
+    <spec>XEP-0166</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>muji</shortname>
+  <author>
+
+    <firstname>Sjoerd</firstname>
+    <surname>Simons</surname>
+    <email>sjoerd.simons@collabora.co.uk</email>
+    <jid>sjoerd.simons@collabora.co.uk</jid>
+  </author>
+  <author>
+    <firstname>Dafydd</firstname>
+    <surname>Harries</surname>
+    <email>dafydd.harries@collabora.co.uk</email>
+    <jid>dafydd.harries@collabora.co.uk</jid>
+  </author>
+  <revision>
+    <version>0.0.0.2</version>
+    <date>2009-06-09</date>
+    <initials>sjoerd</initials>
+    <remark><p>Second rough draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+Jingle <cite>XEP-0166</cite> is used to negotiate peer to peer media sessions.
+Muji is a way to coordinate Jingle sessions between a group of people.
+Muji conferences are held in <cite>XEP-0045</cite> rooms.
+</section1>
+
+<section1 topic="How it works" anchor="howitworks">
+
+A Muji conference has a number of contents, each of which has unique name.
+content type, and an encoding. Each participant may provide a stream for each
+content, and communicates which contents they are willing to provide streams
+for, along with encoding information, in their MUC presence. This serves two
+purposes. Firstly, so that each participant knows which contents every other
+participant provides. Secondly, so that there is a global payload type (PT)
+mapping for the various contents, so that clients only need to encode and
+payload each content that they provide once.
+
+Participants are not required to participate all the contents that are
+available. For example, a Muji client might choose to only request audio
+streams.
+</section1>
+
+<section1 topic='Joining a conference' anchor='joining'>
+  <p>
+  Joining a conference is done in two stages. The first step is to
+  declare that preparations are being done to either join or start a muji
+  session inside the MUC. This is indicated by the client sending a presence
+  stanza to the MUC with a preparing element in muji section.
+
+  <code><![CDATA[
+    <presence from='wiccarocks@shakespeare.lit/laptop'
+      to='darkcave@chat.shakespeare.lit/oldhag'>
+      <c xmlns="http://jabber.org/protocol/caps"
+        node="http://telepathy.freedesktop.org/wiki/Muji"
+        ver="48QdBuXRCJFb8qIzgy1FOHSGO0U="
+        hash="sha-1" />
+      <muji xmlns='http://telepathy.freedesktop.org/muji>
+        <preparing />
+      </muji>
+    </presence>
+  ]]></code>
+
+  The client MUST then wait until the MUC rebroadcasts its presence message,
+  after which it MUST wait for all other participants that had a preparing
+  element in their presence to finish preparation. Afterwards it should finish
+  it's own preparation by updating its presence with the contents it wants to
+  take part in.
+
+  <code><![CDATA[
+    <presence from='wiccarocks@shakespeare.lit/laptop'
+      to='darkcave@chat.shakespeare.lit/oldhag'>
+      <c xmlns="http://jabber.org/protocol/caps"
+        node="http://telepathy.freedesktop.org/wiki/Muji"
+        ver="48QdBuXRCJFb8qIzgy1FOHSGO0U="
+        hash="sha-1" />
+      <muji xmlns='http://telepathy.freedesktop.org/muji'>
+        <content name='video'>
+          <description xmlns='urn:xmpp:jingle:apps:rtp:0' media='video'>
+            <payload-type id='97' name='theora' clockrate='90000'/>
+          </description>
+        </content>
+        <content creator='initiator' name='voice'>
+          <description xmlns='urn:xmpp:jingle:apps:rtp:0' media='audio'>
+            <payload-type id='97' name='speex' clockrate='8000'/>
+            <payload-type id='18' name='G729'/>
+         </description>
+       </content>
+       </muji>
+    </presence>
+  ]]></code>
+  </p>
+
+  <p>
+
+  When a client adds a payload ID to a content description, it MUST have the
+  same codec name and receiving parameters as the corresponding entries in
+  other participants' payload maps for that content. For instance, if Alice
+  defines a payload type with ID 98, codec Speex and a a clock rate of 8000
+  for a content called “voice0”, then Bob must define payload type 98
+  identically or not at all for that content.
+  </p>
+
+  <p>
+  Furthermore, each content description MUST include at least one payload type
+  that every other participant supports. In other words, the intersection of
+  payload type mappings in descriptions for a content must not be the empty
+  set. This avoids clients having to encode the same stream multiple times,
+  which can be very costly, and also allows sending the encoded data only once
+  where the transport makes this possible (e.g. IP multicast).
+  </p>
+
+  <p>
+  Once a client has constructed content descriptions and advertised them in
+  its MUC presence, it MUST initiate a Jingle session with every other
+  participant. The requirement that it is the joining participant that
+  initiates sessions avoids race conditions.
+  </p>
+
+  <p>
+
+  Jingle sessions are initiated between the MUC JIDs of participants. That is,
+  the Jingle session-initiate stanza is sent from one MUC JID to another. This
+  allows participants to easily identify sessions as belonging to a Muji
+  conference. Content names inside Muji-related Jingle sessions always refer
+  to the content with the same name inside the Muji conference.
+  </p>
+</section1>
+
+<section1 topic='Leaving a conference' anchor='leaving'>
+  <p>
+  To leave a conference the Muji information MUST first be removed from the
+  participant's presence; subsequently it SHOULD terminate all Jingle sessions
+  related to that conference. Updating the presence first reduces the
+  likelihood of situations where new participants initiate sessions with
+  participants who are leaving the conference.
+  </p>
+</section1>
+
+<section1 topic='Adding a content' anchor='addcontent'>
+  <p>
+  Adding a stream follows a process similar to the joining a conference. As a
+  first step an updated presence stanza MUST be send which contains a preparing
+  element as part of the Muji section.
+
+  <code><![CDATA[
+    <presence from='wiccarocks@shakespeare.lit/laptop'
+      to='darkcave@chat.shakespeare.lit/oldhag'>
+      <c xmlns="http://jabber.org/protocol/caps"
+        node="http://telepathy.freedesktop.org/wiki/Muji"
+        ver="48QdBuXRCJFb8qIzgy1FOHSGO0U="
+        hash="sha-1" />
+      <muji xmlns='http://telepathy.freedesktop.org/muji'>
+        <content creator='initiator' name='voice'>
+          <description xmlns='urn:xmpp:jingle:apps:rtp:0' media='audio'>
+            <payload-type id='97' name='speex' clockrate='8000'/>
+            <payload-type id='18' name='G729'/>
+         </description>
+       </content>
+       <preparing/>
+       </muji>
+    </presence>
+  ]]></code>
+
+  The client MUST then wait until the MUC rebroadcasts its presence message,
+  after which it MUST wait for all other participants that had a preparing
+  element in their presence to finish their changes.
+
+  Afterwards the client should add the new content to the muji section of its
+  presence and add the content to all the jingle sessions it had with
+  participants it shared the content with.
+
+  <code><![CDATA[
+    <presence from='wiccarocks@shakespeare.lit/laptop'
+      to='darkcave@chat.shakespeare.lit/oldhag'>
+      <c xmlns="http://jabber.org/protocol/caps"
+        node="http://telepathy.freedesktop.org/wiki/Muji"
+        ver="48QdBuXRCJFb8qIzgy1FOHSGO0U="
+        hash="sha-1" />
+      <muji xmlns='http://telepathy.freedesktop.org/muji'>
+        <content name='video'>
+          <description xmlns='urn:xmpp:jingle:apps:rtp:0' media='video'>
+            <payload-type id='97' name='theora' clockrate='90000'/>
+          </description>
+        </content>
+        <content creator='initiator' name='voice'>
+          <description xmlns='urn:xmpp:jingle:apps:rtp:0' media='audio'>
+            <payload-type id='97' name='speex' clockrate='8000'/>
+            <payload-type id='18' name='G729'/>
+         </description>
+       </content>
+       </muji>
+    </presence>
+  ]]></code>
+  </p>
+</section1>
+
+<section1 topic='Removing a content' anchor='removecontent'>
+  <p>
+  To remove a content the participant SHOULD first sent an updated presence
+  without the content in its muji section. Afterwards it MUST the content from
+  all the jingle sessions it has open.
+  </p>
+</section1>
+
+<section1 topic='relays and mixers' anchor='relaysmixer'>
+
+  <p>
+    When scaling to conferences with a big number of participants or when
+    clients it's no longer viable for all participants to have direct
+    connections.
+
+    On connections where upstream bandwidth is the limiting factor an RTP a
+    RTP relay which is able to relay the stream to multiple participants on
+    the behalf of the clients and which forwards the streams of other
+    participants back to the client can be used.
+
+    If the limiting factor is either CPU or downstream bandwidth then a mixer
+    can be used, which receives the media streams from other participants and
+    mixes them on behalf of the client, so that the client only has to deal
+    with receiving and decoding a single stream for each media type. On the
+    sending side a mixer acts like a relay and relays the clients stream to all
+    other participants.
+
+    Both these services can either be provided by dedicated services or by
+    other clients.
+  </p>
+</section1>
+</xep>

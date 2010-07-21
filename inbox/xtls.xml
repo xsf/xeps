@@ -1,0 +1,394 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>XMPP Transport Layer Security</title>
+  <abstract>This document specifies the XMPP Transport Layer Security (XTLS) protocol. XTLS, which provides communications privacy for the Extensible Messaging and Presence Protocol (XMPP), enables XMPP applications to communicate in a way that is designed to prevent eavesdropping, tampering, and forgery of XMPP stanzas. XTLS is based on Transport Layer Security (TLS) and provides equivalent security guarantees. The protocol sends standard TLS handshake and application data encoded as Base64, similar to the XMPP In-Band Bytestreams (IBB) extension but qualified by a dedicated namespace.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>RFC 4346</spec>
+    <spec>XEP-0250</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <author>
+    <firstname>Dirk</firstname>
+    <surname>Meyer</surname>
+    <email>dmeyer@tzi.de</email>
+    <jid>dmeyer@jabber.org</jid>
+  </author>
+  &stpeter;
+  &infiniti;
+  <revision>
+    <version>0.0.5</version>
+    <date>2008-12-11</date>
+    <initials>dm/psa</initials>
+    <remark>
+      <ul>
+        <li>By popular demand, resurrected the proposal.</li>
+        <li>Removed IBB dependency and replaced it with a similar method in the XTLS namespace.</li>
+        <li>Added explicit proceed and closed elements in the IQ-result stanzas.</li>
+        <li>Removed seq attribute.</li>
+        <li>Moved offer semantics from XEP-0250 to this specification.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.4</version>
+    <date>2008-06-06</date>
+    <initials>psa</initials>
+    <remark>
+      <ul>
+        <li>Modified initial handshake to use dedicated namespace instead of child of IBB &lt;open/&gt; element.</li>
+        <li>Referred to rfc3920bis for certificate generation and validation guidelines.</li>
+        <li>Added security considerations regarding denial of service attacks.</li>
+        <li>Completed editorial review.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.3</version>
+    <date>2008-06-06</date>
+    <initials>dm</initials>
+    <remark>
+      <ul>
+        <li>Removed harcoding of the IBB sid.</li>
+        <li>Added conflict handling on open.</li>
+        <li>Added close.</li>
+        <li>Updated text regarding CertificateRequest.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2008-06-05</date>
+    <initials>dm/jk</initials>
+    <remark>
+      <ul>
+        <li>Modified to use In-Band Bytestreams as the transport.</li>
+        <li>Use IQ result for some messages during the handshake.</li>
+        <li>Added alternative handshake for TLS session resume.</li>
+        <li>Added TLS error handling.</li>
+        <li>Changed the namespace.</li>
+        <li>Added note that Offline Sessions are not supported.</li>
+        <li>Added note that a user can verify the fingerprint later.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2007-10-30</date>
+    <initials>psa</initials>
+    <remark><p>First draft, based on suggestions from Eric Rescorla.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>End-to-end encryption of traffic sent over the Extensible Messaging and Presence Protocol (XMPP) is a desirable goal. The Jabber/XMPP developer community has experimented with several such technologies, including OpenPGP (&xep0027;), S/MIME (&rfc3923;), and encrypted sessions or "ESessions" (&xep0218;). For various reasons, these technologies have not been widely implemented and deployed. When the &XSF; asked various Internet security experts to complete a security review of encrypted sessions, it was recommended to explore the possibility of instead using the Transport Layer Security (TLS; see &rfc4346;) as the base technology for end-to-end encryption XMPP traffic. That possibility is explored in this document.</p>
+  <p>TLS is the most widely implemented protocol for securing network traffic. In addition to applications in the email infrastructure, the World Wide Web (HTTP Over TLS; see &rfc2818;), and datagram transport for multimedia session negotiation (DTLS; see &rfc4347;), TLS is used in XMPP to secure TCP connections from client to server and from server to server, as specified in &xmppcore;. Therefore TLS is already a familiar technology for many XMPP developers.</p>
+  <p>The basic idea behind XTLS is that two XMPP entities negotiate an encrypted "tunnel" between themselves over XMPP. The tunnel is negotiated using standard TLS handshake data, contained in XMPP &IQ; stanzas and encapsulated as Base64-encoded payloads of a &lt;data/&gt; element qualified by a dedicated namespace. The entities can then exchange TLS-encrypted XMPP stanzas over that tunnel.</p>
+  <p>XTLS is not limited to client-to-client encryption, since it can be used between two XMPP clients, between an XMPP client and a remote XMPP service (i.e., a service with which a client does not have a direct XML stream, such as a &xep0045; chatroom), or between two remote XMPP services.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>It is intended that this specification will address the requirements specified in &xep0210;, or some reasonable subset thereof (yet to be defined). However, there is no guarantee that this specification addresses those requirements in its current form. Detailed analysis will need to be performed in order to determine whether XTLS meets the full requirements for end-to-end encryption of XMPP traffic.</p>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <p>In XTLS, the initiator functions as a TLS client and the responder functions as a TLS server.</p>
+</section1>
+<section1 topic='Protocol' anchor='proto'>
+  <section2 topic='Agreeing to Use XTLS' anchor='start'>
+    <p>To start the use of XTLS, the initiator sends an IQ-set containing a &lt;start/&gt; element qualified by the 'urn:xmpp:tmp:xtls' namespace &NSNOTE;.</p>
+    <example caption='Initiating XTLS'><![CDATA[
+<iq from='romeo@montague.net/orchard'
+    id='xtls_1'
+    to='juliet@capulet.com/balcony'
+    type='set'>
+  <start xmlns='urn:xmpp:tmp:xtls'/>
+</iq>
+    ]]></example>
+    <p>(Note: This is the functional equivalent of the &lt;starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/&gt; command for direct XML streams as specified in <cite>RFC 3920</cite>.)</p>
+    <p>If the responder supports XTLS and agrees to start the use of XTLS, it returns an IQ-result containing a &lt;proceed/&gt; element qualified by the 'urn:xmpp:tmp:xtls' namespace &NSNOTE;.</p>
+    <example caption='Responder Agrees to Use XTLS'><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    id='xtls_1'
+    to='romeo@montague.net/orchard'
+    type='result'>
+  <proceed xmlns='urn:xmpp:tmp:xtls'/>
+</iq>
+    ]]></example>
+    <p>(Note: This is the functional equivalent of the &lt;proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/&gt; command for direct XML streams as specified in <cite>RFC 3920</cite>.)</p>
+    <p>If the responder does not support XTLS, in accordance with core XMPP semantics it MUST return a &unavailable; error.</p>
+    <example caption='Responder Does Not Support XTLS'><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    id='xtls_1'
+    to='romeo@montague.net/orchard'
+    type='error'>
+  <error type='cancel'>
+    <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>If the responder supports XTLS but does not wish to proceed with the use of XTLS, it MUST return a &notacceptable; error.</p>
+    <example caption='Responder Does Not Wish to Use XTLS'><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    id='xtls_1'
+    to='romeo@montague.net/orchard'
+    type='error'>
+  <error type='cancel'>
+    <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>It is possible that both parties will attempt to start the use of XTLS at the same time <note>For example, the applications might automatically open an XTLS tunnel based on presence information.</note>, in which case one party might receive an XTLS start stanza from the other party after it has sent such an XTLS start stanza but before receiving a response. In this case, one of the initiation requests shall be considered to have higher priority than the other, and the party that receives the lower priority initiation request shall return a &conflict; stanza error in response to the lower priority request. The higher priority request MUST be considered the request that is generated by the party whose JID is sorted before the other party when the JIDs of both parties are sorted using "i;octet" collation as specified in Section 9.3 of &rfc4790;.</p>
+    <p>In this example, juliet@capulet.com/balcony is sorted before romeo@montague.net/orchard and therefore her XTLS start stanza has a higher priority. Therefore she would return a conflict error to Romeo if they both send an XTLS start stanza at the same time.</p>
+    <example caption='Higher Priority Party Returns Conflict Error'><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    id='xtls_1'
+    to='romeo@montague.net/orchard'
+    type='error'/>
+  <error type='cancel'>
+    <conflict xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Offer Details' anchor='offer'>
+    <p>&xep0250; defines an IQ stanza to determine which TLS method shall be used for client-to-client STARTTLS as described in &xep0246;. The initiator MAY exchange the XEP-0250 offers first, but MAY instead include the offers in the XTLS &lt;start/&gt; stanza to save a round trip. A client supporting XTLS and XEP-0250 MUST support offer exchange in the XTLS &lt;start/&gt; stanza.</p>
+    <example caption='Initiating XTLS with XEP-0250 Offer'><![CDATA[
+<iq from='romeo@montague.net/orchard'
+    id='xtls_1'
+    to='juliet@capulet.com/balcony'
+    type='set'>
+  <start xmlns='urn:xmpp:tmp:xtls'>
+    <offer xmlns='urn:xmpp:tmp:c2ctls'>
+      <keyinfo xmlns='urn:xmpp:tmp:pubkey'>
+        <name>RomeoX509CertificateHash</name>
+      </keyinfo>
+      <srp/>
+    </offer>
+  </start>
+</iq>
+    ]]></example>
+    <p>If the responder supports XTLS, agrees to start the use of XTLS, and can verify the X.509 fingerprint, it returns an IQ-result containing a &lt;proceed/&gt; element with its offer.</p>
+    <example caption='Responder Agrees to Use XTLS and Returns its XEP-0250 Offer'><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    id='xtls_1'
+    to='romeo@montague.net/orchard'
+    type='result'>
+  <proceed xmlns='urn:xmpp:tmp:xtls'>
+    <offer xmlns='urn:xmpp:tmp:c2ctls'>
+      <keyinfo xmlns='urn:xmpp:tmp:pubkey'>
+        <name>JulietX509CertificateHash</name>
+      </keyinfo>
+      <srp/>
+    </offer>
+  </proceed>
+</iq>
+    ]]></example>
+    <p>If the initiator detects that a TLS handshake will fail based on the received offers (e.g. the peer only supports X.509 certificates and the client is unable to verify the certificate), the initiator MUST close the tunnel immediately (see <link url='#close'>Closing the XTLS Tunnel</link>).</p>
+  </section2>
+  <section2 topic='TLS Handshake' anchor='handshake'>
+    <p>Before sending encrypted data, the parties MUST perform a TLS handshake to establish the the XTLS tunnel. The TLS library sends the handshake and all encrypted data in-band as Base64-encoded payload of a &lt;data&gt; element qualified by the 'urn:xmpp:tmp:xtls' namespace &NSNOTE;. (This is similar to how data is sent in-band using &xep0047;, but in a dedicated namespace to work around the potential blockage of IBB exchanges by server administrators.) During the handshake, the responder (which functions as the TLS server) SHOULD send a CertificateRequest if X.509 certificates are used, since mutual authentication is desired. The first stanza MUST include a 'method' attribute defining the TLS method to be used. Possible values are 'x509', 'openpgp', and 'srp'. While this information is also included in the TLS handshake message itself, it can be useful for the recipient to know this before sending the data to the TLS library in use, e.g. when SRP is used the client might need to provide the password to the TLS library before decoding any data.</p>
+    <p>Note: It is possible that XTLS stanzas will not respect TLS message boundaries; therefore the number of IQ stanzas depends on the TLS implementation.</p>
+    <example caption='TLS Handshake (1)'><![CDATA[
+<iq from='romeo@montague.lit/orchard'
+    id='xtls_3'
+    to='juliet@capulet.lit/chamber'
+    type='set'>
+  <data xmlns='urn:xmpp:tmp:xtls' method='x509'>
+    base_64(TLS-Handshake-Messages)
+  </data>
+</iq>
+    ]]></example>
+    <p>The responder then acknowledges the stanza and, if the stream contains the complete ClientHello message, it continues with the TLS handshake. Otherwise it will wait for more messages from the initiator.</p>
+    <example caption='TLS Handshake (2)'><![CDATA[
+<iq from='juliet@capulet.lit/chamber'
+    id='xtls_3'
+    to='romeo@montague.lit/orchard'
+    type='result'/>
+
+<iq from='juliet@capulet.lit/chamber'
+    id='xtls_4'
+    to='romeo@montague.lit/orchard'
+    type='set'>
+  <data xmlns='urn:xmpp:tmp:xtls'>
+    base_64(TLS-Server-Handshake-Messages)
+  </data>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Sending Encrypted Stanzas' anchor='stanzas'>
+    <p>After the TLS handshake has been completed, the parties exchange encrypted data over the tunnel. Because the routing information is already present in the IQ stanzas used by XTLS, it is OPTIONAL for the stanzas encapsulated in the XTLS stream to include routing information (i.e., the 'from' and 'to' attributes). In that case, the entity receiving the data MUST supply the 'from' and 'to' addresses of the IQ stanza that contains the encrypted data.</p>
+    <example caption='A Stanza to Send'><![CDATA[
+<message 
+    from='romeo@montague.lit/orchard'
+    to='juliet@capulet.lit//chamber'
+    type='chat'>
+  <thread>act2scene2chat1</thread>
+  <body>
+    I take thee at thy word:
+    Call me but love, and I'll be new baptized;
+    Henceforth I never will be Romeo.
+  </body>
+  <active xmlns='http://jabber.org/protocol/chatstates'/>
+</message>
+    ]]></example>
+    <p>The sender's client would strip off the routing information.</p>
+    <example caption='A Stanza to Send (No Routing)'><![CDATA[
+<message type='chat'>
+  <thread>act2scene2chat1</thread>
+  <body>
+    I take thee at thy word:
+    Call me but love, and I'll be new baptized;
+    Henceforth I never will be Romeo.
+  </body>
+  <active xmlns='http://jabber.org/protocol/chatstates'/>
+</message>
+    ]]></example>
+    <p>This message is then encrypted and sent in one or more stanzas over the XTLS tunnel.</p>
+    <example caption='Sender Generates XTLS Tunnel Data'><![CDATA[
+<iq from='romeo@montague.lit/orchard'
+    id='xtls_3'
+    to='juliet@capulet.lit/chamber'
+    type='set'>
+  <data xmlns='urn:xmpp:tmp:xtls'>
+    base_64(TLS-Encrypted-Message)
+  </data>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Closing the XTLS Tunnel' anchor='close'>
+    <p>Either party can close the XTLS tunnel; this is done by sending an IQ-set containing an empty &lt;close/&gt; element qualified by the 'urn:xmpp:tmp:xtls' namespace &NSNOTE;. However, if the entities have a mutual presence subscription then it is RECOMMENDED for the entities to maintain the tunnel until one entity becomes unavailable. Keeping the XTLS tunnel open does not require significant resources and prevents the need for a new TLS handshake.</p>
+    <example caption='One Party Closes the XTLS Tunnel'><![CDATA[
+<iq type='set' 
+    from='romeo@montague.net/orchard'
+    to='juliet@capulet.com/balcony'
+    id='xtls_10'>
+  <close xmlns='urn:xmpp:tmp:xtls'/>
+</iq>
+    ]]></example>
+    <p>The other party then acknowledges that the tunnel is closed by sending an IQ-result containing an empty &lt;closed/&gt; element qualified by the 'urn:xmpp:tmp:xtls' namespace &NSNOTE;.</p>
+    <example caption='Other Party Acknowledges Closing of the Tunnel'><![CDATA[
+<iq type='result' 
+    from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/orchard'
+    id='xtls_10'>
+  <closed xmlns='urn:xmpp:tmp:xtls'/>
+</iq>
+    ]]></example>
+    <p>If the tunnel is unknown to the receiving party, it MUST return an &notfound; error.</p>
+    <example caption='Unknown Tunnel'><![CDATA[
+<iq type='error' 
+    from='juliet@capulet.com/balcony'
+    to='romeo@montague.net/orchard'
+    id='xtls_10'>
+  <error code='404' type='cancel'>
+    <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+    ]]></example>
+    <p>If an error is detected, the tunnel MUST be considered closed and invalid.</p>
+  </section2>
+</section1>
+<section1 topic='Requirements Analysis' anchor='analysis'>
+  <p>As mentioned, XTLS is intended to address the requirements specified in <cite>XEP-0210</cite> (or a reasonable subset thereof). This section compares XTLS against the requirements and points out gaps that might need to be filled with changes to XTLS or to TLS itself.</p>
+  <ol>
+    <li><strong>Offline Sessions</strong> are not supported because XTLS tunnels use IQ stanzas, which are not stored offline.</li>
+  </ol>
+</section1>
+<section1 topic='Determining Support' anchor='disco'>
+  <p>If an entity wishes to request the use of XTLS, it SHOULD first determine whether the intended responder supports the protocol. This can be done directly via &xep0030; or indirectly via &xep0115;.</p>
+  <p>If an entity supports XTLS, it MUST report that by including a service discovery feature of "urn:xmpp:tmp:xtls" in response to disco#info requests &NSNOTE;.</p>
+  <example caption="Initial Service Discovery Information Request"><![CDATA[
+<iq from='romeo@montague.lit/orchard'
+    id='disco1'
+    to='juliet@capulet.lit/chamber'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+  ]]></example>
+  <example caption="Service Discovery Information Response"><![CDATA[
+<iq from='juliet@capulet.lit/chamber'
+    id='disco1'
+    to='romeo@montague.lit/orchard'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <feature var='urn:xmpp:tmp:xtls'/>
+  </query>
+</iq>
+  ]]></example>
+  <p>Both service discovery and entity capabilities information could be corrupted or intercepted; for details, see the <link url='#security-dos'>Denial of Service</link> section of this document.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>This entire document addresses security. Particular security-related issues are discussed in the following sections.</p>
+  <section2 topic='Mandatory-to-Implement Technologies' anchor='security-mti'>
+    <p>An implementation MUST at a minimum support the TLS_RSA_WITH_3DES_EDE_CBC_SHA and TLS_DH_RSA_WITH_AES_256_CBC_SHA ciphers. An implementation MAY support other ciphers as well.</p> 
+  </section2>
+  <section2 topic='Certificates' anchor='security-certs'>
+    <p>As noted, XTLS can be used between XMPP clients, between an XMPP client and a remote XMPP service (i.e., a service with which a client does not have a direct XML stream), or between remote XMPP services. Therefore, a party to an XTLS tunnel will present either a client certificate or a server certificate as appropriate. Such certificates MUST be generated and validated in accordance with the certificate guidelines guidelines provided in &rfc3920bis;.</p>
+    <p>A future version of this specification might provide additional guidelines regarding certificate validation in the context of client-to-client encryption.</p>
+  </section2>
+  <section2 topic='Denial of Service' anchor='security-dos'>
+    <p>The XTLS start stanzas and proceed stanzas are not encrypted or signed; the same is true of service discovery exchanges and entity capabilities data. Therefore it is possible for an attacker to intercept these stanzas and modify them (e.g., by spuriously returning a &unavailable; error), thus convincing the initiator that the responder does not support XTLS and therefore denying the parties an opportunity to use XTLS.</p>
+    <p>A future version of this specification might address this problem.</p>
+  </section2>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p> 
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>Until this proposal is accepted for publication by the XSF, its associated namespace shall be "urn:xmpp:tmp:xtls". Upon publication as a XEP, the &REGISTRAR; shall issue an initial namespace in accordance with the process defined in Section 4 of &xep0053;. The namespace "urn:xmpp:xtls:0" is requested and is thought to be unique per the XMPP Registrar's requirements.</p>
+  </section2>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:tmp:xtls'
+    xmlns='urn:xmpp:tmp:xtls'
+    elementFormDefault='qualified'>
+
+  <xs:element name='start' type='empty'/>
+
+  <xs:element name='proceed' type='empty'/>
+
+  <xs:element name='data'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='xs:string'>
+          <xs:attribute name='method' type='xs:string' use='optional'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='close' type='empty'/>
+
+  <xs:element name='closed' type='empty'/>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+  ]]></code>
+</section1>
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>The authors wish to thank Eric Rescorla for initial suggestions regarding the use of TLS for application-layer encryption in XMPP. Thanks also to Joe Hildebrand and Remko Tron&#231;on for their comments and suggestions.</p>
+</section1>
+</xep>
