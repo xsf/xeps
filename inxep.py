@@ -56,7 +56,7 @@ def getText(nodelist):
 
 xepname = sys.argv[1];
 
-xepfile = xepname + '.xml'
+xepfile = inbox/xepname + '.xml'
 
 # PARSE XEP HEADERS:
 #
