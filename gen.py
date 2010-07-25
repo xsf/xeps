@@ -235,7 +235,7 @@ def buildPDF( file, nr ):
 
 def buildXEP( filename ):
 	nr = re.match("xep-(\d\d\d\d).xml", filename).group(1)
-	xepfilepath = getLatestXEPFilename("", nr);
+	xepfilepath = getLatestXEPFilename("../", nr);
 	if not xepfilepath:
 		print "getLatestXEPContent (ERROR)"
 		return
