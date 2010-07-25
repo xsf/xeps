@@ -1,5 +1,5 @@
 # File: xeputil.py
-# Version: 0.1
+# Version: 0.2
 # Description: xep utility functions 
 # Last Modified: 2010
 # Author: Tobias Markmann (tm@ayena.de)
@@ -28,11 +28,13 @@
 #
 ## END LICENSE ##
 
-import pysvn
 import os
 import tempfile
 from xepinfo import XEPInfo
 from xml.dom.minidom import parse,parseString,Document,getDOMImplementation
+
+from mercurial import ui, hg
+from mercurial.node import hex
 
 def getText(nodelist):
     thisText = ""
@@ -47,20 +49,20 @@ class XEP:
 		self.BASEDIR = BASEDIR
 
 	def revisions(self):
-		client = pysvn.Client(self.BASEDIR);
-		rev = client.info("xep-" + self.nr + ".xml").revision.number
-		log = client.log("xep-" + self.nr + ".xml", pysvn.Revision( pysvn.opt_revision_kind.number, 0 ),pysvn.Revision( pysvn.opt_revision_kind.number, rev ), True)
-
+		repo = hg.repository(ui.ui(), self.BASEDIR)
+		fctx = repo.filectx('extensions/' + "xep-" + self.nr + ".xml", 'tip')
 		revs = []
-		for l in log:
-			revs.append(l.revision.number)
+		for rev in fctx.filelog():
+			revs.append(fctx.filectx(rev).rev())
+		
 		return sorted(revs)
 
 	def contentOfRevision(self, revision):
-		client = pysvn.Client(self.BASEDIR);
-
+		repo = hg.repository(ui.ui(), self.BASEDIR)
+		fctx = repo.filectx('extensions/' + "xep-" + self.nr + ".xml", revision)
+		
 		# load content for that revision
-		file_text = client.cat( "xep-" + self.nr + ".xml", pysvn.Revision( pysvn.opt_revision_kind.number, revision))
+		file_text = fctx.data()
 		return file_text
 
 
