@@ -1,0 +1,321 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+  <!ENTITY BASE64 "<span class='ref'><link url='http://tools.ietf.org/html/rfc4648'>BASE64</link></span> <note>RFC 4648: The Base16, Base32, and Base64 Data &lt;<link url='http://tools.ietf.org/html/rfc4648'>http://tools.ietf.org/html/rfc4648</link>&gt;.</note>" >
+  <!ENTITY DATETIME "<span class='ref'><link url='http://tools.ietf.org/html/rfc3339'>DATETIME</link></span> <note>RFC 3339: Date and Time on the Internet Timestamps &lt;<link url='http://tools.ietf.org/html/rfc3339'>http://tools.ietf.org/html/rfc3339</link>&gt;.</note>" >
+  <!ENTITY XMLDSIG "<span class='ref'><link url='http://www.w3.org/TR/xmldsig-core/'>XMLDSIG</link></span> <note>XML Signature Syntax and Processing, W3C Recommendation, 10 June 2008 &lt;<link url='http://www.w3.org/TR/xmldsig-core/'>http://www.w3.org/TR/xmldsig-core/</link>&gt;.</note>" >
+  <!ENTITY E2EEncrypt "<span class='ref'><link url='http://datatracker.ietf.org/doc/draft-miller-3923bis'>E2EEncrypt</link></span> <note>End-to-End Object Encryption for the Extensible Messaging and Presence Protocol (XMPP), Miller, M. and P. Saint-Andre, work in progress &lt;<link url='http://datatracker.ietf.org/doc/draft-miller-3923bis'>http://datatracker.ietf.org/doc/draft-miller-3923bis</link>&gt;.</note>" >
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>Digital Signatures in XMPP</title>
+    <abstract>This document provides a technical specification for Digital Signatures in the
+      Extensible Messaging and Presence Protocol (XMPP).</abstract> &LEGALNOTICE;
+    <number>0285</number>
+    <status>Experimental</status>
+    <type>Technical Specification</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XMPP Core</spec>
+      <spec>XEP-0001</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>N/A</shortname> 
+    &kdz; 
+    <revision>
+      <version>0.1</version>
+      <date>2010-09-15</date>
+      <initials>psa</initials>
+      <remark><p>Initial published version.</p></remark>
+    </revision>
+    <revision>
+      <version>0.0</version>
+      <date>2010-03-10</date>
+      <initials>kdz</initials>
+      <remark>
+        <p>Proto-XEP draft.</p>
+      </remark>
+    </revision>
+  </header>
+
+  <section1 topic="Introduction" anchor="intro">
+    <p>This document provides a technical specification for Digital Signatures in Extensible
+      Messaging and Presence Protocol (&xmpp;) based upon End-to-End Object Encryption
+      (&E2EEncrypt;) "work in progress".</p>
+    <p>The S/MIME approach defined in &rfc3923; has never been implemented in XMPP clients to the
+      best of our knowledge, but has some attractive features, especially the ability to
+      store-and-forward a signed message at a user's server if the user is not online when the
+      message is received (in the XMPP community this is called "offline storage" and the message is
+      referred to as an "offline message"). The authors surmise that RFC 3923 has not been
+      implemented mainly because it adds several new dependencies to XMPP clients, especially MIME
+      (along with the CPIM and MSGFMT media types). This document explores the possibility of an
+      approach that is similar to but simpler than RFC 3923.</p>
+  </section1>
+  <section1 topic="Signing XMPP Stanzas" anchor="stanza">
+    <p>The process that a sending agent follows for securing stanzas is very similar regardless of
+      the form of stanza (i.e., &lt;iq/&gt;, &lt;message/&gt;, or &lt;presence/&gt;).</p>
+    <ol>
+      <li>Constructs a cleartext version of the stanza, S.</li>
+      <li>Notes the current UTC date and time N when this stanza is constructed, formatted as
+        described in Section 5.</li>
+      <li>Converts the stanza to a UTF-8, as defined by &rfc3269;, encoded string, optionally
+        removing line breaks and other insignificant whitespace between elements and attributes,
+        i.e., UTF8-encode(S) = S'. We call S' a "stanza-string" because for purposes of signing and
+        verification it is treated not as XML but as an opaque string (this avoids the need for
+        complex canonicalization of the XML input).</li>
+      <li>Constructs a plaintext envelope (E) &lt;plain/&gt; qualified by the "urn:xmpp:signed:0"
+        namespace as follows: <ul>
+          <li>The attribute 'timestamp' set to the UTC date and time value N</li>
+          <li>The XML character data set to the base64-encoded form of S' (where the encoding
+            adheres to the definition in Section 4 of &BASE64; and where the padding bits are set to
+            zero). This encoding is necessary to preserve a canonicalized form of S'.</li>
+        </ul>
+      </li>
+      <li>Converts the envelope (E) to a UTF-8 encoded string, optionally removing line breaks and
+        other insignificant whitespace between elements and attributes, i.e., E' =
+        UTF8-encode(E).</li>
+      <li>Produce a signature of UTF8-encoded envelope (E') using the intended signature algorithm.
+        T = signature(E'). (This step is underspecified and will be expanded upon in later revision
+        of this document.)</li>
+      <li>Base64-encodes T to produce the signature data T'.</li>
+      <li>Constructs an &lt;signed/&gt; element qualified by the "urn:xmpp:signed:0" namespace as
+        follows: <ul>
+          <li>The child element &lt;signature&gt; (implicitly qualified by the "urn:xmpp:signed:0"
+            namespace) as follows: <ul>
+              <li>The attribute 'algorithm' set to a string identifying the signature algorithm
+                used.</li>
+              <li>The XML character data T'.</li>
+            </ul></li>
+          <li>The child element &lt;data&gt; (implicitly qualified by the "urn:xmpp:signed:0"
+            namespace) as follows: <ul>
+              <li>The XML character data E'.</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+      <li>Sends the &lt;signed&gt; element as the payload of a stanza that SHOULD match the stanza
+        from step 1 in kind (e.g., &lt;message/&gt;), type (e.g., "chat"), and addressing (e.g.
+        to="romeo@montague.net" from="juliet@capulet.net/balcony"). If the original stanza (S) has a
+        value for the "id" attribute, this stanza MUST NOT use the same value for its "id"
+        attribute.</li>
+    </ol>
+
+    <section2 topic="Example of Signing Messages" anchor="ex-message">
+      <p>The sender begins with the cleartext version of the &lt;message/&gt; stanza "S":</p>
+      <example><![CDATA[
+<message    xmlns='jabber:client'
+            from='juliet@capulet.net/balcony'
+            id='183ef129'
+            to='romeo@montague.net'
+            type='chat'>
+    <thread>8996aef0-061d-012d-347a-549a200771aa</thread>
+    <body>Wherefore art thou, Romeo?</body>
+</message>
+          ]]></example>
+
+      <p>The sender then performs the steps 1 through 4 from above to generate:</p>
+      <example><![CDATA[
+<plain  xmlns="urn:xmpp:signed:0"
+           timestamp="2010-06-29T02:15:21.012Z">
+     PG1lc3NhZ2UgeG1sbnM9ImphYmJlcjpjbGllbnQiIGZyb209Imp1bGlldEBjYXB
+     1bGV0Lm5ldC9iYWxjb255IiB0bz0icm9tZW9AbW9udGVndWUubmV0IiB0eXBlPS
+     JjaGF0Ij48dGhyZWFkPmM2MzczODI0LWEzMDctNDBkZC04ZmUwLWJhZDZlNzI5O
+     WFkMDwvdGhyZWFkPjxib2R5PldoZXJlZm9yZSBhcnQgdGhvdSwgUm9tZW8/PC9i
+     b2R5PjwvbWVzc2FnZT4=
+   </plain>
+   ]]></example>
+      <p>And then performs steps 5 through 9 steps, causing the following to be sent:</p>
+      <example><![CDATA[
+   <message  xmlns='jabber:client'
+             from='juliet@capulet.net/balcony'
+             id='6410ed123'
+             to='romeo@montague.net'
+             type='chat'>
+     <signed   xmlns="urn:xmpp:signed:0">
+       <signature    algorithm="RSA-SHA1">
+	       DxbxIziY1C1Ytcxkj0IFLsfmDLMv96JMlMAQZ7jh49IbsOIPsxI2LyLmqhKH/994UXDJKQLHvLJz
+         gAmw8V2b+zmyZeItJzSmB+HHiLFVXkD2Dd4JfetsafsfIcB7uNWg0gAeiKrTHfFgiyEC/2WxwOj3
+         JUMRyQ9ykEPIzS0GZ/k=
+       </signature>
+       <data>
+         PHBsYWluIHhtbG5zPSJ1cm46eG1wcDpzaWduZWQ6MCIgdGltZXN0YW1wPSIyMDEwLTA2LTI5VDAy
+         OjE1OjIxLjAxMloiPgogIFBHMWxjM05oWjJVZ2VHMXNibk05SW1waFltSmxjanBqYkdsbGJuUWlJ
+         R1p5YjIwOUltcDFiR2xsZEVCallYQgogIDFiR1YwTG01bGRDOWlZV3hqYjI1NUlpQjBiejBpY205
+         dFpXOUFiVzl1ZEdWbmRXVXVibVYwSWlCMGVYQmxQUwogIEpqYUdGMElqNDhkR2h5WldGa1BtTTJN
+         emN6T0RJMExXRXpNRGN0TkRCa1pDMDRabVV3TFdKaFpEWmxOekk1TwogIFdGa01Ed3ZkR2h5WldG
+         a1BqeGliMlI1UGxkb1pYSmxabTl5WlNCaGNuUWdkR2h2ZFN3Z1VtOXRaVzgvUEM5aQogIGIyUjVQ
+         and2YldWemMyRm5aVDQ9CjwvcGxhaW4+Cg==
+       </data>
+     </signed>
+   </message>
+   ]]></example>
+
+    </section2>
+    <section2 topic="Example of Securing IQs" anchor="ex-iq">
+      <p>To be added....</p>
+    </section2>
+  </section1>
+  <section1 topic="Interaction with Stanza Semantics" anchor="interact">
+    <p>The following limitations and caveats apply:</p>
+
+    <ul>
+      <li>Undirected &lt;presence/&gt; stanzas SHOULD NOT be signed.</li>
+      <li>Stanzas directed to multiplexing services (e.g. multi-user chat) SHOULD NOT be signed,
+        unless the sender has established the service supports the handling of signed stanzas.</li>
+    </ul>
+
+  </section1>
+  <section1 topic="Handling of Inbound Stanzas" anchor="inbound">
+    <p>Several scenarios are possible when an entity receives an encrypted stanza:</p>
+
+    <dl>
+      <di>
+        <dt>Case #1:</dt>
+        <dd>The receiving application does not understand the protocol.</dd>
+      </di>
+      <di>
+        <dt>Case #2:</dt>
+        <dd>The receiving application understands the protocol and is able to verify the
+          signature.</dd>
+      </di>
+      <di>
+        <dt>Case #3:</dt>
+        <dd>The receiving application understands the protocol and is able to verify the signature,
+          but the timestamps fail the checks specified under Checking of Timestamps.</dd>
+      </di>
+      <di>
+        <dt>Case #4:</dt>
+        <dd>The receiving application understands the protocol and is unable to verify the
+          signature.</dd>
+      </di>
+    </dl>
+
+    <p>In Case #1, the receiving application MUST do one and only one of the following: (1) ignore
+      the &lt;signed/&gt; extension, (2) ignore the entire stanza, or (3), except where precluded by
+      the protocol (&rfc3920bis;), return a &lt;service-unavailable/&gt; error to the sender.</p>
+    <p>In Case #2, the receiving application MUST NOT return a stanza error to the sender, since
+      this is the success case.</p>
+    <p>In Case #3, the receiving application MAY, except where precluded by the protocol, return a
+      &lt;not-acceptable/&gt; error to the sender, optionally supplemented by an
+      application-specific error condition element of &lt;bad-timestamp/&gt; as shown below:</p>
+    <example><![CDATA[
+<message from='romeo@example.net/orchard'
+         id='6410ed123' 
+         to='juliet@capulet.net/balcony'
+         type='error'>
+  <signed xmlns='urn:xmpp:signed:0'>
+    XML-character-data-here
+  </signed>
+  <error type='modify'>
+    <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <bad-timestamp xmlns='urn:xmpp:signed:0'/>
+  </error>
+</message>
+        ]]></example>
+    <p>In Case #4, the receiving application SHOULD, except as precluded by the protocol, return a
+      &lt;bad-request/&gt; error to the sender, optionally supplemented by an application-specific
+      error condition element of &lt;bad-signature/&gt; as shown below:</p>
+    <example><![CDATA[
+<message from='romeo@example.net/orchard'
+         id='6410ed123' 
+         to='juliet@capulet.net/balcony'
+         type='error'>
+  <e2e xmlns='urn:xmpp:signed:0'>
+    XML-character-data-here
+  </e2e>
+  <error type='modify'>
+    <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <bad-signature xmlns='urn:ietf:params:xml:xmpp-signed:0'/>
+  </error>
+</message>
+        ]]></example>
+    <p>Additionally in Case #4, the receiving application SHOULD NOT present the stanza to the
+      intended recipient (human or application) and SHOULD provide some explicit alternate
+      processing of the stanza (which may be to display a message informing the recipient that it
+      has received a stanza that cannot be verified).</p>
+  </section1>
+
+  <section1 topic="Inclusion and Checking of Timestamps" anchor="timestamps">
+    <p>Timestamps are included to help prevent replay attacks. All timestamps MUST conform to
+      &DATETIME; and be presented as UTC with no offset, always including the seconds and fractions
+      of a second to three digits (resulting in a datetime 24 characters in length). Absent a local
+      adjustment to the sending agent's perceived time or the underlying clock time, the sending
+      agent MUST ensure that the timestamps it sends to the receiver increase monotonically (if
+      necessary by incrementing the seconds fraction in the timestamp if the clock returns the same
+      time for multiple requests). The following rules apply to the receiving application:</p>
+
+    <ul style="symbols">
+      <li>It MUST verify that the timestamp received is within five minutes of the current time,
+        except as described below for offline messages.</li>
+      <li>If the foregoing check fails, the timestamp SHOULD be presented to the receiving entity
+        (human or application) marked with descriptive text indicating "old timestamp" or "future
+        timestamp" and the receiving entity MAY return a stanza error to the sender (except as
+        precluded in the protocol).</li>
+    </ul>
+
+    <p>The foregoing timestamp checks assume that the recipient is online when the message is
+      received. However, if the recipient is offline then the server will probably store the message
+      for delivery when the recipient is next online (offline storage does not apply to &lt;iq/&gt;
+      or &lt;presence/&gt; stanzas, only &lt;message/&gt; stanzas). As described in &xep0160;, when
+      sending an offline message to the recipient, the server SHOULD include delayed delivery data
+      as specified in &xep0203; so that the recipient knows that this is an offline message and also
+      knows the original time of receipt at the server. In this case, the recipient SHOULD verify
+      that the timestamp received in the encrypted message is within five minutes of the time
+      stamped by the recipient's server in the &lt;delay/&gt; element.</p>
+  </section1>
+
+  <section1 topic="Mandatory-to-Implement Cryptographic Algorithms" anchor="mti">
+    <p>All implementations MUST support the following algorithms. Implementations MAY support other
+      algorithms as well.</p>
+    <ul>
+      <li>TBD (RSA/SHA1? RSASSA-RKCS1-v1_5? RSASSA-PSS?)</li>
+    </ul>
+  </section1>
+
+  <section1 topic="Certificates" anchor="certs">
+    <p>To participate in end-to-end signing using the methods defined in this document, a client
+      needs to possess an X.509 certificate. It is expected that many clients will generate their
+      own (self-signed) certificates rather than obtain a certificate issued by a certification
+      authority (CA). In any case the certificate MUST include an XMPP address that is represented
+      using the ASN.1 Object Identifier "id-on-xmppAddr" as specified in Section 5.1.1 of
+      RFC 3920bis.</p>
+  </section1>
+
+  <section1 topic="Security Considerations" anchor="security">
+    <p>TBD.</p>
+  </section1>
+
+  <section1 topic="XMPP Registrar Considerations" anchor="reg">
+    <section2 topic="XML Namespace Name for Signed Data in XMPP" anchor="ns">
+      <p>A URN sub-namespace of signed content for the Extensible Messaging and Presence Protocol
+        (XMPP) is defined as follows.</p>
+      <dl>
+        <di>
+          <dt>URI:</dt>
+          <dd>urn:xmpp:signed</dd>
+        </di>
+        <di>
+          <dt>Specification:</dt>
+          <dd>ProtoXEP</dd>
+        </di>
+        <di>
+          <dt>Description:</dt>
+          <dd>This is an XML namespace name of signed content for the Extensible Messaging and
+            Presence Protocol as defined by ProtoXEP.</dd>
+        </di>
+        <di>
+          <dt>Registrant Contact:</dt>
+          <dd>XSF</dd>
+        </di>
+      </dl>
+    </section2>
+  </section1>
+  <section1 topic="Acknowledgements" anchor="ack">
+    <p>This document borrows ideas and text from End-to-End Object Encryption "work in progress" by
+      Matthew Miller and Peter Saint-Andre.</p>
+  </section1>
+</xep>
