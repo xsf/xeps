@@ -287,9 +287,9 @@
   <cmd name="footnote"><parm><xsl:apply-templates/></parm></cmd>
 </xsl:template>
 
-<!-- span[@class='super] -->
+<!-- span[@class='super'] -->
 <xsl:template match="span[@class='super']">
-  <math>^{<xsl:apply-templates/>}</math>
+  <math><spec cat="sup"/><spec cat="bg"/><xsl:apply-templates/><spec cat="eg"/></math>
 </xsl:template>
 
 
