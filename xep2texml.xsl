@@ -288,7 +288,7 @@
 </xsl:template>
 
 <!-- span[@class='super] -->
-<xsl:template match="span[@class='super]">
+<xsl:template match="span[@class='super']">
   <math>^{<xsl:apply-templates/>}</math>
 </xsl:template>
 
