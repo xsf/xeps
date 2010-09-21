@@ -277,7 +277,7 @@ def makeBundle():
 	print "DONE"
 
 def usage():
-	print "gen.py: generate nice XHTML and beatuy PDF out of the XEP XML"
+	print "gen.py: generate nice XHTML and beautiful PDF out of the XEP XML files"
 	print ""
 	print "Usage:"
 	print "gen.py xep-####.xml"
