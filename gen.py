@@ -285,7 +285,7 @@ def usage():
 	print "Options:"
 	print "-v  Enable verbose output for debugging."
 	print "-a  Build all available XEPs."
-	print "-f  Fast; means no actual compiling is done"
+	print "-f  Fast; means no actual compiling is done."
 
 def main(argv):
 	global verbose
