@@ -99,6 +99,8 @@
 \newcommand{\XEPNumber}[0]{<xsl:value-of select="/xep/header/number"/>}
 \newcommand{\XEPVersion}[0]{<xsl:value-of select="$maxXEPVersion"/>}
 
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+
 \fancyhead[L,L]{\includegraphics[totalheight=10pt]{xmpp.pdf} \slshape \leftmark}
 \fancyfoot[C,C]{\thepage}
 
@@ -225,7 +227,7 @@
 <xsl:template match='table'>
   <TeXML escape="0">
     <env name="center">
-    <env name='tabularx'><parm><cmd name="linewidth" /></parm>
+    <env name='tabularx'><parm><TeXML escape="0">\linewidth</TeXML></parm>
       <parm><xsl:for-each select='tr[1]/th | tr[1]/td'><xsl:if test="position() = 1">l</xsl:if><xsl:if test='position() != last() and position() > 1'>X</xsl:if><xsl:if test='position() = last()'>X</xsl:if></xsl:for-each></parm>
       <xsl:for-each select='tr'>
         <xsl:for-each select='td | th'><xsl:if test='position() > 1'> &amp; </xsl:if><TeXML escape="1"><xsl:value-of select='.'/></TeXML><xsl:if test='position() = last()'> \\</xsl:if></xsl:for-each>
