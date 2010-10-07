@@ -96,7 +96,7 @@ class XEPTable:
 			self.botsFile = parse(shortXMLfilename)
 		except:
 			impl = getDOMImplementation()
-			self.botsfile = impl.createDocument(None, "xeps", None)
+			self.botsFile = impl.createDocument(None, "xeps", None)
 
 	def save(self):
 		f = open(self.filename, "wb")
