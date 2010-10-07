@@ -65,9 +65,12 @@ def executeCommand( cmd ):
 	error, desc = commands.getstatusoutput( cmd )
 	return error, desc + "\n" + "executed cmd: " + cmd
  
+## creates a HTML table (for the human reader) and XML table (for bots)
 class XEPTable:
-	def __init__(self, filename):
+	def __init__(self, filename, shortXMLfilename):
 		self.filename = filename
+		self.shortXMLfilename = shortXMLfilename
+		
 		try:
 			self.tableFile = parse(filename)
 		except:
@@ -88,14 +91,26 @@ class XEPTable:
 	<th align='left'>Date</th>
 </tr>''')
 			self.tableFile.getElementsByTagName("table")[0].appendChild(header.getElementsByTagName("tr")[0])
-			
+		
+		try:
+			self.botsFile = parse(shortXMLfilename)
+		except:
+			impl = getDOMImplementation()
+			self.tableFile = impl.createDocument(None, "xeps", None)
+
 	def save(self):
 		f = open(self.filename, "wb")
 		self.tableFile.getElementsByTagName("table")[0].normalize()
 		f.write(self.tableFile.toxml())
 		f.close()
+		
+		f = open(self.shortXMLfilename, "wb")
+		self.tableFile.getElementsByTagName("xeps")[0].normalize()
+		f.write(self.tableFile.toxml())
+		f.close()
 
 	def setXEP(self, info):
+		## set for HTML table
 		rows = self.tableFile.getElementsByTagName("tr")
 		xeprow = 0
 		for row in rows:
@@ -130,6 +145,43 @@ class XEPTable:
 		col = parseString("<td valign='top'>" + info.getDate() + "</td>")
 		xeprow.appendChild(col.getElementsByTagName("td")[0])
 		
+		## set for bots file
+		xeps = self.botsFile.getElementsByTagName("xep")
+		xep = 0
+		for xeps_xep in xeps:
+			if xeps_xep.getElementsByTagName("number")[0].firstChild.data == info.getNr():
+				xep = xeps_xep
+				break
+		
+		if xep == 0:
+			xep = self.botsFile.createElement("xep")
+			self.botsFile.getElementsByTagName("xeps")[0].appendChild(xep)
+			self.botsFile.getElementsByTagName("xeps")[0].appendChild(self.botsFile.createTextNode('''
+'''))
+		else:
+			while(xep.hasChildNodes()):
+				xep.removeChild(xep.firstChild)
+		
+		child = parseString("<number>" + info.getNr() + "</number>")
+		xep.appendChild(child.getElementsByTagName("number"))
+		
+		child = parseString("<name>" + info.getTitle() + "</name>")
+		xep.appendChild(child.getElementsByTagName("name"))
+		
+		child = parseString("<type>" + info.getType() + "</type>")
+		xep.appendChild(child.getElementsByTagName("type"))
+		
+		child = parseString("<status>" + info.getStatus() + "</status>")
+		xep.appendChild(child.getElementsByTagName("status"))
+		
+		child = parseString("<updated>" + info.getDate() + "</updated>")
+		xep.appendChild(child.getElementsByTagName("updated"))
+		
+		child = parseString("<shortname>" + info.getShortname() + "</shortname>")
+		xep.appendChild(child.getElementsByTagName("shortname"))
+		
+		child = parseString("<abstract>" + info.getAbstract() + "</abstract>")
+		xep.appendChild(child.getElementsByTagName("abstract"))
 
 def filebase( filename ):
 	return os.path.splitext(os.path.basename(filename))[0]
@@ -255,7 +307,7 @@ def buildXEP( filename ):
 	else:
 		print "Building " + filename + " (FAST MODE)"
 	
-	x = XEPTable(CONFIGPATH + "/extensions.xml")
+	x = XEPTable(CONFIGPATH + "/extensions.xml", XEPPATH + "/xeps.xml")
 	xinfo = XEPInfo(xepfilepath, False)
 	x.setXEP( xinfo )
 	x.save()

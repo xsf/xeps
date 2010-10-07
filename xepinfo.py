@@ -49,8 +49,9 @@ class XEPInfo:
 		titleNode = (headerNode.getElementsByTagName("title")[0])
 		self.title = getText(titleNode.childNodes)
 		self.nr = getText((headerNode.getElementsByTagName("number")[0]).childNodes)
+		self.shortname = getText((headerNode.getElementsByTagName("shortname")[0]).childNodes)
 		abstractNode = (headerNode.getElementsByTagName("abstract")[0])
-		abstract = getText(abstractNode.childNodes)
+		self.abstract = getText(abstractNode.childNodes)
 		statusNode = (headerNode.getElementsByTagName("status")[0])
 		self.status = getText(statusNode.childNodes)
 		self.type = getText((headerNode.getElementsByTagName("type")[0]).childNodes)
@@ -79,6 +80,12 @@ class XEPInfo:
 	
 	def getTitle(self):
 		return self.title
+	
+	def getShortname(self):
+		return self.shortname
+	
+	def getAbstract(self):
+		return self.abstract
 	
 	def getStatus(self):
 		return self.status
