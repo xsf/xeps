@@ -163,25 +163,25 @@ class XEPTable:
 				xep.removeChild(xep.firstChild)
 		
 		child = parseString("<number>" + info.getNr() + "</number>")
-		xep.appendChild(child.getElementsByTagName("number"))
+		xep.appendChild(child.getElementsByTagName("number")[0])
 		
 		child = parseString("<name>" + info.getTitle() + "</name>")
-		xep.appendChild(child.getElementsByTagName("name"))
+		xep.appendChild(child.getElementsByTagName("name")[0])
 		
 		child = parseString("<type>" + info.getType() + "</type>")
-		xep.appendChild(child.getElementsByTagName("type"))
+		xep.appendChild(child.getElementsByTagName("type")[0])
 		
 		child = parseString("<status>" + info.getStatus() + "</status>")
-		xep.appendChild(child.getElementsByTagName("status"))
+		xep.appendChild(child.getElementsByTagName("status")[0])
 		
 		child = parseString("<updated>" + info.getDate() + "</updated>")
-		xep.appendChild(child.getElementsByTagName("updated"))
+		xep.appendChild(child.getElementsByTagName("updated")[0])
 		
 		child = parseString("<shortname>" + info.getShortname() + "</shortname>")
-		xep.appendChild(child.getElementsByTagName("shortname"))
+		xep.appendChild(child.getElementsByTagName("shortname")[0])
 		
 		child = parseString("<abstract>" + info.getAbstract() + "</abstract>")
-		xep.appendChild(child.getElementsByTagName("abstract"))
+		xep.appendChild(child.getElementsByTagName("abstract")[0])
 
 def filebase( filename ):
 	return os.path.splitext(os.path.basename(filename))[0]
