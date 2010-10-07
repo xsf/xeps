@@ -49,7 +49,11 @@ class XEPInfo:
 		titleNode = (headerNode.getElementsByTagName("title")[0])
 		self.title = getText(titleNode.childNodes)
 		self.nr = getText((headerNode.getElementsByTagName("number")[0]).childNodes)
-		self.shortname = getText((headerNode.getElementsByTagName("shortname")[0]).childNodes)
+		shortnameNode = (headerNode.getElementsByTagName("shortname")[0])
+		if shortnameNode:
+			self.shortname = getText(shortnameNode.childNodes)
+		else:
+			self.shortname = "NOT YET ASSIGNED"
 		abstractNode = (headerNode.getElementsByTagName("abstract")[0])
 		self.abstract = getText(abstractNode.childNodes)
 		statusNode = (headerNode.getElementsByTagName("status")[0])
