@@ -105,8 +105,8 @@ class XEPTable:
 		f.close()
 		
 		f = open(self.shortXMLfilename, "wb")
-		self.tableFile.getElementsByTagName("xeps")[0].normalize()
-		f.write(self.tableFile.toxml())
+		self.botsFile.getElementsByTagName("xeps")[0].normalize()
+		f.write(self.botsFile.toxml())
 		f.close()
 
 	def setXEP(self, info):
