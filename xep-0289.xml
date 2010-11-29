@@ -1,0 +1,372 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Federated MUC for Constrained Environments</title>
+  <abstract>This document provides a protocol for reducing the bandwidth cost of local users contributing to a remote MUC over a constrained link through local proxying of the MUC room.</abstract>
+  &LEGALNOTICE;
+  <number>0289</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0045</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>FMUC</shortname>
+  &ksmithisode;
+  <revision>
+    <version>0.1</version>
+    <date>2010-11-29</date>
+    <initials>psa</initials>
+    <remark><p>Initial published version.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2010-05-24</date>
+    <initials>kis</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>MUC uses lots of bandwidth. Sometimes server to server traffic is heavily constrained. This limits the amount of traffic going across s2s through local proxying for remote MUC rooms. It requires no setup in advance, and needs no bandwidth for remote rooms without local occupants. The premise is that a proxy room joins another room, and receives stanzas from the MUC just as anoter occupant would.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>If appropriately configured, avoid bandwidth use that isn't strictly necessary for message exchange.</p>
+  <p>Allow an endpoint to scale gracefully up to the usual full MUC chat service as bandwidth allows.</p>
+</section1>
+
+<section1 topic='Addressing' anchor='addressing'>
+  <p>Each local representation has a different address for the federated MUC so that standard XMPP routing rules can be used, and servers do not need to be modified. To generate the JID through which a user can join a federated MUC, the joining client should apply &xep0106; to the JID of the MUC, and use this as the node part of a JID with the host of the mirroring domain. For example, if a client is connected to the server 'remote.example.com', which has a mirroring service 'mirror.remote.example.com', and the user wants to join the MUC 'jabberchat@talk.example.com', their client would generate a federated MUC JID of jabberchat\40talk.example.com@mirror.remote.example.com for them to use.</p>
+</section1>
+
+<section1 topic='Actors' anchor='actors'>
+  <p>The following JIDs are used in this document.</p>
+  <ul>
+    <li>example.com - service</li>
+    <li>talk.example.com - MUC service on example.com.</li>
+    <li>curtis@example.com - User on example.com</li>
+    <li>jabberchat@talk.example.com - MUC room.</li>
+
+    <li>remote.example.com - remote service, connected to example.com over constrained link</li>
+    <li>kev@remote.example.com/Swift - user connected to a remote service</li>
+    <li>mirror.remote.example.com - MUC mirroring service on remote.example.com</li>
+    <li>jabberchat\40talk.example.com@mirror.remote.example.com - slave room.</li>
+  </ul>
+  <p></p>
+</section1>
+
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Joining' anchor='joining'>
+    <section3 topic='Success case' anchor='joinsuccess'>
+<p>kev@remote.example.com/Swift joining jabberchat@talk.example.com through a pre-known mirror.remote.example.com service. At this point mirror.remote.example.com knows nothing of the jabberchat@talk.example.com MUC, and no existing proxying is in place beyond mirror.remote.example.com being willing to proxy for kev@remote.example.com</p>
+
+<example caption='User joins MUC through a proxy'><![CDATA[
+<presence
+    from='kev@remote.example.com/Swift'
+    to='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+</presence>
+]]></example>
+
+<p>mirror.example.com then un-escapes 'jabberchat\40talk.example.com', and joins jabberchat@talk.example.com (the master), saying it's a room mirror.</p>
+
+<example caption='Proxy service joins the target MUC'><![CDATA[
+<presence
+    from='jabberchat\40talk.example.com@mirror.remote.example.com'
+    to='jabberchat@talk.example.com/Kev'>
+  <fmuc xmlns='http://isode.com/protocol/fmuc' from='kev@remote.example.com/Swift' />
+</presence>
+]]></example>
+
+<p>jabberchat@talk.example.com recognises that the mirror service is now mirrorring it, and performs the usual ACL checks as if kev@example.com/Swift had joined directly, sending presence to all occupants as normal. For all in-room routing, the slave is now treated as an occupant, and the slave is expected to do fan-out to its users as it is itself a MUC.</p>
+
+<example caption='MUC confirms room join'><![CDATA[
+<presence
+    from='jabberchat@talk.example.com/Kev'
+    to='jabberchat\40talk.example.com@mirror.remote.example.com'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>
+]]></example>
+
+<p>The slave then fans-out.</p>
+
+<example caption='Proxy delivers the join to local users'><![CDATA[
+<presence
+    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
+    to='kev@remote.example.com/Swift'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>
+]]></example>
+</section3>
+
+    <section3 topic='Failure case' anchor='joinfail'>
+      <p>If the master doesn't allow the user to join, they send the standard MUC error to the slave. Note that for stanzas sent to a user on the slave (such as this join error), it sends to the full MUC JID of the user on the slave, not to the slave room as it does with most other stanzas.</p>
+
+<example caption='Master rejects joins'><![CDATA[
+<presence
+    from='jabberchat@talk.example.com'
+    to='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
+    type='error'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+  <error type='auth'>
+    <registration-required xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</presence>
+]]></example>
+
+<p>The proxy then delivers this to the user</p>
+
+<example caption='Proxy delivers the join failure to the user'><![CDATA[
+<presence
+    from='jabberchat\40talk.example.com@mirror.remote.example.com'
+    to='kev@remote.example.com/Swift'
+    type='error'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+  <error type='auth'>
+    <registration-required xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</presence>
+]]></example>
+    </section3>
+
+    <section3 topic='Joining the MUC directly' anchor='joinmaster'>
+      <p>Now when a user joins the master directly it will do usual presence distribution to occupants (remembering the slave is an occupant). Status codes are omitted from this example, see &xep0045; for those.</p>
+
+<example caption='User joins the master MUC directly'><![CDATA[
+<presence
+    from='curtis@example.com/Swift'
+    to='jabberchat@talk.example.com/Curtis'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+</presence>
+]]></example>
+
+<example caption='MUC delivers the join to its occupants'><![CDATA[
+<presence
+    from='jabberchat@talk.example.com/Curtis'
+    to='curtis@example.com/Swift'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='owner' role='moderator'/>
+  </x>
+</presence>
+
+<presence
+    from='jabberchat@talk.example.com/Curtis'
+    to='jabberchat\40talk.example.com@mirror.remote.example.com'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='admin' role='moderator'/>
+  </x>
+</presence>
+]]></example>
+      
+<example caption='Proxy delivers join to its occupants'><![CDATA[
+<presence
+    from='jabberchat\40talk.example.com@mirror.remote.example.com/Curtis'
+    to='kev@remote.example.com/Swift'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='owner' role='moderator'/>
+  </x>
+</presence>
+]]></example>
+    </section3>
+</section2>
+
+  <section2 topic='Parting' anchor='parting'>
+    <section3 topic='Proxy-connected Users' anchor='proxypart'>
+      <p>The flow for a user leaving the proxy room is much the same as joining the proxy room:</p>
+      <example caption='User leaves the proxy room'><![CDATA[
+<presence
+    from='kev@remote.example.com/Swift'
+    to='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
+    type='unavailable'/>
+]]></example>
+
+      <example caption='Proxy sends part to the MUC'><![CDATA[
+<presence
+    from='jabberchat\40talk.example.com@mirror.remote.example.com'
+    to='jabberchat@talk.example.com/Kev'
+    type='unavailable'/>
+]]></example>
+
+      <example caption='MUC transmits part to occupants'><![CDATA[
+<presence
+    from='jabberchat@talk.example.com/Kev'
+    to='jabberchat\40talk.example.com@mirror.remote.example.com'
+    type='unavailable'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='none'/>
+  </x>
+</presence>
+
+<presence
+    from='jabberchat@talk.example.com/Kev'
+    to='curtis@example.com/Swift'
+    type='unavailable'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='none'/>
+  </x>
+</presence>
+]]></example>
+
+      <example caption='Proxy sends part to local users'><![CDATA[
+<presence
+    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
+    to='kev@remote.example.com/Swift''
+    type='unavailable'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='none'/>
+    <status code='110'/>
+  </x>
+</presence>
+]]></example>
+
+
+
+      <p>When the master MUC receives a parting presence from the only user of the proxy, the proxy itself also leaves the room. This means that as long as no users of the proxy are in the room, it is causing no traffic on the s2s link.</p>
+    </section3>
+
+
+    <section3 topic='Direct-connection Users' anchor='directpart'>
+      <p>Distribution of presence for users parting when connected directly to the MUC is identical to distribution of presence for users joining directly to the MUC.</p>
+    </section3>
+
+    <section3 topic='Status changes' anchor='statuschange'>
+      <p>Distribution of presence for users changing status is the same as that for joining and parting.</p>
+    </section3>
+
+
+  </section2>
+
+  <section2 topic='Sending a Message to All Occupants' anchor='message'>
+    <section3 topic='Normal use' anchor='message-ack'>
+      <p>Normal fan-out like presence</p>
+      <example caption='Proxy user sends a message to the room'><![CDATA[
+<message
+    from='kev@remote.example.com/Swift'
+    to='jabberchat\40talk.example.com@mirror.remote.example.com'
+    type='groupchat'>
+  <body>[[Unclassified]] It's getting warm in here.</body>
+</message>
+]]></example>
+      <example caption='Proxy sends the message to the MUC'><![CDATA[
+<message
+    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
+    to='jabberchat@talk.example.com'
+    type='groupchat'>
+  <body>[[Unclassified]] It's getting warm in here.</body>
+</message>
+]]></example>
+      <p>If the proxy is not using fire and forget mode (see below), it MUST NOT fan out this message to local users until it receives the message copy from the MUC.</p>
+      <example caption='MUC sends the message to the occupants'><![CDATA[
+<message
+    from='jabberchat@talk.example.com'
+    to='jabberchat\40talk.example.com@mirror.remote.example.com'
+    type='groupchat'>
+  <body>[[Unclassified]] It's getting warm in here.</body>
+</message>
+
+<message
+    from='jabberchat@talk.example.com'
+    to='curtis@example.com/Swift'
+    type='groupchat'>
+  <body>[[Unclassified]] It's getting warm in here.</body>
+</message>
+]]></example>
+      <p>When receiving the message copy, the proxy MUST then distribute to proxied occupants.</p>
+      <example caption='Proxy sends the message to the proxied users'><![CDATA[
+<message
+    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
+    to='kev@remote.example.com/Swift'
+    type='groupchat'>
+  <body>[[Unclassified]] It's getting warm in here.</body>
+</message>
+]]></example>
+    </section3>
+    <section3 topic='Fire and Forget' anchor='message-noack'>
+      <p>When dealing with very constrained s2s links, the extra round-trip involved with the MUC sending the message back to the proxy may be unacceptable. In this case, the proxy MAY include the &lt;nomirror> element. If the MUC receives a message from a proxy with &lt;nomirror>, it MUST NOT resend this message to the proxy during its usual fan-out, but MUST send it to other occupants as usual. If sending a message with &lt;nomirror>, the proxy MUST perform fan-out as if the MUC had sent the message back to it.</p>
+      <p>Note that this use introduces unfortunate side-effects, such as messages appearing out of order, depending on whether connected directly to the MUC, or through a proxy. Also, messages rejected by the MUC may already have been delivered to users on a proxy. As such, a proxy SHOULD only use &lt;nomirror> in environments where these side-effects are understood.</p>
+      <example caption='Proxy user sends a message to the room'><![CDATA[
+<message
+    from='kev@remote.example.com/Swift'
+    to='jabberchat\40talk.example.com@mirror.remote.example.com'
+    type='groupchat'>
+  <body>[[Unclassified]] It's getting warm in here.</body>
+</message>
+]]></example>
+      <example caption='Proxy sends the message to the MUC'><![CDATA[
+<message
+    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
+    to='jabberchat@talk.example.com'
+    type='groupchat'>
+  <body>[[Unclassified]] It's getting warm in here.</body>
+  <nomirror xmlns='http://isode.com/protocol/fmuc'/>
+</message>
+]]></example>
+      <p>If the proxy is using fire and forget mode, it MUST fan out this message to local users now, instead of waiting  until it receives the message copy from the MUC.</p>
+      <example caption='Proxy sends the message to the proxied users'><![CDATA[
+<message
+    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
+    to='kev@remote.example.com/Swift'
+    type='groupchat'>
+  <body>[[Unclassified]] It's getting warm in here.</body>
+</message>
+]]></example>
+      <p>Because this is fire and forget mode, the MUC now MUST NOT send the message back to the proxy, but MUST send to the other occupants.</p>
+      <example caption='MUC sends the message to the other occupants'><![CDATA[
+<message
+    from='jabberchat@talk.example.com/Kev'
+    to='curtis@example.com/Swift'
+    type='groupchat'>
+  <body>[[Unclassified]] It's getting warm in here.</body>
+</message>
+]]></example>
+    </section3>
+    
+  </section2>
+
+  <section2 topic='Administration Use Cases' anchor='admin'>
+    <p>To perform administration of the MUC, connect directly to the MUC and follow the standard process.</p>
+  </section2>
+
+</section1>
+
+
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>To avoid complexity of protocol, the MUC MUST NOT modify the nick of a user joining from a proxy - if their JID is unacceptable, the join must instead fail (this simplifies the passing of status codes between the MUC and the proxy).</li>
+    <li>Similarly to avoid complexity and round-trips, nick-changing is not allowed for users connected through a proxy. If a user attempts to change their nick, the proxy MUST return a <![CDATA[<not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>]]> error.</li>
+  </ul>
+</section1>
+<!--<section1 topic='Implementation Notes' anchor='impl'>
+  <p>OPTIONAL.</p>
+</section1>
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>OPTIONAL.</p>
+</section1>
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>OPTIONAL.</p>
+</section1>-->
+<section1 topic='Security Considerations' anchor='security'>
+  <p>This allows a MUC mirror to proxy for another JID, so should only be deployed in scenarios where either the proxy service is trusted, or it is known that the users of the proxy service are in the same security domain as the proxy service.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>None.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>Needs a namespace.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>When advanced.</p>
+</section1>
+</xep>
