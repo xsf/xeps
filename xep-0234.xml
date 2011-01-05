@@ -25,6 +25,12 @@
   <shortname>NOT_YET_ASSIGNED</shortname>
   &stpeter;
   <revision>
+    <version>0.12</version>
+    <date>2011-01-05</date>
+    <initials>psa</initials>
+    <remark><p>Clarified usage of Jingle actions as well as several ambiguous points in the text, including use of the range feature from XEP-0096.</p></remark>
+  </revision>
+  <revision>
     <version>0.11</version>
     <date>2010-02-19</date>
     <initials>psa</initials>
@@ -152,6 +158,7 @@
     <li>An application type of "urn:xmpp:jingle:apps:file-transfer:1". In particular, the &lt;description/&gt; element contains an &lt;offer/&gt; or &lt;request/&gt; element that in turn contains a &lt;file/&gt; element qualified by the existing 'http://jabber.org/protocol/si/profile/file-transfer' namespace from <cite>XEP-0096</cite>.</li>
     <li>An appropriate transport method. So far the suggested methods are jingle-s5b (<cite>XEP-0260</cite>) and, as a fallback, jingle-ibb (<cite>XEP-0261</cite>).</li>
   </ol>
+  <p>Note: All attributes of the &lt;file/&gt; element are defined in XEP-0096, not in this specification.</p>
   <p>In this example, the initiator is &lt;romeo@montague.lit&gt;, the responder is &lt;juliet@capulet.lit&gt;, the application type is a file offer, and the transport method is jingle-s5b.</p>
   <p>The flow is as follows.</p>
   <code><![CDATA[
@@ -193,6 +200,7 @@ Initiator                    Responder
                 name='test.txt'
                 size='1022'>
             <desc>This is a test. If this were a real file...</desc>
+            <range/>
           </file>
         </offer>
       </description>
@@ -213,7 +221,8 @@ Initiator                    Responder
   </jingle>
 </iq>
   ]]></example>
-  <p class='box'>Note: Computing the hash of the file before sending it can slow down the process of file transfer, since the sending application needs to process the file twice. The sender might prefer to send the hash after the file transfer has begun, using a transport-info message as described under <link url='#hash'>Communicating the Hash</link>.</p>
+  <p>Note: Inclusion of the &lt;range/&gt; child of the &lt;file/&gt; element indicates that the initiatior supports ranged transfers as described below under <link url='#range'>Ranged Transfers</link>.</p>
+  <p>Note: Computing the hash of the file before sending it can slow down the process of file transfer, since the sending application needs to process the file twice. The sender might prefer to send the hash after the file transfer has begun, using a transport-info message as described under <link url='#hash'>Communicating the Hash</link>.</p>
   <p>The responder immediately acknowledges receipt of the Jingle session-initiate.</p>
   <example caption="Responder acknowledges session-initiate"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
@@ -241,6 +250,7 @@ Initiator                    Responder
                 hash='552da749930852c69ae5d2141d3766b1'
                 date='1969-07-21T02:56:15Z'>
             <desc>This is a test. If this were a real file...</desc>
+            <range/>
           </file>
         </offer>
       </description>
@@ -251,6 +261,7 @@ Initiator                    Responder
   </jingle>
 </iq>
   ]]></example>
+  <p>Note: Inclusion of the &lt;range/&gt; child of the &lt;file/&gt; element indicates that the receiver also supports ranged transfers as described below under <link url='#range'>Ranged Transfers</link>.</p>
   <p>The initiator acknowledges the Jingle session-accept.</p>
   <example caption="Initiator acknowledges session-accept"><![CDATA[
 <iq from='romeo@montague.lit/orchard'
@@ -278,7 +289,7 @@ Initiator                    Responder
 </section1>
 
 <section1 topic='Communicating the Hash' anchor='hash'>
-  <p>At any time, the hosting entity can communicate the hash of the file to the receiving entity. This is done by sending a session-info message containing a &lt;hash/&gt; element qualified by the 'urn:xmpp:jingle:apps:file-transfer:info:1' namespace.</p>
+  <p>At any time during the lifetime of the file transfer session, the hosting entity can communicate the hash of the file to the receiving entity. This is done by sending a session-info message containing a &lt;hash/&gt; element qualified by the 'urn:xmpp:jingle:apps:file-transfer:info:1' namespace. The XML character data of this &lt;hash/&gt; element has the same meaning as the 'hash' attribute of the &lt;file/&gt; element qualified by the 'http://jabber.org/protocol/si/profile/file-transfer' namespace from <cite>XEP-0096</cite>; that is, it is a checksum of the file contents produced in accordance with the hashing function specified by the 'algo' attribute, which MUST be one of the functions listed in the &ianahashes;. For historical reasons and for backward-compatibility with <cite>XEP-0096</cite>, the 'algo' attribute defaults to a value of "md5".</p>
   <example caption="Receiver sends session-terminate"><![CDATA[
 <iq from='romeo@montague.lit/orchard'
     id='kqh401b5'
@@ -328,6 +339,112 @@ Initiator                    Responder
   <p>Note: If the requesting entity knows the hash of the file, then it can include only that metadata in its request. If not, the requesting entity needs to include enough metadata to uniquely identify the file, such as the date, name, and size. For similar considerations, see &rfc5547;.</p>
 </section1>
 
+<section1 topic='Ranged Transfers' anchor='range'>
+  <p>As in <cite>XEP-0096</cite>, a transfer can include only part of a file (e.g., to restart delivery of a truncated transfer session at a point other than the start of the file). This is done using the &lt;range/&gt; element from <cite>XEP-0096</cite>. The usage is illustrated in the following examples.</p>
+  <p>Let us imagine that the parties negotiate a file transfer session using, say, In-Band Bytestreams. During the transfer, the recipient goes offline unexpectedly and IBB stanzas from the sender to the recipient begin to bounce. When the recipient comes back online, the recipient could initiate a new Jingle session (to retrieve the file) and specify that it wants to receive all chunks after byte 270336 (which might be the 66th chunk of size 4096).</p>
+  <example caption="Receiver requests hosted file, with range"><![CDATA[
+<iq from='juliet@capulet.lit/balcony'
+    id='wsn361c3'
+    to='romeo@montague.lit/orchard'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-initiate'
+          initiator='romeo@montague.lit/orchard'
+          sid='uj3b2'>
+    <content creator='initiator' name='a-file-request'>
+      <description xmlns='urn:xmpp:jingle:apps:file-transfer:1'>
+        <request>
+          <file xmlns='http://jabber.org/protocol/si/profile/file-transfer'
+                hash='552da749930852c69ae5d2141d3766b1'>
+            <range offset='270336'/>
+          </file>
+        </request>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
+        	 mode='tcp'
+                 sid='xig361fj'>
+        <streamhost 
+            host='24.24.24.2' 
+            jid='proxy.capulet.lit' 
+            type='proxy'/>
+      </transport>
+    </content>
+  </jingle>
+</iq>
+  ]]></example>
+  <p>Alternatively, the sender could initiate a new file transfer, indicating that it supports ranged transfers, and in the Jingle session-accept message the receiver could indicate that it wants the transfer to begin at the specified offset.</p>
+</section1>
+
+<section1 topic='Use of Jingle Actions' anchor='jingle'>
+  <p>Jingle file transfer uses only a few of the actions defined in XEP-0166. Jingle usage is summarized in the following table.</p>
+  <table caption='Jingle Actions Used in File Transfer'>
+    <tr>
+      <th>Action</th>
+      <th>Use</th>
+    </tr>
+    <tr>
+      <td>content-accept</td> 
+      <td>Unused</td>
+    </tr>
+    <tr>
+      <td>content-add</td> 
+      <td>Unused</td>
+    </tr>
+    <tr>
+      <td>content-modify</td> 
+      <td>Unused</td>
+    </tr>
+    <tr>
+      <td>content-reject</td> 
+      <td>Unused</td>
+    </tr>
+    <tr>
+      <td>content-remove</td> 
+      <td>Unused</td>
+    </tr>
+    <tr>
+      <td>description-info</td> 
+      <td>Unused</td>
+    </tr>
+    <tr>
+      <td>security-info</td> 
+      <td>Unused</td>
+    </tr>
+    <tr>
+      <td>session-accept</td> 
+      <td>Accepting a file offer or request</td>
+    </tr>
+    <tr>
+      <td>session-info</td> 
+      <td>Communication of the file hash</td>
+    </tr>
+    <tr>
+      <td>session-initiate</td> 
+      <td>Initiating a file offer or request</td>
+    </tr>
+    <tr>
+      <td>session-terminate</td> 
+      <td>Ending a file transfer session</td>
+    </tr>
+    <tr>
+      <td>transport-accept</td> 
+      <td>Accepting fallback from S5B to IBB</td>
+    </tr>
+    <tr>
+      <td>transport-info</td> 
+      <td>Unused</td>
+    </tr>
+    <tr>
+      <td>transport-reject</td> 
+      <td>Rejecting fallback from S5B to IBB</td>
+    </tr>
+    <tr>
+      <td>transport-replace</td> 
+      <td>Fallback from S5B to IBB</td>
+    </tr>
+  </table>
+</section1>
+
 <section1 topic='Implementation Notes' anchor='impl'>
   <section2 topic='Mandatory to Implement Technologies' anchor='impl-mti'>
     <p>All implementations MUST support the Jingle In-Band Bytestreams Transport Method (<cite>XEP-0261</cite>) as a reliable method of last resort. An implementation SHOULD support other transport methods as well, especially the Jingle SOCKS5 Bytestreams Transport Method (<cite>XEP-0260</cite>).</p>
@@ -341,6 +458,7 @@ Initiator                    Responder
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
+  <p>For historical reasons and for backward-compatibility with XEP-0096, the hashing algorithm used in computing the file checksum defaults to MD5. It is RECOMMENDED for implementations to use stronger hashing algorithms.</p>
   <p>In order to secure the data stream, implementations SHOULD use encryption methods appropriate to the transport method being used. For example, end-to-end encryption can be negotiated over either SOCKS5 Bytestreams or In-Band Bytestreams as described in <cite>XEP-0260</cite> and <cite>XEP-0261</cite>.</p>
   <p>Refer to <cite>XEP-0047</cite>, <cite>XEP-0065</cite>, <cite>XEP-0096</cite>, <cite>XEP-0260</cite>, and <cite>XEP-0261</cite> for related security considerations.</p>
 </section1>
@@ -424,7 +542,7 @@ Initiator                    Responder
 </section1>
 
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>Thanks to Marcus Lundblad and Jiří Zárevúcky for their feedback.</p>
+  <p>Thanks to Steffen Larsen, Marcus Lundblad, Joe Maissel, Ali Sabil, Matthew Wild, and Jiří Zárevúcky for their feedback.</p>
 </section1>
 
 </xep>
