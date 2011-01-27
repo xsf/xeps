@@ -1,0 +1,388 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+    <header>
+        <title>Encapsulated Digital Signatures in XMPP</title>
+        <abstract>This document provides a technical specification for Encapsulated Digital
+            Signatures in the Extensible Messaging and Presence Protocol (XMPP).</abstract>
+        &LEGALNOTICE;
+        <number>0290</number>
+        <status>Experimental</status>
+        <type>Standards Track</type>
+        <sig>Standards</sig>
+        <approver>Council</approver>
+        <dependencies>
+            <spec>XMPP Core</spec>
+            <spec>XEP-0001</spec>
+        </dependencies>
+        <supersedes/>
+        <supersededby/>
+        <shortname>N/A</shortname>
+        &kdz;
+        <revision>
+          <version>0.1</version>
+          <date>2011-01-26</date>
+          <initials>psa</initials>
+          <remark><p>Initial published version.</p></remark>
+        </revision>
+        <revision>
+            <version>0.0.1</version>
+            <date>2010-11-29</date>
+            <initials>kdz</initials>
+            <remark>
+                <p>Proto-XEP draft.</p>
+            </remark>
+        </revision>
+    </header>
+
+    <section1 topic="Introduction" anchor="intro">
+        <p>This document provides a technical specification for Encapsulated Digital Signatures in
+            Extensible Messaging and Presence Protocol (&xmpp;).</p>
+        <p>XMPP Digital Signatures may be used to provide signer authentication, data integrity,
+	   non-repudiation, and other security services.</p>
+	<p>This extension is intended to be highly flexible, supporting a wide range of applications.
+	   The extension not only supports signing by the originator, but by other entities which
+	   handle XMPP stanzas.  Multiple entities may independently sign a stanza.</p>
+	<p>A signed manifest approach is used to allow selective signing (only select elements
+	   may be included in the manifest) and to allow flexibility in handling verification
+	   errors.</p>
+	<p>This extension is intended to support <em>optimistic signing</em>.</p>
+        <p>This document offers an encapsulated signature approach based upon &w3xmlsig; (XMLDSIG).
+            Implementations of this extension not required to fully implement the XML DSIG
+            specification, they may implement only the minimal subset necessary to support this
+            extension.</p>
+        <p>It is noted that a number of object-level XMPP digital signature extensions have been
+	   specified over the years. These include &rfc3923; (XMPP E2E), &xep0116; (XMPP PGP),
+	   and &xep0285;.  The limited applicability of encapsulating signature approaches in XMPP
+	   is discussed in &xep0274;.</p>
+    </section1>
+    <section1 topic="Signing XMPP Stanzas" anchor="stanza">
+        <p>The process that a sending agent follows for securing stanzas is very similar regardless
+            of the form of stanza (i.e., &lt;iq/&gt;, &lt;message/&gt;, or &lt;presence/&gt;).</p>
+
+        <p>The signer begins with the cleartext version of the &lt;message/&gt; stanza "S":</p>
+        <example><![CDATA[
+<message from='juliet@capulet.net/balcony'
+         id='183ef129'
+         to='romeo@montague.net'>
+    <thread>8996aef0-061d-012d-347a-549a200771aa</thread>
+    <body>Wherefore art thou, Romeo?</body>
+</message>
+          ]]></example>
+
+        <p>This is modified prior to signing as follows:</p>
+        <ul>
+            <li>Default attribute values are added.  (Namespace declarations are not modified.)</li>
+            <li>Each child element of the stanza is augmented by a <tt>id</tt> attribute
+                qualified in the <tt>urn:xmpp:dsig:0</tt> namespace. As these attributes are used to
+                identify the element within a manifest, they must be sufficient unique.</li>
+        </ul>
+        <example><![CDATA[
+<message from='juliet@capulet.net'
+         id='183ef129'
+         to='romeo@montague.net'
+         type='chat'>
+    <thread xmlns:d="urn:xmpp:dsig:0" d:id="xxxx-1">8996aef0-061d-012d-347a-549a200771aa</thread>
+    <body xmlns:d="urn:xmpp:dsig:0" d:id="xxxx-2">Wherefore art thou, Romeo?</body>
+</message>
+          ]]></example>
+
+        <p>The signer builds a stanza description object containing a signer element, the stanza
+            element, and a timestamp element. The signer element value is the bare JID of the
+            signing entity. When the signing entity is a service entity, the JID may only contain
+            service domain. The stanza element is the stanza prepared above with each of its element
+            replaced by an reference element.</p>
+        <example><![CDATA[
+<stanza id="stanza-desc" xmlns="urn:xmpp:dsig:0">
+    <signer>juliet@capulet.net</signer>
+    <message from='juliet@capulet.net'
+            id='183ef129'
+            to='romeo@montague.net'
+            type='chat'>            
+        <reference>xxxx-1</reference>
+        <reference>xxxx-2</reference>
+    </message>
+    <timestamp>2010-11-11T13:33:00.123Z</timestamp>
+</stanza>
+]]></example>
+
+        <p>The signer then builds an XMLDSIG Manifest object which references each element via the
+                <tt>xmpp:dsig:ref:0</tt> URN and provides a digest over the element (after it has
+            been modified to include a <tt>d:id</tt> attribute) as transformed by the transformation
+            algorithm.</p>
+        <example><![CDATA[
+<Manifest id="manifest">
+    <Reference URI="urn:xmpp:dsig:ref:0#xxxx-1">
+        <Transforms>
+            <Transform Algorithm="urn:xmpp:dsig:transform:0"/>
+        </Transform>
+        <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+        <DigestValue>...</DigestValue>
+    </Reference>
+    <Reference URI="urn:xmpp:dsig:ref:0#xxxx-2">
+        <Transforms>
+            <Transform Algorithm="urn:xmpp:dsig:transform:0"/>
+        </Transform>
+        <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+        <DigestValue>...</DigestValue>
+    </Reference>
+</Manifest>
+]]></example>
+
+        <p>The signer then builds a SignedInfo element.</p>
+        <example><![CDATA[
+<SignedInfo>
+    <CanonicalizationMethod Algorithm="urn:xmpp:dsig:transform:0"/>
+    <SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#dsa-sha1"/
+    <Reference URI="#stanza-desc">
+        <Transforms>
+            <Transform Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>
+        </Transform>
+        <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+        <DigestValue>...</DigestValue>
+    </Reference>
+    <Reference URI="#manifest" Type="http://www.w3.org/2000/09/xmldsig#Manifest">
+        <Transforms>
+            <Transform Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>
+        </Transform>
+        <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+        <DigestValue>...</DigestValue>
+    </Reference>
+</SignedInfo>
+]]></example>
+
+        <p>And then produces a Signature element:</p>
+        <example><![CDATA[
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+    <SignedInfo>
+        <CanonicalizationMethod Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>
+        <SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#dsa-sha1"/
+        <Reference URI="#stanza-desc">
+            <Transforms>
+                <Transform Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>
+            </Transform>
+            <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+            <DigestValue>...</DigestValue>
+        </Reference>
+        <Reference URI="#manifest" Type="http://www.w3.org/2000/09/xmldsig#Manifest">
+            <Transforms>
+                <Transform Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>
+            </Transforms>
+            <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+            <DigestValue>...</DigestValue>
+        </Reference>
+    </SignedInfo>
+    <SignatureValue/>
+    <Object>
+        <stanza id="stanza-desc" xmlns="urn:xmpp:dsig:0">
+            <signer>juliet@capulet.net</signer>
+            <message from='juliet@capulet.net'
+                     id='183ef129'
+                     to='romeo@montague.net'
+                     type='chat'>            
+                <reference>xxxx-1</reference>
+                <reference>xxxx-2</reference>
+            </message>
+            <timestamp>2010-11-11T13:33:00.123Z</timestamp>
+        </stanza>
+    </Object>
+    <Object>
+        <Manifest id="manifest">
+            <Reference URI="urn:xmpp:dsig:ref:0#xxxx-1">
+                <Transforms>
+                    <Transform Algorithm="urn:xmpp:dsig:transform:0"/>
+                </Transform>
+                <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+                <DigestValue>...</DigestValue>
+            </Reference>
+            <Reference URI="urn:xmpp:dsig:ref:0#xxxx-2">
+                <Transforms>
+                    <Transform Algorithm="urn:xmpp:dsig:transform:0"/>
+                </Transform>
+                <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+                <DigestValue>...</DigestValue>
+            </Reference>
+        </Manifest>
+    </Object>
+</Signature>
+          ]]></example>
+
+        <p> The signer than computes the SignatureValue element, processing the Signature element as
+            a detached signature, and replaces the empty Signature element with it. Finally, the
+            signer inserts the Signature element into stanza and forwards the stanza as it normally
+            would.</p>
+        <example><![CDATA[ 
+<message from='juliet@capulet.net'
+         id='183ef129'
+         to='romeo@montague.net'
+         type='chat'>
+    <thread xmlns:d="urn:xmpp:dsig:0" d:id="xxxx-1">8996aef0-061d-012d-347a-549a200771aa</thread>
+    <body xmlns:d="urn:xmpp:dsig:0" d:id="xxxx-2">Wherefore art thou, Romeo?</body>
+    <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+        <SignedInfo>
+            <CanonicalizationMethod Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>
+            <SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#dsa-sha1"/
+            <Reference URI="#stanza-desc">
+                <Transforms>
+                    <Transform Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>
+                </Transform>
+                <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+                <DigestValue>...</DigestValue>
+            </Reference>
+            <Reference URI="#manifest" Type="http://www.w3.org/2000/09/xmldsig#Manifest">
+                <Transforms>
+                    <Transform Algorithm="http://www.w3.org/2006/12/xml-c14n11"/>
+                </Transforms>
+                <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+                <DigestValue>...</DigestValue>
+            </Reference>
+        </SignedInfo>
+        <SignatureValue>...</SignatureValue>
+        <Object>
+            <stanza id="stanza-desc" xmlns="urn:xmpp:dsig:0">
+                <signer>juliet@capulet.net</signer>
+                <message from='juliet@capulet.net'
+                         id='183ef129'
+                         to='romeo@montague.net'
+                         type='chat'>            
+                    <reference>xxxx-1</reference>
+                    <reference>xxxx-2</reference>
+                </message>
+                <timestamp>2010-11-11T13:33:00.123Z</timestamp>
+            <stanza>
+        </Object>
+        <Object>
+            <Manifest id="manifest">
+                <Reference URI="urn:xmpp:dsig:ref:0#xxxx-1">
+                    <Transforms>
+                        <Transform Algorithm="urn:xmpp:dsig:transform:0"/>
+                    </Transform>
+                    <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+                    <DigestValue>...</DigestValue>
+                </Reference>
+                <Reference URI="urn:xmpp:dsig:ref:0#xxxx-2">
+                    <Transforms>
+                        <Transform Algorithm="urn:xmpp:dsig:transform:0"/>
+                    </Transform>
+                    <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+                    <DigestValue>...</DigestValue>
+                </Reference>
+            </Manifest>
+        </Object>
+    </Signature>
+ </message>
+ ]]></example>
+    </section1>
+
+    <section1 topic="Transformation Algorithm" anchor="transform">
+        <p>For referenced elements of a stanza, the referenced element is normalized (omitting
+            comments), as detailed in &w3canon;, as a document subset of a document containing a
+            stream element containing the appropriate jabber:client stanza element containing the
+            stanza with the referenced elements. Note that jabber:client stanzas are used when
+            constructing this document even when a server is signing a stanza to be sent to another
+            server.</p>
+        <p>For the stanza in Example 2, the input document would be:</p>
+        <example><![CDATA[
+<stream:stream xmlns='jabber:client" xmlns:stream='http://etherx.jabber.org/streams'>
+    <message from='juliet@capulet.net'
+             id='183ef129'
+             to='romeo@montague.net'
+             type='chat'>
+        <thread xmlns:d="urn:xmpp:dsig:0" d:id="xxxx-1">8996aef0-061d-012d-347a-549a200771aa</thread>
+        <body xmlns:d="urn:xmpp:dsig:0" d:id="xxxx-2">Wherefore art thou, Romeo?</body>
+    </message>
+</stream:stream>
+          ]]></example>
+
+        <p>The canonical form of element referenced by <tt>urn:xmpp:dsig:ref:0#xxx-1</tt> would
+            be:</p>
+        <example><![CDATA[<thread xmlns="jabber:client" xmlns:d="urn:xmpp:dsig:0" d:id="xxxx-1">8996aef0-061d-012d-347a-549a200771aa</thread>]]></example>
+    </section1>
+
+    <section1 topic="Stanza Element References" anchor="references">
+        <p>The URI 'uri:xmpp:dsig:ref:0#xxxx" refers to the child element of the stanza which
+            contains the 'uri:xmpp:dsig:0' 'id' attribute with the value "xxxx".</p>
+    </section1>
+
+    <section1 topic="Inclusion and Checking of Timestamps" anchor="timestamps">
+        <p>Timestamps are included to help prevent replay attacks. All timestamps MUST conform to
+            &rfc3339; and be presented as UTC with no offset, always including the seconds and
+            fractions of a second to three digits (resulting in a datetime 24 characters in length).
+            Absent a local adjustment to the sending agent's perceived time or the underlying clock
+            time, the sending agent MUST ensure that the timestamps it sends to the receiver
+            increase monotonically (if necessary by incrementing the seconds fraction in the
+            timestamp if the clock returns the same time for multiple requests). The following rules
+            apply to the receiving application:</p>
+
+        <ul style="symbols">
+            <li>It MUST verify that the timestamp received is within five minutes of the current
+                time, except as described below for offline messages.</li>
+            <li>If the foregoing check fails, the timestamp SHOULD be presented to the receiving
+                entity (human or application) marked with descriptive text indicating "old
+                timestamp" or "future timestamp" and the receiving entity MAY return a stanza error
+                to the sender (except as precluded in the protocol).</li>
+        </ul>
+
+        <p>The foregoing timestamp checks assume that the recipient is online when the message is
+            received. However, if the recipient is offline then the server will probably store the
+            message for delivery when the recipient is next online (offline storage does not apply
+            to &lt;iq/&gt; or &lt;presence/&gt; stanzas, only &lt;message/&gt; stanzas). As
+            described in &xep0160;, when sending an offline message to the recipient, the server
+            SHOULD include delayed delivery data as specified in &xep0203; so that the recipient
+            knows that this is an offline message and also knows the original time of receipt at the
+            server. In this case, the recipient SHOULD verify that the timestamp received in the
+            encrypted message is within five minutes of the time stamped by the recipient's server
+            in the &lt;delay/&gt; element.</p>
+    </section1>
+
+    <section1 topic="Mandatory-to-Implement Cryptographic Algorithms" anchor="mti">
+        <p>All implementations MUST support the following algorithms. Implementations MAY support
+            other algorithms as well.</p>
+        <ul>
+            <li>TBD</li>
+        </ul>
+    </section1>
+
+    <section1 topic="Certificates" anchor="certs">
+        <p>To participate in end-to-end signing using the methods defined in this document, a client
+            needs to possess an X.509 certificate. It is expected that many clients will generate
+            their own (self-signed) certificates rather than obtain a certificate issued by a
+            certification authority (CA). In any case the certificate MUST include an XMPP address
+            that is represented using the ASN.1 Object Identifier "id-on-xmppAddr" as specified in
+            Section 5.1.1 of RFC 3920bis.</p>
+    </section1>
+
+    <section1 topic="Security Considerations" anchor="security">
+        <p>TBD.</p>
+    </section1>
+
+    <section1 topic="XMPP Registrar Considerations" anchor="reg">
+        <section2 topic="XML Namespace Name for Signed Data in XMPP" anchor="ns">
+            <p>A URN sub-namespace of signed content for the Extensible Messaging and Presence
+                Protocol (XMPP) is defined as follows.</p>
+            <dl>
+                <di>
+                    <dt>URI:</dt>
+                    <dd>urn:xmpp:dsig</dd>
+                </di>
+                <di>
+                    <dt>Specification:</dt>
+                    <dd>ProtoXEP</dd>
+                </di>
+                <di>
+                    <dt>Description:</dt>
+                    <dd>This is an XML namespace name of signed content for the Extensible Messaging
+                        and Presence Protocol as defined by ProtoXEP.</dd>
+                </di>
+                <di>
+                    <dt>Registrant Contact:</dt>
+                    <dd>XSF</dd>
+                </di>
+            </dl>
+        </section2>
+    </section1>
+</xep>
