@@ -65,6 +65,11 @@ class XEP:
 		file_text = fctx.data()
 		return file_text
 
+	def globalLatestRevison(self):
+		repo = hg.repository(ui.ui(), self.BASEDIR)
+		cctx = repo['tip']
+		return cctx.rev()
+
 
 def getLatestXEPFilename(XEPDIR, nr, no_interim=True):
 	try:
