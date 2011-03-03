@@ -171,7 +171,7 @@ msg = msg + "\r\n\n"
 msg = msg + changelogline
 msg = msg + "\r\n\n"
 msg = msg + diffsline
-#msg = msg + "\r\n\n"
+msg = msg + "\r\n\n"
 msg = msg + urlline
 msg = msg + "\r\n\n"
 
