@@ -6,7 +6,7 @@
 # Last Modified: 2006-10-03
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
-# HowTo: ./announce.py xepnum
+# HowTo: ./announce.py xepnum diffs
 
 ## LICENSE ##
 #
@@ -57,10 +57,10 @@ now = int(time.time())
 # READ IN ARGS: 
 #
 # 1. XEP number
-# 2. URL for source control diffs ### no longer in use
+# 2. URL for source control diffs
 
 xepnum = sys.argv[1];
-#diffs = sys.argv[2];  ### no longer in use
+diffs = sys.argv[2];
 
 xepfile = 'xep-' + xepnum + '.xml'
 
@@ -158,7 +158,7 @@ thesubject = thesubject + xepnum + ' (' + title + ')'
 versionline = 'Version ' + version + ' of XEP-' + xepnum + ' (' + title + ') has been released.' 
 abstractline = 'Abstract: ' + abstract
 changelogline = 'Changelog: ' + remark + ' (' + initials + ')'
-# diffsline = 'Diff: ' + diffs  ### no longer in use
+diffsline = 'Diff: ' + diffs
 urlline = 'URL: http://xmpp.org/extensions/xep-' + xepnum + '.html'
 
 msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr
@@ -170,7 +170,7 @@ msg = msg + abstractline
 msg = msg + "\r\n\n"
 msg = msg + changelogline
 msg = msg + "\r\n\n"
-#msg = msg + diffsline
+msg = msg + diffsline
 #msg = msg + "\r\n\n"
 msg = msg + urlline
 msg = msg + "\r\n\n"
