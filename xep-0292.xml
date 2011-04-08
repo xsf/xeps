@@ -32,6 +32,12 @@
   </author>
   &stpeter;
   <revision>
+    <version>0.2</version>
+    <date>2011-04-07</date>
+    <initials>psa</initials>
+    <remark><p>Updated to track base vCard4 specs; defined IQ transport, with pubsub for notifications; added examples for server vCards; specified mapping from vcard-temp.</p></remark>
+  </revision>
+  <revision>
     <version>0.1</version>
     <date>2011-03-02</date>
     <initials>psa</initials>
@@ -72,12 +78,13 @@
   <p>Since 1999, the Jabber/XMPP community has used an interim, unofficial XML representation of vCard data for personal contacts, called &xep0054;. Recently, the IETF has upgraded vCard from vCard3 to &vcardrev;, and at the same time has defined &vcardxml; as an official XML format for vCard4. This document specifies an XMPP extension for use of the vCard4 XML format in XMPP systems, with the intent of obsoleting the vcard-temp format. Primarily this document defines the encapsulation method itself; secondarily it also defines transport methods and a mapping to the vcard-temp format for migration by clients and servers.</p>
 </section1>
 <section1 topic='Requirements' anchor='reqs'>
-  <p>This specification was designed with the following documents in mind.</p>
+  <p>This specification was designed with the following requirements in mind.</p>
   <ol>
     <li>Reuse vCard4 as defined in draft-ietf-vcarddav-vcardrev.</li>
     <li>Reuse the vCard4 XML format as defined in draft-ietf-vcarddav-vcardxml.</li>
     <li>Ensure that clients and servers can easily migrate from vcard-temp to the new encapsulation format.</li>
     <li>Notify interested parties of changes to vCard data using standard XMPP extensions, specifically &xep0163;.</li>
+    <li>Support vCards for non-human entities such as XMPP servers and &xep0045; rooms.</li>
     <li>Enable XMPP servers to store vCard4 XML data in LDAP directories if desired.</li>
   </ol>
 </section1>
@@ -87,153 +94,269 @@
 <section1 topic='Encapsulation' anchor='encapsulation'>
   <p>The vCard XML format defined at the IETF specifies that the root element is &lt;vcards/&gt;, where the only defined child element is &lt;vcard/&gt;. For use in XMPP, we specify that the root element shall be &lt;vcard/&gt;, not &lt;vcards/&gt;.</p>
 </section1>
-<section1 topic='PubSub Binding' anchor='pubsub'>
-  <section2 topic='Location' anchor='pubsub-location'>
-    <p>When the Personal Eventing Protocol (PEP) "flavor" of XMPP publish-subscribe is used, the canonical location for a user's vCard is a pubsub node whose name is "urn:ietf:params:xml:ns:vcard-4.0". For instance, if the Shakespearean character Romeo has a JabberID of 'romeo@montague.lit' then his vCard would be located at that JID with a node of "urn:ietf:params:xml:ns:vcard-4.0".</p>
-    <p>When "raw" &xep0060; is used, the location is a generic publish-subscribe node that is not attached to an user's IM account.</p>
-    <p>Use of PEP is RECOMMENDED to simplify the process of discovering and subscribing to the vCard information.</p>
-  </section2>
-  <section2 topic='Subscribing to a vCard' anchor='pubsub-subscribe'>
-    <p>Let us imagine that Juliet wishes to receive the updates that Romeo publishes to his vCard. She has two options:
-    <ol>
-      <li>Implicitly subscribe by advertising support for "urn:ietf:param:xml:ns:vcard-4.0+notify" in her &xep0115; data. Romeo's PEP service then automatically sends vCard updates to her when it receives presence from her, until and unless she sends presence of type unavailable or stops advertising an interest in vCard updates. This is in accordance with XEP-0060, section 6.1.</li>
-      <li>Explicitly subscribe by sending a formal subscription request to the "urn:ietf:param:xml:ns:vcard-4.0" node at Romeo's JabberID. Romeo's PEP service may send her all vCard updates even if she is offline at the time (depending on service policies regarding presence integration).</li>
-    </ol>
-  </p>
-  </section2>
-  <section2 topic='Publishing/Updating a vCard' anchor='pubsub-publish'>
-    <p>Romeo can publish/update a vCard via XMPP pubsub. Currently there is no method for partial updates of a vCard, and the entire vCard must be sent to the server in order to update any part of the vCard. Publish-subscribe is done in accordance with XEP-0060, section 7.1.</p>
-    <example caption="Publishing/Updating a vCard"><![CDATA[
-<iq from='romeo@motague.lit/office
-    id='v1'
-    to='romeo@motague.lit'
-    type='set'>
-  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <publish node='urn:ietf:param:xml:ns:vcard-4.0'>
-      <item>
-        <vcard xmlns="urn:ietf:params:xml:ns:vcard-4.0">
-          <fn><text>Romeo Montague</text></fn>
-          <n>
-            <surname><text>Montague</text></surname>
-            <given><text>Romeo</text></given>
-            <additional/>
-            <prefix>
-              <text>Sir</text>
-            </prefix>
-            <suffix/>
-          </n>
-          <bday><date>--0203</date></bday>
-          <anniversary>
-            <date-time>15000808T1430-0500</date-time>
-          </anniversary>
-          <gender><text>male</text></gender>
-          <org>
-            <parameters><type>home</type></parameters>
-            <text>Juliet</text>
-          </org>
-          <adr>
-            <parameters><type>home</type></parameters>
-            <pobox/>
-            <ext/>
-            <street><text>123 Capulet Way</text></street>
-            <locality><text>Verona</text></locality>
-            <region/>
-            <code/>
-            <country><text>Italy</text></country>
-          </adr>
-          <email>
-            <parameters><type>work</type></parameters>
-            <text>romeo@montague.lit</text>
-          </email>
-        </vcard>
-      </item>
-    </publish>
-  </pubsub>
+<section1 topic='IQ-Based Publication and Retrieval' anchor='iq'>
+  <p>As in <cite>XEP-0054</cite>, the primary method for publishing and retrieving vCards is the XMPP &IQ; stanza.</p>
+  <section2 topic='Retrieval' anchor='iq-retrieval'>
+    <p>An XMPP entity retrieves the vCard of another entity (or itself) by sending an IQ-get to the target entity containing a &lt;vcard/&gt; child element (note the lowercase "c"!) qualified by the 'urn:ietf:params:xml:ns:vcard-4.0' namespace.</p>
+    <example caption="vCard Retrieval Request"><![CDATA[
+<iq from='samizzi@cisco.com/foo'
+    id='bx81v356'
+    to='stpeter@jabber.org'
+    type='get'>
+  <vcard xmlns='urn:ietf:params:xml:ns:vcard-4.0'/>
+</iq>
+    ]]></example>
+    <p>If a vCard exists for the target entity, the responsible entity (e.g., the XMPP server that hosts the account for a bare JID) MUST return the data in an IQ-result:</p>
+    <example caption="Server Returns vCard"><![CDATA[
+<iq from='stpeter@jabber.org'
+    id='bx81v356'
+    to='samizzi@cisco.com/foo'
+    type='result'>
+  <vcard xmlns='urn:ietf:params:xml:ns:vcard-4.0'>
+    <fn><text>Peter Saint-Andre</text></fn>
+    <n>
+      <surname><text>Saint-Andre</text></surname>
+      <given><text>Peter</text></given>
+    </n>
+    <nickname><text>stpeter</text></nickname>
+    <url><uri>https://stpeter.im/</uri></url>
+    <bday><date>19660806</date></bday>
+    <gender><sex><text>M</text></sex></gender>
+    <lang>
+      <parameters><pref>1</pref></parameters>
+      <language-tag>en</language-tag>
+    </lang>
+    <org>
+      <parameters><type><text>work</text></type></parameters>
+      <text>XMPP Standards Foundation</text>
+    </org>
+    <title><text>Executive Director</text></title>
+    <role><text>Patron Saint</text></role>
+    <adr>
+      <parameters><type><text>work</text></type></parameters>
+      <ext><text>Suite 600</text></ext>
+      <street><text>1899 Wynkoop Street</text></street>
+      <locality><text>Denver</text></locality>
+      <region><text>CO</text></region>
+      <code><text>80202</text></code>
+      <country><text>USA</text></country>
+    </adr>
+    <adr>
+      <parameters><type><text>home</text></type></parameters>
+      <locality><text>Denver</text></locality>
+      <region><text>CO</text></region>
+      <code><text>80210</text></code>
+      <country><text>USA</text></country>
+    </adr>
+    <tel>
+      <parameters>
+        <text>work</text>
+        <text>voice</text>
+      </parameters>
+      <uri>tel:+1-303-308-3282</uri>
+    </tel>
+    <tel>
+      <parameters>
+        <text>home</text>
+        <text>voice</text>
+      </parameters>
+      <uri>tel:+1-303-555-1212</uri>
+    </tel>
+    <email>
+      <text>stpeter@jabber.org</text>
+    </email>
+    <impp>
+      <uri>xmpp:stpeter@jabber.org</uri>
+    </impp>
+    <tz><text>America/Denver</text></tz>
+  </vcard>
+</iq>
+    ]]></example>
+    <p>If no vCard exists, the server MUST return an IQ-result containing an empty &lt;vcard/&gt; element.</p>
+    <example caption="No vCard (empty element)"><![CDATA[
+<iq from='stpeter@jabber.org'
+    id='bx81v356'
+    to='samizzi@cisco.com/foo'
+    type='result'>
+  <vcard xmlns='urn:ietf:params:xml:ns:vcard-4.0'/>
 </iq>
     ]]></example>
   </section2>
-  <section2 topic='Receiving a vCard'>
-    <p>Because Juliet has sent presence to Romeo including Entity Capabilities data that encapsulates the "urn:ietf:param:xml:ns:vcard-4.0+notify" feature, Romeo's XMPP server will send a PEP notification to Juliet. The notification can include an XMPP message body for backwards-compatibility with XMPP clients that are not pubsub-capable (see Message Body). This is in accordance with XEP-0060, second 6.1.7.</p>
+  <section2 topic='Publication' anchor='iq-publication'>
+    <p>An XMPP entity publishes or updates its vCard by sending an IQ-set to itself, containing a &lt;vcard/&gt; child element qualified by the 'urn:ietf:params:xml:ns:vcard-4.0' namespace.</p>
+    <example caption="vCard Publication Request"><![CDATA[
+<iq from='stpeter@jabber.org/squire
+    id='h3vz319m'
+    to='stpeter@jabber.org'
+    type='set'>
+  <vcard xmlns='urn:ietf:params:xml:ns:vcard-4.0'>
+    <fn><text>Peter Saint-Andre</text></fn>
+    <n>
+      <surname><text>Saint-Andre</text></surname>
+      <given><text>Peter</text></given>
+    </n>
+    <nickname><text>stpeter</text></nickname>
+    <url><uri>https://stpeter.im/</uri></url>
+    <bday><date>19660806</date></bday>
+    <gender><sex><text>M</text></sex></gender>
+    <lang>
+      <parameters><pref>1</pref></parameters>
+      <language-tag>en</language-tag>
+    </lang>
+    <org>
+      <parameters><type><text>work</text></type></parameters>
+      <text>XMPP Standards Foundation</text>
+    </org>
+    <title><text>Executive Director</text></title>
+    <role><text>Patron Saint</text></role>
+    <adr>
+      <parameters><type><text>work</text></type></parameters>
+      <ext><text>Suite 600</text></ext>
+      <street><text>1899 Wynkoop Street</text></street>
+      <locality><text>Denver</text></locality>
+      <region><text>CO</text></region>
+      <code><text>80202</text></code>
+      <country><text>USA</text></country>
+    </adr>
+    <adr>
+      <parameters><type><text>home</text></type></parameters>
+      <locality><text>Denver</text></locality>
+      <region><text>CO</text></region>
+      <code><text>80210</text></code>
+      <country><text>USA</text></country>
+    </adr>
+    <tel>
+      <parameters>
+        <text>work</text>
+        <text>voice</text>
+      </parameters>
+      <uri>tel:+1-303-308-3282</uri>
+    </tel>
+    <tel>
+      <parameters>
+        <text>home</text>
+        <text>voice</text>
+      </parameters>
+      <uri>tel:+1-303-555-1212</uri>
+    </tel>
+    <email>
+      <parameters><type><text>work</text></type></parameters>
+      <text>stpeter@jabber.org</text>
+    </email>
+    <impp>
+      <parameters><type><text>work</text></type></parameters>
+      <uri>xmpp:stpeter@jabber.org</uri>
+    </impp>
+    <key>
+      <parameters><type><text>work</text></type></parameters>
+      <uri>https://stpeter.im/index.php/contact/</uri>
+    </key>
+    <tz><text>America/Denver</text></tz>
+  </vcard>
+</iq>
+    ]]></example>
+    <p>If no error occurs, the responsible entity returns an IQ-result.</p>
+    <example caption="Server Acknowledges Publication"><![CDATA[
+<iq from='stpeter@jabber.org'
+    id='bx81v356'
+    to='stpeter@jabber.org/squire'
+    type='result'/>
+    ]]></example>
+    <p>Note: An entity MAY have authorization to update the vCard of another entity (e.g., a server administrator might have authorization to modify the server's vCard).</p>
+  </section2>
+</section1>
+<section1 topic='Event Notifications' anchor='pep'>
+  <p>&xep0060; provides a way to subscribe to events, and &xep0163; defines a pubsub profile for events associated with instant messaging (IM) accounts. If PEP is supported by an IM server, it can be used to automatically generate event notifications when a user's vCard is modified.</p>
+  <section2 topic='Location' anchor='pubsub-location'>
+    <p>The canonical location for notifications regarding a user's vCard is a pubsub node whose name is "urn:xmpp:vcard4".</p>
+  </section2>
+  <section2 topic='Subscribing to vCard Notifications' anchor='pubsub-subscribe'>
+    <p>Let us imagine that Juliet wishes to receive the updates that Romeo publishes to his vCard. She has two options:
+    <ol>
+      <li>Implicitly subscribe by advertising support for "urn:xmpp:vcard4+notify" in her &xep0115; data. Romeo's PEP service then automatically sends vCard updates to her when it receives presence from her, until and unless she sends presence of type unavailable or stops advertising an interest in vCard updates. This is in accordance with XEP-0060, section 6.1.</li>
+      <li>Explicitly subscribe by sending a formal subscription request to the "urn:xmpp:vcard4" node at Romeo's JabberID. Romeo's PEP service may send her all vCard updates even if she is offline at the time (depending on service policies regarding presence integration).</li>
+    </ol>
+  </p>
+  </section2>
+  <section2 topic='Receiving a vCard Notification'>
+    <p>Because Juliet has sent presence to Romeo including Entity Capabilities data that includes the "urn:xmpp:vcard4+notify" feature, Romeo's XMPP server will send a PEP notification to Juliet. The notification can include an XMPP message body for backwards-compatibility with XMPP clients that are not pubsub-capable (see Message Body). This is in accordance with XEP-0060, second 6.1.7.</p>
     <example caption="Receiving a vCard publication/update"><![CDATA[
 <message from='romeo@montague.lit'
          to='juliet@capulet.lit'
          type='headline'>
   <event xmlns='http://jabber.org/protocol/pubsub#event'>
-    <items node='urn:ietf:param:xml:ns:vcard-4.0'>
-      <item id='foobar'>
-        <vcard xmlns="urn:ietf:params:xml:ns:vcard-4.0">
-          <fn><text>Romeo Montague</text></fn>
-          <n>
-            <surname><text>Montague</text></surname>
-            <given><text>Romeo</text></given>
-            <prefix>
-              <text>Sir</text>
-            <prefix/>
-            <suffix/>
-          </n>
-          <bday><date>--0203</date></bday>
-          <anniversary>
-            <date-time>15000808T1430-0500</date-time>
-          </anniversary>
-          <gender><text>male</text></gender>
-          <org>
-            <parameters><type>home</type></parameters>
-            <text>Juliet</text>
-          </org>
-          <adr>
-            <parameters><type>home</type></parameters>
-            <pobox/>
-            <ext/>
-            <street><text>123 Capulet Way</text></street>
-            <locality><text>Verona</text></locality>
-            <region/>
-            <code/>
-            <country><text>Italy</text></country>
-          </adr>
-          <email>
-            <parameters><type>work</type></parameters>
-            <text>romeo@montague.lit</text>
-          </email>
-        </vcard>
-      </item>
+    <items node='urn:xmpp:vcard4'>
+      <item id='current'/>
     </items>
   </event>
 </message>
     ]]></example>
+    <p>Note: There is no payload, because this is a pure notification (the receiver needs to retrieve the vCard using an IQ-get as described earlier..</p>
   </section2>
-  <section2 topic='Implicit Interactions with vCard'>
-    <section3 topic='Retrieving vCard'>
-      <p>Implementations of pubsub that choose to persist items MAY allow entities to request existing items from a node (e.g., an entity may wish to do this after successfully subscribing in order to receive all the items in the publishing history for the node). This is in accordance with XEP-0060, section 6.5. The subscriber may request all items by specifying only the Node ID without restrictions.</p>
-      <example caption="Subscriber requests vCard"><![CDATA[
-<iq type='get'
-    from='juliet@capulet.lit/castle'
-    to='romeo@montague.lit'
-    id='items1'>
-  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <items node='urn:ietf:param:xml:ns:vcard-4.0'/>
-  </pubsub>
+</section1>
+<section1 topic='vCards of Automated Entities' anchor='things'>
+  <p>Traditionally, vCards have been used on the XMPP network for entities other than human users, e.g. by XMPP servers and chatrooms. When such automated entities use vCards, it is RECOMMENDED to specify a value of "thing" for the vCard4 KIND property &vcardthing;. An example follows.</p>
+  <example caption="vCard for a Thing"><![CDATA[
+<iq from='jabber.org'
+    id='yhx51c35'
+    to='samizzi@cisco.com/foo'
+    type='result'>
+  <vcard xmlns='urn:ietf:params:xml:ns:vcard-4.0'>
+    <fn><text>jabber.org IM service</text></fn>
+    <url><uri>http://www.jabber.org/</uri></url>
+    <lang>
+      <parameters><pref>1</pref></parameters>
+      <language-tag>en</language-tag>
+    </lang>
+    <email>
+      <parameters><type><text>work</text></type></parameters>
+      <text>xmpp@jabber.org</text>
+    </email>
+    <impp>
+      <parameters><type><text>work</text></type></parameters>
+      <uri>xmpp:stpeter@jabber.org</uri>
+    </impp>
+    <logo>
+      <parameters><type><text>work</text></type></parameters>
+      <uri>http://www.jabber.org/wp-content/themes/carrington-blog/images/logo.png</uri>
+    </logo>
+    <geo>
+      <parameters><type><text>work</text></type></parameters>
+      <uri>geo:42.25,-91.05</uri>
+    </geo>
+    <tz><text>America/Chicago</text></tz>
+    <kind><text>thing</text></kind>
+  </vcard>
 </iq>
     ]]></example>
-    </section3>
+</section1>
+<section1 topic='Mapping from vcard-temp to vCard4' anchor='mapping'>
+  <p>The following sections mention non-obvious aspects of the migration from vcard-temp to vCard4. A future version of this specification might provide a more detailed mapping.</p>
+  <section2 topic='JABBERID' anchor='mapping-jabberid'>
+    <p>The vcard-temp specification defined a &lt;JABBERID/&gt; element:</p>
+    <example caption="Deprecated JABBERID element"><![CDATA[
+<JABBERID>stpeter@jabber.org</JABBERID>
+    ]]></example>
+    <p>However, the JABBERID field was not part of the vCard3 schema. &rfc4770; defined an IMPP property for instant messaging and presence addresses, which was ported to vCard4. In the vCard4 XML format, the IMPP property for a JabberID would be as follows.</p>
+    <example caption="IMPP property"><![CDATA[
+<impp>
+  <uri>xmpp:stpeter@jabber.org</uri>
+</impp>
+    ]]></example>
+  </section2>
+  <section2 topic='DESC' anchor='mapping-desc'>
+    <p>The vcard-temp specification defined a &lt;DESC/&gt; element. This element too was not part of the vCard3 schema. There is no mapping of the vcard-temp &lt;DESC/&gt; element to vCard4.</p>
   </section2>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
-  <p>
-    <ol>
-      <li>The vCard information published to one's XMPP server is world-readable; therefore, users should exercise due caution when determining what information to include (e.g., street addresses, personal telephone numbers, or email addresses).</li>
-      <li>There are security considerations around XEP-0060, please see section 14.</li>
-      <li>There are security considerations around XEP-0115, please see section 9.</li>
-      <li>There are security considerations around XEP-0163, please see section 8.</li>
-    </ol>
-  </p>
+  <p>The vCard information published to one's XMPP server is world-readable; therefore, users should exercise due caution when determining what information to include (e.g., street addresses, personal telephone numbers, or email addresses).</p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
-  <p>This document does not require interaction with the Internet Assigned Numbers Authority (IANA) [35]</p>
+  <p>This document does not require interaction with &IANA;.</p>
 </section1>
 <section1 topic='Open Issues' anchor='issues'>
   <p>The following open issues are yet to be addressed:</p>
   <ol>
-    <li>Do we need to define an IQ binding as in XEP-0054?</li>
     <li>The mapping from XEP-0054 to vCard4 is not yet specified.</li>
     <li>It would be helpful to provide an XSLT for automated translation of vcard-temp to vCard4.</li>
   </ol>
