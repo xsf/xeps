@@ -25,7 +25,7 @@
   &pgmillard;
   <revision>
     <version>1.1rc3</version>
-    <date>in progress, last updated 2011-04-11</date>
+    <date>in progress, last updated 2011-04-12</date>
     <initials>psa</initials>
     <remark><p>Updated to reflect RFC 6120 and RFC 6125.</p></remark>
   </revision>
@@ -100,7 +100,7 @@
   <p>XMPP as specified in &rfc3920; and updated in &rfc6120; allows the use of any SASL (&rfc4422;) mechanism in the authentication of XMPP entities. This document specifies a recommended protocol flow for use of the SASL EXTERNAL mechanism with PKIX (&rfc5280;) certificates <note>This specification focuses on the use of the SASL EXTERNAL mechanism with X.509 certificates. Future specifications may document best practices for use of SASL EXTERNAL outside the context of the X.509 infrastructure, for example via Internet Protocol Security (IPSec) as specified in &rfc4301;.</note>, expecially when an XMPP service indicates that TLS is mandatory-to-negotiate. <note>The protocol flows when TLS is not required are more complicated (e.g., alternate flows involving server dialback) and may be described in a future version of this document.</note></p>
 </section1>
 <section1 topic='Client-to-Server Recommendation' anchor='c2s'>
-  <p>As specified in <cite>RFC 3920</cite> and updated in <cite>RFC 6120</cite>, during the stream negotiation process an XMPP client can present a certificate (here called an "end-user certificate"). If a JabberID is included in an end-user certificate, it is encapsulated as an id-on-xmppAddr Object Identifier ("xmppAddr"), i.e., a subjectAltName entry of type otherName with an ASN.1 Object Identifier of "id-on-xmppAddr" as specified in Section 5.1.1. of <cite>RFC 3920</cite> and Section 13.7.1.4 of <cite>RFC 6120</cite>.</p>
+  <p>As specified in <cite>RFC 3920</cite> and updated in <cite>RFC 6120</cite>, during the stream negotiation process an XMPP client can present a certificate (a "client certificate"). If a JabberID is included in a client certificate, it is encapsulated as an id-on-xmppAddr Object Identifier ("xmppAddr"), i.e., a subjectAltName entry of type otherName with an ASN.1 Object Identifier of "id-on-xmppAddr" as specified in Section 13.7.1.4 of <cite>RFC 6120</cite>.</p>
   <p>There are three possible cases:</p>
   <ol>
     <li>The certificate includes one xmppAddr.</li>
@@ -108,7 +108,7 @@
     <li>The certificate includes no xmppAddr.</li>
   </ol>
   <p>This specification includes recommendations that address all three cases.</p>
-  <p>The RECOMMENDED protocol flow for client-to-server use of SASL EXTERNAL with end-user certificates is as follows:</p>
+  <p>The RECOMMENDED protocol flow for client-to-server use of SASL EXTERNAL with client certificates is as follows:</p>
   <ol>
     <li>
       <p>Client initiates stream to server.</p>
@@ -156,10 +156,10 @@
       ]]></code>
     </li>
     <li>
-      <p>Client presents its certificate during TLS negotiation.</p>
+      <p>Server requests, and client presents, the client certificate during TLS negotiation.</p>
     </li>
     <li>
-      <p>Server and client negotiate TLS; if successful, client initiates a new initial stream header to server over the encrypted TCP connection.</p>
+      <p>Server and client successfully complete the TLS negotiation and client initiates a new initial stream header to server over the encrypted TCP connection.</p>
       <code><![CDATA[
 <stream:stream 
         xmlns:stream='http://etherx.jabber.org/streams' 
@@ -182,7 +182,7 @@
       ]]></code>
     </li>
     <li>
-      <p>Server advertises SASL mechanisms. Here the server offers and prefers the SASL EXTERNAL mechanism (see Section 6.3.4 of <cite>RFC 6120</cite> for recommendations regarding the conditions under which to offer the SASL EXTERNAL mechanism).</p>
+      <p>Server advertises SASL mechanisms. Because the client presented a client certificate, here the server offers the SASL EXTERNAL mechanism (see Section 6.3.4 of <cite>RFC 6120</cite> for recommendations regarding the conditions under which to offer the SASL EXTERNAL mechanism).</p>
       <code><![CDATA[
 <stream:features>
   <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
@@ -195,11 +195,30 @@
       ]]></code>
     </li>
     <li>
-      <p>Client considers EXTERNAL to be its preferred SASL mechanism. Here the client does not include an authorization identity and therefore sets the XML character data of the &lt;auth/&gt; element to "=", indicating an empty response (see Section 6.3.8 of <cite>RFC 6120</cite> for recommendations regarding the conditions under which to include an authorization identity).</p>
-      <code><![CDATA[
+      <p>Client considers EXTERNAL to be its preferred SASL mechanism so it attempts to complete SASL negotiation using that mechanism. The following paragraphs illustrate several possible paths, depending on whether the client includes an authorization identity (for the official rules regarding when to include the authorization identity, see Section 6.3.8 of <cite>RFC 6120</cite>).</p>
+      <ol>
+        <li>
+          <p>If the client certificate contains only one JID, then the client MAY include an authorization identity, but only if it desires to be authorized as a JID other than the address in the client certificate; else it MUST NOT include include an authorization identity (this is shown in the following example by setting the XML character data of the &lt;auth/&gt; element to "=").</p>
+          <code><![CDATA[
 <auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' 
       mechanism='EXTERNAL'>=</auth>
-      ]]></code>
+          ]]></code>
+        </li>
+        <li>
+          <p>If the client certificate contains more than one JID, then the client MUST include an authorization identity so that the server can determine which JID to use (this is shown in the following example by setting the XML character data of the &lt;auth/&gt; element to "anVsaWV0QGV4YW1wbGUuY29t", which is the base 64 encoding for "juliet@example.com").</p>
+          <code><![CDATA[
+<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' 
+      mechanism='EXTERNAL'>anVsaWV0QGV4YW1wbGUuY29t</auth>
+          ]]></code>
+        </li>
+        <li>
+          <p>If the client certificate does not contain a JID, then the client MAY include an authorization identity, but only if it desires to be authorized as a JID other than the address in the client certificate; else it MUST NOT include include an authorization identity (this is shown in the following example by setting the XML character data of the &lt;auth/&gt; element to "=").</p>
+          <code><![CDATA[
+<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' 
+      mechanism='EXTERNAL'>=</auth>
+          ]]></code>
+        </li>
+      </ol>
     </li>
     <li>
       <p>Server determines whether to allow authentication and authorization of user.</p>
@@ -251,7 +270,7 @@
   </ol>
 </section1>
 <section1 topic='Server-to-Server Recommendation' anchor='s2s'>
-  <p><cite>RFC 3920</cite> specified that if a JabberID is included in a certificate intended for use by an XMPP server (here called a "domain certificate"), it shall be encapsulated as an xmppAddr. That recommendation is updated in <cite>RFC 6120</cite> through a reference to &certid;, which prefers use of a dNSName and/or SRVName entry in the Subject Alternative Name. The DNS domain name contained in the certificate can be a fully-qualified domain name ("FQDN") or a so-called "wildcard" with the '*' character as the complete left-most label.</p>
+  <p><cite>RFC 3920</cite> specified that if a JabberID is included in a certificate intended for use by an XMPP server (a "server certificate"), it shall be encapsulated as an xmppAddr. That recommendation is updated in <cite>RFC 6120</cite> through a reference to &rfc6125;, which prefers use of a dNSName and/or SRVName entry in the Subject Alternative Name. The DNS domain name contained in the certificate can be a fully-qualified domain name ("FQDN") or a so-called "wildcard" with the '*' character as the complete left-most label (see <cite>RFC 6125</cite> for complete details).</p>
   <p>The RECOMMENDED protocol flow for server-to-server use of SASL EXTERNAL with server (domain) certificates is as follows:</p>
   <ol>
     <li>
@@ -300,7 +319,7 @@
       ]]></code>
     </li>
     <li>
-      <p>Server1 presents its certificate during TLS negotiation.</p>
+      <p>Server2 requests, and Server1 presents, Server1's certificate during TLS negotiation.</p>
     </li>
     <li>
       <p>Server2 validates certificate in accordance with the rules from <cite>RFC 6120</cite> and <cite>RFC 6125</cite>.</p>
@@ -334,7 +353,7 @@
       ]]></code>
     </li>
     <li>
-      <p>Server2 advertises SASL mechanisms. If Server2 expects that Server1 will be able to authenticate and authorize as the identity provided in the certificate that Server1 already provided, then Server2 SHOULD advertise the SASL EXTERNAL mechanism.</p>
+      <p>Server2 advertises SASL mechanisms. If the 'from' attribute of the stream header sent by Server1 can be matched against one of the identifiers provided in the certificate following the matching rules from <cite>RFC 6125</cite>, Server2 SHOULD advertise the SASL EXTERNAL mechanism. If no match is found, Server2 closes Server1's TCP connection.</p>
       <code><![CDATA[
 <stream:features>
   <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
@@ -350,12 +369,13 @@
 <auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>Y29uZmVyZW5jZS5leGFtcGxlLm9yZwo=</auth>
       ]]></code>
       <p>(In this case, the authorization identity is "conference.example.org".)</p>
+      <p>Interoperability Note: Previous versions of this specification relied on the authorization identity being present on the receiving server. Even though this is no longer required, the connecting server should include it for backward compability.</p>
     </li>
     <li>
       <p>Server2 determines if hostname is valid.</p>
       <ol>
         <li>
-          <p>If the authorization identity provided by Server1 can be matched against one of the identifiers provided in the certificate following the matching rules from <cite>RFC 6125</cite>, Server2 returns success.</p>
+          <p>If the 'from' attribute of stream header sent by Server1 can be matched against one of the identifiers provided in the certificate following the matching rules from <cite>RFC 6125</cite>, Server2 returns success.</p>
           <code><![CDATA[
 <success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
           ]]></code>
@@ -374,7 +394,7 @@
   </ol>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
-  <p>This document introduces no security considerations or concerns above and beyond those discussed in <cite>RFC 3920</cite>.</p>
+  <p>This document introduces no security considerations or concerns above and beyond those discussed in <cite>RFC 6120</cite> and <cite>RFC 6125</cite>.</p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with &IANA;.</p>
