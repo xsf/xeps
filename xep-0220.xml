@@ -10,8 +10,7 @@
   <abstract>This specification defines the Server Dialback protocol, which is used between XMPP servers to provide identity verification. Server Dialback uses the Domain Name System (DNS) as the basis for verifying identity; the basic approach is that when a receiving server accepts a server-to-server connection from an originating server, it does not process traffic over the connection until it has verified a key with an authoritative server for the domain asserted by the originating server. Although Server Dialback does not provide strong authentication or trusted federation and although it is subject to DNS poisoning attacks, it has effectively prevented most instances of address spoofing on the XMPP network since its development in the year 2000.</abstract>
   &LEGALNOTICE;
   <number>0220</number>
-  <status>Proposed</status>
-  <lastcall>2010-11-12</lastcall>
+  <status>Experimental</status>
   <type>Standards Track</type>
   <sig>Standards</sig>
   <approver>Council</approver>
@@ -28,6 +27,12 @@
     <surname>Hancke</surname>
     <jid>fippo@psyced.org</jid>
   </author>
+  <revision>
+    <version>0.6</version>
+    <date>2011-04-13</date>
+    <initials>psa</initials>
+    <remark><p>Updated to reflect RFC 6120; mandated support for stream feature in XMPP 1.0 implementations; removed requirement for the Receiving Server to close the stream if the dialback key is invalid, since the stream might be used for multiple domain pairs.</p></remark>
+  </revision>
   <revision>
     <version>0.5</version>
     <date>2010-03-18</date>
@@ -95,13 +100,13 @@
   <section2 topic="Why Dialback?" anchor="intro-why">
     <p>When Jabber technologies were first developed in 1998, they were conceived of as a client-server system similar to email, wherein a client would connect to a server in order to communicate with other clients. Similarly, servers would connect with peer servers to provide inter-domain communication (often called "federation"). In a system that allows federation, it is important for a server to be able to determine the identity of a peer server; accepting a connection from any peer without determining its identity would result in the use of merely asserted identities and a completely uncontrolled approach to federation, which on the open Internet would rapidly devolve into chaos. Clearly such a state of affairs would be unsustainable for a network protocol aiming for widespread deployment.</p>
     <p>Such potential chaos was the state of affairs on the Jabber network during the earliest releases of the original &jabberd; server codebase (up through the 1.0 release in May 2000). Therefore the Jabber developer community designed a protocol ("Server Dialback") for weak identity verification based on the Domain Name System (DNS), built support for that protocol into the jabberd 1.2 server (released in October 2000), and mandated support for that protocol on the emerging Jabber server network.</p>
-    <p>When the early Jabber protocols were formalized by the XMPP Working Group of the &IETF; in 2002-2004, support for strong identity verification was added. That support takes the form of Transport Layer Security (TLS) for encryption of server-to-server XML streams and the Simple Authentication and Security Layer (SASL) for authentication of such streams, using digital certificates issued by trusted root certificate authorities (CAs). However, the Server Dialback protocol is still in wide use, and probably will be for the foreseeable future given the perceived difficulty of obtaining digital certificates issued by common CAs (although this problem is mitigated by the &XMPPICA; run by the &XSF;). Therefore it is important to maintain accurate documentation of the Server Dialback protocol. Such documentation was originally provided in &rfc3920;. Although that documentation was removed from &rfc6120;, it is still provided in this specification for the sake of interoperability.</p>
+    <p>When the early Jabber protocols were formalized by the XMPP Working Group of the &IETF; in 2002-2004, support for strong identity verification was added. That support takes the form of Transport Layer Security (TLS) for encryption of server-to-server XML streams and the Simple Authentication and Security Layer (SASL) for authentication of such streams, using digital certificates issued by trusted root certificate authorities (CAs). However, the Server Dialback protocol is still in wide use, and probably will be for the foreseeable future given the perceived difficulty of obtaining digital certificates issued by common CAs. Therefore it is important to maintain accurate documentation of the Server Dialback protocol. Such documentation was originally provided in &rfc3920;. Although that documentation was removed from &rfc6120;, it is still provided in this specification for the sake of interoperability.</p>
   </section2>
 
   <section2 topic="What Dialback Accomplishes" anchor="intro-what">
     <p>Server Dialback is a method for weak identity verification. Such verification depends on the Domain Name System (DNS) and the use of keys based on a shared secret known to all XMPP servers within a given trust domain.</p>
     <p>Since October 2000, the use of Server Dialback has made it more difficult to spoof the hostnames of servers (and therefore the addresses of sent messages) on the XMPP network. However, Server Dialback does not provide authentication between servers and is not a security mechanism. Domains requiring high security are advised to use TLS and SASL with certificates issued by trusted roots.</p>
-    <p>Server Dialback is uni-directional, and results in weak identity verification for one XML stream in one direction. Because Server Dialback is not an authentication mechanism, mutual authentication is not possible via dialback. Therefore, Server Dialback must be completed in each direction in order to enable bi-directional communication between two domains.</p>
+    <p>Server Dialback is uni-directional, and results in weak identity verification for one XML stream in one direction. Because Server Dialback is not an authentication mechanism, mutual authentication is not possible via dialback. Therefore, Server Dialback needs to be completed in each direction in order to enable bi-directional communication between two domains.</p>
     <p>Dialback does not verify that the IP address returned by a DNS lookup of the originating domain is the same as the source IP address of the incoming TCP connection. While this might often be true, not performing this check enables large deployments to separate incoming and outgoing message routing.</p>
   </section2>
 
@@ -109,7 +114,7 @@
     <p>Server Dialback is typically used in two scenarios:</p>
     <ol start='1'>
       <li><p>When a peer service does not support XMPP 1.0 as defined in <cite>RFC 3920</cite> or, more generally, does not offer negotiation of TLS.</p></li>
-      <li><p>When STARTTLS negotiation succeeds with a peer service but the peer's certificate cannot be be used to establish the peer's identity.</p></li>
+      <li><p>When STARTTLS negotiation succeeds with a peer service but the peer's certificate cannot be used to establish the peer's identity.</p></li>
     </ol>
     <p>Both of these scenarios result in an untrusted connection. However, depending on local security policies, a server might accept such an untrusted connection if the use of Server Dialback results in weak identity verification.</p>
   </section2>
@@ -186,7 +191,7 @@ Originating               Receiving
   <p>Section 2.1 describes the protocol from the perspective of an active, outbound connection. Section 2.2 describes the protocol from the perspective of an inbound connection. Note that both parts can be implemented, tested, and used separately.</p>
   <!-- bounce mark 0 -->
   <section2 topic="Outgoing Connection">
-    <p>On an outgoing connection there are two different tasks that the sending server may perform. The first task is to request authorization to send stanzas from the Sender Domain to the Target Domain, which is described in section 2.1.1. The second task is to respond to requests on the validity of a given dialback key as described in section 2.1.2.</p>
+    <p>On an outgoing connection there are two different tasks that the sending server can perform. The first task is to request authorization to send stanzas from the Sender Domain to the Target Domain, which is described in Section 2.1.1. The second task is to respond to requests on the validity of a given dialback key as described in Section 2.1.2.</p>
     <section3 topic="Dialback Request and Response">
       <p>This subsection describes the interaction between the Originating Server and the Receiving Server, from the perspective of the Originating Server.</p>
       <p>When the Originating Server has stanzas to send for the DOMAIN PAIR (Sender Domain/Target Domain), does not have a verified connection, or is currently attempting to get a verified connection for this domain pair, it sends a new dialback key to the Receiving Server.</p>
@@ -195,8 +200,8 @@ Originating               Receiving
 send: <db:result
           from='sender.tld'
           to='target.tld'>
-       1e701f120f66824b57303384e83b51feba858024fd2221d39f7acc52dcf767a9
-     </db:result>
+        1e701f120f66824b57303384e83b51feba858024fd2221d39f7acc52dcf767a9
+      </db:result>
       ]]></example>
       <p>The key sent is generated as described in &xep0185;:</p>
       <code>
@@ -206,16 +211,18 @@ key = HMAC-SHA256(
       )
       </code>
       <p>Note: the Receiving Server MAY use any method to determine the validity of the dialback key and the identity of the Originating Sever. The Originating Server MUST NOT make any assumptions about how the Receiving Server verifies the key. This includes the assumption that the key is ever verified by the Receiving Server.</p>
-      <p>After that, the Originating Server waits for the verification result. Any stanzas for this domain pair have to be queued. The Originating Server MUST NOT attempt to reverify the domain pair on this TCP connection.</p> 
-      <p>Note: While waiting for the verification result, the Originating Server SHOULD continue to send stanzas for any pair of domains that have been verified on that connection. It MAY send out additional dialback keys for different domain pairs and issue dialback verification requests as described in section 2.1.2. To avoid Denial-of-Service attacks, the Originating Server MAY impose a timeout on key verification.</p>
+      <p>After that, the Originating Server waits for the verification result. Any stanzas for this domain pair have to be queued. The Originating Server MUST NOT attempt to re-verify the domain pair on this TCP connection.</p> 
+      <p>Note: While waiting for the verification result, the Originating Server SHOULD continue to send stanzas for any pair of domains that have been verified on that connection. It MAY send out additional dialback keys for different domain pairs and issue dialback verification requests as described in Section 2.1.2. To avoid Denial-of-Service attacks (&rfc4732;), the Originating Server MAY impose a timeout on key verification.</p>
       <p>If the stream or the underlying TCP connection is closed by the remote side while waiting for the verification result, this is to be handled similar to receiving an error as described below.</p>
-      <p>After the Receiving Server has verified the request, the Originating Server receives the verification result:</p>
+      <p>After the Receiving Server has verified the request, the Originating Server receives the verification result.</p>
+      <p>The result is either valid...</p>
       <example caption="Originating Server Receives Valid Verification Result from Receiving Server (step 4)"><![CDATA[
 recv: <db:result
           from='target.tld'
           to='sender.tld'
           type='valid'/>
       ]]></example>
+      <p>... or invalid ...</p>
       <example caption="Originating Server Receives Invalid Verification Result from Receiving Server (step 4)"><![CDATA[
 recv: <db:result
           from='target.tld'
@@ -223,10 +230,10 @@ recv: <db:result
           type='invalid'/>
       ]]></example>
       <p>If the value of the 'type' attribute is "valid", then the connection between the domain pair is considered verified and the Originating Server can send any queued stanzas.</p>
-      <p>If the value of the 'type' attribute is "invalid", this means that the Originating Server's identity (as valid for the Sender Domain) could not be verified by the Receiving Server. Queued stanzas MUST be returned to the respective senders with a &lt;internal-server-error&gt; stanza error and the underlying stream MAY be closed unless it is being used by other domain pairs. Note that the Receiving Server may choose to terminate the TCP connection.</p>
+      <p>If the value of the 'type' attribute is "invalid", this means that the Originating Server's identity (as valid for the Sender Domain) could not be verified by the Receiving Server. Queued stanzas MUST be returned to the respective senders with an &lt;internal-server-error&gt; stanza error and the underlying stream MAY be closed unless it is being used by other domain pairs. Note that the Receiving Server might choose to terminate the TCP connection.</p>
       <!-- bounce mark 1 -->
       <!-- FIXME: is it valid to re-attempt validation on the same connection after it has failed? -->
-      <p>If the value of the 'type' attribute is "error", this indicates a problem which is not related to the validity of the dialback key provided. The error conditions are explained in detail in section 2.4. Such an error is to be considered non-fatal for the XML stream, but queued stanzas MUST be returned to the respective senders with a &timeout; stanza error.</p>
+      <p>If the value of the 'type' attribute is "error", this indicates a problem which is not related to the validity of the dialback key provided. The error conditions are explained in detail in Section 2.4. Such an error is to be considered non-fatal for the XML stream, but queued stanzas MUST be returned to the respective senders with a &timeout; stanza error.</p>
       <example caption="Originating Server Receives Dialback Error from Receiving Server (step 4)"><![CDATA[
 recv: <db:result
           from='target.tld'
@@ -241,7 +248,7 @@ recv: <db:result
     </section3>
     <section3 topic="Verify Request and Response">
       <p>This subsection describes the interaction between the Receiving Server and the Authoritative Server, from the perspective of the Receiving Server.</p>
-      <p>To determine the validity of a dialback key, the Receiving Server needs to establish communications with the Authoritative Server. To do so, either it can reuse an existing XML stream or it needs to establish a new connection. To establish a new connection, the Receiving Server performs a DNS lookup on the Sender Domain, thus finding the IP address and port for server-to-server communication at an authoritative machine for the Sender Domain (here the machine is authority.sender.tld).</p>
+      <p>To determine the validity of a dialback key, the Receiving Server needs to establish communications with the Authoritative Server. To do so, either it can reuse an existing XML stream or it needs to establish a new connection. To establish a new connection, the Receiving Server performs a DNS lookup on the Sender Domain, thus finding the IP address and port for server-to-server communication at an authoritative machine for the Sender Domain (here the machine is "authority.sender.tld").</p>
       <p>After the XML stream is established from the Receiving Server to the Authoritative Server, the Receiving Server sends a verification request. This is done by creating a &lt;db:verify/&gt; element whose XML character data is the dialback key; the element MUST possess a 'from' attribute whose value is the Target Domain, MUST possess a 'to' attribute whose value is the Sender Domain as provided in the 'from' attribute of step 1, and MUST possess an 'id' attribute whose value is the stream identifier from the Receiving Server's response stream header to the Originating Server. The combination of 'from', 'to', and 'id' attributes makes it possible for the Receiving Server to uniquely identify the TCP connection on which it received the original request in step 1.</p>
       <p>Note: An implementation MAY open a separate connection to the Authoritative Server for the sole purpose of doing key verification.</p>
       <example caption="Receiving Server Sends Verification Request to Authoritative Server (step 2)"><![CDATA[
@@ -252,7 +259,8 @@ send: <db:verify
        38b501ec606752318f72ad53de17ac6d15f86257485b0d8f5d54e1f619e6b869
      </db:verify>
       ]]></example>
-      <p>After that, the Receiving Server waits for the verification result. While doing so, it can still use the connection to send any valid stanzas or dialback packets.</p>
+      <p>After that, the Receiving Server waits for the verification result. While doing so, it can still use the connection to send any dialback packets or stanzas for domain pairs that have already been validated.</p>
+      <p>Here again, the result is either valid...</p>
       <example caption="Receiving Server is Informed by Authoritative Server that Key is Valid (step 3)"><![CDATA[
 recv: <db:verify
           from='sender.tld'
@@ -261,7 +269,7 @@ recv: <db:verify
           type='valid'>
      </db:verify>
       ]]></example>
-      <p>Or:</p>
+      <p>... or invalid ...</p>
       <example caption="Receiving Server is Informed by Authoritative Server that Key is Invalid (step 3)"><![CDATA[
 recv: <db:verify
           from='target.tld'
@@ -270,7 +278,7 @@ recv: <db:verify
           type='invalid'>
      </db:verify>
       ]]></example>
-      <p>In addition to the values "valid" and "invalid", the 'type' attribute can also have a value of "error"; see section 2.4 for a detailed explanation.</p>
+      <p>In addition to the values "valid" and "invalid", the 'type' attribute can also have a value of "error"; see Section 2.4 for a detailed explanation.</p>
       <example caption="Receiving Server Receives Dialback Error from Authoritative Server (step 3)"><![CDATA[
 recv: <db:verify
           from='sender.tld'
@@ -288,7 +296,7 @@ recv: <db:verify
   </section2>
 
   <section2 topic="Incoming Connection">
-    <p>There are two different tasks on an incoming connection. The first is to authorize incoming connections, which is described in section 2.2.1. The second task is to answer requests for the validity of a dialback key, which is described in section 2.2.2.</p>
+    <p>There are two different tasks on an incoming connection. The first task is to authorize incoming connections, which is described in Section 2.2.1. The second task is to answer requests for the validity of a dialback key, which is described in Section 2.2.2.</p>
     <section3 topic="Dialback Request and Response">
       <p>This subsection describes the interaction between the Originating Server and the Receiving Server, from the perspective of the Receiving Server.</p>
       <example caption="Receiving Server Receives Dialback Key from Originating Server (step 1)"><![CDATA[
@@ -299,9 +307,9 @@ recv: <db:result
      </db:result>
       ]]></example>
       <p>This key MUST be verified before the Sender Domain ('sender.tld') is authorized to send stanzas. The verification process might fail prematurely, for example, if the Receiving Server's policy states that connections from the Sender Domain are not allowed.</p>
-      <p>The usual method for verifying that the Originating Server is authorized to send stanzas for the Sender Domain is to "dial back" the Authoritative Server for the Sender Domain and asking it to validate the dialback key which is contained in the XML character data of the request. Other methods can be used for verifying the identity of the Originating Server, but are out of scope for this document.</p>
+      <p>The usual method for verifying that the Originating Server is authorized to send stanzas for the Sender Domain is to "dial back" the Authoritative Server for the Sender Domain and ask it to validate the dialback key which is contained in the XML character data of the request. Other methods can be used for verifying the identity of the Originating Server, but are out of scope for this document.</p>
       <p>Note: the Receiving Server MUST continue to accept and process stanzas for already verified domain pairs, and MUST continue to process both &lt;db:result/&gt; and &lt;db:verify/&gt; elements.</p>
-      <p>If the Target Domain as given in the 'to' attribute of the element is not a configured domain of the Receiving Server, this results in a dialback error. This error, which is explained further in section 2.4, is not a stream error and therefore MUST NOT result in termination of the stream and the underlying TCP connection, which might already be used for sending XML stanzas for other domain pairs.</p>
+      <p>If the Target Domain as given in the 'to' attribute of the element is not a configured domain of the Receiving Server, this results in a dialback error. This error, which is explained further in Section 2.4, is not a stream error and therefore MUST NOT result in termination of the stream and the underlying TCP connection, which might already be used for sending XML stanzas for other domain pairs.</p>
       <example caption="Receiving Server Sends Dialback Error to Originating Server (step 4)"><![CDATA[
 send: <db:result
           from='target.tld'
@@ -314,21 +322,22 @@ send: <db:result
       ]]></example>
       <p>After the validity of the key has been established (for example, by the Authoritative Server), the domain pair is to be considered as verified and the Receiving Server MUST accept stanzas from the Originating Server.</p>
       <p>In addition, the Originating Server is notified of the result. This is done by creating a &lt;db:result/&gt; element which MUST possess a 'from' attribute whose value is the Target Domain, MUST possess a 'to' attribute whose value is the Sender Domain, and MUST possess a 'type' attribute whose value is either "valid" or "invalid".</p>
+      <p>Therefore, here again the result is either valid...</p>
       <example caption="Receiving Server Sends Valid Verification Result to Originating Server (step 4)"><![CDATA[
 send: <db:result
           from='target.tld'
           to='sender.tld'
           type='valid'/>
       ]]></example>
-      <p>Or:</p> 
+      <p>... or invalid ...</p> 
       <example caption="Receiving Server Sends Invalid Verification Result to Originating Server (step 4)"><![CDATA[
 send: <db:result
           from='target.tld'
           to='sender.tld'
           type='invalid'/>
       ]]></example>
-      <p>If the type is 'invalid', the Originating Server is attempting to spoof the Sender Domain. The Receiving Server MUST terminate the XML stream and the underlying TCP connection and SHOULD log the attempt.</p>
-      <p>As mentioned, Server Dialback results in weak identity verification of the Sender Domain by the Target Domain. In order to proceed with bi-directional communication so that the Target Domain can send XML stanzas to the Sender Domain, the Receiving Server has to initiate a dialback negotiation with the Originating Server (i.e., assume the role of an originating server in a new dialback negotiation on a new TCP connection).</p>
+      <p>If the type is 'invalid', the Originating Server is attempting to spoof the Sender Domain. The Receiving Server MUST NOT accept stanzas from the Originating Server for the Sender Domain, SHOULD log the attempt, and MAY terminate the XML stream and the underlying TCP connection.</p>
+      <p>As mentioned, Server Dialback results in weak identity verification of the Sender Domain by the Target Domain. In order to proceed with bi-directional communication so that the Target Domain can send XML stanzas to the Sender Domain, the Receiving Server needs to initiate a dialback negotiation with the Originating Server (i.e., assume the role of an originating server in a new dialback negotiation on a new TCP connection).</p>
     </section3>
 
     <section3 topic="Verify Request and Response">
@@ -341,7 +350,7 @@ recv: <db:verify
        fed84f34d39682fd80bd04e01894f98c4149cf9df47575b134eeb6d2c7fe9fee
      </db:verify>
       ]]></example>
-      <p>If the Target Domain as given in the 'to' attribute of the element does not match a configured local domain, this results in a dialback error. This error, which is explained further in section 2.4, is not a stream error and therefore MUST NOT result in termination of the stream and the underlying TCP connection, which might already be used for sending XML stanzas for other domain pairs.</p>
+      <p>If the Target Domain as given in the 'to' attribute of the element does not match a configured local domain, this results in a dialback error. This error, which is explained further in Section 2.4, is not a stream error and therefore MUST NOT result in termination of the stream and the underlying TCP connection, which might already be used for sending XML stanzas for other domain pairs.</p>
       <example caption="Authoritative Server Sends Dialback Error to Receiving Server (step 3)"><![CDATA[
 send: <db:verify
           from='sender.tld'
@@ -362,6 +371,7 @@ key = HMAC-SHA256(
     = fed84f34d39682fd80bd04e01894f98c4149cf9df47575b134eeb6d2c7fe9fee
       </code>
       <p>The Authoritative Server then notifies the Receiving Server whether the key is valid. This is done by creating a &lt;db:verify/&gt; element which MUST possess 'from' and 'to' attributes whose values are swapped from the request, MUST possess an 'id' attribute whose value is copied from the 'id' value of the request, and MUST possess a 'type' attribute whose value is either "valid" or "invalid".</p>
+      <p>Therefore, here again the result is either valid...</p>
       <example caption="Authoritative Server Informs Receiving Server that Key is Valid (step 3)"><![CDATA[
 send: <db:verify
           from='sender.tld'
@@ -369,7 +379,7 @@ send: <db:verify
           to='target.tld'
           type='valid'/>
       ]]></example>
-      <p>Or:</p>
+      <p>... or invalid ...</p>
       <example caption="Authoritative Server Informs Receiving Server that Key is Invalid (step 3)"><![CDATA[
 send: <db:verify
           from='sender.tld'
@@ -386,17 +396,16 @@ send: <db:verify
       <li>By inclusion of the server dialback feature in a given set of stream features.</li>
       <li>By inclusion of the dialback namespace declaration in the stream header.</li>
     </ul>
-    <p>The former method is preferred, but the latter method is also specified herein for the purpose of backward-compatibility with older "XMPP 0.9" deployments.</p>
-    <p>The server dialback stream feature is advertised by including in any given set of stream features a &lt;dialback/&gt; element qualified by the 'urn:xmpp:features:dialback' namespace; the <dialback/> element MAY also include an empty &lt;errors/&gt; element, indicating that the entity sending the stream features supports graceful handling of dialback errors as described in section 2.4.</p>
+    <p>The former method is preferred, and XMPP 1.0 servers MUST support and send the stream feature. However, the latter method is also specified herein for the purpose of backward-compatibility with older "XMPP 0.9" deployments.</p>
+    <p>The server dialback stream feature is advertised by including in any given set of stream features a &lt;dialback/&gt; element qualified by the 'urn:xmpp:features:dialback' namespace; the <dialback/> element MAY also include an empty &lt;errors/&gt; element, indicating that the entity sending the stream features supports graceful handling of dialback errors as described in Section 2.4.</p>
     <example caption="Stream Features"><![CDATA[
 <stream:features>
   <dialback xmlns='urn:xmpp:features:dialback'>
-    <required/>
     <errors/>
   </dialback>
 </stream:features>
     ]]></example>
-    <p>Note: If the Sender Domain was authenticated using SASL, the &lt;dialback/&gt; element SHOULD NOT be present in stream features. If a server offers both SASL and dialback, dialback SHOULD be &lt;required/&gt; and SASL &lt;optional/&gt;.</p>
+    <p>Note: If the Sender Domain was authenticated using SASL, the &lt;dialback/&gt; element SHOULD NOT be present in stream features. If a server offers both SASL and dialback, dialback SHOULD be mandatory-to-negotiate and SASL SHOULD be voluntary-to-negotiate as those terms are described in <cite>RFC 6120</cite>.</p>
     <p>As mentioned, support for the server dialback protocol can also be advertised by including the dialback namespace declaration in a stream header.</p>
     <example caption="Stream Header"><![CDATA[
 <stream:stream 
@@ -409,8 +418,8 @@ send: <db:verify
   </section2>
   <section2 topic="Dialback Error Conditions" anchor='errors'>
     <!-- credits: Matthias in http://mail.jabber.org/pipermail/standards/2007-June/015662.html -->
-    <p>RFC 3920 introduced stream errors for any errors related to dialback. However, this turned out to be overly aggressive, particulary if the XML stream was used to multiplex stanzas from more than one receiving domain. Therefore this specification introduces a third value for the 'type' attribute, with the value "error".</p>
-    <p>This usage of the 'error' value for the 'type' attribute is not fully backward compatible with RFC 3920. However, the server that generates the error SHOULD still attempt to send the dialback error instead of terminating the stream, as the worst thing that can happen is that the remote server terminates the stream if it does not understand the error. Those dialback errors are to be considered non-fatal for the XML stream, but queued stanzas MUST be returned to the respective senders with a &timeout; stanza error. If an error is encountered in step 3, the Receiving Server must send a &lt;remote-server-not-found/&gt; error to the Originating Server.</p>
+    <p><cite>RFC 3920</cite> introduced stream errors for any errors related to dialback. However, this turned out to be overly aggressive, particulary if the XML stream was used to multiplex stanzas from more than one receiving domain. Therefore this specification introduces a third value for the 'type' attribute, with the value "error".</p>
+    <p>This usage of the 'error' value for the 'type' attribute is not fully backward compatible with <cite>RFC 3920</cite>. However, the server that generates the error SHOULD still attempt to send the dialback error instead of terminating the stream, as the worst thing that can happen is that the remote server terminates the stream if it does not understand the error. Furthermore, a server could send these errors only to XMPP 1.0 peers that advertise support for dialback errors as described under Section 2.3. Dialback errors are to be considered non-fatal for the XML stream, but queued stanzas MUST be returned to the respective senders with a &timeout; stanza error. If an error is encountered in step 3, the Receiving Server MUST send a &lt;remote-server-not-found/&gt; error to the Originating Server.</p>
      <p>When the &lt;db:verify/&gt; or &lt;db:result/&gt; element is of type "error", the element MUST contain an &lt;error/&gt; element, which is similar to a "stanza error" as specified in &xmppcore;. This specification re-uses the following stanza error conditions.</p>
     <table caption='Dialback error conditions'>
       <tr>
@@ -452,22 +461,22 @@ send: <db:verify
   </section2>
 
   <section2 topic="Multiplexing" anchor='multiplex'>
-    <p>A single XML stream between Originating and Receiving Server can be used to multiplex stanzas for more than one domain pair. This usage is for historical reasons also known as "PIGGYBACKING". One common motivation for this is virtual hosting, for which many domains are hosted on the same server. Another common motivation for such reuse is the existence of additional services associated with the Sender Domain but hosted at "subdomains" thereof. For example, both the "target.tld" and the "sender.tld" XMPP servers might host a groupchat service at "chat.target.tld" and "chat.sender.tld" respectively. Without multiplexing, many server-to-server connections would be necessary to exchange stanzas between those domains. With more domains, the number of connections might exceed the maximum number of connections allowed from a single IP address as explained in &xep0205;. Multiplexing reduces the number of connections to two.</p>
+    <p>A single XML stream between Originating and Receiving Server can be used to multiplex stanzas for more than one domain pair. This usage is for historical reasons also known as "PIGGYBACKING". One common motivation for this is virtual hosting, for which many domains are hosted on the same server. Another common motivation for such reuse is the existence of additional services associated with the Sender Domain but hosted at "subdomains" thereof. For example, both the "target.tld" and the "sender.tld" XMPP servers might host &xep0045; services at "chat.target.tld" and "chat.sender.tld" respectively. Without multiplexing, many server-to-server connections would be necessary to exchange stanzas between those domains. With more domains, the number of connections might exceed the maximum number of connections allowed from a single IP address as explained in &xep0205;. Multiplexing reduces the number of connections to two.</p>
     <p>Note: Because dialback operates on domain pairs, a total of eight dialback negotiations is necessary for a bidirectional exchange of stanzas between two sending domains and two target domains.</p>
     <section3 topic="Multiplexing Sender Domains" anchor="senderpiggyback">
       <p>In order to accept XML stanzas from rooms at "chat.sender.tld" intended for addresses at "target.tld", the "target.tld" domain will need to validate the "chat.sender.tld" domain (just as it already did for the "sender.tld" domain). Thus the Originating Server would now initiate a dialback negotiation with "target.tld" but specify the Sender Domain as "chat.sender.tld". Specifying different Sender Domains is called "SENDER PIGGYBACKING" and MAY be used without further negotation.</p>
     </section3>
     <section3 topic="Multiplexing Target Domains" anchor="targetpiggyback">
     <!-- role switch -->
-      <p>Likewise, to send stanzas to rooms at "chat.target.tld" from addresses at "sender.tld", the Originating Server would initiate dialback negotiation with "chat.target.tld" on the same connection that may already be used to send stanzas from "sender.tld" to "target.tld", specifiying the Target Domain as "chat.target.tld". Specifiyng different target domains is called "TARGET PIGGYBACKING".</p>
-      <p>The Originating Server SHOULD NOT use Target Piggybacking unless the Receiving Server has signalled support for dialback error handling via &lt;stream:features/&gt;. The Originating Server MAY then attempt to multiplex a Sender Domain 'B' on the stream to the Receiving Server that is already used for Sender Domain 'A' if the hostname and port resolution results in the same IP address and port combination. For example:</p>
+      <p>Likewise, to send stanzas to rooms at "chat.target.tld" from addresses at "sender.tld", the Originating Server would initiate dialback negotiation with "chat.target.tld" on the same connection that might already be used to send stanzas from "sender.tld" to "target.tld", specifying the Target Domain as "chat.target.tld". Specifying different target domains is called "TARGET PIGGYBACKING".</p>
+      <p>The Originating Server SHOULD NOT use Target Piggybacking unless the Receiving Server has signalled support for dialback error handling via &lt;stream:features/&gt; as described under Section 2.3. The Originating Server MAY then attempt to multiplex a Sender Domain 'B' on the stream to the Receiving Server that is already used for Sender Domain 'A' if the hostname and port resolution results in the same IP address and port combination. For example:</p>
       <example caption="DNS SRV Record for the sender.tld Zone"><![CDATA[
 _xmpp-server._tcp.target.tld.      86400 IN SRV 10 0 5269 receiver.target.tld
 _xmpp-server._tcp.chat.target.tld. 86400 IN SRV 10 0 5269 receiver.target.tld
 receiver.target.tld.               86400 IN A                       10.44.0.4
     ]]></example>
       <!-- FIXME: what if there is such a SRV record for sender.tld with port 5269 but only an A record for chat.sender.tld? might be a good example -->
-      <p>Because DNS lookups for both "target.tld" and "chat.target.tld" resolve to the same IP address (10.44.0.4) and port (5269), "sender.tld" may initiate a dialback negotation from "sender.tld" to "chat.target.tld" over the same XML stream that is already used to send stanzas from "sender.tld" to "target.tld".</p>
+      <p>Because DNS lookups for both "target.tld" and "chat.target.tld" resolve to the same IP address (10.44.0.4) and port (5269), "sender.tld" MAY initiate a dialback negotation from "sender.tld" to "chat.target.tld" over the same XML stream that is already used to send stanzas from "sender.tld" to "target.tld".</p>
     </section3>
   </section2>
 </section1>
@@ -562,10 +571,6 @@ receiver.target.tld.               86400 IN A                       10.44.0.4
   <xs:element name='sm'>
     <xs:complexType>
       <xs:sequence>
-        <xs:choice>
-          <xs:element name='optional' type='empty'/>
-          <xs:element name='required' type='empty'/>
-        </xs:choice>
         <xs:element name='errors' minOccurs='0' type='empty'/>
       </xs:sequence>
     </xs:complexType>
