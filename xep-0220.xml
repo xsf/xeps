@@ -28,6 +28,12 @@
     <jid>fippo@psyced.org</jid>
   </author>
   <revision>
+    <version>0.8</version>
+    <date>2011-04-19</date>
+    <initials>ph/psa</initials>
+    <remark><p>Per list discussion, restored requirement for Receiving Server to close the stream if the dialback key is invalid, since application of dialback to multiple domain pairs will use dialback packets of type error, not type invalid.</p></remark>
+  </revision>
+  <revision>
     <version>0.7</version>
     <date>2011-04-14</date>
     <initials>ph/psa</initials>
@@ -217,7 +223,7 @@ key = HMAC-SHA256(
       )
       </code>
       <p>Note: the Receiving Server MAY use any method to determine the validity of the dialback key and the identity of the Originating Sever. The Originating Server MUST NOT make any assumptions about how the Receiving Server verifies the key. This includes the assumption that the key is ever verified by the Receiving Server.</p>
-      <p>After that, the Originating Server waits for the verification result. Any stanzas for this domain pair have to be queued. The Originating Server MUST NOT attempt to re-verify the domain pair on this TCP connection.</p> 
+      <p>After that, the Originating Server waits for the verification result. If the Originating Server wishes to send any stanzas for this domain pair, it MUST queue them for sending after it has received authorization to send stanzas from the Receiving Server, and MUST NOT attempt to send stanzas until it has received such authorization. The Originating Server MUST NOT attempt to re-verify the domain pair on this TCP connection.</p> 
       <p>Note: While waiting for the verification result, the Originating Server SHOULD continue to send stanzas for any pair of domains that have been verified on that connection. It MAY send out additional dialback keys for different domain pairs and issue dialback verification requests as described in Section 2.1.2. To avoid Denial-of-Service attacks (&rfc4732;), the Originating Server MAY impose a timeout on key verification.</p>
       <p>If the stream or the underlying TCP connection is closed by the remote side while waiting for the verification result, this is to be handled similar to receiving an error as described below.</p>
       <p>After the Receiving Server has verified the request, the Originating Server receives the verification result.</p>
@@ -235,8 +241,8 @@ recv: <db:result
           to='sender.tld'
           type='invalid'/>
       ]]></example>
-      <p>If the value of the 'type' attribute is "valid", then the connection between the domain pair is considered verified and the Originating Server can send any queued stanzas.</p>
-      <p>If the value of the 'type' attribute is "invalid", this means that the Originating Server's identity (as valid for the Sender Domain) could not be verified by the Receiving Server. Queued stanzas MUST be returned to the respective senders with an &lt;internal-server-error&gt; stanza error and the underlying stream MAY be closed unless it is being used by other domain pairs. Note that the Receiving Server might choose to terminate the TCP connection.</p>
+      <p>If the value of the 'type' attribute is "valid", then the connection between the domain pair is considered verified and the Originating Server can send any outbound stanzas it has queued up for routing to the Receiving Server.</p>
+      <p>If the value of the 'type' attribute is "invalid", then the Receiving Server is reporting that Originating Server's identity (as valid for the Sender Domain) could not be verified by the Authoritative Server. In this case, the Originating Server MUST NOT attempt to send any outbound stanzas it has queued up for routing to the Receiving Server. In addition, the Receiving Server MUST close the stream as described in Section 4.4 of <cite>RFC 6120</cite>.</p>
       <!-- bounce mark 1 -->
       <!-- FIXME: is it valid to re-attempt validation on the same connection after it has failed? -->
       <p>If the value of the 'type' attribute is "error", this indicates a problem which is not related to the validity of the dialback key provided. The error conditions are explained in detail in Section 2.4. Such an error is to be considered non-fatal for the XML stream, but queued stanzas MUST be returned to the respective senders with a &timeout; stanza error.</p>
@@ -315,7 +321,7 @@ recv: <db:result
       <p>This key MUST be verified before the Sender Domain ('sender.tld') is authorized to send stanzas. The verification process might fail prematurely, for example, if the Receiving Server's policy states that connections from the Sender Domain are not allowed.</p>
       <p>The usual method for verifying that the Originating Server is authorized to send stanzas for the Sender Domain is to "dial back" the Authoritative Server for the Sender Domain and ask it to validate the dialback key which is contained in the XML character data of the request. Other methods can be used for verifying the identity of the Originating Server, but are out of scope for this document.</p>
       <p>Note: the Receiving Server MUST continue to accept and process stanzas for already verified domain pairs, and MUST continue to process both &lt;db:result/&gt; and &lt;db:verify/&gt; elements.</p>
-      <p>If the Target Domain as given in the 'to' attribute of the element is not a configured domain of the Receiving Server, this results in a dialback error. This error, which is explained further in Section 2.4, is not a stream error and therefore MUST NOT result in termination of the stream and the underlying TCP connection, which might already be used for sending XML stanzas for other domain pairs.</p>
+      <p>If the Target Domain as given in the 'to' attribute of the element is not a configured domain of the Receiving Server, this results in a dialback error. This error, which is explained further in Section 2.4, is not a stream error and therefore MUST NOT result in closing of the stream as described in Section 4.4 of <cite>RFC 6120</cite>, since the stream might already be used for sending XML stanzas for other domain pairs.</p>
       <example caption="Receiving Server Sends Dialback Error to Originating Server (step 4)"><![CDATA[
 send: <db:result
           from='target.tld'
@@ -342,7 +348,7 @@ send: <db:result
           to='sender.tld'
           type='invalid'/>
       ]]></example>
-      <p>If the type is 'invalid', the Originating Server is attempting to spoof the Sender Domain. The Receiving Server MUST NOT accept stanzas from the Originating Server for the Sender Domain, SHOULD log the attempt, and MAY terminate the XML stream and the underlying TCP connection.</p>
+      <p>If the type is 'invalid', the Originating Server is attempting to spoof the Sender Domain. The Receiving Server MUST NOT accept stanzas from the Originating Server for the Sender Domain, SHOULD log the attempt, and MAY close the XML stream as described in Section 4.4 of <cite>RFC 6120</cite>.</p>
       <p>As mentioned, Server Dialback results in weak identity verification of the Sender Domain by the Target Domain. In order to proceed with bi-directional communication so that the Target Domain can send XML stanzas to the Sender Domain, the Receiving Server needs to initiate a dialback negotiation with the Originating Server (i.e., assume the role of an originating server in a new dialback negotiation on a new TCP connection).</p>
     </section3>
 
@@ -356,7 +362,7 @@ recv: <db:verify
        fed84f34d39682fd80bd04e01894f98c4149cf9df47575b134eeb6d2c7fe9fee
      </db:verify>
       ]]></example>
-      <p>If the Target Domain as given in the 'to' attribute of the element does not match a configured local domain, this results in a dialback error. This error, which is explained further in Section 2.4, is not a stream error and therefore MUST NOT result in termination of the stream and the underlying TCP connection, which might already be used for sending XML stanzas for other domain pairs.</p>
+      <p>If the Target Domain as given in the 'to' attribute of the element does not match a configured local domain, this results in a dialback error. This error, which is explained further in Section 2.4, is not a stream error and therefore MUST NOT result in closing of the stream as described in Section 4.4 of <cite>RFC 6120</cite>, since the stream might already be used for sending XML stanzas for other domain pairs.</p>
       <example caption="Authoritative Server Sends Dialback Error to Receiving Server (step 3)"><![CDATA[
 send: <db:verify
           from='sender.tld'
