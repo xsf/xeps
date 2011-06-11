@@ -303,19 +303,13 @@ OR OTHER DEALINGS IN THE SOFTWARE.
               <br />
             </xsl:if>
             <xsl:variable name='sourceHTML'>
-              <xsl:text>http://svn.xmpp.org:18080/browse/XMPP/trunk/extensions/xep-</xsl:text>
+              <xsl:text>http://gitorious.org/xmpp/xmpp/blobs/master/extensions/xep-</xsl:text>
               <xsl:value-of select='/xep/header/number'/>
               <xsl:text>.xml</xsl:text>
             </xsl:variable>
-            <xsl:variable name='sourceRSS'>
-              <xsl:text>http://svn.xmpp.org:18080//changelog/~rss/XMPP/trunk/extensions/xep-</xsl:text>
-              <xsl:value-of select='/xep/header/number'/>
-              <xsl:text>.xml/rss.xml</xsl:text>
-            </xsl:variable>
             <xsl:if test='$thestatus != "ProtoXEP"'>
               Source Control: 
-                <a class='standardsButton' href='{$sourceHTML}'>HTML</a>&#160;
-                <a class='standardsButton' href='{$sourceRSS}'>RSS</a>
+                <a class='standardsButton' href='{$sourceHTML}'>HTML</a>
                 <br />
             </xsl:if>
             <xsl:variable name='formatXML'>
