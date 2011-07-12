@@ -1,0 +1,382 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Commenting</title>
+  <abstract>This specification defines a method for commenting.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes/>
+
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  &infiniti;
+  <revision>
+    <version>0.0.1</version>
+    <date>2011-07-07</date>
+    <initials>jk</initials>
+
+    <remark>First draft.</remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>Commenting is a popular activity on the Internet.  Users leave comments on just about anything: blog posts, news articles, product reviews, photos, status updates, etc.  Existing commenting solutions often involve proprietary access methods and authentication, and are silo'd off from other services.  This specification proposes an open and federated way of commenting.  A conversation exists as a set of &xep0060; nodes, containing comment items or other activity, and any user with a JID may leave a comment there (per conversation access rules).  The protocol is designed to be modern, social, and extensible.  Additionally, while the protocol is described in XMPP terms, the core concept is meant to translate easily to the HTTP-based Social Web.</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The following features are required:</p>
+
+  <ul>
+    <li>A client MUST be able to efficiently request the most recent portion of a conversation (as well as "page" to further portions) without having to fetch every comment.</li>
+    <li>A client MUST be able to efficiently receive updates to a conversation as they happen.</li>
+    <li>It MUST be possible to nest comments (comments as replies to other comments) for rendering the conversation as a tree.</li>
+    <li>A user MUST be able to mention another user in a comment, and have that user be notified about it.</li>
+
+    <li>A user MUST be able to efficiently track its own history in a conversation using a third-party service.  For example, such a service might maintain a web page of the user's activity, or send an SMS message to the user if a reply is discovered.</li>
+    <li>To enable future expansion, consideration must be made for allowing non-comment activity in the conversation, even if this specification does not define those activity types.</li>
+  </ul>
+</section1>
+
+<section1 topic='Result Set Management' anchor='pubsub-rsm'>
+  <p>&xep0060; contains an example of how to retrieve items with &xep0059;, but the specification is light on details.  This section gives a more complete description of how RSM is used in conjunction with PubSub.</p>
+
+  <p>Clients MAY provide an RSM section in the iq request:</p>
+
+  <example caption="Requesting items with a maximum of 20 in the result set"><![CDATA[
+<iq type="get" from="alice@example.com/1" to="comments.example.com" id="1">
+  <pubsub xmlns="http://jabber.org/protocol/pubsub">
+    <items node="activity"/>
+    <set xmlns="http://jabber.org/protocol/rsm">
+      <max>20</max>
+    </set>
+  </pubsub>
+</iq>]]></example>
+
+  <p>The server MAY provide an RSM section in the response.  This is already documented in XEP-0060.  The server can do this regardless of whether or not the client has made the request with RSM.</p>
+
+  <p>Use of RSM implies that there is a natural ordering of the items at a node.  The criteria used for ordering is to be determined by the node.</p>
+
+  <p>RSM and max_items do not mix.  If the client provides both, then the server MUST prefer RSM.  If the server does not support RSM, then it may honor max_items and return items ordered by newest first (which may not necessarily be the same as the ordering used by RSM).</p>
+
+</section1>
+
+<section1 topic='How It Works' anchor='protocol'>
+  <section2 topic='Conversation Nodes' anchor='nodes'>
+    <p>A conversation exists across a set of PubSub nodes, some of which are dynamic:</p>
+
+    <table caption='Conversation Nodes and their Descriptions'>
+      <tr>
+        <th>Node</th>
+        <th>Natural Sort Order</th>
+
+        <th>Description</th>
+      </tr>
+        <td>"info"</td>
+        <td>N/A</td>
+        <td>Singleton node containing information about the conversation.</td>
+      <tr>
+        <td>"comments" (dynamic)</td>
+
+        <td>modified-ascending</td>
+        <td>Contains comment items only.  This node is primarily used for presenting conversations to the user.  It is essentially a subset of the activity node.</td>
+      </tr>
+      <tr>
+        <td>"activity" (dynamic)</td>
+        <td>modified-ascending</td>
+        <td>Contains all activity items in the conversation, including comments.  This node is primarily used for submitting comments and receiving mention events.  Item persistence is OPTIONAL.  Advanced implementations may choose to maintain full activity history of a conversation and expose it in this node.</td>
+
+      </tr>
+    </table>
+
+    <p>The comments and activity nodes share item data.  Comments are added to the conversation by publishing to the activity node, yet the comment will also appear in the comments node as a result.  In fact, since the activity node is not required to offer item persistence, it is possible that the comment might <em>only</em> be retrievable through the comments node.  Implementations of this protocol will therefore require tight association between the comments and activity nodes.  It is not possible to implement this protocol using a "generic" PubSub service.</p>
+
+    <p>A dynamic node accepts additional parameters by appending the parameters to the node name using a "query"-like notation.  Parameters and values in the query string MUST be percent-encoded.</p>
+
+    <table caption='Dynamic Node Parameters'>
+      <tr>
+        <th>Name</th>
+        <th>Allowed Values</th>
+        <th>Applies To</th>
+        <th>Example</th>
+      </tr>
+
+      <tr>
+        <td>"order"</td>
+        <td>"-created" (sort items by created time, descending)</td>
+        <td>comments</td>
+        <td>Node name "comments?order=-created" would present comments in created-descending order.</td>
+      </tr>
+      <tr>
+
+        <td>"parent_ids"</td>
+        <td>Comma-separated list of parent comment IDs to filter by.  An empty value means to include top-level comments.</td>
+        <td>comments</td>
+        <td>Node name "comments?order=-created&amp;parent_ids=1%2C5a%2Co19g%2C" (note last value is empty) would present items in created-descending order, filtered to only include comments that have parent ID "1", "5a", "o19g", or are top-level.</td>
+      </tr>
+
+    </table>
+
+    <p>The "activity" node is defined as dynamic to allow for future expansion, even though no dynamic node parameters are defined in this document that apply to it.</p>
+
+    <p>Before utilizing additional nodes or parameters not defined in this document, the client SHOULD first determine support via &xep0030; or other discovery mechanism.  If the server does not support or understand a parameter or value, it SHOULD reject the request.  Attempting to service a request by ignoring unsupported parameters will most likely result in incorrect or undesired behavior.</p>
+
+    <p>A conversation is accessible through a JID and optionally a node prefix.  The prefix is prepended to the desired node name, separated by a '/' character.  For example, if the "Coffee Talk" conversation is said to be accessible at the JID "coffeetalk@comments.example.com" without a node prefix, then PubSub interactions are made using the node names defined above (i.e. "info", "comments", etc).  If that conversation is instead said to be accessible at the JID "comments.example.com" with node prefix "coffeetalk", then PubSub interactions are made using node names like "coffeetalk/info", "coffeetalk/comments", etc.  This allows conversations to be provisioned as either one per JID or many per JID.</p>
+  </section2>
+
+  <section2 topic='Retrieving Information About the Conversation' anchor='retrieve-info'>
+    <p>Information about a conversation can be obtained by requesting the item from the info node.</p>
+
+    <example caption="Retrieve conversation info"><![CDATA[
+<iq type="get" from="alice@example.com/1" to="comments.example.com" id="2">
+  <pubsub xmlns="http://jabber.org/protocol/pubsub">
+    <items node="coffeetalk/info"/>
+  </pubsub>
+</iq>]]></example>
+
+    <example caption="Server responds"><![CDATA[
+<iq type="result" from="comments.example.com" to="alice@example.com/1" id="2">
+  <pubsub xmlns="http://jabber.org/protocol/pubsub">
+    <items node="coffeetalk/info">
+      <item id="current">
+        <entry xmlns="http://www.w3.org/2005/Atom">
+          <title>Coffee Talk</title>
+          <summary>A great place to talk about your day.</summary>
+          <id>tag:comments.example.com,2011:coffeetalk</id>
+          <published>2011-07-01T10:15:00Z</published>
+          <updated>2011-07-01T10:15:00Z</updated>
+        </entry>
+      </item>
+    </items>
+  </pubsub>
+</iq>]]></example>
+
+    <p>It is also possible to subscribe to the info node to track changes to the conversation information.</p>
+  </section2>
+
+  <section2 topic='Retrieving Comments in a Conversation' anchor='retrieve-comments'>
+    <p>The process for retrieving the first "page" of a conversation and listening for further updates can be summarized as follows:</p>
+
+    <ol>
+      <li>Subscribe to the "comments" node.</li>
+      <li>Retrieve items from the "comments?order=-created" node.  Multiple retrieval requests may be required depending on the client display needs (parent_ids can be used to reduce trips, see the <link url='#impl'>Implementation Notes</link>)</li>
+      <li>Updates are pushed via the subscription.</li>
+
+    </ol>
+
+    <p>First, the client subscribes to the comments node.  A temporary subscription is recommended, so that it is removed if the client goes offline.</p>
+
+    <example caption="Subscribe to comments node"><![CDATA[
+<iq type="set" from="alice@example.com/1" to="comments.example.com" id="1">
+  <pubsub xmlns="http://jabber.org/protocol/pubsub">
+    <subscribe node="coffeetalk/comments" jid="alice@example.com/1"/>
+    <options>
+      <x xmlns="jabber:x:data" type="submit">
+        <field var="FORM_TYPE" type="hidden">
+          <value>http://jabber.org/protocol/pubsub#subscribe_options</value>
+        </field>
+        <field var="pubsub#expire"><value>presence</value></field>
+      </x>
+    </options>
+  </pubsub>
+</iq>]]></example>
+
+    <p>Next, the client retrieves past comments.  For simplicity, the example below will fetch the 50 most recently created comments.  This would be useful for displaying the comments in a flat list.</p>
+
+    <example caption="Retrieve the most recent comments"><![CDATA[
+<iq type="get" from="alice@example.com/1" to="comments.example.com" id="2">
+  <pubsub xmlns="http://jabber.org/protocol/pubsub">
+    <items node="coffeetalk/comments?order=-created"/>
+    <set xmlns="http://jabber.org/protocol/rsm">
+      <max>50</max>
+    </set>
+  </pubsub>
+</iq>]]></example>
+
+    <example caption="Server responds"><![CDATA[
+<iq type="result" from="comments.example.com" to="alice@example.com/1" id="2">
+  <pubsub xmlns="http://jabber.org/protocol/pubsub">
+    <items node="coffeetalk/comments?order=-created">
+      <item id="39267824-cdc8-11df-b1a7-0024bed71c0a">
+        <entry xmlns="http://www.w3.org/2005/Atom" xmlns:activity="http://activitystrea.ms/spec/1.0/">
+          <id>1</id>
+          <title>Bob posted a comment in the Coffee Talk conversation.</title>
+          <summary>Bob posted a comment in the Coffee Talk conversation.</summary>
+          <published>2011-07-01T12:00:00Z</published>
+          <updated>2011-07-01T12:00:00Z</updated>
+          <author>
+            <name>Bob</name>
+            <uri>acct:bob@example.com</uri>
+            <activity:object-type>person</activity:object-type>
+          </author>
+          <activity:object>
+            <id>1</id>
+            <title>This is a nice comment.</title>
+            <content type="text/html">This is a nice comment.</summary>
+            <activity:object-type>comment</activity:object-type>
+          </activity:object>
+        </entry>
+      </item>
+      ...
+    </items>
+    <set xmlns="http://jabber.org/protocol/rsm">
+      <first index="0">39267824-cdc8-11df-b1a7-0024bed71c0a</first>
+      <last>ac277776-cdd5-11df-92c4-0024bed71c0a</last>
+      <count>5</count>
+    </set>
+  </pubsub>
+</iq>]]></example>
+
+    <p>Comments are stored as Activity Streams items in Atom format.</p>
+  </section2>
+  <section2 topic='Submitting a Comment' anchor='submit'>
+    <p>Comments are submitted by publishing the comment to the activity node.</p>
+
+    <example caption="Publishing a comment"><![CDATA[
+<iq type="set" from="alice@example.com/1" to="comments.example.com" id="3">
+  <pubsub xmlns="http://jabber.org/protocol/pubsub">
+    <publish node="activity">
+      <item>
+        <entry xmlns="http://www.w3.org/2005/Atom" xmlns:activity="http://activitystrea.ms/spec/1.0/">
+          <id>2</id>
+          <title>Alice posted a comment in the Coffee Talk conversation.</title>
+          <summary>Alice posted a comment in the Coffee Talk conversation.</summary>
+          <published>2011-07-01T13:00:00Z</published>
+          <updated>2011-07-01T13:00:00Z</updated>
+          <activity:object>
+            <id>2</id>
+            <title>This is another nice comment.</title>
+            <content type="text/html">This is another nice comment.</summary>
+            <activity:object-type>comment</activity:object-type>
+          </activity:object>
+        </entry>
+      </item>
+    </publish>
+  </pubsub>
+</iq>]]></example>
+
+    <p>Upon receiving the request, the server MUST sanitize the item as necessary before accepting it.  In particular, the author information MUST be confirmed or replaced with the information of the user that submitted the comment.  If the item is not formatted as a valid Activity Streams Comment, then the request MUST be rejected.</p>
+
+    <example caption="Rejecting invalid comment"><![CDATA[
+<iq type="error" from="comments.example.com" to="alice@example.com/1" id="3">
+  <error type="modify">
+    <bad-request xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/>
+  </error>
+</iq>]]></example>
+
+    <p>Next, the server SHOULD ensure it has the submitter's user information.  This is so when the comment is served to other clients, name and avatar information can be provided as well.  This is done by requesting the VCard of the submitter's bare JID using &xep0054;.  If the server skips this step, the author name SHOULD be the bare JID of the submitter.</p>
+
+    <example caption="Server responds with success"><![CDATA[
+<iq type="result" from="comments.example.com" to="alice@example.com/1" id="3">
+  <pubsub xmlns="http://jabber.org/protocol/pubsub">
+    <publish node="activity">
+      <item id="0f72afbe-a9d4-11e0-b0bc-0024bed71c0a"/>
+    </publish>
+  </pubsub>
+</iq>]]></example>
+
+    <example caption="Server relays comment to subscribers"><![CDATA[
+<message type="headline" from="comments.example.com" to="alice@example.com/1">
+  <event xmlns="http://jabber.org/protocol/pubsub#event">
+    <items node="comments">
+      <item id="0f72afbe-a9d4-11e0-b0bc-0024bed71c0a">
+        <entry xmlns="http://www.w3.org/2005/Atom" xmlns:activity="http://activitystrea.ms/spec/1.0/">
+          <id>0f72afbe-a9d4-11e0-b0bc-0024bed71c0a</id>
+          <title>Alice posted a comment in the Coffee Talk conversation.</title>
+          <summary>Alice posted a comment in the Coffee Talk conversation.</summary>
+          <published>2011-07-01T13:00:00Z</published>
+          <updated>2011-07-01T13:00:00Z</updated>
+          <author>
+            <name>Alice</name>
+            <uri>acct:alice@example.com</uri>
+            <activity:object-type>person</activity:object-type>
+          </author>
+          <activity:object>
+            <id>0f72afbe-a9d4-11e0-b0bc-0024bed71c0a</id>
+            <title>This is another nice comment.</title>
+            <content type="text/html">This is another nice comment.</summary>
+            <activity:object-type>comment</activity:object-type>
+          </activity:object>
+        </entry>
+      </item>
+    </items>
+  </event>
+</message>]]></example>
+
+  </section2>
+  <section2 topic='Other Activity' anchor='submit-other'>
+    <p>Conversations MAY support submission of activity items other than comments.  A client SHOULD first determine support for other item types before attempting to submit them.  If a server does not support an item type, it should reject it:</p>
+
+    <example caption="Rejecting unsupported activity type"><![CDATA[
+<iq type="error" from="comments.example.com" to="alice@example.com/1" id="3">
+  <error type="modify">
+    <bad-request xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/>
+  </error>
+</iq>]]></example>
+  </section2>
+  <section2 topic='Mentions' anchor='mentions'>
+    <p>If the server deems a submitted comment to be relevant to a user who is not subscribed to the activity node, it SHOULD send an unsolicited event to that user anyway.  This way, users can "tag" or "mention" users not involved in a conversation, so that they may be notified about it.</p>
+
+    <p>A comment is considered relevant to a user if one the following are true:</p>
+    <ul>
+      <li>The user is the one that submitted the comment.  This is to allow a user service to automatically pick up on conversations that the user has commented in, without the user's client to have to explicitly inform the user service.</li>
+      <li>The comment is a reply to one of the user's comments, or it affects one of the user's comments in some way (for example, modification by an admin).</li>
+      <li>The comment body contains an HTML Microdata object of type "http://data-vocabulary.org/Person", where the itemid value is the user's account URI.</li>
+    </ul>
+
+  </section2>
+  <section2 topic='Deleted Comments' anchor='deleted'>
+    <p>If a comment is deleted, it SHOULD remain in the past items of the node(s), but with its content cleared out and replaced with bogus author data and no activity:object.  This change should also cause the comment item to be pushed out again to subscribers and relevant users.  This way, entities that are tracking the conversation for changes can be informed of deletes.  Even after a network failure, the deleted items can be discovered by retrieving past items.</p>
+  </section2>
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>In order for the user information that gets saved with comments to not become stale over time, servers SHOULD have ways of refreshing this information by refetching user vcards.</p>
+  <p>To load a conversation intended for display with nesting, the following algorithm is RECOMMENDED:</p>
+
+  <ol>
+    <li>Let C be the desired number of total comments to display.</li>
+    <li>Request the C newest top-level comments (set parent_ids to an empty value).</li>
+    <li>Request the C newest comments at depth 1, by setting parent_ids to the list of comments in the previous request that had a reply count greater than 0.</li>
+    <li>Repeat previous step for every depth until the full depth has been traversed.</li>
+    <li>Truncate resulting tree to C items.</li>
+
+  </ol>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>As noted when handling comment submission above, the server MUST replace author information with that of the user performing the submission.  This is essential to prevent author spoofing.</p>
+  <p>Care SHOULD be taken to prevent "mention spam."  If the server determines a user is acting maliciously, then it MUST NOT send unsolicited events as a result of a submission.  If a user service receives a mention event from a comment author that it has determined to be malicious, then it MUST NOT process the event further.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>No interaction with &IANA; is required as a result of this document.</p>
+
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:tmp:comments:0</li>
+    </ul>
+    <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespace to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
+
+  </section2>
+  <section2 topic='Namespace Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+
+</xep>
