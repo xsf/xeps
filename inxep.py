@@ -117,7 +117,7 @@ introline = 'The XMPP Extensions Editor has received a proposal for a new XEP.'
 titleline = 'Title: ' + title
 abstractline = 'Abstract: ' + abstract
 urlline = 'URL: http://www.xmpp.org/extensions/inbox/' + xepname + '.html'
-actionline = 'The XMPP Council will decide at its next meeting whether to accept this proposal as an official XEP.'
+actionline = 'The XMPP Council will decide in the next two weeks whether to accept this proposal as an official XEP.'
 
 msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr
 msg = msg + "To: %s\r\n" % toaddrs
