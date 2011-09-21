@@ -105,7 +105,7 @@ remark = getText(remarkNode.childNodes)
 #
 #    Abstract: $abstract
 #
-#    URL: http://www.xmpp.org/extensions/xep-$xepnum.html
+#    URL: http://xmpp.org/extensions/xep-$xepnum.html
 #
 #    This Last Call begins today and shall end at the close
 #    of business on $enddate.
@@ -134,7 +134,7 @@ toaddrs = "standards@xmpp.org"
 thesubject = 'LAST CALL: XEP-' + xepnum + " (" + title + ")"
 introline = 'This message constitutes notice of a Last Call for comments on XEP-' + xepnum + ' (' + title + ').'
 abstractline = 'Abstract: ' + abstract
-urlline = 'URL: http://www.xmpp.org/extensions/xep-' + xepnum + '.html'
+urlline = 'URL: http://xmpp.org/extensions/xep-' + xepnum + '.html'
 schedline = 'This Last Call begins today and shall end at the close of business on ' + enddate + '.'
 qline0 = 'Please consider the following questions during this Last Call and send your feedback to the standards@xmpp.org discussion list:'
 qline1 = '1. Is this specification needed to fill gaps in the XMPP protocol stack or to clarify an existing protocol?'

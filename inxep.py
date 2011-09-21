@@ -100,7 +100,7 @@ remark = getText(remarkNode.childNodes)
 #
 #    Abstract: $abstract
 #
-#    URL: http://www.xmpp.org/extensions/inbox/$xepname.html
+#    URL: http://xmpp.org/extensions/inbox/$xepname.html
 #
 #    The XMPP Council will now consider whether to accept
 #    this proposal as a full XEP.
@@ -116,7 +116,7 @@ thesubject = 'Proposed XMPP Extension: ' + title
 introline = 'The XMPP Extensions Editor has received a proposal for a new XEP.'
 titleline = 'Title: ' + title
 abstractline = 'Abstract: ' + abstract
-urlline = 'URL: http://www.xmpp.org/extensions/inbox/' + xepname + '.html'
+urlline = 'URL: http://xmpp.org/extensions/inbox/' + xepname + '.html'
 actionline = 'The XMPP Council will decide in the next two weeks whether to accept this proposal as an official XEP.'
 
 msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr

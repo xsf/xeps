@@ -102,7 +102,7 @@ remark = getText(remarkNode.childNodes)
 #
 #    Abstract: $abstract
 #
-#    URL: http://www.xmpp.org/extensions/xep-$xepnum.html
+#    URL: http://xmpp.org/extensions/xep-$xepnum.html
 #
 #    If and when a new revision of this XEP is published,
 #    its status will be changed back to Experimental.
@@ -117,7 +117,7 @@ toaddrs = "standards@xmpp.org"
 thesubject = 'DEFERRED: XEP-' + xepnum + " (" + title + ")"
 introline = 'XEP-' + xepnum + ' (' + title + ') has been Deferred because of inactivity.'
 abstractline = 'Abstract: ' + abstract
-urlline = 'URL: http://www.xmpp.org/extensions/xep-' + xepnum + '.html'
+urlline = 'URL: http://xmpp.org/extensions/xep-' + xepnum + '.html'
 endline = 'If and when a new revision of this XEP is published, its status will be changed back to Experimental.'
 
 #msg = "From: %s\r\n" % fromaddr
