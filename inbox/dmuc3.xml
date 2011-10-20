@@ -1,0 +1,548 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>DMUC3: Distributed MUC</title>
+  <abstract>This document provides a protocol for reducing the bandwidth cost of local users contributing to a remote MUC over a constrained link through a local mirror of the MUC room.</abstract>
+  <legal>
+    <copyright>This XMPP Extension Protocol is copyright (c) 2011 by the XMPP Standards Foundation (XSF).</copyright>
+    <permissions>Permission is hereby granted, free of charge, to any person obtaining a copy of this specification (the &quot;Specification&quot;), to make use of the Specification without restriction, including without limitation the rights to implement the Specification in a software program, deploy the Specification in a network service, and copy, modify, merge, publish, translate, distribute, sublicense, or sell copies of the Specification, and to permit persons to whom the Specification is furnished to do so, subject to the condition that the foregoing copyright notice and this permission notice shall be included in all copies or substantial portions of the Specification. Unless separate permission is granted, modified works that are redistributed shall not contain misleading information regarding the authors, title, number, or publisher of the Specification, and shall not claim endorsement of the modified works by the authors, any organization or project to which the authors belong, or the XMPP Standards Foundation.</permissions>
+    <warranty>## NOTE WELL: This Specification is provided on an &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. In no event shall the XMPP Standards Foundation or the authors of this Specification be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the Specification or the implementation, deployment, or other use of the Specification. ##</warranty>
+    <liability>In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall the XMPP Standards Foundation or any author of this Specification be liable for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising out of the use or inability to use the Specification (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if the XMPP Standards Foundation or such author has been advised of the possibility of such damages.</liability>
+    <conformance>This XMPP Extension Protocol has been contributed in full conformance with the XSF's Intellectual Property Rights Policy (a copy of which may be found at &lt;<link url='http://www.xmpp.org/extensions/ipr-policy.shtml'>http://www.xmpp.org/extensions/ipr-policy.shtml</link>&gt; or obtained by writing to XSF, P.O. Box 1641, Denver, CO 80201 USA).</conformance>
+  </legal>
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0033</spec>
+    <spec>XEP-0045</spec>
+    <spec>XEP-0106</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>DMUC</shortname>
+  <author>
+    <firstname>Wayne</firstname>
+    <surname>Franklin</surname>
+    <email>wayne.franklin@tridsys.com</email>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2011-01-25</date>
+    <initials>waf</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+<p></p>
+<section2 topic='Motiviation' anchor='motivation'>
+<p>The primary motivation for Distributed Multi-User Chat (DMUC) is to minimize the server-to-server (S2S) traffic that is required for Multi-User Chat (MUC).  In constrained environments, the traffic on the S2S link can cause severe degradation of service.  Much of the S2S message traffic can be eliminated if each local server keeps a mirror of the chat room and responds to its local users on behalf of the actual MUC room.</p>
+</section2>
+<section2 topic='Requirements' anchor='requirements'>
+  <p>
+    MUC uses lots of bandwidth. Sometimes the network link that S2S traffic is carried on is heavily constrained. This protocol reduces the amount of traffic going across S2S through local mirrors of remote MUC rooms.
+    It needs no bandwidth for remote rooms without local occupants.
+</p> 
+</section2>
+<section2 topic='Requirements' anchor='reqs'>
+  <p>The following is a list of goals for the design of this extension:
+    <ul>
+    <li>DMUC should be transparent to the end user</li>
+    <li>DMUC should be transparent to the client program</li>
+    <li>DMUC support will be a server feature and not a room feature to minimize administration</li>
+    <li>The actual MUC room will be called the master room</li>
+    <li>Mirrors of the master room will not communicate directly with each other</li>
+    <li>If the S2S link is broken, it will appear to a user as if other users have left the room</li>
+    <li>Users in the same mirror can communicate with each other until the link is re-established with the master</li>
+    <li>DMUC will improve upon the &xep0033; concept</li> by eliminating the need for &lt;addresses/&gt;
+    </ul>
+  </p>
+</section2>
+</section1>
+
+<section1 topic='Terminology' anchor='terms'>
+<section2 topic='General Terms' anchor='genterms'>
+<dl>
+<dt>master</dt>
+<dd>The the actual MUC server</dd>
+<dt>mirror</dt>
+<dd>A mirror for a master MUC room on another machine</dd>
+</dl>
+</section2>
+
+<section2 topic='Actors' anchor='actors'>
+  <p>The following JIDs are used in this document.</p>
+  <dl>
+    <dt>fairfax.tridsys.com</dt><dd>XMPP server where the master MUC room is located</dd>
+    <dt>conference.fairfax.tridsys.com</dt><dd>MUC service on fairfax.tridsys.com.</dd>
+    <dt>chatroom@conference.fairfax.tridsys.com</dt><dd>MUC room.</dd>
+    <dt>kevin@fairfax.tridsys.com</dt><dd>User on fairfax.tridsys.com</dd>
+    <dt>scott@fairfax.tridsys.com</dt><dd>Another user on fairfax.tridsys.com</dd>
+    <br/>
+    <dt>raleigh.tridsys.com</dt><dd>A remote service, connected to fairfax.tridsys.com over constrained link</dd>
+    <dt>mirror.raleigh.tridsys.com</dt><dd>DMUC service on raleigh.tridsys.com</dd>
+    <dt>wayne@raleigh.tridsys.com</dt><dd>User on raleigh.tridsys.com</dd>
+    <dt>keith@raleigh.tridsys.com</dt><dd>Another user on raleigh.tridsys.com</dd>
+  </dl>
+  <p></p>
+</section2>
+</section1>
+
+<section1 topic='Use Cases' anchor='usecases'>
+
+<section2 topic='Discovering Server Support' anchor='disco'>
+<p>
+Support for Distributed MUC in a given server instance SHOULD be determined using &xep0030;.
+A conforming server MUST respond to disco#info requests.
+</p>
+<section3 topic='Disco to determine support' anchor='disco2'>
+To determine if a server or service supports Distributed MUC, the requesting entity SHOULD send a disco#info request to it.
+<example caption='Disco request for distributed MUC support'><![CDATA[
+<iq type='get'
+    from='raleigh.tridsys.com'
+    to='conference.fairfax.tridsys.com'
+    id='info1'>
+    <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+<p>If the server supports Distributed MUC, it MUST include a feature in the response.</p>
+<example caption='Disco response for server supporting distributed MUC'><![CDATA[
+<iq type='result'
+    from='conference.fairfax.tridsys.com'
+    to='raleigh.tridsys.com'
+    id='info1'>
+    <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+        <feature var='http://tridsys.com/protocol/dmuc'/>
+    ...
+    </query>
+</iq>
+]]></example>
+</section3>
+</section2>
+
+<section2 topic='Joining' anchor='joining'>
+<section3 topic='Success case' anchor='joinsuccess'>
+<p>User wayne@raleigh.tridsys.com/TransVerse wants to join MUC room chatroom@conference.fairfax.tridsys.com. At this point mirror.raleigh.tridsys.com knows nothing of the chatroom@conference.fairfax.tridsys.com MUC, and no existing mirror is in place beyond mirror.raleigh.tridsys.com being willing to mirror for wayne@raleigh.tridsys.com/TransVerse.</p>
+
+<example caption='User joins MUC through a mirror'><![CDATA[
+<presence
+    from='wayne@raleigh.tridsys.com/TransVerse'
+    to='chatroom@conference.fairfax.tridsys.com/Wayne'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+</presence>
+]]></example>
+
+<p>raleigh.tridsys.com determines that this message is bound for a MUC service supporting DMUC and sends it to the real MUC with an additional tag.</p>
+
+<example caption='Mirror service joins the target MUC'><![CDATA[
+<presence
+    from='wayne@raleigh.tridsys.com/TransVerse'
+    to='chatroom@conference.fairfax.tridsys.com/Wayne'>
+  <dmuc xmlns='http://tridsys.com/protocol/dmuc'
+    from='mirror.raleigh.tridsys.com'/>
+</presence>
+]]></example>
+
+<p>chatroom@conference.fairfax.tridsys.com recognises that the mirror service is now mirrorring it, 
+and performs the usual ACL checks as if wayne@tridsys.com/TransVerse had joined directly,
+sending presence to all occupants.  The master MUC will be able to take advantage of the fact that the
+rosters are being maintained by the distributed MUC services and send one presence with no
+&lt;addresses/&gt; (see &xep0033;) block to the mirrors.  The mirrors can then forward the &lt;presence/&gt; to each of
+their locally attached users that are in the room.
+</p>
+<p>If this mirror is unknown to the master, the room configuration MUST be sent to the new mirror.  The room configuration
+will contain information like if the room is moderated, how much history, who is allowed in the room, etc.</p>
+<example caption='MUC sends room configuration to DMUC'><![CDATA[
+<iq from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='mirror.raleigh.tridsys.com'
+    id='iq1'
+    type='set'>
+  <config xmlns='urn:xmpp:dmuc:0'>
+    <x xmlns='jabber:x:data' type='form'>
+      <field type='hidden' var='FORM_TYPE'>
+	<value>http://jabber.org/protocol/muc#roomconfig</value>
+      </field>
+      ...
+    </x>
+  </config>
+</iq>
+]]></example>
+<p>Upon receiving the room configuration, the mirror MUST respond.</p>
+<example caption='DMUC responds to room configuration'><![CDATA[
+<iq from='mirror.raleigh.tridsys.com'
+    to='chatroom@conference.fairfax.tridsys.com/Wayne'
+    id='iq1'
+    type='result'/>
+]]></example>
+<p>The master room MUST now send the roster to the mirror.</p>
+<example caption='MUC sends roster to DMUC'><![CDATA[
+<iq from='chatroom@conference.fairfax.tridsys.com'
+    to='mirror.raleigh.tridsys.com'
+    id='roster1'
+    type='set'>
+  <roster xmlns='urn:xmpp:dmuc:0'>
+    <item affiliation='owner' 
+	jid='scott@fairfax.tridsys.com' name='Scott'/>
+    <item affiliation='admin' 
+	jid='kevin@fairfax.tridsys.com' name='Kevin'/>
+    <item affiliation='none' 
+	jid='wayne@raleigh.tridsys.com' name='Wayne'/>
+    <item affiliation='none' 
+	jid='keith@raleigh.tridsys.com' name='Keith'/>
+  </roster>
+</iq>
+]]></example>
+<p>The mirror MUST send a response to the roster.</p>
+<example caption='DMUC sends response to roster'><![CDATA[
+<iq from='mirror.raleigh.tridsys.com'
+    to='chatroom@conference.fairfax.tridsys.com'
+    type='result'/>
+]]></example>
+<p>The new mirror SHOULD request room history.  See &xep0045; for details.</p>
+<example caption='DMUC sends history request to MUC'><![CDATA[
+<iq from='mirror.raleigh.tridsys.com'
+    to='chatroom@conference.fairfax.tridsys.com/Wayne'
+    id='history'
+    type='get'>
+  <room xmlns='urn:xmpp:dmuc:0' 
+	id='chatroom@conference.fairfax.tridsys.com'>
+    <history xmlns='http://jabber.org/protocol/muc'/>
+  </room>
+</iq>
+]]></example>
+<p>The history request MAY include any attributes specified in &xep0045;, such as 'maxchars', 'maxstanzas', 'seconds', and 'since'.</p>
+<example caption='MUC sends history to DMUC'><![CDATA[
+<iq from='chatroom@conference.fairfax.tridsys.com'
+    to='mirror.raleigh.tridsys.com'
+    id='history1'
+    type='result'>
+  <history xmlns='http://jabber.org/protocol/muc'>
+    <message xmlns='jabber:client' 
+	from='chatroom@conference.fairfax.tridsys.com/Wayne' type='groupchat'>
+      <body>All work and no play makes Jack a dull boy</body>
+      <delay xmlns='urn:xmpp:delay' 
+	from='wayne@raleigh.tridsys.com/TransVerse' 
+	stamp='2011-01-19T08:02:43Z'/>
+    </message>
+    ...
+    </message>
+    <message xmlns='jabber:client' 
+	from='chatroom@conference.fairfax.tridsys.com/Scott' type='groupchat'>
+      <body>All work and no play makes Jack a dull boy</body>
+      <delay xmlns='urn:xmpp:delay' 
+	from='scott@fairfax.tridsys.com/TransVerse' 
+	stamp='2011-01-19T08:23:10Z'/>
+      <body>All work and no play makes Jack a dull boy</body>
+    </message>
+  </history>
+</iq>
+]]></example>
+<example caption='MUC confirms room join'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='mirror.raleigh.tridsys.com'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>
+]]></example>
+<example caption='MUC informs local users'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='scott@fairfax.tridsys.com/TransVerse'
+   <x xmlns='http://jabber.org/protocol/muc#user'>
+     <item affiliation='none' role='participant'/>
+   </x>
+</presence>
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='kevin@fairfax.tridsys.com/TransVerse'
+   <x xmlns='http://jabber.org/protocol/muc#user'>
+     <item affiliation='none' role='participant'/>
+   </x>
+</presence>
+]]></example>
+<p>The mirror service on raleigh.tridsys.com then relays the message to all of the room members that are in the raleigh.tridsys.com domain.</p>
+
+<example caption='Mirror delivers the join to local users'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='wayne@raleigh.tridsys.com/TransVerse'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='keith@raleigh.tridsys.com/TransVerse'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='participant'/>
+  </x>
+</presence>
+]]></example>
+</section3>
+
+<section3 topic='Failure case' anchor='joinfail'>
+<p>If the master doesn't allow the user to join, it sends the standard MUC error to the mirror. 
+The mirror SHOULD only send the rejection to the user that failed to join.  Other users don't
+need to know.
+</p>
+<p>
+If a message is targeted to a specific user, &xep0106; will be used to pass along
+the user's JID.  The mirror service can then truncate the string just before the @ and convert
+the \40 to an @ and the \2f to a / to get the target user's JID and then forward the packet to that user.
+</p>
+
+<example caption='Master rejects joins'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com'
+    to='wayne\40raleigh.tridsys.com\2fTransVerse@mirror.raleigh.tridsys.com'
+    type='error'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+  <error type='auth'>
+    <registration-required 
+	xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</presence>
+]]></example>
+
+<p>The mirror then extracts the user's JID and delivers the bad news to the user.</p>
+
+<example caption='Mirror delivers the join failure to the user'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com'
+    to='wayne@raleigh.tridsys.com/TransVerse'
+    type='error'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+  <error type='auth'>
+    <registration-required 
+	xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</presence>
+]]></example>
+</section3>
+
+<section3 topic='Joining the MUC directly' anchor='joinmaster'>
+<p>Now when a user joins the master directly it will do usual presence distribution to occupants (remembering the mirror is an occupant). Status codes are omitted from this example, see &xep0045; for those.</p>
+
+<example caption='User joins the master MUC directly'><![CDATA[
+<presence
+    from='kevin@tridsys.com/TransVerse'
+    to='chatroom@conference.fairfax.tridsys.com/Kevin'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+</presence>
+]]></example>
+
+<example caption='MUC delivers the join to its occupants'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Kevin'
+    to='kevin@tridsys.com/TransVerse'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='owner' role='moderator'/>
+  </x>
+</presence>
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Kevin'
+    to='scott@tridsys.com/TransVerse'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='owner' role='moderator'/>
+  </x>
+</presence>
+]]></example>
+<example caption='MUC delivers the join to the DMUC'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Kevin'
+    to='mirror.raleigh.tridsys.com'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='admin' role='moderator'/>
+  </x>
+</presence>
+]]></example>
+      
+<example caption='Mirror delivers join to its occupants'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Kevin'
+    to='wayne@raleigh.tridsys.com/TransVerse'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='owner' role='moderator'/>
+  </x>
+</presence>
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Kevin'
+    to='keith@raleigh.tridsys.com/TransVerse'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='owner' role='moderator'/>
+  </x>
+</presence>
+]]></example>
+    </section3>
+</section2>
+
+<section2 topic='Leaving' anchor='leaving'>
+    <section3 topic='Mirror-connected Users' anchor='mirror'>
+      <p>The flow for a user leaving the mirror room is much the same as joining the mirror room:</p>
+      <example caption='User leaves the mirror room'><![CDATA[
+<presence
+    from='wayne@raleigh.tridsys.com/TransVerse'
+    to='chatroom@conference.fairfax.tridsys.com/Wayne'
+    type='unavailable'/>
+]]></example>
+
+<example caption='Mirror sends unavailable presence to local users'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='wayne@raleigh.tridsys.com/TransVerse''
+    type='unavailable'>
+</presence>
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='keith@raleigh.tridsys.com/TransVerse''
+    type='unavailable'>
+</presence>
+]]></example>
+<example caption='Mirror sends unavailable presence to MUC'><![CDATA[
+<presence
+    from='wayne@raleigh.tridsys.com/TransVerse'
+    to='chatroom@conference.fairfax.tridsys.com/Wayne'
+    type='unavailable'/>
+]]></example>
+<p>The master needs to send the presence to locally attached users and mirrors that did not send this message.</p>
+<example caption='MUC sends unavailable presence to occupants'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='kevin@tridsys.com/TransVerse'
+    type='unavailable'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='none'/>
+  </x>
+</presence>
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='scott@tridsys.com/TransVerse'
+    type='unavailable'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='none'/>
+  </x>
+</presence>
+]]></example>
+<example caption='MUC sends unavailable presence to DMUC'><![CDATA[
+<presence
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='mirror.raleigh.tridsys.com'
+    type='unavailable'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='none'/>
+  </x>
+</presence>
+]]></example>
+</section3>
+
+<section3 topic='Direct-connection Users' anchor='directpart'>
+<p>Distribution of presence for users parting when connected directly to the MUC is identical to distribution of presence for users joining directly to the MUC.</p>
+</section3>
+
+<section3 topic='Status changes' anchor='statuschange'>
+<p>Distribution of presence for users changing status is the same as that for joining and parting.</p>
+</section3>
+
+</section2>
+
+<section2 topic='Sending a Message to All Occupants' anchor='message'>
+    <section3 topic='Normal use' anchor='message-ack'>
+      <p>Normal fan-out like presence</p>
+      <example caption='Mirror user sends a message to the room'><![CDATA[
+<message
+    from='wayne@raleigh.tridsys.com/TransVerse'
+    to='chatroom@conference.fairfax.tridsys.com/Wayne'
+    type='groupchat'>
+  <body>All work and no play makes Jack a dull boy.</body>
+</message>
+]]></example>
+<example caption='DMUC sends the message to its users'><![CDATA[
+<message
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='wayne@raleigh.tridsys.com/TransVerse'
+    type='groupchat'>
+  <body>All work and no play makes Jack a dull boy.</body>
+</message>
+<message
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='keith@raleigh.tridsys.com/TransVerse'
+    type='groupchat'>
+  <body>All work and no play makes Jack a dull boy.</body>
+</message>
+]]></example>
+<example caption='Mirror sends the message to the MUC'><![CDATA[
+<message
+    from='wayne@raleigh.tridsys.com/TransVerse'
+    to='chatroom@conference.fairfax.tridsys.com/Wayne'
+    type='groupchat'>
+</message>
+]]></example>
+<p>The local server sends out this message to local users.</p>
+<example caption='MUC sends the message to the occupants'><![CDATA[
+<message
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='scott@fairfax.tridsys.com/TransVerse'
+    type='groupchat'>
+  <body>All work and no play makes Jack a dull boy.</body>
+</message>
+<message
+    from='chatroom@conference.fairfax.tridsys.com/Wayne'
+    to='kevin@fairfax.tridsys.com/TransVerse'
+    type='groupchat'>
+  <body>All work and no play makes Jack a dull boy.</body>
+</message>
+]]></example>
+</section3>
+</section2>
+<section2 topic='Connection to master is lost' anchor='lost'>
+<p>If the connection is lost to the master MUC, the mirrors should be able to continue on.</p>
+<p>It is the responsibility of the mirrored DMUC to send unavailable presence on behalf of any user that is not attached locally.</p>
+<p>It is the responsibility of the master MUC to send unavailable presence on behalf of the users attached to the disconnected remote domain to all local users and affected mirrors.</p>
+<p>When the connection is re-established, there will be a flood of queued up presences and messages.  Because presence information is most likely out of date, the master MUC should send all current presence information to the mirror.  The mirror, should also send presence for its users to the master MUC.</p>
+</section2>
+<section2 topic='Administration Use Cases' anchor='admin'>
+    <p>To perform administration of the MUC, connect directly to the MUC and follow the standard process.</p>
+</section2>
+</section1>
+
+
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>To avoid complexity of protocol, the MUC MUST NOT modify the nick of a user joining from a mirror - if their JID is unacceptable, the join must instead fail (this simplifies the passing of status codes between the MUC and the mirror).</li>
+    <li>Similarly to avoid complexity and round-trips, nick-changing is not allowed for users connected through a mirror. If a user attempts to change their nick, the mirror MUST return a <![CDATA[<not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>]]> error.</li>
+  </ul>
+</section1>
+<!--<section1 topic='Implementation Notes' anchor='impl'>
+  <p>OPTIONAL.</p>
+</section1>
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>OPTIONAL.</p>
+</section1>
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>OPTIONAL.</p>
+</section1>-->
+<section1 topic='Security Considerations' anchor='security'>
+  <p>This allows a MUC mirror to mirror for another JID, so should only be deployed in scenarios where either the mirror service is trusted, or it is known that the users of the mirror service are in the same security domain as the mirror service.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>None.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>Needs a namespace.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>When advanced.</p>
+</section1>
+</xep>
