@@ -249,7 +249,8 @@ def buildPDF( file, nr ):
 		return False
 	
 	#detect http urls and escape them to make them breakable
-	error, desc = executeCommand('''sed -i 's|\([\s"]\)\(http://[^ "]*\)|\1\\path{\2}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
+	# this should match all urls in free text; not the urls in xml:ns or so..so no " or ' in front.
+	error, desc = executeCommand('''sed -i 's|\([\s"]\)\([^"]http://[^ "]*\)|\1\\path{\2}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
 	if not checkError(error, desc):
 		return False
 	
