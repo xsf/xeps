@@ -46,7 +46,18 @@
   </xsl:for-each>
 </xsl:variable>
 
-
+<!-- Format URLs for the front page. Putting too long URLs in the footnotes. -->
+<xsl:template name="formatURL">
+  <xsl:param name="url"/>
+  <xsl:choose>
+    <xsl:when test="string-length($url) > 80">
+      <cmd name="thanks"><parm><cmd name="url"><parm><xsl:value-of select="$url"/></parm></cmd></parm></cmd> \hspace{0.5 cm}
+    </xsl:when>
+    <xsl:otherwise>
+      <cmd name="url"><parm><xsl:value-of select="$url"/></parm></cmd> \\
+    </xsl:otherwise>
+  </xsl:choose>
+</xsl:template>
 
 <!-- convert "document": create header and continue -->
 <xsl:template match="xep">
@@ -67,6 +78,10 @@
 	unicode, 
 	pagebackref, 
 	xetex]{hyperref}
+
+% break URLs at more places
+\renewcommand{\UrlBreaks}{\do\/\do\a\do\b\do\c\do\d\do\e\do\f\do\g\do\h\do\i\do\j\do\k\do\l\do\m\do\n\do\o\do\p\do\q\do\r\do\s\do\t\do\u\do\v\do\w\do\x\do\y\do\z\do\A\do\B\do\C\do\D\do\E\do\F\do\G\do\H\do\I\do\J\do\K\do\L\do\M\do\N\do\O\do\P\do\Q\do\R\do\S\do\T\do\U\do\V\do\W\do\X\do\Y\do\Z\do\0\do\1}
+
 \usepackage{xcolor}
 \usepackage{graphicx}
 \usepackage{fancyhdr}
@@ -122,9 +137,9 @@
     <cmd name="author">
       <parm><TeXML escape="0">
       <xsl:for-each select='/xep/header/author'><xsl:value-of select="firstname"/><xsl:text> </xsl:text><xsl:value-of select="surname"/> \\
-      <xsl:if test="email"><cmd name="url"><parm>mailto:<xsl:value-of select="email"/></parm></cmd> \\ </xsl:if> 
-      <xsl:if test="jid"><cmd name="url"><parm>xmpp:<xsl:value-of select="jid"/></parm></cmd> \\ </xsl:if>
-      <xsl:if test="uri"><cmd name="url"><parm><xsl:value-of select="uri"/></parm></cmd></xsl:if> <xsl:if test='position() != last()'> \and </xsl:if>
+      <xsl:if test="email"><xsl:call-template name="formatURL"><xsl:with-param name="url">mailto:<xsl:value-of select="email"/></xsl:with-param></xsl:call-template></xsl:if>
+      <xsl:if test="jid"><xsl:call-template name="formatURL"><xsl:with-param name="url">xmpp:<xsl:value-of select="jid"/></xsl:with-param></xsl:call-template></xsl:if>
+      <xsl:if test="uri"><xsl:call-template name="formatURL"><xsl:with-param name="url"><xsl:value-of select="uri"/></xsl:with-param></xsl:call-template></xsl:if> <xsl:if test='position() != last()'> \and </xsl:if>
       </xsl:for-each>
       </TeXML></parm>
     </cmd>
