@@ -1,0 +1,187 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Presence State Annotations</title>
+  <abstract>This document provides a protocol using which a server is able to provide information to clients indicating that previously received presence data may be stale.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>PSA</shortname>
+  &ksmithisode;
+  <revision>
+    <version>0.0.1</version>
+    <date>2012-01-03</date>
+    <initials>kis</initials>
+    <remark><p>Initial published version.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Presence data received by a client are typically cached and displayed until they are replaced by an update (whereupon the new data will be cached and displayed...), for example graphically annotating availability of contacts in a roster. Where the entity from which the client has received the presence data is remote (residing upon a different server), unavailability of the server to server link will render the client unable to receive further presence updates from the entity but unaware that this is the case. Where the remote entity is a contact, it may cause the contact appear to be online (or offline, or away etc.) to the user of the client when they are not. Where the remote entity is a MUC room the case is more severe, as the MUC room may have ejected the client due to the S2S link being unavailable to send stanzas but the client may still consider itself present in the room.</p>
+  <p>This extension provides a simple mechanism by which the local server can resend previous presence data to the client, annotated such that the client knows it would be unable to receive future updates.</p>
+</section1>
+Appropriate action - alert user, attempt to rejoin MUC, whatever.
+<section1 topic='Requirements' anchor='reqs'>
+  <p>Allow servers to annotate presence stanzas sent to clients indicating lack of availability of a client or server link necessary for receipt of updated presence.</p>
+</section1>
+
+<section1 topic='Discovery' anchor='discovery'>
+  <p>Clients supporting this should have a feature of "urn:xmpp:psa" in caps. Servers autoenable based on this.</p>
+</section1>
+
+<section1 topic='Use Cases' anchor='usecases'>
+  <p>There are three main cases that links may be unavailable, leading to Romeo (a user of the montague.lit server) receiving presence state annotations:</p>
+  <ul>
+    <li>That a connection from montague.lit to a remote server, such as capulet.lit, is unavailable, leading to remote presence from users on capulet.lit (e.g. juliet@capulet.lit) being potentially stale.</li>
+    <li>That a connection from a client to montague.lit has been paused (e.g. because the client uses Stream Management and has a ready-to-resume session, or has a paused BOSH session), such that Romeo's representation of a paused session such as benvolio@montague.lit's is not accurate.</li>
+    <li>That the connection between a MUC room in which Romeo is an occupant and another of that room's occupants is affected by either of the cases above, making Romeo's view of the room occupancy stale.</li>
+  </ul>
+  <p>Here we address each in turn. In each of these examples Romeo's client is assumed to have already indicated support for PSAs, as described in 'discovery' above.</p>
+  <section2 topic='Remote Server Unavailable' anchor='s2s'>
+    <p>In this example, Romeo (romeo@montague.lit) has received presence from Juliet (juliet@capulet.lit/orchard), either because she's in his roster or because she sent directed presence.</p>
+    <example caption="Romeo receives Juliet's presence" ><![CDATA[
+<presence
+    from='juliet@capulet.lit/orchard'
+    to='romeo@montague.lit/lane'>
+  <status>Available</status>
+</presence>
+]]></example>
+    <p>The server to server connection between capulet.lit and montague.lit then becomes unavailable for some reason (montague.lit can't know if this is a network error, a server failure, or some other condition). Juliet may now be updating her presence (e.g. she might now have gone offline), and Romeo would not be able to receive the presence update stanzas. As such, montague.lit MUST push the old presence to Romeo, annotated that this may now be stale due to an s2s outage.</p>
+    <p>The state-annotation element alerts Romeo's client to the unavailability of the server link through the server-unavailable child. The state-annotation MUST have a 'from' attribute set to the entity annotating the stanza (in this case montague.lit), and an OPTIONAL description child MAY provide human-readable text describing the change.</p>
+    <example caption="Romeo receives Juliet's presence, annotated that the S2S is unavailable" ><![CDATA[
+<presence
+    from='juliet@capulet.lit/orchard'
+    to='romeo@montague.lit/lane'>
+  <status>Available</status>
+  <state-annotation xmlns="urn:xmpp:psa" from="montague.lit">
+    <server-unavailable/>
+    <description>The capulet.lit server is no longer available</description>
+  </state-annotation>
+</presence>
+]]></example>
+    <p>When the link between montague.lit and capulet.lit again becomes available, montague.lit MUST send an empty annotation of the previous presence to Romeo. It MAY subsequently attempt to refresh this presence by reprobing the remote entity.</p>
+    <example caption="Romeo receives Juliet's annotated presence, annotated that S2S is restored" ><![CDATA[
+<presence
+    from='juliet@capulet.lit/orchard'
+    to='romeo@montague.lit/lane'>
+  <status>Available</status>
+  <state-annotation xmlns="urn:xmpp:psa" from="montague.lit"/>
+</presence>
+]]></example>
+    <p>When an S2S connection is deemed not to be available, or to return to availability afterwards (TODO: guidelines on what this means), the server MUST send a corresponding annotated presence for every remote full JID on the unavailable server to every local client requesting PSAs where the local client has received presence from the remote JID and the most recent presence is an available type (i.e. not error or unavailable). Subscription requests are excluded from this processing.</p>
+  </section2>
+
+  <section2 topic='Local User Paused' anchor='connectionpaused'>
+    <p>In this example, Romeo (romeo@montague.lit) has received presence from Benvolio (benvolio@montague.lit/lane), who is using BOSH.</p>
+    <example caption="Romeo receives Benvolio's presence" ><![CDATA[
+<presence
+    from='benvolio@montague.lit/lane'
+    to='romeo@montague.lit/lane'>
+  <status>He ran this way, and leap'd this orchard wall</status>
+</presence>
+]]></example>
+    <p>Benvolio's client then uses the BOSH 'pause' feature for suspending the session. The montague.lit server MUST then send an annotated presence to Romeo's client saying that Benvolio's session has been paused. This MUST include the connection-paused element, MUST include a 'from' attribute of the entity doing the annotating (montague.lit) and MAY include a human-readable description element</p>
+    <example caption="Romeo receives Benvolio's presence annotated for the paused session" ><![CDATA[
+<presence
+    from='benvolio@montague.lit/lane'
+    to='romeo@montague.lit/lane'>
+  <state-annotation xmlns="urn:xmpp:psa" from="montague.lit">
+    <connection-paused/>
+    <description>benvolio's BOSH session has been paused</description>
+  </state-annotation>
+  <status>He ran this way, and leap'd this orchard wall</status>
+</presence>
+]]></example>
+    <p>After pausing the session, Benvolio's client can either resume it or allow it to time out. If the session is resumed, the server MUST send an empty state-annotation to Romeo's client. If the session times out, it will simply send an unavailable presence as normal.</p>
+    <example caption="Romeo receives Benvolio's presence annotated for the resumed session" ><![CDATA[
+<presence
+    from='benvolio@montague.lit/lane'
+    to='romeo@montague.lit/lane'>
+  <state-annotation xmlns="urn:xmpp:psa" from="montague.lit"/>
+  <status>He ran this way, and leap'd this orchard wall</status>
+</presence>
+]]></example>
+    <example caption="Romeo receives Benvolio's synthesized unavailable presence for the terminated session" ><![CDATA[
+<presence
+    from='benvolio@montague.lit/lane'
+    to='romeo@montague.lit/lane' type='unavailable'/>
+]]></example>
+
+    <p>When a server detects that a client's session has been temporarily suspended (either through a BOSH pause, or through a disconnection while using 198 prior to the resume period timing out) it MUST send annotated presence, as above, to every local and remote JID that has received the client session's presence (and where the presence is not subscription-related and has not been cancelled by a corresponding unavailable presence) and requests PSAs. If a paused session is resumed, the server MUST then send a corresponding empty state-annotation to each of these JIDs, as above. If the session is terminated the server MUST send unavailable presence using the usual rules from RFC6121.</p>
+  </section2>
+
+  <section2 topic='MUC loses contact with occupant' anchor='mucoccupant'>
+    <p>In this example, Romeo (romeo@montague.lit) is an occupant in the orchard@chats.shakespeare.lit MUC room, alongside Juliet (juliet@capulet.lit). (For these examples, the usual MUC payloads are elided; they should be present as required by xep45).</p>
+    <example caption="Romeo receives a presence update from Juliet in the MUC room" ><![CDATA[
+<presence
+    from='orchard@chats.shakespeare.lit/Juliet'
+    to='romeo@montague.lit/lane'>
+  <status>Ay me!</status>
+</presence>
+]]></example>
+    <p>Some time later, the MUC service chats.shakespeare.lit loses server to server connectivity to capulet.lit (the server upon which Juliet's account resides). If the server does not immediately remove Juliet as an occupant of the room, it MUST send Romeo an annotated presence, following the rules for server-unavailable defined above in s2s.</p>
+    <example caption="Romeo receives an annotated presence from the MUC room that Juliet's server is unavailable" ><![CDATA[
+<presence
+    from='orchard@chats.shakespeare.lit/Juliet'
+    to='romeo@montague.lit/lane'>
+  <state-annotation xmlns="urn:xmpp:psa" from="chats.shakespeare.lit">
+    <server-unavailable/>
+    <description>The user's server is no longer reachable</description>
+  </state-annotation>
+  <status>Ay me!</status>
+</presence>
+]]></example>
+    <p>If the S2S link becomes available and the MUC service has not yet ejected Juliet from the room, it MUST send an empty state-annotation to indicate this. If, instead, it has ejected Juliet in the meantime there is no additional stanza to send (as the ejection will already have been communicated to Romeo's client following the rules in xep45).</p>
+    <example caption="Romeo receives an annotated presence from the MUC room that Juliet's server is again available" ><![CDATA[
+<presence
+    from='orchard@chats.shakespeare.lit/Juliet'
+    to='romeo@montague.lit/lane'>
+  <state-annotation xmlns="urn:xmpp:psa" from="chats.shakespeare.lit"/>
+  <status>Ay me!</status>
+</presence>
+]]></example>
+
+  </section2>
+</section1>
+
+
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>When getting 'available again' for a remote MUC, MAY message yourself in the MUC and rejoin if not present.</li>
+    <li>When MUC service re-establishes S2S, may send a probe to see if remote client is still online.</li>
+  </ul>
+</section1>
+<!--<section1 topic='Implementation Notes' anchor='impl'>
+  <p>OPTIONAL.</p>
+</section1>
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>OPTIONAL.</p>
+</section1>
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>OPTIONAL.</p>
+</section1>-->
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Although this involves sending stanzas on behalf of another entity, these are always sent by entities that are already within trust domains able to spoof such stanzas (e.g. the local server sending to a local user, or a remote server sending on behalf of its local users).</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>None.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>Needs a namespace.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>When advanced.</p>
+</section1>
+</xep>
