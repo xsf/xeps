@@ -145,6 +145,8 @@ OR OTHER DEALINGS IN THE SOFTWARE.
             <td><xsl:value-of select='/xep/header/revision[position()=1]/date'/></td>
           </tr>
         </table>
+        <!-- COUNCIL NOTE -->
+        <xsl:apply-templates select='/xep/header/councilnote'/>
         <!-- DEPLOYABILITY -->
         <hr />
         <xsl:variable name='thestatus' select='/xep/header/status'/>
@@ -430,7 +432,15 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     </p>
     </div>
   </xsl:template>
-    
+  
+  <xsl:template match='councilnote'>
+    <hr />
+    <div>
+      <h3>COUNCIL NOTE</h3>
+      <xsl:apply-templates/>
+    </div>
+  </xsl:template>
+
   <xsl:template match='author' mode='meta'>
     <meta>
       <xsl:attribute name='name'><xsl:text>DC.Creator</xsl:text></xsl:attribute>
