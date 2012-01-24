@@ -16,6 +16,8 @@
   <approver>Council</approver>
   <dependencies>
     <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>XEP-0045</spec>
   </dependencies>
   <supersedes/>
   <supersededby/>
@@ -35,21 +37,21 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>A client joining a &xep0045; room involves the receipt of a significant volume of data in the form of presence from the current room occupants, and past ("context" or "history") messages. If the client has recently been in the room (for example if it has needed to reconnect only because of a networking error) it may already know most of the current state, and receipt of these data will redundant. XEP-0045 provides a method for limiting the context messages received when joining but no method for limiting the duplication of known presence; this document expands slightly upon the former and provides the latter.</p>
+  <p>A client joining a &xep0045; room will receive a significant volume of data, in the form of presence from the current room occupants and past ("context" or "history") messages. If the client has recently been in the room (for example if it has needed to reconnect only because of a networking error) it may already know most of the current state, and receipt of these data will be redundant. XEP-0045 provides a method for limiting the context messages received when joining but no method for limiting the duplication of known presence; this document expands slightly upon the former and provides the latter.</p>
 </section1>
-Appropriate action - alert user, attempt to rejoin MUC, whatever.
+
 <section1 topic='Requirements' anchor='reqs'>
-  <p>Reduce the volume of data sent to a client .</p>
+  <p>Reduce the volume of redundant data sent to a client.</p>
 </section1>
 
 <section1 topic='Discovery' anchor='discovery'>
-  <p>MUC Rooms supporting this should have a disco feature of "urn:xmpp:presence-session:0" in caps.</p>
+  <p>MUC Rooms supporting this should have a disco feature of "urn:xmpp:presence-session:0".</p>
   <p>To avoid extra roundtrips for discovery, clients may speculatively send elements when initially joining a MUC, and treat the absense of appropriate elements in the responses to indicate a lack of support.</p>
 </section1>
 
 <section1 topic='Use Cases' anchor='usecases'>
   <section2 topic='Initial Join' anchor='initial'>
-    <p>In this example, Romeo (romeo@montague.lit) is joining the MUC room orchard@chats.capulet.lit. To use MUC Fast Reconnect for future joins, the initial MUC join presence stanza must also contain a presence-session element in the namespace "urn:xmpp:presence-session:0" with no attributes.</p>
+    <p>In this example, Romeo (romeo@montague.lit) is joining the MUC room orchard@chats.capulet.lit. To use MUC Fast Reconnect for future joins, the initial MUC join presence stanza MUST also contain a presence-session element in the namespace "urn:xmpp:presence-session:0" with no attributes.</p>
     <example caption="Romeo sends 'room join' presence" ><![CDATA[
 <presence
     from='romeo@montague.lit/lane'
@@ -71,21 +73,25 @@ Appropriate action - alert user, attempt to rejoin MUC, whatever.
 ]]></example>
     <p>Attributes:</p>
     <ul>
-      <li>session: This is an opaque, string, identifier provider by the MUC room and may be used by the server to distinguish between stanzas that will potentially have the same id, but be for logically different rooms (e.g. because the room was deleted and another created with the same name).</li>
-      <li>id: This, paired with the session, gives a unique identifier for every presence update.</li>
+      <li>session: This is an opaque, string, identifier provider by the MUC room and may be used by the server to distinguish between stanzas that will potentially have the same id, but be for logically different rooms (e.g. because the room was deleted and another created with the same name in the time between the client leaving and trying to fast rejoin).</li>
+      <li>id: This (also opaque, string) is a per-stanza identifier that, when paired with the session, gives a unique identifier for every presence update.</li>
+      <li>type: This is empty for the normal case, and has a value of "resume" when a client requests a session resumption, or "truncated" when a room is announcing that it is not transmitting the full history to a joining client (see below)</li>
     </ul>
   </section2>
   <section2 topic="Fast rejoin" anchor = "rejoin">
-    <p>If Romeo then leaves the room and wants to rejoin, his client can attempt a fast rejoin by requesting only the presence changes since he was last an occupant, by including in his room join stanza a presence-session-resume element, again with namespace "urn:xmpp:presence-session:0", and the session and id attributes of the last presence it received from the room prior to leaving.</p>
+    <p>If Romeo then leaves the room and wants to rejoin, his client can attempt a fast rejoin. To request only the presence changes since he was last an occupant, it includes a presence-session element in his room join stanza, again with namespace "urn:xmpp:presence-session:0", with a type attribute whose value is "resume" and the session and id attributes of the last presence it received from the room prior to leaving. This corresponds to the "last known state".</p>
     <example caption="Romeo performs a fast rejoin on the room" ><![CDATA[
 <presence
     from='romeo@montague.lit/lane'
     to='orchard@chat.capulet.lit/Romeo'>
   <x xmlns='http://jabber.org/protocol/muc'/>
-  <presence-session-resume xmlns="urn:xmpp:presence-session:0" session="u8e8t2thu" id="893oehh"/>
+  <presence-session xmlns="urn:xmpp:presence-session:0" session="u8e8t2thu" id="893oehh" type="resume"/>
 </presence>
 ]]></example>
-    <p>When the MUC room receives a room fast rejoin request, it must either first send an 'unavailable' presence from the room's bare JID, followed by a normal full join, as above, or instead of sending the full presence list for all occupants, only send those stanzas needed to get from the state represented by the client-provided session and id to the current state. All the presence stanzas (apart from the unavailable one used to reset state before a clean join) MUST contain the presence-session element as described above.</p>
+    <p>When the MUC room receives a room fast rejoin request, it MUST either satisfy the request by sending incremental updates to the room state <em>or</em> send a complete set of stanzas to reestablish the current state.</p>
+    <p>If the room is able to update the client's state incrementally, it SHOULD only send those presence stanzas needed by the client to remove any occupants no longer in the room, add any newly joined occupants and update the state of any occupants whose status has changed (either because they have changed their presence sent to the room (e.g. changed to an 'away' state) or because their status within the MUC has changed (e.g. they have become a moderator). If the incremental stanzas would present a greater volume of data than a fresh join, it is RECOMMENDED that the server sends fresh join information instead.</p>
+    <p> If the server is unable to calculate the stanzas required to send the client an incremental update (or if it is to send a fresh join for some other reason), it MUST first send an 'unavailable' presence from the room's bare JID, followed by a normal full join, as above</p>
+    <p>All the presence stanzas (apart from the initial unavailable presence used to reset state before a clean join) MUST contain the presence-session element as described above.</p>
     <example caption="Romeo receives an 'unavailable' presence from the room, indicating that it is a clean join." ><![CDATA[
 <presence
     to='romeo@montague.lit/lane'
@@ -95,11 +101,34 @@ Appropriate action - alert user, attempt to rejoin MUC, whatever.
     <p>The room SHOULD only send the unavailable presence, forcing a sending of all the occupants' presence, if it would either result in fewer transmitted stanzas than sending the necessary delta, or it is unable to provide the necessary delta (such as if too much time has past and it no longer has records of the old state).</p>
   </section2>
 
-  <section2 topic='Requesting only unseen messages' anchor='unseenmessages'>
-    <p>XEP-0045 provides several ways to limit the history/context messages received on join, but none of these allow a client to accurately request only the messages they have yet to see. This is done by the MUC annotating each message with an id (like in presence, above), and the client using it instead of maxchars/maxstanzas/seconds/since from -45 when it joins. And here I've just stopped writing.</p>
-    <example caption="Romeo requests only unseen messages" ><![CDATA[
-Here
+  <section2 topic='Receiving only unseen messages' anchor='unseenmessages'>
+    <p>XEP-0045 provides several ways to limit the history/context messages received on join, but none of these allow a client to accurately request only the messages they have yet to see. To address this, the MUC service annotates each message with an id (in the same manner as presence, above), and the room will consider only messages since the last stanza the client received when applying the default/maxchars/maxstanzas/seconds/since rules from -45 for sending context. If the room doesn't send the full history of messages that the client has yet to receive (e.g. due to the application of history controls or because the server hasn't stored them) it sends a message to the client such the client knows it only has partial history.</p>
+    <p>Some informal examples:</p>
+    <ul>
+      <li>There have been 9 messages since the client was last in the room, and the client joins requesting a maximum of 20 stanzas. The client receives the 9 messages.</li>
+      <li>There have been 9 messages since the client was last in the room, and the client joins requesting a maximum of 5 stanzas. The client first receives a message that the history has been trucated and then the 5 most recent messages.</li>
+      <li>There have been 9 messages since the client was last in the room, and the client requests that no history be sent. The client receives the truncation message and no history</li>
+    </ul>
+    <example caption="Romeo receives annotated message while in room" ><![CDATA[
+<message
+    to='romeo@montague.lit/lane'
+    from='orchard@chat.capulet.lit/Juliet'
+    type='groupchat'>
+  <body>Ay me!</body>
+  <presence-session xmlns="urn:xmpp:presence-session:0" session="u8e8t2thu" id="893ou22"/>
+</message>
 ]]></example>
+    <p>When sending broadcast messages from the room, the service MUST annotate them with a presence-session stanza with xmlns "urn:xmpp:presence-session:0" and session and id attributes as defined above for presence stanzas.</p>
+    <example caption="Room informs Romeo's client that it will not transmit the full missing history" ><![CDATA[
+<message
+    to='romeo@montague.lit/lane'
+    from='orchard@chat.capulet.lit'
+    type='groupchat'>
+  <presence-session xmlns="urn:xmpp:presence-session:0" type="truncated"/>
+</message>
+]]></example>
+    <p>When the room does not send the full history of all messages that the client has not received, it MUST (prior to sending any history and subsequent to sending presence) send a message stanza with a payload whose name is 'presence-session' and namespace is "urn:xmpp:presence-session:0" with an attribute named "type" whose value is "truncated". This lets the client know that it is missing history and it could choose to display this to the user in some way.</p>
+
     
   </section2>
 </section1>
@@ -120,7 +149,7 @@ Here
   <p>OPTIONAL.</p>
 </section1>-->
 <section1 topic='Security Considerations' anchor='security'>
-  <p>To follow.</p>
+  <p>This specification doesn't add additional security considerations beyond those of its dependencies..</p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>None.</p>
