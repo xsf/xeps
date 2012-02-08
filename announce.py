@@ -115,6 +115,8 @@ elif (xepstatus == "Retracted"):
     xepflag = "retract"
 elif (xepstatus == "Deprecated"):
     xepflag = "deprecate"
+elif (xepstatus == "Obsolete"):
+    xepflag = "obsolete"
 elif (xepstatus == "Deferred"):
     xepflag = "defer"
 
@@ -149,6 +151,8 @@ elif xepflag == "retract":
     thesubject = 'RETRACTED: XEP-'
 elif xepflag == "deprecate":
     thesubject = 'DEPRECATED: XEP-'
+elif xepflag == "obsolete":
+    thesubject = 'OBSOLETED: XEP-'
 elif xepflag == "defer":
     thesubject = 'DEFERRED: XEP-'
 else:
