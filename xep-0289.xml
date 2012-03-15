@@ -7,7 +7,7 @@
 <xep>
 <header>
   <title>Federated MUC for Constrained Environments</title>
-  <abstract>This document provides a protocol for reducing the bandwidth cost of local users contributing to a remote MUC over a constrained link through local proxying of the MUC room.</abstract>
+  <abstract>This document provides a protocol for federating MUC rooms together in order to reduce the effects of constrained network (e.g. unreliability, severely limited bandwidth) on the room occupants.</abstract>
   &LEGALNOTICE;
   <number>0289</number>
   <status>Deferred</status>
@@ -23,6 +23,12 @@
   <shortname>FMUC</shortname>
   &ksmithisode;
   <revision>
+    <version>0.2</version>
+    <date>2012-03-15</date>
+    <initials>kis</initials>
+    <remark><p>Reworking for new protocol and clarity of purpose.</p></remark>
+  </revision>
+  <revision>
     <version>0.1</version>
     <date>2010-11-29</date>
     <initials>psa</initials>
@@ -36,29 +42,47 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>MUC uses lots of bandwidth. Sometimes server to server traffic is heavily constrained. This limits the amount of traffic going across s2s through local proxying for remote MUC rooms. It requires no setup in advance, and needs no bandwidth for remote rooms without local occupants. The premise is that a proxy room joins another room, and receives stanzas from the MUC just as anoter occupant would.</p>
+  <p>MUC's design generally assumes a highly reliable network providing plenty of bandwidth, and it functions well in Internet settings. It is sometimes the case that server to server traffic is heavily constrained, with typical problems for constrained links being high latency, tiny amounts of available bandwidth and unreliability (including, potentially, long-term failure of S2S links). This document provides methods for allowing experiences close to those of standard MUC use while operating across such constrained links by allowing rooms to federate with remote counterparts and for users to connect to the federated MUC node nearest to them on the network for a given FMUC room. It requires no setup in advance, and needs no bandwidth for remote rooms without local occupants. The premise is that a proxy room joins another room and receives stanzas from the MUC just as another occupant would; this is analogous to the client to server model, whereby a client would connect to their local server and the server deals with connections elsewhere - the client joins a local room and the room deals with connections to other federated rooms.</p>
+
+  <section2 topic='Terminology' anchor='terminology'>
+    <p>As MUCs are generally self-contained entities with a single address, federating them requires the introduction of some new terminology:</p>
+    <ul>
+      <li>FMUC set - the union of all MUC rooms that federate together</li>
+      <li>FMUC node - a single MUC room that is a member of an FMUC set</li>
+      <li>FMUC room - a room represented by an FMUC set</li>
+    </ul>
+    <p>For illustration: if room1@rooms.server1.lit and room2@rooms.server2.lit federate with each other, then room1@rooms.server1.lit is an FMUC node, as is room2@rooms.server2.lit. Both nodes are in the FMUC set (along with any other node rooms that mutually federate) while the conceptual single room created by joining the FMUC set together is the FMUC room (and this FMUC room does not have a single definitive identifier).</p>
+  </section2>
 </section1>
+
 <section1 topic='Requirements' anchor='reqs'>
-  <p>If appropriately configured, avoid bandwidth use that isn't strictly necessary for message exchange.</p>
-  <p>Allow an endpoint to scale gracefully up to the usual full MUC chat service as bandwidth allows.</p>
+  <ul>
+  <li>If appropriately configured, avoid bandwidth use that isn't strictly necessary for message exchange.</li>
+  <li>Allow conversation in a federated MUC to continue when one of the federated nodes is unavailable (e.g. due to network failure preventing S2S links forming), such that the nodes operate in a 'peer to peer' or 'multi-master' mode.</li>
+  <li>If configured, allow a master/slave configuration such that a disconnected node is no longer usable for local chat</li>
+  <li><em>Acceptable compromise</em> When operating in multi-master mode the message ordering may not be consistent between FMUC nodes.</li>
+  </ul>
 </section1>
 
 <section1 topic='Addressing' anchor='addressing'>
-  <p>Each local representation has a different address for the federated MUC so that standard XMPP routing rules can be used, and servers do not need to be modified. To generate the JID through which a user can join a federated MUC, the joining client should apply &xep0106; to the JID of the MUC, and use this as the node part of a JID with the host of the mirroring domain. For example, if a client is connected to the server 'remote.example.com', which has a mirroring service 'mirror.remote.example.com', and the user wants to join the MUC 'jabberchat@talk.example.com', their client would generate a federated MUC JID of jabberchat\40talk.example.com@mirror.remote.example.com for them to use.</p>
+  <p>In Federated MUC an FMUC room does not have a single logical address; when joining the FMUC room a user's client can join any of the nodes in the FMUC set for that room, and all addressing will appear to that client as if this was the single canonical representation of the room's address - while other users in the room may see different addresses dependent upon the node they joined.</p>
+  <p>It is possible, although not required, for an implementation and deployment to use &xep0106; to make naming schemes easy to manage, but this is a matter of deployment policy and not of the protocol defined herein.</p>
 </section1>
 
 <section1 topic='Actors' anchor='actors'>
   <p>The following JIDs are used in this document.</p>
   <ul>
-    <li>example.com - service</li>
-    <li>talk.example.com - MUC service on example.com.</li>
-    <li>curtis@example.com - User on example.com</li>
-    <li>jabberchat@talk.example.com - MUC room.</li>
+    <li>wonderland.lit - service</li>
+    <li>rooms.wonderland.lit - MUC service on wonderland.lit.</li>
+    <li>alice@wonderland.lit - User on wonderland.lit</li>
+    <li>hatter@wonderland.lit - User on wonderland.lit</li>
+    <li>rabbithole@rooms.wonderland.lit - MUC room / FMUC node.<br/></li>
 
-    <li>remote.example.com - remote service, connected to example.com over constrained link</li>
-    <li>kev@remote.example.com/Swift - user connected to a remote service</li>
-    <li>mirror.remote.example.com - MUC mirroring service on remote.example.com</li>
-    <li>jabberchat\40talk.example.com@mirror.remote.example.com - slave room.</li>
+    <li>denmark.lit - service, likely connected to wonderland.lit over constrained link</li>
+    <li>talk.denmark.lit - MUC service on denmark.lit.</li>
+    <li>hamlet@denmark.lit - User on denmark.lit</li>
+    <li>ophelia@denmark.lit - User on denmark.lit</li>
+    <li>elsinore@talk.denmark.lit - MUC room / FMUC node.</li>
   </ul>
   <p></p>
 </section1>
