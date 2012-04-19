@@ -1,0 +1,380 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Message Archive Management</title>
+  <abstract>This document defines a protocol to query and control and archive of messages stored on a server.</abstract>
+  &LEGALNOTICE;
+  <number>0313</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0059</spec>
+    <spec>XEP-0297</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>mam</shortname>
+  <schemaloc>
+    <url>http://www.xmpp.org/schemas/archive-management.xsd</url>
+  </schemaloc>
+  <author>
+    <firstname>Matthew</firstname>
+    <surname>Wild</surname>
+    <email>me@matthewwild.co.uk</email>
+    <jid>me@matthewwild.co.uk</jid>
+  </author>
+  <revision>
+    <version>0.1</version>
+    <date>2010-07-01</date>
+    <initials>mw</initials>
+    <remark><p>Initial version, to much rejoicing.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>It is a common desire for a user using XMPP for IM to want to store their messages in a central archive
+  on their server. This feature allows them to record conversations that take place on clients that do not
+  support local history storage, and also to synchronise their conversation history seamlessly between
+  multiple clients.</p>
+</section1>
+
+<section1 topic='Requirements'>
+  <p>As this extension aims to make things easy for client developers, some research was made into the
+  way clients handle history today. The resulting protocol was designed to allow for the following primary
+  usage scenarios:</p>
+  <ul>
+    <li>Automatic history synchronization between multiple clients.</li>
+    <li>Calendar-based on-demand display of historic messages in a client that doesn't keep local history.</li>
+    <li>So-called 'infinite' scrollback, whereby a client automatically fetches and displays historic messages
+    naturally in the message log as the user scrolls back in time.</li>
+  </ul>
+  <p>Another extension for archiving already exists in XMPP, &xep0136;). However implementation experience has
+  shown that the protocol defined therein supports rather more functionality than is typically needed for the
+  above uses, and is significantly more effort to implement.</p>
+  <p>This specification aims to define a much simpler and modular protocol for working with a server-side
+  message store. Through this it is hoped to boost implementation and deployment of archiving in XMPP. It
+  should be noted that (although not required) a server is free to implement XEP-0136 alongside this
+  protocol if it so chooses, though a mapping between both protocols is beyond the scope of this specification.</p>
+  <p>Notable functionality in XEP-0136 that is intentionally not defined by this specification for simplicity:</p>
+  <ul>
+    <li>Support for 'collections'. Few clients even support this concept for local history storage, and
+    it is possible to apply the logic for splitting a stream of messages into conversations on the
+    client-side, thus greatly simplifying the protocol.</li>
+    <li>Support for uploading to the archive. On the assumption that a server automatically archives
+    messages to and from the client, it is typically rare for a client to end up with messages that are
+    not already in the archive. Uploading could be useful for bootstrapping an empty archive however, and
+    may be defined in a future specification if there is demand for such functionality.</li>
+    <li>Support for 'off the record' chats (OTR; not to be confused with the encryption algorithm of
+    the same name). This allowed complex negotiation for either the user or contact to command specific
+    conversations to bypass the archive. In reality the archiving behaviour of a contact's server cannot
+    be enforced (they could ignore the OTR request and archive the messages anyway without your consent)
+    so this specification does not try and regulate that. Equivalent functionality can be implemented with
+    server logic for not including encrypted or specially-tagged messages in the archive (out of scope for
+    this specification).</li>
+    <li>Support per-session configuration. This feature was deemed unnecessary for the majority of
+    implementations, and hence the configuration protocol in this specification is much simplified,
+    which allows for a simple user interface in clients. Advanced configuration however may be performed
+    through ad-hoc commands depending on the server implementation.</li>
+  </ul>
+</section1>
+
+<section1 topic='Message archives'>
+        <p>An archive is a collection of messages stored on a user's server. Messages sent to or from a
+        user's account are generally automatically added to a user's archive by the server. The collection
+        is ordered chronologically by the time each message was sent/received.</p>
+        <p>Exactly which messages a server archives is left up to implementation and deployment policy,
+        but as a minimum servers SHOULD NOT archive messages that do not have a &lt;body/&gt; child tag.</p>
+        <p>At a minimum, a stored message consists of the following pieces of information:</p>
+        <ul>
+                <li>A timestamp of when the message was sent (for an outgoing message) or received (for
+                an incoming message).</li>
+                <li>The remote JID that the stanza is to (for an outgoing message) or from (for an
+                incoming message).</li>
+                <li>A server-assigned UID that MUST be unique within the archive.</li>
+                <li>The message stanza itself. The entire original stanza SHOULD be stored, but at a
+                minimum only the &lt;body/&gt; tag MUST be preserved (ie. the server might, at its
+                discretion, strip certain extensions from messages before storage).</li>
+        </ul>
+        <p>A server MAY impose limits on the size of a user's archive. For example a server might begin
+        to discard old messages once the archive reaches a certain size, or only keep messages until they
+        reach a certain age. The UIDs of deleted messages MUST NOT be reused for new messages.</p>
+        <p>Finally, there is no restriction on where an archive may be hosted. Servers that archive
+        messages on behalf of local users SHOULD expose archives to the user on their bare JID, while a
+        MUC service might allow MAM queries to be sent to the room's bare JID.</p>
+</section1>
+
+<section1 topic='Querying the archive'>
+        <p>A client is able to query the archive for all messages within a certain timespan, optionally
+        restricting results to those to/from a particular JID. To allow limiting the results or paging
+        through them a client may use &xep0059;, which MUST be supported by servers.</p>
+        <p>A query consists of an &lt;iq/&gt; stanza addressed to the account or server entity hosting
+        the archive, with a 'query' payload. On receiving the query, the server pushes to the client a
+        series of messages from the archive that match the client's given criteria, and finally returns
+        the &lt;iq/&gt; result.</p>
+    <example caption='Querying the archive for messages'><![CDATA[
+<iq type='get' id='juliet1'>
+  <query xmlns='urn:xmpp:mam:tmp' queryid='f27' />
+</iq>
+
+[... server sends matching messages ...]
+
+<iq type='result' id='juliet1'/>
+    ]]></example>
+  <p>To ensure that the client knows when the results are complete, the server MUST delay the result
+  &lt;iq/&gt; until after it has pushed all the results to the client. An optional 'queryid' attribute
+  allows the client to match results to a certain query.</p>
+  <section2 topic="Filtering results">
+    <p>The query can contain any combination of three filtering tags - &lt;with/&gt;, &lt;start/&gt;
+    and &lt;end/&gt;. By default all messages match a query, the filters are used to request a subset
+    of the archived messages.</p>
+    <section3 topic="Filtering by contact">
+      <p>If a &lt;with/&gt; element is present in the &lt;query/&gt;, it contains a JID against which
+      to match messages. The server MUST only return messages if they match the supplied JID.</p>
+      <p>If &lt;with/&gt; is omitted, the server SHOULD return all messages in the selected timespan,
+      regardless of the to/from addresses on each message.</p>
+    <example caption='Querying for all messages to/from a particular JID'><![CDATA[
+<iq type='get' id='juliet1'>
+  <query xmlns='urn:xmpp:mam:tmp'>
+    <with>juliet@capulet.com</with>
+  </query>
+</iq>
+    ]]></example>
+    <p>If (and only if) the supplied JID is a bare JID (i.e. no resource is present), then
+    the server SHOULD return messages if their bare to/from address would match it. For example,
+    if the client supplies with='juliet@capulet.com' this filter would also match messages to
+    or from "juliet@capulet.com/balcony" and "juliet@capulet.com/chamber".</p>
+    </section3>
+    <section3 topic="Filtering by time received">
+      <p>The &lt;start/&gt; and &lt;end/&gt; elements, if provided, MUST contain timestamps
+      formatted according to the DateTime profile defined in &xep0082;</p>
+      <p>The &lt;start/&gt; element is used to filter out messages before a certain date/time.
+      If specified, a server MUST only return messages whose timestamp is equal to or later
+      than the given timestamp.</p>
+      <p>If omitted, the server SHOULD assume the value of &lt;start/&gt; to be equal to the
+      date/time of the earliest message stored in the archive.</p>
+      <p>Conversely, the &lt;end/&gt; element is used to exclude from the results messages
+      after a certain point in time. If specified, a server MUST only return messages whose
+      timestamp is equal to or earlier than the timestamp given in the &lt;end/&gt; element.</p>
+      <p>If omitted, the server SHOULD assume the value of &lt;end/&gt; to be equal to the
+      date/time of the most recent message stored in the archive.</p>
+      <example caption='Querying the archive for all messages in a certain timespan'><![CDATA[
+<iq type='get' id='juliet1'>
+  <query xmlns='urn:xmpp:mam:tmp'>
+      <start>2010-06-07T00:00:00Z</start>
+      <end>2010-07-07T13:23:54Z</end>
+  </query>
+</iq>
+    ]]></example>  
+      <example caption='Querying the archive for all messages after a certain time'><![CDATA[
+<iq type='get' id='juliet1'>
+  <query xmlns='urn:xmpp:mam:tmp'>
+    <start>2010-08-07T00:00:00Z</start>
+  </query>
+</iq>
+    ]]></example>
+    </section3>
+    <section3 topic='Limiting results'>
+      <p>Finally, in order for the client or server to limit the number of results transmitted at
+      a time a server MUST support &xep0059; and SHOULD support the paging mechanism defined therein.
+      A client MAY include a &lt;set/&gt; element in its query.</p>
+      <p>For the purposes of this protocol, the UIDs used by RSM correspond with the UIDs of the
+      stanzas stored in the archive.</p>
+      <example caption='A query using Result Set Management'><![CDATA[
+<iq type='get' id='q29302'>
+  <query xmlns='urn:xmpp:mam:tmp'>
+      <start>2010-08-07T00:00:00Z</start>
+      <set xmlns='http://jabber.org/protocol/rsm'>
+         <limit>10</limit>
+      </set>
+  </query>
+</iq>
+    ]]></example>
+    <p>To conserve resources, a server MAY place a reasonable limit on how many stanzas may be
+    pushed to a client in one request. If a query returns a number of stanzas greater than this
+    limit and either the client did not specify a limit using RSM then the server should return
+    a policy-violation error to the client. If the query did include a &lt;set/&gt; element then
+    the server SHOULD simply return its limited results and adjust the &lt;before/&gt; and &lt;after/&gt;
+    in its reply to allow the client to page through them by timestamp.</p>
+    <example caption='Client without RSM requests too many results'><![CDATA[
+<iq type='error' id='q29302'>
+  <error type='modify'>
+    <policy-violation xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <text>Too many results</text>
+  </error>
+</iq>
+    ]]></example>
+    </section3>
+  </section2>
+  <section2 topic="Query results">
+    <p>The server responds to the archive query by transmitting to the client all the messages
+       that match the criteria the client requested. The results are sent as individual stanzas,
+       with the original message encapsulated in a &lt;forwarded/&gt; element as described in &xep0297;.
+    </p>
+    <p>The result messages MUST contain a &lt;result/&gt; element with an 'id' attribute that gives
+    the current message's UID. If the client gave a 'queryid' attribute in its initial query, the
+    server MUST also include that in this result element.</p>
+    <p>The &lt;forwarded/&gt; element SHOULD contain the original message as it was received, and
+       SHOULD also contain a &lt;delay/&gt; element qualified by the 'urn:xmpp:delay' namespace
+       specified in &xep0203;. The value of the 'stamp' attribute MUST be the time the message was
+       originally received by the forwarding entity.
+    </p>
+    <example caption='Server returns two matching messages'><![CDATA[
+<message id='aeb213' to='juliet@capulet.com/chamber'>
+  <result xmlns='urn:xmpp:mam:tmp' queryid='f27' id='28482-98726-73623' />
+  <forwarded xmlns='urn:xmpp:forward:0'>
+    <delay xmlns='urn:xmpp:delay' stamp='2010-07-10T23:08:25Z'/>
+    <message to='juliet@capulet.com/balcony'
+      from='romeo@montague.net/orchard'
+      type='chat'>
+      <body>Call me but love, and I'll be new baptized; Henceforth I never will be Romeo.</body>
+    </message>
+  </forwarded>
+</message>
+
+<message id='aeb214' to='juliet@capulet.com/chamber'>
+  <result xmlns='urn:xmpp:mam:tmp' queryid='f27' id='5d398-28273-f7382'/>
+  <forwarded xmlns='urn:xmpp:forward:0'>
+    <delay xmlns='urn:xmpp:delay' stamp='2010-07-10T23:09:32Z'/>
+    <message to='romeo@montague.net/orchard'
+       from='juliet@capulet.com/balcony'
+       type='chat' id='8a54s'>
+      <body>What man art thou that thus bescreen'd in night so stumblest on my counsel?</body>
+    </message>
+  </forwarded>
+</message>
+    ]]></example>
+  </section2>
+</section1>
+
+<section1 topic="Archiving Preferences">
+  <p>Depending on implementation and deployment policies, a server MAY allow the user to have control
+  over the server's archiving behaviour. This specification defines a basic protocol for this, and
+  also allows a server to offer more advanced configuration to a user.</p>
+  <section2 topic='Simple configuration'>
+    <p>If the server supports and allows configuration then it SHOULD implement the protocol defined
+    in this section. This allows the user to configure the following preferences:</p>
+    <ul>
+      <li>A list of JIDs that should always have messages to/from archived in the user's store.</li>
+      <li>A list of JIDs that should never have messages to/from archived in the user's store.</li>
+      <li>The default archiving behaviour (for JIDs in neither of the above lists).</li>
+    </ul>
+    <example caption='Updating archiving preferences'><![CDATA[
+  <iq type='set' id='juliet2'>
+    <prefs xmlns='urn:xmpp:mam:tmp' default="roster">
+      <always>
+        <jid>romeo@montague.net</jid>
+      </always>
+      <never>
+        <jid>montague@montague.net</jid>
+      </never>
+    </prefs>
+  </iq>
+]]></example>
+  <p>The server then replies with the applied preferences (note that due to server policies these
+  MAY be different to the preferences sent by the client):</p>
+<example caption='Server responds with updated preferences'><![CDATA[
+  <iq type='result' id='juliet1'>
+    <prefs xmlns='urn:xmpp:mam:tmp' default="roster">
+      <always>
+        <jid>romeo@montague.net</jid>
+      </always>
+      <never>
+        <jid>montague@montague.net</jid>
+      </never>
+    </prefs>
+  </iq>
+      ]]></example>
+    <section3 topic='Default behaviour'>
+      <p>If a JID is in neither the 'always archive' nor the 'never archive' list then whether it
+         is archived depends on this setting, the default.
+      </p>
+      <p>The 'default' attribute of the 'prefs' element MUST be one of the following values:</p>
+      <ul>
+        <li>'always' - all messages are archived by default.</li>
+        <li>'never' - messages are never archived by default.</li>
+        <li>'roster' - messages are archived only if the contact's bare JID is in the user's roster.</li>
+      </ul>
+    </section3>
+    <section3 topic='Always archive'>
+      <p>The &lt;prefs/&gt; element MAY contain an &lt;always/&gt; child element. If present, it
+         contains a list of &lt;jid/&gt; elements, each containing a single JID. The server SHOULD
+         archive any messages to/from this JID (see 'JID matching').
+      </p>
+      <p>If missing from the preferences, &lt;always/&gt; SHOULD be assumed by the server to be an
+         empty list.
+      </p>
+    </section3>
+    <section3 topic='Never archive'>
+      <p>The &lt;prefs/&gt; element MAY contain an &lt;never/&gt; child element. If present, it
+         contains a list of &lt;jid/&gt; elements, each containing a single JID. The server SHOULD
+         NOT archive any messages to/from this JID (see 'JID matching').
+      </p>
+      <p>If missing from the preferences, &lt;never/&gt; SHOULD be assumed by the server to be an
+         empty list.
+      </p>
+    </section3>
+  </section2>
+  <section2 topic='Advanced configuration'>
+    <p>In addition to this protocol, a server MAY offer more advanced configuration to the user
+       through &xep0050;. Such an interface might, for example, allow the user to configure what
+       types of messages to store, or set a limit on how long messages should remain in the
+       archive.</p>
+    <p>If supported, such a configuration command SHOULD be presented on the well-defined
+       command node of "urn:xmpp:mam#configure".</p>
+  </section2>
+  <section2 topic='JID matching'>
+    <section3 topic='General rules'>
+      <p>When comparing the message target JID against the user's roster (ie. when the user has
+         set default='roster') the comparison MUST use the bare target JID (that is, stripped of
+         any resource).
+      </p>
+      <p>For matching against entries in either the 'allow' or 'never' lists, for each listed
+         JID:
+      </p>
+      <ul>
+        <li>If the listed JID contains a resource, compare against the target JID as-is.</li>
+        <li>If the listed JID has no resource (it is a bare JID) then first strip any resource
+            from the target JID prior to comparison.
+        </li>
+      </ul>
+    </section3>
+    <section3 topic='Outgoing messages'>
+      <p>For outgoing messages, the server MUST use the value of the 'to' attribute as the target JID.
+      </p>
+    </section3>
+    <section3 topic='Incoming messages'>
+      <p>For incoming messages, the server MUST use the value of the 'from' attribute as the target JID.
+      </p>
+    </section3>
+  </section2>
+</section1>
+
+<section1 topic='Determining support'>
+        <p>If a server or other entity hosts archives and supports MAM queries, it MUST advertise that fact
+        by including the feature "urn:xmpp:mam:tmp" in response to a &xep0030; request:</p>
+<example caption='Client queries for server features'><![CDATA[
+  <iq type='get' id='disco1' to='capulet.lit' from='juliet@capulet.lit/balcony'>
+      <query xmlns='http://jabber.org/protocol/disco#info'/>
+  </iq>
+]]></example>
+
+<example caption='Server responds with features'><![CDATA[
+  <iq type='result' id='disco1' from='capulet.lit' to='juliet@capulet.lit/balcony'>
+      <query xmlns='http://jabber.org/protocol/disco#info'>
+          ...
+          <feature var='urn:xmpp:mam:tmp'/>
+          ...
+      </query>
+  </iq>
+]]></example>
+</section1>
+
+</xep>
