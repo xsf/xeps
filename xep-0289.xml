@@ -24,7 +24,7 @@
   &ksmithisode;
   <revision>
     <version>0.2</version>
-    <date>2012-03-15</date>
+    <date>2012-05-29</date>
     <initials>kis</initials>
     <remark><p>Reworking for new protocol and clarity of purpose.</p></remark>
   </revision>
@@ -50,6 +50,8 @@
       <li>FMUC set - the union of all MUC rooms that federate together</li>
       <li>FMUC node - a single MUC room that is a member of an FMUC set</li>
       <li>FMUC room - a room represented by an FMUC set</li>
+      <li>Master-Master mode - two FMUC nodes operating such that both will continue to work when a network fails between them. This mode has the properties of reduced network traffic and of not having a guarantee of consistent message ordering between nodes</li>
+      <li>Master-Slave mode - two FMUC nodes operating where one, the master, will continue working during a network outage while the slave will cease to work while it cannot communicate with the master. This mode has increased network traffic and a consistent message delivery order across both nodes.</li>
     </ul>
     <p>For illustration: if room1@rooms.server1.lit and room2@rooms.server2.lit federate with each other, then room1@rooms.server1.lit is an FMUC node, as is room2@rooms.server2.lit. Both nodes are in the FMUC set (along with any other node rooms that mutually federate) while the conceptual single room created by joining the FMUC set together is the FMUC room (and this FMUC room does not have a single definitive identifier).</p>
   </section2>
@@ -76,8 +78,8 @@
     <li>rooms.wonderland.lit - MUC service on wonderland.lit.</li>
     <li>alice@wonderland.lit - User on wonderland.lit</li>
     <li>hatter@wonderland.lit - User on wonderland.lit</li>
-    <li>rabbithole@rooms.wonderland.lit - MUC room / FMUC node.<br/></li>
-
+    <li>rabbithole@rooms.wonderland.lit - MUC room / FMUC node.</li>
+    <br/>
     <li>denmark.lit - service, likely connected to wonderland.lit over constrained link</li>
     <li>talk.denmark.lit - MUC service on denmark.lit.</li>
     <li>hamlet@denmark.lit - User on denmark.lit</li>
@@ -88,288 +90,255 @@
 </section1>
 
 <section1 topic='Use Cases' anchor='usecases'>
-  <section2 topic='Joining' anchor='joining'>
-    <section3 topic='Success case' anchor='joinsuccess'>
-<p>kev@remote.example.com/Swift joining jabberchat@talk.example.com through a pre-known mirror.remote.example.com service. At this point mirror.remote.example.com knows nothing of the jabberchat@talk.example.com MUC, and no existing proxying is in place beyond mirror.remote.example.com being willing to proxy for kev@remote.example.com</p>
+  <section2 topic='Initial Federation' anchor='startup'>
+    <p>Here hamlet@denmark.lit is going to join the (currently empty) elsinor@talk.denmark.lit room. This room is configured as an FMUC node, federating with the rabbithole@rooms.wonderland.lit node, which current has one occupant - alice@wonderland.lit. The method of configuration that elsinor should federate with rabbithole is considered out of scope for this document - it is suggested that it be including in the standard MUC room configuration form. Note that this configuration only needs to be one way (that is: there is no protocol reason why rabbithole needs to know that elsinor will be federating with it in advance) - this allows for the ad-hoc addition of additional nodes to the FMUC room.</p>
+        <p>First hamlet@denmark.lit issues a normal MUC join request to elsinor@talk.denmark.lit</p>
 
-<example caption='User joins MUC through a proxy'><![CDATA[
-<presence
-    from='kev@remote.example.com/Swift'
-    to='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'>
-  <x xmlns='http://jabber.org/protocol/muc'/>
+<example caption='User joins FMUC node'><![CDATA[
+<presence from='hamlet@denmark.lit/priam-ubuntu-vm' to="elsinore@talk.denmark.lit/Hamlet">
+    <x xmlns="http://jabber.org/protocol/muc"/>
 </presence>
 ]]></example>
 
-<p>mirror.example.com then un-escapes 'jabberchat\40talk.example.com', and joins jabberchat@talk.example.com (the master), saying it's a room mirror.</p>
+<p>Elsinor then attempts to join with the FMUC node rabbithole@rooms.wonderland.lit.</p>
 
-<example caption='Proxy service joins the target MUC'><![CDATA[
-<presence
-    from='jabberchat\40talk.example.com@mirror.remote.example.com'
-    to='jabberchat@talk.example.com/Kev'>
-  <fmuc xmlns='http://isode.com/protocol/fmuc' from='kev@remote.example.com/Swift' />
+<example caption='FMUC Node begins initiates federation'><![CDATA[
+<presence from='elsinore@talk.denmark.lit/Hamlet' to='rabbithole@rooms.wonderland.lit/Hamlet'>
+    <fmuc xmlns='http://isode.com/protocol/fmuc' from='hamlet@denmark.lit/priam-ubuntu-vm'/>
+    <x xmlns="http://jabber.org/protocol/muc"/>
+    <x xmlns="http://jabber.org/protocol/muc#user">
+      <item affiliation="none" role="participant" jid="hamlet@denmark.lit/priam-ubuntu-vm"/>
+    </x>
 </presence>
 ]]></example>
 
-<p>jabberchat@talk.example.com recognises that the mirror service is now mirrorring it, and performs the usual ACL checks as if kev@example.com/Swift had joined directly, sending presence to all occupants as normal. For all in-room routing, the slave is now treated as an occupant, and the slave is expected to do fan-out to its users as it is itself a MUC.</p>
+<p>Now rabbithole may reject the join, if elsinor is not permitted to federate</p>
 
-<example caption='MUC confirms room join'><![CDATA[
-<presence
-    from='jabberchat@talk.example.com/Kev'
-    to='jabberchat\40talk.example.com@mirror.remote.example.com'>
-  <x xmlns='http://jabber.org/protocol/muc#user'>
-    <item affiliation='none' role='participant'/>
-  </x>
-</presence>
+<example caption='Second FMUC Node rejects federation'><![CDATA[
 ]]></example>
 
-<p>The slave then fans-out.</p>
+<p>Or it may accept the federation request and reply with the list of current occupants and message context in the same order as specified in XEP-0045. Note that the fmuc element is always added containing the JID of the user (possibly passed down from other FMUC nodes, or indeed from the joining node for the presence of the user used for the initial join), while the XEP-0045 rules apply for whether to include the jid in the muc#user element.</p>
+<p>As part of the initial join of one node to another, the node being joined will send the current topic to the node doing the joining. The node receiving this (the joining node) SHOULD replace its own subject with the received one.</p>
+<p>The joining node may add an element to the initial presence to the node being joined limiting the amount of history to be sent in the normal manner, as in XEP-0045.</p>
 
-<example caption='Proxy delivers the join to local users'><![CDATA[
-<presence
-    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
-    to='kev@remote.example.com/Swift'>
-  <x xmlns='http://jabber.org/protocol/muc#user'>
-    <item affiliation='none' role='participant'/>
-  </x>
-</presence>
-]]></example>
-</section3>
 
-    <section3 topic='Failure case' anchor='joinfail'>
-      <p>If the master doesn't allow the user to join, they send the standard MUC error to the slave. Note that for stanzas sent to a user on the slave (such as this join error), it sends to the full MUC JID of the user on the slave, not to the slave room as it does with most other stanzas.</p>
-
-<example caption='Master rejects joins'><![CDATA[
-<presence
-    from='jabberchat@talk.example.com'
-    to='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
-    type='error'>
-  <x xmlns='http://jabber.org/protocol/muc'/>
-  <error type='auth'>
-    <registration-required xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-  </error>
-</presence>
-]]></example>
-
-<p>The proxy then delivers this to the user</p>
-
-<example caption='Proxy delivers the join failure to the user'><![CDATA[
-<presence
-    from='jabberchat\40talk.example.com@mirror.remote.example.com'
-    to='kev@remote.example.com/Swift'
-    type='error'>
-  <x xmlns='http://jabber.org/protocol/muc'/>
-  <error type='auth'>
-    <registration-required xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-  </error>
-</presence>
-]]></example>
-    </section3>
-
-    <section3 topic='Joining the MUC directly' anchor='joinmaster'>
-      <p>Now when a user joins the master directly it will do usual presence distribution to occupants (remembering the slave is an occupant). Status codes are omitted from this example, see &xep0045; for those.</p>
-
-<example caption='User joins the master MUC directly'><![CDATA[
-<presence
-    from='curtis@example.com/Swift'
-    to='jabberchat@talk.example.com/Curtis'>
-  <x xmlns='http://jabber.org/protocol/muc'/>
-</presence>
-]]></example>
-
-<example caption='MUC delivers the join to its occupants'><![CDATA[
-<presence
-    from='jabberchat@talk.example.com/Curtis'
-    to='curtis@example.com/Swift'>
-  <x xmlns='http://jabber.org/protocol/muc#user'>
-    <item affiliation='owner' role='moderator'/>
+<example caption='Second FMUC Node accepts federation and sends occupants and history'><![CDATA[
+<presence from="rabbithole@rooms.wonderland.lit/Alice" to="elsinore@talk.denmark.lit">
+  <fmuc xmlns="http://isode.com/protocol/fmuc" from="alice@wonderland.lit/priam-ubuntu-vm"/>
+  <x xmlns="http://jabber.org/protocol/muc#user">
+    <item affiliation="owner" role="moderator" jid="alice@wonderland.lit/priam-ubuntu-vm"/>
   </x>
 </presence>
 
-<presence
-    from='jabberchat@talk.example.com/Curtis'
-    to='jabberchat\40talk.example.com@mirror.remote.example.com'>
-  <x xmlns='http://jabber.org/protocol/muc#user'>
-    <item affiliation='admin' role='moderator'/>
+<presence from="rabbithole@rooms.wonderland.lit/Hamlet" to="elsinore@talk.denmark.lit">
+  <fmuc xmlns="http://isode.com/protocol/fmuc" from="hamlet@denmark.lit/priam-ubuntu-vm"/>
+  <x xmlns="http://jabber.org/protocol/muc#user">
+    <item affiliation="none" role="participant" jid="hamlet@denmark.lit/priam-ubuntu-vm"/>
   </x>
 </presence>
+
+<message from="rabbithole@rooms.wonderland.lit/Alice" to="elsinore@talk.denmark.lit" type="groupchat">
+  <fmuc xmlns="http://isode.com/protocol/fmuc" from="alice@wonderland.lit/priam-ubuntu-vm"/>
+  <body>This is an old message from the history</body>
+  <x xmlns="urn:xmpp:delay" from="rabbithole@rooms.wonderland.lit" stamp="20120419T16:00:44"/>
+</message>
+
+<message from="rabbithole@rooms.wonderland.lit/Hatter" to="elsinore@talk.denmark.lit" type="groupchat">
+  <fmuc xmlns="http://isode.com/protocol/fmuc" from="hatter@wonderland.lit/priam-ubuntu-vm"/>
+  <body>This is another old message from the history</body>
+  <x xmlns="urn:xmpp:delay" from="rabbithole@rooms.wonderland.lit" stamp="20120501T10:03:24"/>
+</message>
+
+<message from="rabbithole@rooms.wonderland.lit/Alice" to="elsinore@talk.denmark.lit" type="groupchat">
+  <fmuc xmlns="http://isode.com/protocol/fmuc" from="hatter@wonderland.lit/priam-ubuntu-vm"/>
+  <subject>This is the subject</subject>
+  <x xmlns="urn:xmpp:delay" from="rabbithole@rooms.wonderland.lit" stamp="20120528T14:39:34"/>
+</message>
 ]]></example>
-      
-<example caption='Proxy delivers join to its occupants'><![CDATA[
-<presence
-    from='jabberchat\40talk.example.com@mirror.remote.example.com/Curtis'
-    to='kev@remote.example.com/Swift'>
-  <x xmlns='http://jabber.org/protocol/muc#user'>
-    <item affiliation='owner' role='moderator'/>
+
+<p>Upon receiving the occupants, history and subject from the other node the joining FMUC node will process these in the normal way, treating the received presence as joins, adding the history to the room's history (re-ordering by delay?) and changing the subject. The joining FMUC node MUST NOT send the traffic generated by these data back to the joined room, but only deliver them to local participants (and in the case of chained FMUC nodes, any nodes joined to it). It also MUST NOT pass the fmuc payloads through to local clients.</p>
+
+<example caption='First FMUC Node relays the state to the joined client'><![CDATA[
+<presence from="elsinore@talk.denmark.lit/Alice" to="hamlet@denmark.lit/priam-ubuntu-vm">
+  <x xmlns="http://jabber.org/protocol/muc#user">
+    <item affiliation="owner" role="moderator" jid="alice@wonderland.lit/priam-ubuntu-vm"/>
   </x>
 </presence>
+
+<presence from="elsinore@talk.denmark.lit/Hamlet" to="hamlet@denmark.lit/priam-ubuntu-vm">
+  <x xmlns="http://jabber.org/protocol/muc#user">
+    <item affiliation="none" role="participant" jid="hamlet@denmark.lit/priam-ubuntu-vm"/>
+  </x>
+</presence>
+
+<message from="elsinore@talk.denmark.lit/Alice" to="hamlet@denmark.lit/priam-ubuntu-vm" type="groupchat">
+  <body>This is an old message from the history</body>
+  <x xmlns="urn:xmpp:delay" from="rabbithole@rooms.wonderland.lit" stamp="20120419T16:00:44"/>
+</message>
+
+<message from="elsinore@talk.denmark.lit/Hatter" to="hamlet@denmark.lit/priam-ubuntu-vm" type="groupchat">
+  <body>This is another old message from the history</body>
+  <x xmlns="urn:xmpp:delay" from="rabbithole@rooms.wonderland.lit" stamp="20120501T10:03:24"/>
+</message>
+
+<message from="elsinore@talk.denmark.lit/Hatter" to="hamlet@denmark.lit/priam-ubuntu-vm" type="groupchat">
+  <subject>This is the subject</subject>
+  <x xmlns="urn:xmpp:delay" from="rabbithole@rooms.wonderland.lit" stamp="20120528T14:39:34"/>
+</message>
 ]]></example>
-    </section3>
+</section2>
+<section2 topic="Sending messages" anchor="messages">
+<p>Then hamlet@denmark.lit sends a message to the FMUC room, which is sent from the elsinor node to the rabbithole node and then broadcast to the local occupants of each room according to the standard XEP-0045 rules (rabbithole distributes to alice, elsinor distributes to hamlet). This example is for master-master mode, so rabbithole does not echo the message back to elsinore and elsinore does not need to wait for receipt of this stanza from rabbithole before distributing the stanza locally.</p>
+
+<example caption='User on FMUC Node sends a message'><![CDATA[
+<message from='hamlet@denmark.lit/priam-ubuntu-vm' to='elsinore@talk.denmark.lit' type='groupchat'>
+    <body>Hi Alice</body>
+</message>
+
+<message from='elsinore@talk.denmark.lit/Hamlet' to='hamlet@denmark.lit/priam-ubuntu-vm' type='groupchat'>
+    <body>Hi Alice</body>
+</message>
+
+<message from='elsinore@talk.denmark.lit/Hamlet' to='rabbithole@rooms.wonderland.lit' type='groupchat'>
+    <body>Hi Alice</body>
+    <fmuc xmlns="http://isode.com/protocol/fmuc" from="hamlet@denmark.lit/priam-ubuntu-vm"/>
+</message>
+
+<message from='rabbithole@rooms.wonderland.lit/Hamlet' to='alice@wonderland.lit/priam-ubuntu-vm' type='groupchat'>
+    <body>Hi Alice</body>
+</message>
+
+]]></example>
+
+<p>alice@wonderland.lit then replies to this message, causing a similar distribution.</p>
+
+<example caption='User on other FMUC Node replies to message'><![CDATA[
+<message from='alice@wonderland.lit/priam-ubuntu-vm' to='rabbithole@rooms.wonderland.lit' type='groupchat'>
+    <body>Hi Hamlet</body>
+</message>
+
+<message from='rabbithole@rooms.wonderland.lit/Alice' to='alice@wonderland.lit/priam-ubuntu-vm' type='groupchat'>
+    <body>Hi Hamlet</body>
+</message>
+
+<message from='rabbithole@rooms.wonderland.lit/Alice' to='elsinore@talk.denmark.lit' type='groupchat'>
+    <body>Hi Hamlet</body>
+    <fmuc xmlns="http://isode.com/protocol/fmuc" from="alice@wonderland.lit/priam-ubuntu-vm"/>
+</message>
+
+<message from='elsinore@talk.denmark.lit/Hamlet' to='hamlet@denmark.lit/priam-ubuntu-vm' type='groupchat'>
+    <body>Hi Hamlet</body>
+</message>
+
+]]></example>
+
+</section2>
+<section2 topic="Subsequent activity" anchor="activity">
+    <p>Another user joining or parting a room will be "fanned-out" in much the same way - the node to which they're joined will send out their presence to all the locally joined users and to the other FMUC nodes to which it's connected, and those nodes will then do the same - noting that in master-master mode they won't distribute the stanza back to the node from which they received it.</p>
+<example caption='Additional user joins FMUC room'><![CDATA[
+<presence from="hatter@wonderland.lit/priam-ubuntu-vm" to="rabbithole@rooms.wonderland.lit/Hatter">
+  <x xmlns="http://jabber.org/protocol/muc"/>
+</presence>
+
+<presence from="rabbithole@rooms.wonderland.lit/Hatter" to="alice@wonderland.lit/priam-ubuntu-vm">
+    <x xmlns="http://jabber.org/protocol/muc#user">
+        <item affiliation="none" role="participant" jid="hatter@wonderland.lit/priam-ubuntu-vm"/>
+    </x>
+</presence>
+
+<presence from="rabbithole@rooms.wonderland.lit/Alice" to="hatter@wonderland.lit/priam-ubuntu-vm">
+  <x xmlns="http://jabber.org/protocol/muc#user">
+    <item affiliation="owner" role="moderator" jid="alice@wonderland.lit/priam-ubuntu-vm"/>
+  </x>
+</presence>
+
+<presence from="rabbithole@rooms.wonderland.lit/Hamlet" to="hatter@wonderland.lit/priam-ubuntu-vm">
+  <x xmlns="http://jabber.org/protocol/muc#user">
+    <item affiliation="none" role="participant" jid="hamlet@denmark.lit/priam-ubuntu-vm"/>
+  </x>
+</presence>
+
+<presence from="rabbithole@rooms.wonderland.lit/Hatter" to="hatter@wonderland.lit/priam-ubuntu-vm">
+    <x xmlns="http://jabber.org/protocol/muc#user">
+        <item affiliation="none" role="participant" jid="hatter@wonderland.lit/priam-ubuntu-vm"/>
+        <status code="110"/>
+        <status code="100"/>
+    </x>
+</presence>
+
+<!--Message history sent to hatter elided for brevity -->
+<message from="rabbithole@rooms.wonderland.lit/Hatter" to="hatter@wonderland.lit/priam-ubuntu-vm" type="groupchat">
+  <subject>This is the subject</subject>
+  <x xmlns="urn:xmpp:delay" from="rabbithole@rooms.wonderland.lit" stamp="20120528T14:39:34"/>
+</message>
+
+<presence from='rabbithole@rooms.wonderland.lit/Hatter' to='elsinore@talk.denmark.lit/Hatter'>
+  <fmuc xmlns='http://isode.com/protocol/fmuc' from='hatter@wonderland.lit/priam-ubuntu-vm'/>
+  <x xmlns="http://jabber.org/protocol/muc#user">
+    <item affiliation="none" role="participant" jid="hatter@wonderland.lit/priam-ubuntu-vm"/>
+  </x>
+</presence>
+
+<presence from="elsinore@talk.denmark.lit/Hatter" to="hamlet@denmark.lit/priam-ubuntu-vm">
+    <x xmlns="http://jabber.org/protocol/muc#user">
+        <item affiliation="none" role="participant" jid="hatter@wonderland.lit/priam-ubuntu-vm"/>
+    </x>
+</presence>
+
+]]></example>
+
+</section2>
+<section2 topic="Leaving a room" anchor="part">
+    <p>When a user leaves a room the presence is distributed in the same way.</p>
+    <p>Note: when the last user on an FMUC node that has been joined to another (this is the "joining node" not the "joined-to node") leaves the room the joining node has no more users in the joined-to node and the joining node will be considered to have left the FMUC set. Further activity on the joined-to node will not be sent to the joining node unless a user joins the joining node causing it to re-join. I am aware that this is a horrible description - I intend to fix it to be comprehendable.</p>
+<example caption='User leaves FMUC node'><![CDATA[
+<presence from="hatter@wonderland.lit/priam-ubuntu-vm" type="unavailable" to="rabbithole@rooms.wonderland.lit/Hatter"/>
+
+
+<presence from="rabbithole@rooms.wonderland.lit/Hatter" type="unavailable" to="hatter@wonderland.lit/priam-ubuntu-vm">
+    <x xmlns="http://jabber.org/protocol/muc#user">
+        <item affiliation="none" role="none" jid="hatter@wonderland.lit/priam-ubuntu-vm"/>
+        <status code="110"/>
+    </x>
+</presence>
+
+<presence from="rabbithole@rooms.wonderland.lit/Hatter" type="unavailable" to="alice@wonderland.lit/priam-ubuntu-vm">
+    <x xmlns="http://jabber.org/protocol/muc#user">
+        <item affiliation="none" role="none" jid="hatter@wonderland.lit/priam-ubuntu-vm"/>
+    </x>
+</presence>
+
+<presence from='rabbithole@rooms.wonderland.lit/Hatter' to='elsinore@talk.denmark.lit/Hamlet' type='unavailable'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='none' role='none' jid='hatter@wonderland.lit/priam-ubuntu-vm'/>
+  </x>
+  <fmuc xmlns='http://isode.com/protocol/fmuc' from='hatter@wonderland.lit/priam-ubuntu-vm'/>
+</presence>
+
+<presence from="elsinore@talk.denmark.lit/Hatter" type="unavailable" to="hamlet@denmark.lit/priam-ubuntu-vm">
+    <x xmlns="http://jabber.org/protocol/muc#user">
+        <item affiliation="none" role="none" jid="hatter@wonderland.lit/priam-ubuntu-vm"/>
+    </x>
+</presence>
+
+]]></example>
 </section2>
 
-  <section2 topic='Parting' anchor='parting'>
-    <section3 topic='Proxy-connected Users' anchor='proxypart'>
-      <p>The flow for a user leaving the proxy room is much the same as joining the proxy room:</p>
-      <example caption='User leaves the proxy room'><![CDATA[
-<presence
-    from='kev@remote.example.com/Swift'
-    to='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
-    type='unavailable'/>
-]]></example>
 
-      <example caption='Proxy sends part to the MUC'><![CDATA[
-<presence
-    from='jabberchat\40talk.example.com@mirror.remote.example.com'
-    to='jabberchat@talk.example.com/Kev'
-    type='unavailable'/>
-]]></example>
-
-      <example caption='MUC transmits part to occupants'><![CDATA[
-<presence
-    from='jabberchat@talk.example.com/Kev'
-    to='jabberchat\40talk.example.com@mirror.remote.example.com'
-    type='unavailable'>
-  <x xmlns='http://jabber.org/protocol/muc#user'>
-    <item affiliation='none' role='none'/>
-  </x>
-</presence>
-
-<presence
-    from='jabberchat@talk.example.com/Kev'
-    to='curtis@example.com/Swift'
-    type='unavailable'>
-  <x xmlns='http://jabber.org/protocol/muc#user'>
-    <item affiliation='none' role='none'/>
-  </x>
-</presence>
-]]></example>
-
-      <example caption='Proxy sends part to local users'><![CDATA[
-<presence
-    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
-    to='kev@remote.example.com/Swift''
-    type='unavailable'>
-  <x xmlns='http://jabber.org/protocol/muc#user'>
-    <item affiliation='none' role='none'/>
-    <status code='110'/>
-  </x>
-</presence>
-]]></example>
+<section2 topic="Administration" anchor="admin">
+    <p>When an FMUC node receives notice that one of their users has been kicked by a moderator on another node it SHOULD kick the user and fan-out the consequent presence stanzas to other nodes.</p>
+    <p>Role change should be distributed across nodes and fanned out to users, but only cosmetically (e.g. an owner on another node cannot effect changes to the affiliation lists on this node).</p>
+    <!--<example caption='User joins FMUC node'><![CDATA[
+]]></example>-->
+</section2>
 
 
-
-      <p>When the master MUC receives a parting presence from the only user of the proxy, the proxy itself also leaves the room. This means that as long as no users of the proxy are in the room, it is causing no traffic on the s2s link.</p>
-    </section3>
-
-
-    <section3 topic='Direct-connection Users' anchor='directpart'>
-      <p>Distribution of presence for users parting when connected directly to the MUC is identical to distribution of presence for users joining directly to the MUC.</p>
-    </section3>
-
-    <section3 topic='Status changes' anchor='statuschange'>
-      <p>Distribution of presence for users changing status is the same as that for joining and parting.</p>
-    </section3>
-
-
-  </section2>
-
-  <section2 topic='Sending a Message to All Occupants' anchor='message'>
-    <section3 topic='Normal use' anchor='message-ack'>
-      <p>Normal fan-out like presence</p>
-      <example caption='Proxy user sends a message to the room'><![CDATA[
-<message
-    from='kev@remote.example.com/Swift'
-    to='jabberchat\40talk.example.com@mirror.remote.example.com'
-    type='groupchat'>
-  <body>[[Unclassified]] It's getting warm in here.</body>
-</message>
-]]></example>
-      <example caption='Proxy sends the message to the MUC'><![CDATA[
-<message
-    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
-    to='jabberchat@talk.example.com'
-    type='groupchat'>
-  <body>[[Unclassified]] It's getting warm in here.</body>
-</message>
-]]></example>
-      <p>If the proxy is not using fire and forget mode (see below), it MUST NOT fan out this message to local users until it receives the message copy from the MUC.</p>
-      <example caption='MUC sends the message to the occupants'><![CDATA[
-<message
-    from='jabberchat@talk.example.com'
-    to='jabberchat\40talk.example.com@mirror.remote.example.com'
-    type='groupchat'>
-  <body>[[Unclassified]] It's getting warm in here.</body>
-</message>
-
-<message
-    from='jabberchat@talk.example.com'
-    to='curtis@example.com/Swift'
-    type='groupchat'>
-  <body>[[Unclassified]] It's getting warm in here.</body>
-</message>
-]]></example>
-      <p>When receiving the message copy, the proxy MUST then distribute to proxied occupants.</p>
-      <example caption='Proxy sends the message to the proxied users'><![CDATA[
-<message
-    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
-    to='kev@remote.example.com/Swift'
-    type='groupchat'>
-  <body>[[Unclassified]] It's getting warm in here.</body>
-</message>
-]]></example>
-    </section3>
-    <section3 topic='Fire and Forget' anchor='message-noack'>
-      <p>When dealing with very constrained s2s links, the extra round-trip involved with the MUC sending the message back to the proxy may be unacceptable. In this case, the proxy MAY include the &lt;nomirror> element. If the MUC receives a message from a proxy with &lt;nomirror>, it MUST NOT resend this message to the proxy during its usual fan-out, but MUST send it to other occupants as usual. If sending a message with &lt;nomirror>, the proxy MUST perform fan-out as if the MUC had sent the message back to it.</p>
-      <p>Note that this use introduces unfortunate side-effects, such as messages appearing out of order, depending on whether connected directly to the MUC, or through a proxy. Also, messages rejected by the MUC may already have been delivered to users on a proxy. As such, a proxy SHOULD only use &lt;nomirror> in environments where these side-effects are understood.</p>
-      <example caption='Proxy user sends a message to the room'><![CDATA[
-<message
-    from='kev@remote.example.com/Swift'
-    to='jabberchat\40talk.example.com@mirror.remote.example.com'
-    type='groupchat'>
-  <body>[[Unclassified]] It's getting warm in here.</body>
-</message>
-]]></example>
-      <example caption='Proxy sends the message to the MUC'><![CDATA[
-<message
-    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
-    to='jabberchat@talk.example.com'
-    type='groupchat'>
-  <body>[[Unclassified]] It's getting warm in here.</body>
-  <nomirror xmlns='http://isode.com/protocol/fmuc'/>
-</message>
-]]></example>
-      <p>If the proxy is using fire and forget mode, it MUST fan out this message to local users now, instead of waiting  until it receives the message copy from the MUC.</p>
-      <example caption='Proxy sends the message to the proxied users'><![CDATA[
-<message
-    from='jabberchat\40talk.example.com@mirror.remote.example.com/Kev'
-    to='kev@remote.example.com/Swift'
-    type='groupchat'>
-  <body>[[Unclassified]] It's getting warm in here.</body>
-</message>
-]]></example>
-      <p>Because this is fire and forget mode, the MUC now MUST NOT send the message back to the proxy, but MUST send to the other occupants.</p>
-      <example caption='MUC sends the message to the other occupants'><![CDATA[
-<message
-    from='jabberchat@talk.example.com/Kev'
-    to='curtis@example.com/Swift'
-    type='groupchat'>
-  <body>[[Unclassified]] It's getting warm in here.</body>
-</message>
-]]></example>
-    </section3>
-    
-  </section2>
-
-  <section2 topic='Administration Use Cases' anchor='admin'>
-    <p>To perform administration of the MUC, connect directly to the MUC and follow the standard process.</p>
-  </section2>
 
 </section1>
 
 
 <section1 topic='Business Rules' anchor='rules'>
   <ul>
-    <li>To avoid complexity of protocol, the MUC MUST NOT modify the nick of a user joining from a proxy - if their JID is unacceptable, the join must instead fail (this simplifies the passing of status codes between the MUC and the proxy).</li>
-    <li>Similarly to avoid complexity and round-trips, nick-changing is not allowed for users connected through a proxy. If a user attempts to change their nick, the proxy MUST return a <![CDATA[<not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>]]> error.</li>
   </ul>
 </section1>
 <!--<section1 topic='Implementation Notes' anchor='impl'>
@@ -382,8 +351,15 @@
   <p>OPTIONAL.</p>
 </section1>-->
 <section1 topic='Security Considerations' anchor='security'>
-  <p>This allows a MUC mirror to proxy for another JID, so should only be deployed in scenarios where either the proxy service is trusted, or it is known that the users of the proxy service are in the same security domain as the proxy service.</p>
+  <p>This allows an FMUC node to proxy for another JID, so should only be deployed in scenarios where either the FMUC nodes are trusted, or it is known that the users of an FMUC node are in the same security domain as the FMUC node itself.</p>
 </section1>
+<section1 topic='TBD' anchor='tbd'>
+  <p>How to get the join-target to tell the joining room how much history to send during a resync.</p>
+  <p>How to perform a resync (Part and then full rejoin)</p>
+  <p>Illustrate master-slave mode - this is simply that the sending room waits for the echo back from the room to which it's joined before distributing messages locally.</p>
+  <p>Describe private messages (simply relayed)</p>
+  <p>Describe collisions. Send fmuc payload saying there's a collision back to the node, Node with local user can then send an error message about the collision and kick them.</p>
+  </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>None.</p>
 </section1>
