@@ -85,7 +85,8 @@
 \usepackage{xcolor}
 \usepackage{graphicx}
 \usepackage{fancyhdr}
-\usepackage{tabularx}
+\usepackage{tabu}
+\usepackage{longtable}
 \usepackage{listings}
 \usepackage{varwidth}
 \usepackage{titling}
@@ -242,13 +243,14 @@
 <xsl:template match='table'>
   <TeXML escape="0">
     <env name="center">
-    <env name='tabularx'><parm><TeXML escape="0">\linewidth</TeXML></parm>
+    <env name='longtabu'>
       <parm><xsl:for-each select='tr[1]/th | tr[1]/td'><xsl:if test="position() = 1">l</xsl:if><xsl:if test='position() != last() and position() > 1'>X</xsl:if><xsl:if test='position() = last()'>X</xsl:if></xsl:for-each></parm>
       <xsl:for-each select='tr'>
         <xsl:for-each select='td | th'><xsl:if test='position() > 1'> &amp; </xsl:if><TeXML escape="1"><xsl:value-of select='.'/></TeXML><xsl:if test='position() = last()'> \\</xsl:if></xsl:for-each>
         <xsl:if test="position() = 1">
           \hline
           \hline
+          \endhead
         </xsl:if>
       </xsl:for-each>
     </env>
