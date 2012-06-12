@@ -48,10 +48,12 @@
     <p>As MUCs are generally self-contained entities with a single address, federating them requires the introduction of some new terminology:</p>
     <ul>
       <li>FMUC set - the union of all MUC rooms that federate together</li>
-      <li>FMUC node - a single MUC room that is a member of an FMUC set</li>
+      <li>FMUC node - a single MUC room that is a member of an FMUC set (abbreviated to "node")</li>
       <li>FMUC room - a room represented by an FMUC set</li>
       <li>Master-Master mode - two FMUC nodes operating such that both will continue to work when a network fails between them. This mode has the properties of reduced network traffic and of not having a guarantee of consistent message ordering between nodes</li>
       <li>Master-Slave mode - two FMUC nodes operating where one, the master, will continue working during a network outage while the slave will cease to work while it cannot communicate with the master. This mode has increased network traffic and a consistent message delivery order across both nodes.</li>
+      <li>Joining FMUC node - a node that initiates an FMUC connection to another node (abbreviated to "joining node").</li>
+      <li>Joined FMUC node - a node that accepts an FMUC connection from another node (abbreviated to "joined node"). Note that when nodes are connected in a tree-like structure a node in one of the middle layers will be both a joining node in the context of its connection to the room above it and also a joined node in the context of those nodes below that join to it.</li>
     </ul>
     <p>For illustration: if room1@rooms.server1.lit and room2@rooms.server2.lit federate with each other, then room1@rooms.server1.lit is an FMUC node, as is room2@rooms.server2.lit. Both nodes are in the FMUC set (along with any other node rooms that mutually federate) while the conceptual single room created by joining the FMUC set together is the FMUC room (and this FMUC room does not have a single definitive identifier).</p>
   </section2>
@@ -112,9 +114,14 @@
 </presence>
 ]]></example>
 
-<p>Now rabbithole may reject the join, if elsinor is not permitted to federate</p>
+<p>Now rabbithole may reject the join, if elsinor is not permitted to federate. To do this it sends a 'presence' reply from its bare JID to the bare JID of the joining node with an 'fmuc' payload containing a 'reject' element and MAY include a human-readable explanation as the text content of the 'reject' element.</p>
 
 <example caption='Second FMUC Node rejects federation'><![CDATA[
+<presence from="rabbithole@rooms.wonderland.lit" to="elsinore@talk.denmark.lit">
+  <fmuc xmlns="http://isode.com/protocol/fmuc">
+    <reject>No cross-domain federation.</reject>
+  </fmuc>
+</presence>
 ]]></example>
 
 <p>Or it may accept the federation request and reply with the list of current occupants and message context in the same order as specified in XEP-0045. Note that the fmuc element is always added containing the JID of the user (possibly passed down from other FMUC nodes, or indeed from the joining node for the presence of the user used for the initial join), while the XEP-0045 rules apply for whether to include the jid in the muc#user element.</p>
@@ -290,7 +297,6 @@
 </section2>
 <section2 topic="Leaving a room" anchor="part">
     <p>When a user leaves a room the presence is distributed in the same way.</p>
-    <p>Note: when the last user on an FMUC node that has been joined to another (this is the "joining node" not the "joined-to node") leaves the room the joining node has no more users in the joined-to node and the joining node will be considered to have left the FMUC set. Further activity on the joined-to node will not be sent to the joining node unless a user joins the joining node causing it to re-join. I am aware that this is a horrible description - I intend to fix it to be comprehendable.</p>
 <example caption='User leaves FMUC node'><![CDATA[
 <presence from="hatter@wonderland.lit/priam-ubuntu-vm" type="unavailable" to="rabbithole@rooms.wonderland.lit/Hatter"/>
 
@@ -322,6 +328,15 @@
 </presence>
 
 ]]></example>
+    <p>When the last user on a joining FMUC node leaves the room the joining node has no more users in the joined node and the joining node will be considered to have left the FMUC set. Further activity in the FMUC set not be sent to the joining node (unless it subsequently rejoins the set).</p>
+    <p>The joined room confirms that the joining room has left the set by sending a presence stanza from the bare JID of the joined room to the bare JID of the joining room with an FMUC payload containing an element 'left'.</p>
+<example caption='Joined FMUC node alerts the joining node that it is no longer in the FMUC set'><![CDATA[
+<presence from="rabbithole@rooms.wonderland.lit" to="elsinore@talk.denmark.lit">
+  <fmuc xmlns="http://isode.com/protocol/fmuc">
+    <left/>
+  </fmuc>
+</presence>
+]]></example>
 </section2>
 
 
@@ -333,6 +348,24 @@
 </section2>
 
 
+<section2 topic="Private Messages" anchor="pm">
+    <p>When sending a private message to an occupant of another node, each node that receives it is responsible for routing it to the appropriate node (or the occupant, if local).</p>
+    <example caption='User sends private message to occupant of other node'><![CDATA[
+<message to="elsinore@talk.denmark.lit/Alice" from="hamlet@denmark.lit/priam-ubuntu-vim" type="chat">
+  <body>Hi, I want to say something in private</body>
+</message>
+
+<message to="rabbithole@rooms.wonderland.lit/Alice" from="elsinore@talk.denmark.lit/Hamlet" type="chat">
+  <fmuc xmlns="http://isode.com/protocol/fmuc" from="hamlet@denmark.lit/priam-ubuntu-vm"/>
+  <body>Hi, I want to say something in private</body>
+</message>
+
+<message to="alice@wonderland.lit/priam-ubuntu-vim" from="rabbithole@rooms.wonderland.lit/Hamlet" type="chat">
+  <body>Hi, I want to say something in private</body>
+</message>
+
+]]></example>
+</section2>
 
 </section1>
 
@@ -357,7 +390,6 @@
   <p>How to get the join-target to tell the joining room how much history to send during a resync.</p>
   <p>How to perform a resync (Part and then full rejoin)</p>
   <p>Illustrate master-slave mode - this is simply that the sending room waits for the echo back from the room to which it's joined before distributing messages locally.</p>
-  <p>Describe private messages (simply relayed)</p>
   <p>Describe collisions. Send fmuc payload saying there's a collision back to the node, Node with local user can then send an error message about the collision and kick them.</p>
   </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
