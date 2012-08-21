@@ -28,9 +28,15 @@
     <jid>fippo@psyced.org</jid>
   </author>
   <revision>
+    <version>0.14</version>
+    <initials>ph</initials>
+    <date>2012-08-21</date>
+    <remark><p>Updated the Security Considerations to describe the 'Unsolicited Dialback Attack' and added recommendations to avoid this attack.</p></remark>
+  </revision>
+  <revision>
     <version>0.13</version>
     <initials>ph/psa</initials>
-    <date>2012-08-12</date>
+    <date>2012-08-08</date>
     <remark>
       <ul>
         <li>Allowed same SRV target in multiplexing business</li>
@@ -363,7 +369,7 @@ key = HMAC-SHA256(
       <p>After sending the dialback key, the Initiating Server waits for the verification result from the Receiving Server. If the Initiating Server wishes to send any stanzas for this domain pair, it MUST queue them for sending after it has received authorization to send stanzas from the Receiving Server, and MUST NOT attempt to send stanzas until it has received such authorization.</p>
       <p>Note: While waiting for the verification result, the Initiating Server SHOULD continue to send stanzas for any domain pair that has already been verified on that connection. It MAY send out additional dialback keys for different domain pairs and issue dialback verification requests as described under Section 2.1.2. To avoid denial of service attacks (&rfc4732;) or deadlock situations, the Initiating Server MAY impose a timeout on dialback operations, i.e. it should consider dialback operations to be failed when there is no response after a certain amount of time.</p>
       <p>If the stream or the underlying TCP connection is closed by the Receiving Server while the Initiating Server is waiting for the verification result, the Initiating Server shall behave as it does when receiving a dialback error as described below.</p>
-      <p>After the Receiving Server has verified the request, the Initiating Server receives the verification result in the form of a &lt;db:result/&gt; element, where the 'from' attribute MUST be the Target Domain, the 'to' attribute MUST be the Sender Domain, and the 'type' attribute MUST have a value of "valid" or "invalid" (for the value of "error", see below).</p>
+      <p>After the Receiving Server has verified the request, the Initiating Server receives the verification result in the form of a &lt;db:result/&gt; element with a the 'type' attribute whose value is "valid" or "invalid" (for the value of "error", see below). The Initiating Server MUST ensure that the 'from' and 'to' attributes in this response correlate to a request that was sent over the same XML stream (see Section 3.1).</p>
       <p>Thus the result is either valid...</p>
       <example caption="Initiating Server Receives Valid Verification Result from Receiving Server (Step 4)"><![CDATA[
 recv: <db:result
@@ -439,6 +445,7 @@ recv: <db:verify
      </db:verify>
       ]]></example>
       <p>Note: If the underlying TCP connection is closed by the remote side while there are pending verification requests, those requests SHOULD be considered failed and therefore be treated like an error response.</p>
+      <p>The Receiving Server MUST ensure that the values of the 'from', 'to' and 'id attributes correlate to a request that was sent over the same XML stream (see Section 3.1).</p>
       <p>After receiving the validation result from the Authoritative Server, the Receiving Server determines the inbound connection that the dialback key was originally received on. This connection is uniquely identified by the combination of the 'from', 'to', and 'id' attributes. If no inbound connection is found that matches this combination, the verification result SHOULD be dropped silently. If an inbound connection is found, the Receiving Server uses it to communicate the verification result to the Initiating Server. A positive result indicates the readiness of the Receiving Server to accept stanzas from the Initiating Server for this domain pair.</p>
       <p>When receiving a verification result of type "invalid", the Receiving Server MAY choose not to relay this result to the Initiating Server. Instead, it might send a dialback error such as &lt;forbidden/&gt; to the Initiating Server. Compared to sending a result of type "invalid", this behavior will not result in the loss of the whole stream and any previously domain pairs previously negotiated, while at the same time not accepting stanzas from the spoofed domain. Even when not forwarding the "invalid" result, the incident ought to be logged.</p>
     </section3>
@@ -451,6 +458,7 @@ recv: <db:verify
       <li>Authorize inbound connections, i.e., act as a Receiving Server in relation to an Initiating Server; this is described under Section 2.2.1.</li>
       <li>Answer verification requests about the validity of dialback keys, i.e., act as an Authoritative Server in relation to a Receiving Server; this is described under Section 2.2.2.</li>
     </ol>
+    <p>Note that, unless <cite>XEP-0288</cite> is used, the 'type' should not be set on either &lt;db:result/&gt; or &lt;db:verify/&gt; elements received on an inbound connection.</p>
 
     <section3 topic="Receiving Server Handles Inbound Authorization Request from Initiating Server">
       <p>This subsection describes the interaction between the server hosting capulet.lit (acting as an Initiating Server) and the server hosting montague.net (acting as a Receiving Server), from the inbound perspective of the Receiving Server (i.e., this section is the mirror image of Section 2.1.1).</p>
@@ -660,8 +668,11 @@ home.montague.lit.                   86400 IN A                     10.44.0.4
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
-  <p>Server Dialback helps protect against domain spoofing, thus making it more difficult to spoof XML stanzas. Absent the use of DNS security (DNSSEC, &rfc4033;), Server Dialback does not provide a mechanism for authenticating a stream, as is done via TLS and SASL, and results in weak verification of server identities only. Furthermore, if DNSSEC is not used then it is susceptible to DNS poisoning attacks.</p>
+  <p>Server Dialback helps protect against domain spoofing, thus making it difficult to spoof the origin of XML stanzas. Absent the use of DNS security (DNSSEC, &rfc4033;), Server Dialback does not provide a mechanism for authenticating a stream, as is done via TLS and SASL, and results in weak verification of server identities only. Furthermore, if DNSSEC is not used then it is susceptible to DNS poisoning attacks.</p>
   <p>If DNSSEC is used, Server Dialback provides stream authentication only (i.e., a strong association between a domain name and an XML stream). However, Server Dialback by itself does not provide confidentiality, data integrity, or stream encryption. Some existing implementations are known to support dialback over TLS. Server Dialback is typically carried out the same way as without TLS, but gains from the use of channel encryption.</p>
+  <section2 topic='Unsolicited Dialback' anchor='security-unsolicited'>
+    <p>In mid-2012, several implementations turned out to be vulnerable to a number of attacks against the protocol described in this document. These attacks were based on sending verify (STEP 3) or result (STEP 4) responses without an associated request, in an unexpected direction and/or on an unexpected XML stream. Failure to reject those 'unsolicited' responses lets an attacker either spoof stanzas with an arbitrary sender domain or enables him to impersonate any target domain.</p>
+  </section2>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
