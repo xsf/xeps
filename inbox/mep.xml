@@ -1,0 +1,286 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>MUC Eventing Protocol</title>
+  <abstract>This specification defines semantics for using the XMPP publish-subscribe protocol to broadcast state change events associated with a Multi-User Chat (MUC) room. This profile of pubsub therefore enables a chatroom to function as a virtual pubsub service, easing the discovery of syndicated data and event notifications associated with such a room.</abstract>
+  &LEGALNOTICE;
+  <number>XXXX</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards JIG</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0045</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0115</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>mep</shortname>
+  &stpeter;
+  <revision>
+    <version>0.0.2</version>
+    <date>2012-12-09</date>
+    <initials>psa</initials>
+    <remark><p>Added description of occupant publishing.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2012-12-06</date>
+    <initials>psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+    <p>Just as &xep0163; defines a profile of &xep0060; that enables an instant messaging user to send updates or "events" to other users, this specification defines a profile that enables a room occupant or the chatroom itself to send notifications in the context of &xep0045; chatroom.</p>
+    <p class='em'>Note: Any use cases, error flows, and other protocols details not described herein are described in <cite>XEP-0060</cite>. This document merely defines a "subset" or "profile" of XMPP publish-subscribe.</p>
+</section1>
+
+<section1 topic='Room Notifications' anchor='room'>
+  <p>Using the chatroom example from XEP-0045, imagine that the room itself wants to notify the occupants of the coven@chat.shakespeare.lit chatroom about events of interest to the group (say, notifications about multimedia aspects of the multi-user session, such as described in &xep0298;).</p>
+  <p>When new information is available about the multimedia session (say, calling into a conference "bridge" or starting a &xep0166; session to add a video feed), a multimedia engine might capture that event and inform the chatroom by means of a backend API. The chatroom itself then generates an event notification. That is, a chatroom does not publish events, instead it simply generates them based on data of interest. As a result, everyone in the room who is interested in that kind of data will receive a notification about the event:</p>
+  <example caption='Interested occupants receive event notification'><![CDATA[
+<message from='coven@chat.shakespeare.lit'
+         to='crone1@shakespeare.lit/desktop'
+         type='headline'
+         id='zns61f38'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:ietf:params:xml:ns:conference-info'>
+      <item id='ehs51f40'>
+        <conference-info 
+            xmlns='urn:ietf:params:xml:ns:conference-info'>
+          <conference-description>
+            <available-media label='4'>
+              <type>video</type>
+              <status>sendonly</status>
+            </available-media>
+          </conference-description>
+        </conference-info>
+      </item>
+    </items>
+  </event>
+</message>
+
+<message from='coven@chat.shakespeare.lit'
+         to='wiccarocks@shakespeare.lit/laptop'
+         type='headline'
+         id='uh4gs519'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:ietf:params:xml:ns:conference-info'>
+      <item id='ehs51f40'>
+        <conference-info 
+            xmlns='urn:ietf:params:xml:ns:conference-info'>
+          <conference-description>
+            <available-media label='4'>
+              <type>video</type>
+              <status>sendonly</status>
+            </available-media>
+          </conference-description>
+        </conference-info>
+      </item>
+    </items>
+  </event>
+</message>
+  ]]></example>
+  <p>But how do the occupants tell the room that they are interested in knowing what about conference-info events? Whereas generic pubsub services require an explicit subscription to a conference-info node, MEP services support the "filtered-notification" feature from XEP-0060 and obviously share presence (since MUC is based on directed presence in the room) so the "auto-subscribe" feature also applies.</p>
+  <example caption='Occupant sends directed presence to join the room, with caps'><![CDATA[
+<presence from='crone1.shakespeare.lit/desktop'
+          to='coven@chat.shakespeare.lit/firstwitch'>
+  <x xmlns='http://jabber.org/protocol/muc'/>
+  <c xmlns='http://jabber.org/protocol/caps' 
+     hash='sha-1'
+     node='http://jisti.org'
+     ver='054H4A7280JuT6+IroVYxgCAjZo='/>
+</presence>
+  ]]></example>
+  <p>That chatroom knows to send conference-info notifications to crone1@shakespeare.lig because when the room unpacks the value of the 'ver' attribute ("054H4A7280JuT6+IroVYxgCAjZo=") in accordance with <cite>XEP-0115</cite>, it discovers that her client advertises a service discovery feature of "urn:ietf:params:xml:ns:conference-info+notify", where the "+notify" suffix indicates interest in receiving notifications related to the protocol that precedes the suffix. The server can verify this support if needed by sending a service discovery request to crone1's full JID (see XEP-0115 for details).</p>
+</section1>
+
+<section1 topic='Occupant Notifications' anchor='occupant'>
+  <p>The foregoing section described how the room itself can inform the occupants about data of interest. However, in MEP any particular occupant can also publish information. An occupant does so by sending a publish-subscribe publish request to the occupant's Occupant JID &lt;room@service/nick&gt; (similar to the way in which publishing via PEP happens by sending a request to the user's bare JID &lt;user@host&gt;). For instance, the following example shows how a room occupant would inform the other occupants about an event of interest.</p>
+  <example caption='Occupant Publishes Activity'><![CDATA[
+<iq from='wiccarocks@shakespeare.lit/laptop'
+    id='vlk3h264'
+    to='coven@chat.shakespeare.lit/secondwitch'
+    type='set'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='http://jabber.org/protocol/activity'>
+      <item>
+        <activity xmlns='http://jabber.org/protocol/activity'>
+          <other/>
+          <text xml:lang='en'>I'll give thee a wind.</text>
+        </activity>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+  ]]></example>
+  <p>As a result, everyone in the room who is interested in that kind of data will receive a notification about the event (note that even the publisher receives the event, if they have advertised interest in the payload type):</p>
+  <example caption='Interested occupants receive event notification'><![CDATA[
+<message from='coven@chat.shakespeare.lit/secondwitch'
+         to='crone1@shakespeare.lit/desktop'
+         type='headline'
+         id='hs7bx143'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='http://jabber.org/protocol/activity'>
+      <item id='bxg1c27r'>
+        <activity xmlns='http://jabber.org/protocol/activity'>
+          <other/>
+          <text xml:lang='en'>I'll give thee a wind.</text>
+        </activity>
+      </item>
+    </items>
+  </event>
+</message>
+
+<message from='coven@chat.shakespeare.lit'
+         to='wiccarocks@shakespeare.lit/laptop'
+         type='headline'
+         id='ke2v1c95'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='http://jabber.org/protocol/activity'>
+      <item id='bxg1c27r'>
+        <activity xmlns='http://jabber.org/protocol/activity'>
+          <other/>
+          <text xml:lang='en'>I'll give thee a wind.</text>
+        </activity>
+      </item>
+    </items>
+  </event>
+</message>
+  ]]></example>
+</section1>
+
+<section1 topic='Concepts and Approach' anchor='approach'>
+  <p>MUC eventing via pubsub ("NEP") is based on the following principles:</p>
+  <ol start='1'>
+    <li>Every room JID and occupant JID a pubsub service.</li>
+    <li>One publisher per node (the chatroom or occupant itself).</li>
+    <li>Use presence (implicit in multi-user chat).</li>
+    <li>Filter notifications based on expressed interest.</li>
+    <li>Smart defaults.</li>
+  </ol>
+  <p>These principles are described more fully below.</p>
+  <section2 topic='Every Room JID and Occupant JID a Pubsub Service' anchor='approach-every'>
+    <p>Treating every MEP-enabled chatroom as a pubsub service simplifies the task of discovering and subscribing to information of interest in or about the room.</p>
+  </section2>
+  <section2 topic='One Publisher Per Node' anchor='approach-publisher'>
+    <p>There is no need for multiple publishers to a MEP service, since by definition only the chatroom itself or the occupant itself publishes information.</p>
+  </section2>
+  <section2 topic='Use Presence' anchor='approach-presence'>
+    <p>By definition, a chatroom has presence information about the occupants, because they use directed presence to join the room.</p>
+    <p class='box'>Note: It is strongly NOT RECOMMENDED to use directed presence with Entity Capabilities data that differs from the data included in broadcast presence for the purpose of establishing implicit PEP subscriptions to another entity, because the directed presence information will be overwritten by any subsequent presence broadcast.</p>
+  </section2>
+  <section2 topic='Filtered Notifications' anchor='approach-filter'>
+    <p>By default, the use of directed presence is used to establish a MEP subscription to the chatroom's eventing data. In order to filter which notifications are sent by the MEP service, the contact's client includes extended &xep0115; information in the directed presence notifications it sends to the chatroom. Because the MEP-enabled room supports the "filtered-notifications" feature, it sends only those notifications that match the occupant's expressed notification preferences.</p>
+  </section2>
+  <section2 topic='Smart Defaults' anchor='approach-defaults'>
+    <p>Most pubsub configuration options and metadata are not needed for MUC eventing. Instead, MEP services offer smart defaults to simplify node creation and management.</p>
+  </section2>
+</section1>
+
+<section1 topic='Recommended Defaults' anchor='defaults'>
+  <p>A MEP service MUST:</p>
+  <ul>
+    <li>Support the node discovery, node creation, node deletion, publish item, subscribe, unsubscribe, and item retrieval use cases specified in <cite>XEP-0060</cite>.</li>
+    <li>Support the "auto-create", "auto-subscribe", and "filtered-notifications" features.</li>
+    <li>Support the "owner" and "subscriber" affiliations.</li>
+    <li>Support the "presence" access model and set it to the default.</li>
+    <li>Treat the room JID and each occupant JID as a collection node (i.e., as the root collection node for the virtual pubsub service associated with the chatroom or with each occupant JID).</li>
+    <li>Default the 'deliver_notifications' configuration option to true (i.e., deliver payloads by default).</li>
+    <li>Default the 'send_last_published_item' configuration option to on_sub_and_presence (i.e., send the last published item on subscription and on receipt of presence), treating the receipt of directed presence as equivalent to a subscription.</li>
+  </ul>
+  <p>A PEP service MAY support other use cases, affiliations, access models, and features, but such support is OPTIONAL.</p>
+</section1>
+
+<section1 topic='Determining Support' anchor='support'>
+  <p>If a chatroom supports MEP, it MUST advertise that fact in its responses to &xep0030; information ("disco#info") requests by returning an identity of "pubsub/mep" and the relevant pubsub features:</p>
+  <example caption='A disco#info query'><![CDATA[
+<iq type='get' 
+    from='hag66@shakespeare.lit/pda'
+    to='coven@chat.shakespeare.lit'
+    id='k3hs5174'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+  ]]></example>
+  <example caption='A disco#info response'><![CDATA[
+<iq type='result' 
+    from='coven@chat.shakespeare.lit'
+    to='hag66@shakespeare.lit/pda'
+    id='k3hs5174'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='conference' type='text'/>
+    <identity category='pubsub' type='mep'/>
+    ...
+    <feature var='http://jabber.org/protocol/disco#info'/>
+    <feature var='http://jabber.org/protocol/disco#items'/>
+    <feature var='http://jabber.org/protocol/muc'/>
+    <feature var='http://jabber.org/protocol/pubsub#access-presence'/>
+    <feature var='http://jabber.org/protocol/pubsub#auto-create'/>
+    <feature var='http://jabber.org/protocol/pubsub#auto-subscribe'/>
+    <feature var='http://jabber.org/protocol/pubsub#config-node'/>
+    <feature var='http://jabber.org/protocol/pubsub#create-and-configure'/>
+    <feature var='http://jabber.org/protocol/pubsub#create-nodes'/>
+    <feature var='http://jabber.org/protocol/pubsub#filtered-notifications'/>
+    <feature var='http://jabber.org/protocol/pubsub#persistent-items'/>
+    <feature var='http://jabber.org/protocol/pubsub#publish'/>
+    <feature var='http://jabber.org/protocol/pubsub#retrieve-items'/>
+    <feature var='http://jabber.org/protocol/pubsub#subscribe'/>
+    <feature var='muc_passwordprotected'/>
+    <feature var='muc_hidden'/>
+    <feature var='muc_temporary'/>
+    <feature var='muc_open'/>
+    <feature var='muc_unmoderated'/>
+    <feature var='muc_nonanonymous'/>
+    ...
+  </query>
+</iq>
+  ]]></example>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>The security considerations of XEP-0045 and XEP-0163 apply.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Service Discovery Category/Type' anchor='registrar-disco'>
+    <p>The &REGISTRAR; includes a category of "pubsub" in its registry of Service Discovery identities (see &DISCOCATEGORIES;); as a result of this document, the Registrar includes a type of "pep" to that category.</p>
+    <p>The registry submission is as follows:</p>
+    <code><![CDATA[
+<category>
+  <name>pubsub</name>
+  <type>
+    <name>mep</name>
+    <desc>
+      A MUC eventing service that supports the 
+      publish-subscribe subset defined herein.
+    </desc>
+    <doc>XEP-xxxx</doc>
+  </type>
+</category>
+    ]]></code>
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <p>Because MEP simply reuses the protocol specified in <cite>XEP-0060</cite>, a separate schema is not needed.</p>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>Thanks to Joe Hildebrand and Matthew Wild for their input.</p>
+</section1>
+
+</xep>
