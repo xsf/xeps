@@ -4,7 +4,7 @@
 
 ## LICENSE ##
 #
-# Copyright (c) 1999 - 2010 XMPP Standards Foundation
+# Copyright (c) 1999 - 2013 XMPP Standards Foundation
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -39,6 +39,7 @@ do
     xsltproc ref.xsl xep-$f.xml > $xeppath/refs/reference.XSF.XEP-$f.xml
     xsltproc examples.xsl xep-$f.xml > $xeppath/examples/$f.xml
     cp xep-$f.xml $xeppath/
+    ./gen.py $f
 done < nums.txt
 
 rm nums.txt
