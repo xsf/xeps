@@ -19,7 +19,6 @@
     <spec>XEP-0234</spec>
     <spec>XEP-0059</spec>
     <spec>XEP-0265</spec>
-    <spec>XEP-0055</spec>
   </dependencies>
   <supersedes>
     <spec>XEP-0135</spec>
@@ -32,16 +31,22 @@
       <jid>j.lagrange@jabber.org</jid>
       <jid>j.lagrange@gajim.org</jid>
   </author>
+  <author>
+      <firstname>Lance</firstname>
+      <surname>Stout</surname>
+      <email>lancestout@gmail.com</email>
+  </author>
   <revision>
-    <version>0.0.2</version>
-    <date>2012-10-14</date>
+    <version>0.0.4</version>
+    <date>2013-01-26</date>
     <initials>jl</initials>
-    <remark>Second draft</remark>
+    <remark>Third draft</remark>
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
   <p>XMPP extensions provide ways of transferring files between peers (such as &xep0234; and &xep0096;). However, file transfer is currently limited to needing that the transfer be initiated by the hosting entity. The &xep0234; extension, provides for a way to request files, but it requires the requesting entity to have information about the file being requested, so that it can be uniquely identified. </p>
 <p>This document defines an extension which allows the request of information of files being offered by a hosting entity so they can later be requested in a file transfer; If the requesting entity is interested in the file.</p>
+<p>&xep0135; is a previous extention that attempted to solve the same problem as this one, but unfortunetly it didn't generate much interest and it got deprecated. This extention aims be a modern replacement for XEP-0135.</p>
 <p>IRC users have been able to bypass the limitations of the protocol by using bots that provide information of files and initiate transfer on command. A major downside of this method is that not every user is capable of sharing its files. The aim of this document is to provide a similar functionality while making it easier for users to offer and request information about files. </p>
 <p>Microsoft's MSN proprietary IM client, used to provide similar functionality using "Sharing Folders", but this was replaced by Windows Live SkyDrive </p>
 </section1>
@@ -49,56 +54,37 @@
   <ol>
     <li>Enable a requesting entity to traverse the shared directory of an offering entity (REQUIRED)</li>
     <li>Enable a requesting entity to get detailed information about files. (REQUIRED)</li>
-   <li>Enable a requesting entity to search files hosted by an offering entity.(OPTIONAL)</li>
-    <li>Allow the use of MUCs to share information about files among the users.(OPTIONAL)</li>
-<!--    <li>Allow the use of Pub/Sub service to search files (OPTIONAL)</li> -->
   </ol>
 </section1>
 <section1 topic='Assumptions' anchor='assump'>
 <!-- Maybe make this into a list -->
-    <p> This protocol assumes the existence of a shared directory (either virtual or physical). The hosting entity must not advertise empty directories. The hosting entity is responsible of maintaining the structure of that directory (such as not allowing two files with the same name and preventing cycles within directories). The hosting entity is in no way required to present the same shared directory to different requesters.</p>
+    <p> This protocol assumes the existence of one or more shared directories (either virtual or physical). The hosting entity must not advertise empty directories. The hosting entity is responsible of maintaining the structure of those directories (such as not allowing two files with the same name and preventing cycles within directories). The hosting entity is in no way required to present the same shared directories to different requesters. In fact, the reason multiple share directories are allowed, is to make it easier for implementers to manage permissions of who can see what files.</p>
 </section1>
 <section1 topic='Getting Information About Files ' anchor='disco'>
   <section2 topic='Traversing Files' anchor='traver'>
-      <p>If a requesting entity wishes to traverse the shared folder of an offering entity. It can do so by querying the root directory as it is shown in the following example:</p>
+      <p>If a requesting entity wishes to know what files are being shared by an offering entity, it can do so by sending the following query:</p>
       <example caption='Requester queries the root of the shared folder'>
 <![CDATA[
 <iq type='get'
     from='juliet@capulet.com/chamber'
     to='romeo@montague.net/home'
     id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <request>
-            <directory/>
-        </request>
-    </match>
+    <query xmlns="urn:xmpp:fis" />
 </iq>
 ]]>
       </example>
-      <p> If the offering entity has files to share, it MUST respond with the root-level files of its shared folder. Files and directories at the root level MUST not be the child of any "directory" tag. In order to save bandwidth, the offering entity MAY omit all the children of the file tag except the "name" which is required and MUST always be present.
-      </p>
-      <p>The file tag has the same attributes as defined in &xep0096;. The "name" attribute is required and must be included in every response. The "size" attribute is only required when responding with detailed information about a file.</p>
-      <example caption='The offering entity responds with files'>
+      <p> If the offering entity wishes to share files with the requesting entity, it may respond with a list of shared folders. It MUST not include any files in this response.</p>
+      <example caption='The offering entity responds with shared directories'>
 <![CDATA[
 <iq type='result'
     from='romeo@montague.net/home'
     to='juliet@capulet.com/chamber'
     id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <offer>
-            <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
-                <date>1969-07-21T02:56:15Z</date>
-                <desc>This is a test. If this were a real file...</desc>
-                <name>test.txt</name>
-                <size>1022</size>
-                <hash xmlns='urn:xmpp:hashes:1' algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
-            </file>
-            <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
-                <name>test2.txt</name>
-            </file>
-            <directory name='pics'/>
-        </offer>
-    </match>
+    <query xmlns="urn:xmpp:fis">
+        <directory name='documents'/>
+        <directory name='pics'/>
+        <directory name='audio'/>
+    </query>
 </iq>
 ]]>
       </example>
@@ -109,14 +95,46 @@
     from='romeo@montague.net/home'
     to='juliet@capulet.com/chamber'
     id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <offer>
-            <directory/>
-        </offer>
-    </match>
+    <query xmlns="urn:xmpp:fis" />
 </iq>
 ]]>
       </example>
+      <p>Requesting the list of files and directories within a directory.</p>
+      <example caption='The requesting entity wants to know about a particular directory'>
+<![CDATA[
+<iq type='get'
+    from='juliet@capulet.com/chamber'
+    to='romeo@montague.net/home'
+    id='1234'>
+    <query xmlns="urn:xmpp:fis" node="documents" />
+</iq>
+]]>
+</example>
+      <p>When replying with a list of files, the offering entity can choose to either reply with verbose information on the file using the file attributes defined by &xep0254; or it may reply only with the 'name' attribute, which is required and MUST be included in every response.</p>
+      <p>It is RECOMENDED, when the list files to be sent is small, that a verbose response be made (in order to avoid going back and forth requesting information), and that a non-verbose reponse be made otherwise. This recomendation is made to save bandwidth.</p>
+      <example caption='The offering entity replies with information about a particular directory'>
+<![CDATA[
+<iq type='result'
+    from='romeo@montague.net/home'
+    to='juliet@capulet.com/chamber'
+    id='1234'>
+    <query xmlns="urn:xmpp:fis" node="documents">
+        <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
+            <name>test.txt</name>
+            <date>1969-07-21T02:56:15Z</date>
+            <desc>This is a test. If this were a real file...</desc>
+            <range/>
+            <size>1022</size>
+            <hash xmlns='urn:xmpp:hashes:1' algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
+        </file>
+        <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
+            <name>test2.txt</name>
+        </file>
+        <directory name="secret docs" />
+    </query>
+</iq>
+]]>
+</example>
       <p>If the requesting entity wants to get detailed information about a file. It can do so by providing its full path.</p>
       <example caption='The requesting entity wants to know about a particular file'>
 <![CDATA[
@@ -124,321 +142,37 @@
     from='juliet@capulet.com/chamber'
     to='romeo@montague.net/home'
     id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <request>
-            <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
-                <name>test2.txt</name>
-            </file>
-        </request>
-    </match>
+    <query xmlns="urn:xmpp:fis" node="documents/test2.txt" />
 </iq>
 ]]>
 </example>
-    <p> When replying with detailed information about a file, the offering entity must always include the "name" and "size".</p>
       <example caption='The offering entity responds with more information'>
 <![CDATA[
 <iq type='result'
     from='romeo@montague.net/home'
     to='juliet@capulet.com/chamber'
     id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <offer>
-            <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
-                <name>test2.txt</name>
-                <size>1000</size>
-            </file>
-        </offer>
-    </match>
-</iq>
-]]>
-</example>
-      <example caption='The requesting entity wants know about what files are in a directory'>
-<![CDATA[
-<iq type='get'
-    from='juliet@capulet.com/chamber'
-    to='romeo@montague.net/home'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <request>
-            <directory name='pics'/>
-        </request>
-    </match>
-</iq>
-]]>
-</example>
-      <example caption='The offering entity responds with directory structure'>
-<![CDATA[
-<iq type='result'
-    from='romeo@montague.net/home'
-    to='juliet@capulet.com/chamber'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <offer>
-            <directory name='pics'>
-                <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
-                    <name>test3.png</name>
-                </file>
-                <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
-                    <name>test4.png</name>
-                </file>
-                <directory name="landscapes" />
-            </directory>
-        </offer>
-    </match>
+    <query xmlns="urn:xmpp:fis" node="test2.txt">
+        <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
+            <name>test2.txt</name>
+            <size>1000</size>
+        </file>
+    </query>
 </iq>
 ]]>
 </example>
   </section2>
-  <section2 topic='Searching Files'>
-      <p>Sometimes the list of files is too big to be efficiently traversed or there are too many peers offering files. This extensions allows simple file search to ease the discovery of files.</p>
-      <p>The requesting entity can request the fields on which a search can be performed. </p>
-      <example caption='Requesting search fields'>
-<![CDATA[
-<iq type='get'
-    from='juliet@capulet.com/chamber'
-    to='romeo@montague.net/home'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <query xmlns='jabber:iq:search' />
-    </match>
-</iq>
-]]>
-</example>
-<p>The offering entity replies with its search fields. The fields in the following example are required, and they MUST be supported.</p>
-<example caption='Receiving search fields'>
-<![CDATA[
-<iq type='result'
-    from='romeo@montague.net/home'
-    to='juliet@capulet.com/chamber'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <query xmlns='jabber:iq:search'>
-            <name/>
-            <size/>
-            <date/>
-            <desc/>
-            <hash xmlns='urn:xmpp:hashes:1'/>
-        </query>
-    </match>
-</iq>
-]]>
-</example>
-<p>Different files have different metadata and all of them may not be completly covered by the fields mentioned before. Of course, any field that doesn't fit could be included in "desc", however this can make search difficult as it is not clearly defined what to look for.</p>
-<p>Fields can be extended using dataforms, as it is defined in &xep0055;</p>
-<example caption='Receiving extended search fields'>
-<![CDATA[
-<iq type='result'
-    from='romeo@montague.net/home'
-    to='juliet@capulet.com/chamber'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <query xmlns='jabber:iq:search'>
-            <name/>
-            <size/>
-            <date/>
-            <desc/>
-            <hash xmlns='urn:xmpp:hashes:1'/>
-            <x xmlns='jabber:x:data' type='form'>
-              <field type='hidden'
-                     var='FORM_TYPE'>
-                <value>jabber:iq:search</value>
-              <field type='list-single'
-                     label='File type'
-                     var='type'>
-                <option label='Audio'><value>audio</value></option>
-                <option label='Video'><value>video</value></option>
-                <option label='Text'><value>text</value></option>
-                <option label='Image'><value>image</value></option>
-              </field>
-            </x>
-        </query>
-    </match>
-</iq>
-]]>
-</example>
-<example caption='Requester uses extended search field'>
-<![CDATA[
-<iq type='get'
-    from='juliet@capulet.com/chamber'
-    to='romeo@montague.net/home'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <query xmlns='jabber:iq:search'>
-            <x xmlns='jabber:x:data' type='submit'>
-              <field type='hidden' var='FORM_TYPE'>
-                <value>jabber:iq:search</value>
-              </field>
-              <field var='x-gender'>
-                <value>image</value>
-              </field>
-            </x>
-        </query>
-    </match>
-</iq>
-]]>
-</example>
-<example caption='Offering entity responds with files'>
-<![CDATA[
-<iq type='result'
-    from='romeo@montague.net/home'
-    to='juliet@capulet.com/chamber'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <query xmlns='jabber:iq:search'>
-            <x xmlns='jabber:x:data' type='submit'>
-              <field type='hidden' var='FORM_TYPE'>
-                <value>jabber:iq:search</value>
-              </field>
-            <item>
-                <name>pics/test3.png</name>
-            </item>
-            <item>
-                <name>pics/test4.png</name>
-            </item>
-            </x>
-        </query>
-    </match>
-</iq>
-]]>
-</example>
-      <p>If a requesting entity wishes to search for a particular keyword in the files name, it only needs to send the keyword within the 'name' tag and it MUST not be a full path.</p>
-      <p>The requester may also use the 'desc' to match keywords.</p>
-      <example caption='The requesting entity tries to search for a file'>
-<![CDATA[
-<iq type='get'
-    from='juliet@capulet.com/chamber'
-    to='romeo@montague.net/home'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <query xmlns='jabber:iq:search'>
-            <name>test</name>
-        </query>
-    </match>
-</iq>
-]]>
-</example>
-      <example caption='The offering entity responds with search result'>
-<![CDATA[
-<iq type='result'
-    from='romeo@montague.net/home'
-    to='juliet@capulet.com/chamber'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <query xmlns='jabber:iq:search'>
-            <item>
-              <name>test.txt</name>
-            </item>
-            <item>
-              <name>test2.txt</name>
-            </item>
-            <item>
-                <name>pics/test3.png</name>
-            </item>
-            <item>
-                <name>pics/test4.png</name>
-            </item>
-        </query>
-    </match>
-</iq>
-]]>
-      </example>
-      <p>When simple keyword matching is not enough to efficiently search files, regular expressions (as defined in &xep0004;) can be used</p>
-      <example caption='Requester uses regular expressions to search files'>
-<![CDATA[
-<iq type='get'
-    from='juliet@capulet.com/chamber'
-    to='romeo@montague.net/home'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-      <query xmlns='jabber:iq:search'>
-        <x xmlns='jabber:x:data' type='submit'>
-          <field type='hidden' var='FORM_TYPE'>
-            <value>jabber:iq:search</value>
-          </field>
-          <field var='name'>
-              <validate xmlns='http://jabber.org/protocol/xdata-validate'
-                        datatype='xs:string'>
-                <regex>*.png</regex>
-              </validate>
-          </field>
-        </x>
-      </query>
-    </match>
-</iq>
-]]>
-  </example>
-      <example caption='The offering entity responds with search result'>
-<![CDATA[
-<iq type='result'
-    from='romeo@montague.net/home'
-    to='juliet@capulet.com/chamber'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <query xmlns='jabber:iq:search'>
-            <item>
-                <name>pics/test3.png</name>
-            </item>
-            <item>
-                <name>pics/test4.png</name>
-            </item>
-        </query>
-    </match>
-</iq>
-]]>
-  </example>
-</section2>
-</section1>
-<section1 topic='Discovering Files In a MUC' anchor='muc'>
-    <p>For the most part, discovering files in a MUC is exactly the same as what has been described in this document. However there are some considerations to have present.</p>
-    <p>First, it is RECOMMENDED that a participant in a MUC should have a single shared folder associated with the entire room, as opposed to advertise different files to different participants of the room. This is to reduce the complexity of the client software. Also, due to volatile nature of the participants in a room, keeping track of permissions is more trouble than what it is worth.</p>
-    <p>Second, a participant may discover files of all the participants in the room by sending the request to the room itself. It is RECOMMENDED that the search capabilities of this protocol be used for this.</p>
 </section1>
 <section1 topic='Bandwidth Considerations' anchor='bandwidth'>
     <p> If a considerable amount of files are being shared by the offering entity, it may be the case that the offering entity response might be too be for the server to handle; As there might be a limitation on the size of the stanzas in the current stream. In order to solve this, extensions have been devised and their implementation are hereby recommended along with the implementation of this extension.</p>
     <section2 topic='Using Result Set Management' anchor='resultset'>
-        <p>&xep0059; defines a way of limiting the results of a request. There are some considerations to use &xep0059; along with this extension.</p>
-        <p>First, in &xep0059; it is defined that the requesting entity is the one that sets the limit of the number of items that can be replied. So it is up to the requesting entity to choose a sensible number.</p>
-        <p>Second, since this protocol defines a way of handling the directory tree structure by allowing files tags to be children of a directory tags, it becomes difficult to define items for &xep0059;. Therefore, when responding to a request using &xep0059;, the offering entity MUST NOT send directory tags with files as their children, file tags must be sent separately with their path (starting at the root shared folder) in their name attribute.</p>
-        <example caption='Offering entity responds using result set'>
-<![CDATA[
-<iq type='result'
-    from='romeo@montague.net/home'
-    to='juliet@capulet.com/chamber'
-    id='1234'>
-    <match xmlns='urn:xmpp:mam'>
-        <offer>
-            <item>
-                <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
-                    <name>test.txt</name>
-                </file>
-            </item>
-            <item>
-                <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
-                    <name>test2.txt</name>
-                </file>
-            </item>
-            <item>
-                <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
-                    <name>pics/test3.png</name>
-                </file>
-            </item>
-            <item>
-                <file xmlns='urn:xmpp:jingle:apps:file-transfer:3'>
-                    <name>pics/test4.png</name>
-                </file>
-            </item>
-            <item>
-                <directory name='pics'>
-            </item>
-        </offer>
-    </match>
-</iq>
-]]>
-        </example>
+        <p>&xep0059; defines a way of limiting the results of a request. There are some considerations to use result sets along with this extension.</p>
+        <p>First, it is defined that the requesting entity is the one that sets the limit of the number of items that can be replied. So it is up to the requesting entity to choose a sensible number.</p>
+        <p>Second, since this protocol defines a way of handling the directory tree structure by allowing file tags to be children of a directory tags, it becomes difficult to define items for Result Set Management. Therefore, when responding to a request, the offering entity MUST NOT send directory tags with files as their children.         </p>
     </section2>
     <section2 topic='Out of Band Transfer' anchor='out-of-band'>
-        <p>One obvious way to overcome the limitations of sending large stanzas in-band, is to transfer that information out of band. &xep0065; could be used for that purpose. It is hereby RECOMMENDED its implementation when the offering entity has a massive amount of files that would not be practical to advertise in-band.</p>
-        <p>It is further recommended that when using XEP-0065, the entire directory structure, along with all the files in the shared folder and subfolders, be exchanged in one single reply. Also, all the files attributes should be included. This is to avoid wasting bandwidth initiating out of band streams going back and forth. </p>
+        <p>One obvious way to overcome the limitations of sending large stanzas in-band, is to transfer that information out of band. &xep0265; could be used for that purpose. It is hereby RECOMMENDED its implementation when the offering entity has a massive amount of files that would not be practical to advertise in-band.</p>
+        <p>It is further recommended that when using XEP-0265, the entire directory structure, along with all the files in the shared folder and subfolders, be exchanged in one single reply. Also, all the files attributes should be included. This is to avoid wasting bandwidth initiating out of band streams going back and forth. </p>
 <!--
         <p>One obvious way to overcome the limitations of sending large stanzas in-band, is to transfer that information out of band. Several extensions have tackled that problem, for example &xep0265; and &xep0105; could be used for this purpose. Unfortunately, both of those extensions are deprecated and thus it is not advised their implementation.</p>
         <p>A workaround which would provide the same functionality as those xeps, is to advertise the existence of a tree.xml file in the root of the shared folder. This file would contain the whole directory structure of the shared folder. Its format is exactly the same as the stanzas defined herein, with the exception that it MUST NOT include the "iq" portion of the stanza.</p>
@@ -484,9 +218,9 @@
 -->
     </section2>
 </section1>
-<section1 topic='Implementation Notes' achor='implementation'>
-    <section2>
-        <p> As it was previously discussed, when requesting detailed information about a file, only the "name" and "size" attributes required, but it is strongly RECOMMENDED that the hash attribute be included, in order to reduce the chances of sending the wrong file. When requesting the file to be transferred using &xep0234;, the information that must be provided has to identify the file uniquely. It is then RECOMMENDED that when requesting a file, the full path of the file in the shared folder be included in the "name" attribute.</p>
+<section1 topic='Implementation Notes' anchor='implementation'>
+    <section2 topic='File identification' anchor='file_id'>
+        <p> As it was previously discussed, when requesting detailed information about a file, only the "name" attribute is required, but it is strongly RECOMMENDED that the hash attribute be included, in order to reduce the chances of sending the wrong file. When requesting the file to be transferred using &xep0234;, the information that must be provided has to identify the file uniquely. It is then RECOMMENDED that when requesting a file, the full path of the file in the shared folder be included in the "name" attribute.</p>
         <example>
 <![CDATA[
   <jingle xmlns='urn:xmpp:jingle:1'
@@ -504,6 +238,9 @@
       </description>
 ]]>
         </example>
+    </section2>
+    <section2 topic='File Sharing in MUCs' anchor='fis_muc'>
+ <p>For the most part, discovering files in a MUC is exactly the same as what has been described in this document. However, it is RECOMMENDED that a participant in a MUC should have a single shared folder associated with the entire room, as opposed to advertise different files to different participants of the room. This is to reduce the complexity of the client software. Also, due to volatile nature of the participants in a room, keeping track of permissions is more trouble than what it is worth.</p>
     </section2>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
