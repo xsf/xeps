@@ -1,0 +1,707 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Chat Markers</title>
+  <abstract>This specification describes a solution of marking the last received, read and acknowledged message in a chat.</abstract>
+  <legal>
+    <copyright>This XMPP Extension Protocol is copyright (c) 1999 - 2013 by the XMPP Standards Foundation (XSF).</copyright>
+    <permissions>Permission is hereby granted, free of charge, to any person obtaining a copy of this specification (the &quot;Specification&quot;), to make use of the Specification without restriction, including without limitation the rights to implement the Specification in a software program, deploy the Specification in a network service, and copy, modify, merge, publish, translate, distribute, sublicense, or sell copies of the Specification, and to permit persons to whom the Specification is furnished to do so, subject to the condition that the foregoing copyright notice and this permission notice shall be included in all copies or substantial portions of the Specification. Unless separate permission is granted, modified works that are redistributed shall not contain misleading information regarding the authors, title, number, or publisher of the Specification, and shall not claim endorsement of the modified works by the authors, any organization or project to which the authors belong, or the XMPP Standards Foundation.</permissions>
+    <warranty>## NOTE WELL: This Specification is provided on an &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. In no event shall the XMPP Standards Foundation or the authors of this Specification be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the Specification or the implementation, deployment, or other use of the Specification. ##</warranty>
+    <liability>In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall the XMPP Standards Foundation or any author of this Specification be liable for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising out of the use or inability to use the Specification (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if the XMPP Standards Foundation or such author has been advised of the possibility of such damages.</liability>
+    <conformance>This XMPP Extension Protocol has been contributed in full conformance with the XSF's Intellectual Property Rights Policy (a copy of which may be found at &lt;<link url='http://www.xmpp.org/extensions/ipr-policy.shtml'>http://www.xmpp.org/extensions/ipr-policy.shtml</link>&gt; or obtained by writing to XSF, P.O. Box 1641, Denver, CO 80201 USA).</conformance>
+  </legal>
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>Etc.</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <author>
+    <firstname>Spencer</firstname>
+    <surname>MacDonald</surname>
+    <email>im@spencermacdonald.com</email>
+    <jid>im@spencermacdonald.com</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2013-05-24</date>
+    <initials>sdm</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>The concept of delivery and read receipts has been popularised by other messaging services such as iMessage, Google Hangouts and Blackberry Messenger. 
+  These services provide a visual indication of when a message has been delivered to any of the recipients resources and (optionally) when it has been read. 
+  These visual indications (referred to herein as "Chat Markers") are synced between all of the sender's 
+  and recipient's resources automatically so the state of a chat is always consistent and 
+  if one of the resources is not connected it will sync up upon reconnecting to the server.</p>
+  
+	<p>&xep0184; currently provides delivery receipts on a per message basis, 
+	but it does not provide any mechanism for the user to indicate that they have read or acknowledged the message. 
+	As delivery receipts are sent on a per message basis it would require multiple messages to "sync" up delivery receipts between resources.</p>
+  <p>Moreover by using &xep0085; you could infer that a message has been read if the recipient becomes active at any point after the message has been delivered, but again it would require multiple messages to "sync" up chat states between resources .</p>
+	<p>However, both Delivery Receipts and Chat States are sent as messages without a body element, meaning they will not be archived by &xep0136; or &xep0313;. 
+  	This means both the sender and the recipient must be connected at the same time for Chat Markers to propagate correctly.</p>
+	<p>This XEP outlines an efficient iq based protocol to provide this functionally using Chat Markers.</p>
+</section1>
+
+<section1 topic='Terminology' anchor='terms'>
+  <p>The acronym "MUC" refers to Multi User Chat as defined in &xep0045;.</p>
+  <p>The term "active chat" refers to a chat that a user is currently active in.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>This document addresses the following requirements:</p>
+  <ol>
+    <li>Enable a recipient to mark up to an individual message in a chat as received.</li>
+    <li>Enable a recipient to mark up to an individual message in a chat as read.</li>
+    <li>Enable a recipient to mark up to an individual message in a chat as acknowledged.</li>
+    <li>Enable a entity to update and query Chat Markers regardless of the other entities presence.</li>
+  </ol>
+</section1>
+
+<section1 topic='Chat Markers' anchor='chat-markers'>
+  <p>Chat Markers use a dedicated protocol extension qualified by the 'urn:xmpp:chat-markers:tmp' namespace.</p>
+  <p>There are three allowable elements in this namespace (in order of significance):</p>
+  <ul>
+    <li>received -- the message has been delivered.</li>
+    <li>read -- the message the user has viewed it in a active chat.</li>
+    <li>acknowledged -- the message has been acknowledged by some user interaction e.g. pressing a button.</li>
+  </ul>
+  <p>The Chat Marker MUST have either a 'to' or 'from' attribute with the bare JID of the other contact.</p>
+  <ul>
+    <li>'to' -- the marker is sent to the other connect i.e. where YOU have marked.</li>
+    <li>'from' -- the marker is sent from the other contact. i.e. where THEY have marked.</li>
+  </ul>
+  <p>The Chat Marker MUST have a 'stamp' which is the timestamp of the Chat Marker. If one isn't supplied the server should set the stamp to the current server time.</p>
+  <p>The Chat Marker MUST have an 'message-id' which is the 'id' of the message being marked.</p>
+  <p>The Chat Marker SHOULD have an 'message-stamp' which is the timestamp of the message being marked. This MUST only be set by the server.</p>
+  <p>The Chat Marker MUST have a 'room' if it is from a MUC.</p>
+  <p>A Chat Marker Indicates that all messages up to and including that message 'id' have been marked.</p>
+  <example caption='Example Chat Marker'>
+	<![CDATA[
+<received from='juliet@example.net'
+          stamp='2013-03-14T23:58:49Z'  
+          message-id='message-1'
+          message-stamp='2013-03-13T23:58:49Z'  
+          xmlns='urn:xmpp:chat-markers:tmp'/>
+	]]>
+	</example>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <p>Messages that are marked as acknowledged are also assumed to be read and received. Messages Marked as read are also assumed to be delivered.</p>
+  <p>Less Significant Chat Markers should only be sent if they are later than the more significant Chat Marker i.e. if a Message has been marked as read, 
+    a delivered Chat Marker should only be sent if it has a later timestamp than the read Chat Marker.</p>
+  <p>All messages MUST have an 'id' to use Chat Markers.</p>
+  <p>Clients SHOULD make sure that each message has a unique 'id' so that the can be uniquely identified. 
+    If the server cannot uniquely identify a message by its 'id' it can chose not to add a 'message-stamp' or to add the stamp of the latest message with the matching 'id' for the appropriate chat.</p>
+</section1>
+
+<section1 topic='Use Cases' anchor='usecases'>
+
+	<section2 topic='Chat Marker Subscription' anchor='chat-marker-subscription'>
+		<section3 topic='Subscribing to Chat Markers' anchor='subscribe'>
+		      <p>Servers MUST NOT auto subscribe clients to Chat Markers by default, since unmodified clients might be confused by the new protocol. 
+  		      When a client wants to participate in the Chat Marker Subscription protocol, it sends an IQ set to enable the protocol.</p>
+		      <example caption='Client enables Chat Marker Subscription'><![CDATA[
+<iq xmlns='jabber:client'
+   type='set'
+   id='subscribe1'>
+ <subscribe xmlns='urn:xmpp:chat-markers:tmp'/>
+</iq>
+          ]]></example>
+     <example caption='Server acknowledges Subscription to Chat Marker'><![CDATA[
+<iq xmlns='jabber:client'
+   type='result'
+   id='subscribe1'>
+   <subscribe xmlns='urn:xmpp:chat-markers:tmp'/>
+</iq>
+]]></example>
+		    </section3>
+
+		    <section3 topic='Unsubscribe from Chat Markers' anchor='unsubscribe'>
+		      <p>Some clients might want to unsubscribe from Chat Markers. To unsubscribe from Chat Markers, clients send an IQ set:</p>
+		      <example caption='Client disables Chat Marker Subscription'><![CDATA[
+<iq xmlns='jabber:client'
+    type='set'
+    id='unsubscribe1'>
+  <unsubscribe xmlns='urn:xmpp:chat-markers:tmp'/>
+</iq>
+		]]></example>
+		      <p>The server will respond with an IQ result after unsubscribing from Chat Markers:</p>
+		      <example caption='Server acknowledges Unsubscrive from Chat Marker Subscription'><![CDATA[
+<iq xmlns='jabber:client'
+    type='result'
+    id='unsubscribe1'>
+    <unsubscribe xmlns='urn:xmpp:chat-markers:tmp'/>
+</iq>
+					]]></example>
+		    </section3>
+
+		    <section3 topic='Error Cases' anchor='subscribe-errors'>
+		      <p>Subscribing or unsubscribing from Chat Marker may fail in the several ways.  
+  		      If one of these errors is returned, the server MUST keep the previous state, where the initial state is no Chat Marker Subscription.  
+  		      For example, if the first enable returns an error, the server MUST NOT enable Chat Marker Subscription.</p>
+		      <section4 topic='bad-request' anchor='subscribe-bad-request'>
+		        <p>The sender has sent a stanza containing XML that does not conform to the appropriate schema or that cannot be processed.
+  		        One example is an IQ stanza that includes an unrecognized value of the 'type' attribute.  
+  		        Another is changing to the state that is already in effect (enabling Chat Marker Subscription a second time).</p>
+		        <example caption='Error: bad-request'><![CDATA[
+<iq xmlns='jabber:client'
+    id='subscribe1'
+    type='error'>
+  <subscribe xmlns='urn:xmpp:chat-markers:tmp'/>
+  <error type='modify'>
+    <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+					]]></example>
+		      </section4>
+		      <section4 topic='feature-not-implemented' anchor='subscribe-feature-not-implemented'>
+		        <p>The sender has sent an subscribe or unsubscribe request to a server
+		        that does not support the protocol.  This SHOULD NOT happen in
+		        practice, because clients MUST check for server support before
+		        sending their request.</p>
+		        <example caption='Error: feature-not-implemented'><![CDATA[
+<iq xmlns='jabber:client'
+    id='subscribe1'
+    type='error'>
+    <subscribe xmlns='urn:xmpp:chat-markers:tmp'/>
+  <error type='cancel'>
+    <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+		]]></example>
+		      </section4>
+		      <section4 topic='forbidden'  anchor='subscribe-forbidden'>
+		        <p>The sender is forbidden by policy from subscribing or
+		        unsubscribing the resource from Chat Markers.</p>
+		        <example caption='Error: forbidden'><![CDATA[
+<iq xmlns='jabber:client'
+    id='subscribe1'
+    type='error'>
+  <subscribe xmlns='urn:xmpp:chat-markers:tmp'/>
+  <error type='auth'>
+    <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+		]]></example>
+		      </section4>
+		      <section4 topic='not-allowed' anchor='subscribe-not-allowed'>
+		        <p>The receiver does not allow any entity to turn on Chat Marker Subscription.
+		        This might occur in a multi-domain deployment, where
+		        administrators of one domain allow Chat Marker Subscription, but another does
+		        not.</p>
+		        <example caption='Error: not-allowed'><![CDATA[
+<iq xmlns='jabber:client'
+    id='subscribe1'
+    type='error'>
+    <subscribe xmlns='urn:xmpp:chat-markers:tmp'/>
+  <error type='cancel'>
+    <not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+				]]></example>
+		      </section4>
+		    </section3>
+	</section2>
+	
+	<section2 topic='Updating Chat Markers' anchor='updating-chat-markers'>
+	
+	<example caption='Update Chat Marker'><![CDATA[
+<iq type='set' id='chat-marker-update1'>
+ <chat-markers xmlns='urn:xmpp:chat-markers:tmp'>
+    <read to='juliet@example.net'
+          stamp='2013-03-21T11:12:13Z' 
+          message-id='message-10' 
+          xmlns="urn:xmpp:chat-markers:tmp"/>
+ </chat-markers>
+</iq>
+	]]></example>
+	
+	  <p>The server will respond with an IQ to say that the Chat Marker has been updated, with the inserted 'message-stamp' if known.</p>
+	<example caption='Server acknowledges Chat Marker has been updated'><![CDATA[
+<iq xmlns='jabber:client'
+    type='result'
+    id='chat-marker-update1'>
+    <chat-markers xmlns='urn:xmpp:chat-markers:tmp'>
+       <read to='juliet@example.net'
+       	     stamp='2013-03-21T11:12:13Z'  
+             message-id='message-10'
+             message-stamp='2013-03-20T11:12:13Z' 
+             xmlns="urn:xmpp:chat-markers:tmp"/>
+    </chat-markers>
+</iq>
+	 ]]></example>
+	
+	<example caption='Chat Marker is Pushed to other resources who are Subscribed to Chat Markers'><![CDATA[
+<iq to='romeo@example.com/garden' type='set' id='chat-markers-update-push1'>
+  <query xmlns='urn:xmpp:chat-marker:tmp'>
+    <read to='juliet@example.net' 
+          stamp='2013-03-21T11:12:13Z'  
+          message-id='message-10'
+          message-stamp='2013-03-20T11:12:13Z' 
+          xmlns="urn:xmpp:chat-markers:tmp"/>
+  </query>
+</iq>
+	]]></example>
+	
+	<example caption='Chat Marker is Pushed to the other JIDs resource who are Subscribed to Chat Markers'><![CDATA[
+
+<iq to='juliet@example.com/balcony' type='set' id='chat-markers-update-push2'>
+  <query xmlns='urn:xmpp:chat-marker:tmp'>
+    <read from='romeo@example.net' 
+       	  stamp='2013-03-21T11:12:13Z'  
+          message-id='message-10'
+          message-stamp='2013-03-20T11:12:13Z' 
+          xmlns="urn:xmpp:chat-markers:tmp"/>
+  </query>
+</iq>
+	]]></example>
+	
+	    <section3 topic='Error Cases' anchor='updating-errors'>
+	      <p>Chat Marker updating may fail in the several ways. If one of these errors is returned, 
+	        the server MUST keep the previous Chat Marker.</p>
+	      <section4 topic='bad-request' anchor='updating-bad-request'>
+	        <p>The sender has sent a stanza containing XML that does not conform to the appropriate schema or that cannot be processed. 
+	          One example is an IQ stanza that includes an unrecognized value of the 'type' attribute. 
+	          Another is a Chat Marker with a latter message message is already in effect.</p>
+	      <example caption='Error: bad-request'><![CDATA[
+<iq xmlns='jabber:client'
+    id='chat-marker-update1'
+    type='error'>
+  <query xmlns='urn:xmpp:chat-marker:tmp'>
+    <read from='romeo@example.net' 
+          message-id='message-10'
+          xmlns="urn:xmpp:chat-markers:tmp"/>
+  </query>
+  <error type='modify'>
+    <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+	    ]]></example>
+	      </section4>
+	      <section4 topic='feature-not-implemented' anchor='updating-feature-not-implemented'>
+	        <p>The sender has sent a Chat Marker update to a server
+	        that does not support the protocol. This SHOULD NOT happen in
+	        practice, because clients MUST check for server support before
+	        sending their request.</p>
+	      <example caption='Error: feature-not-implemented'><![CDATA[
+<iq xmlns='jabber:client'
+       id='chat-marker-update1'
+       type='error'>
+	  <query xmlns='urn:xmpp:chat-marker:tmp'>
+	    <read from='romeo@example.net' 
+	          message-id='message-10'
+	          xmlns="urn:xmpp:chat-markers:tmp"/>
+	  </query>
+    <error type='cancel'>
+      <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    </error>
+</iq>
+	]]></example>
+	      </section4>
+	      <section4 topic='forbidden'  anchor='updating-forbidden'>
+	        <p>The sender is forbidden from updating Chat Markers.</p>
+	      <example caption='Error: forbidden'><![CDATA[
+<iq xmlns='jabber:client'
+    id='chat-marker-update1'
+    type='error'>
+	  <query xmlns='urn:xmpp:chat-marker:tmp'>
+	    <read from='romeo@example.net' 
+	          message-id='message-10'
+	          xmlns="urn:xmpp:chat-markers:tmp"/>
+	  </query>
+  <error type='auth'>
+    <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+	]]></example>
+	      </section4>
+	      <section4 topic='not-allowed' anchor='updating-not-allowed'>
+	        <p>The receiver does not allow any entity to turn on Chat Marker Subscription.
+	        This might occur in a multi-domain deployment, where
+	        administrators of one domain allow Chat Marker Subscription, but another does
+	        not.</p>
+	      <example caption='Error: not-allowed'><![CDATA[
+<iq xmlns='jabber:client'
+    id='chat-marker-update1'
+    type='error'>
+  <query xmlns='urn:xmpp:chat-marker:tmp'>
+    <read from='romeo@example.net' 
+          message-id='message-10'
+          xmlns="urn:xmpp:chat-markers:tmp"/>
+  </query>
+  <error type='cancel'>
+    <not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+	  ]]></example>
+	      </section4>
+	    </section3>
+	  </section2>
+	
+	
+  <section2 topic='Querying Chat Markers'>
+      <p>A client is able to query for all Chat Markers, optionally
+      restricting results to those to/from a particular JID and/or time. To allow limiting the results or paging
+      through them a client may use &xep0059;, which MUST be supported by servers.</p>
+      <p>A query consists of an &lt;iq/&gt; stanza addressed to the entity hosting
+      the Chat Markers, with a 'query' payload. On receiving the query, the server pushes the Chat Markers
+      that match the client's given criteria.</p>
+		  <p>Typically you would query for all Chat Markers as soon as you have enabled Chat Marker Subscription.</p>
+  <example caption='Querying Chat Markers'>
+  <![CDATA[
+<iq type='get' id='fetch-all1'>
+  <query xmlns='urn:xmpp:chat-markers:tmp'/>
+</iq>
+  ]]>
+  </example>
+
+		  <example caption='Results'>
+	      <![CDATA[
+<iq to='romeo@example.com/balcony' type='result' id='fetch-all1'>
+	<query xmlns='urn:xmpp:chat-markers:tmp'>
+		<read to='juliet@example.net'
+          stamp='2013-01-01T00:01:03Z'' 
+          message-id='message-3'
+          message-stamp='2013-01-01T00:00:03Z'   
+			    xmlns="urn:xmpp:chat-markers:tmp"/>
+		    
+		<received to='friar@example.net' 
+              stamp='2013-01-01T00:01:04Z'' 
+              message-id='message-4'
+              message-stamp='2013-01-01T00:00:04Z'   
+		          xmlns="urn:xmpp:chat-markers:tmp"/>
+
+		<read from='juliet@example.net'
+          stamp='2013-01-01T00:01:01Z''  
+          message-id='message-1'
+          message-stamp='2013-01-01T00:00:01Z'    
+		      xmlns="urn:xmpp:chat-markers:tmp"/>
+	     
+		<received from='juliet@example.net'
+              stamp='2013-01-01T00:02:01Z''   
+              message-id='message-2'
+              message-stamp='2013-01-01T00:00:02Z'    
+		          xmlns="urn:xmpp:chat-markers:tmp"/>
+	          
+		<received from='friar@example.net'
+              stamp='2013-01-01T00:01:05Z''   
+              message-idid='message-5'
+              message-stamp='2013-01-01T00:00:05Z'     
+		          xmlns="urn:xmpp:chat-markers:tmp"/>
+	</query>
+</iq>
+	      ]]>
+	      </example>
+
+      <section3 topic="Filtering by contact">
+        <p>If a &lt;with/&gt; element is present in the &lt;query/&gt;, it contains a JID against which
+        to match the Chat Marker. The server MUST only return Chat Markers if they match the supplied JID.</p>
+
+      <example caption='Querying for all Chat Markers to/from a particular JID'>
+      <![CDATA[
+<iq type='get' id='fetch-juliet1'>
+  <query xmlns='urn:xmpp:chat-markers:tmp'>
+    <with>juliet@capulet.com</with>
+  </query>
+</iq>
+      ]]>
+      </example>
+
+      <p>If (and only if) the supplied JID is a bare JID (i.e. no resource is present), then
+      the server SHOULD return Chat Markers if their bare to/from address would match it. It SHOULD NOT return Chat Markers
+      from that are from a MUC.</p>
+		
+		  <example caption='Results for particular JID'>
+	      <![CDATA[
+<iq to='romeo@example.com/balcony' type='result' id='fetch-juliet1'>
+	<query xmlns='urn:xmpp:chat-markers:tmp'>
+  
+		<read to='juliet@example.net'
+          stamp='2013-01-01T00:01:03Z'' 
+          message-id='message-3'
+          message-stamp='2013-01-01T00:00:03Z'   
+			    xmlns="urn:xmpp:chat-markers:tmp"/>
+
+		<read from='juliet@example.net'
+          stamp='2013-01-01T00:01:01Z''  
+          message-id='message-1'
+          message-stamp='2013-01-01T00:00:01Z'    
+		      xmlns="urn:xmpp:chat-markers:tmp"/>
+	     
+		<received from='juliet@example.net'
+              stamp='2013-01-01T00:02:01Z''   
+              message-id='message-2'
+              message-stamp='2013-01-01T00:00:02Z'    
+		          xmlns="urn:xmpp:chat-markers:tmp"/>
+	</query>
+</iq>
+	      ]]>
+	      </example>
+
+      </section3>		
+
+      <section3 topic="Filtering by room">
+              <p>If the &lt;with/&gt; element is present in the &lt;query/&gt; and it is that of a room, 
+                the server MUST only return Chat Markers if they match the supplied JID</p>
+            <example caption='Querying for all chat makers for a particular room'>
+            <![CDATA[
+<iq type='get' id='fetch-room1'>
+  <query xmlns='urn:xmpp:chat-markers:tmp'>
+    <with>room@example.net</with>
+  </query>
+</iq>
+            ]]>
+            </example>
+
+            <p>If the jid of a room is supplied,
+            the server MUST return Chat Markers if their room address would match it.</p>
+
+            <example caption='Results for particular room'>
+              <![CDATA[
+<iq to='romeo@example.com/balcony' type='result' id='fetch-room1'>
+  <query xmlns='urn:xmpp:chat-markers:tmp'>
+
+    <read room='room@example.com' 
+          to='room@example.net'
+          stamp='2013-01-01T00:01:03Z''   
+          message-id='message-muc-3'
+          message-stamp='2013-01-01T00:00:03Z'     
+          xmlns="urn:xmpp:chat-markers:tmp"/>
+
+    <read room='room@example.com'
+          from='juliet@example.net'
+          stamp='2013-01-01T00:01:01Z''   
+          message-id='message-muc-1'
+          message-stamp='2013-01-01T00:00:01Z'      
+          xmlns="urn:xmpp:chat-markers:tmp"/>
+
+    <received room='room@example.com'
+              from='juliet@example.net'
+              stamp='2013-01-01T00:02:01Z''    
+              message-id='message-muc-2'
+              message-stamp='2013-01-01T00:00:02Z'      
+              xmlns="urn:xmpp:chat-markers:tmp"/>
+  </query>
+</iq>
+              ]]>
+              </example>
+
+      </section3>
+      <section3 topic="Filtering by time">
+      <p>The &lt;start/&gt; and &lt;end/&gt; elements, if provided, MUST contain timestamps
+      formatted according to the DateTime profile defined in &xep0082;</p>
+      <p>The &lt;start/&gt; element is used to filter out Chat Markers before a certain date/time.
+      If specified, a server MUST only return Chat Markers whose 'stamp' is equal to or later
+      than the given timestamp.</p>
+      <p>If omitted, the server SHOULD assume the value of &lt;start/&gt; to be equal to the
+      date/time of the earliest Chat Marker stored in the archive.</p>
+      <p>Conversely, the &lt;end/&gt; element is used to exclude from the results Chat Markers
+      after a certain point in time. If specified, a server MUST only return Chat Markers whose
+      timestamp is equal to or earlier than the timestamp given in the &lt;end/&gt; element.</p>
+      <p>If omitted, the server SHOULD assume the value of &lt;end/&gt; to be equal to the
+      date/time of the most recent chat Marker stored in the archive.</p>
+      <example caption='Querying the archive for all messages in a certain timespan'><![CDATA[
+<iq type='get' id='date1'>
+  <query xmlns='urn:xmpp:chat-markers:tmp'>
+      <start>2013-01-01T00:0:01Z</start>
+      <end>2013-01-10T00:00:0Z</end>
+  </query>
+</iq>
+    ]]></example>  
+
+      </section3>
+      <section3 topic='Limiting results'>
+        <p>Finally, in order for the client or server to limit the number of results transmitted at
+        a time a server MUST support &xep0059; and SHOULD support the paging mechanism defined therein.
+        A client MAY include a &lt;set/&gt; element in its query.</p>
+        <p>For the purposes of this protocol, the UIDs used by RSM correspond with the UIDs of the
+        stanzas stored in the archive.</p>
+        <example caption='A query using Result Set Management'>
+        <![CDATA[
+<iq type='get' id='fetch-set-rsm1'>
+  <query xmlns='urn:xmpp:chat-markers:tmp'>
+      <set xmlns='http://jabber.org/protocol/rsm'>
+         <max>10</max>
+      </set>
+  </query>
+</iq>
+      ]]>
+      </example>
+
+      <p>To conserve resources, a server MAY place a reasonable limit on how many Chat Markers may be
+      pushed to a client in one request. If a query returns a number of Chat Markers greater than this
+      limit and either the client did not specify a limit using RSM then the server should return
+      a policy-violation error to the client. If the query did include a &lt;set/&gt; element then
+      the server SHOULD simply return its limited results and adjust the &lt;before/&gt; and &lt;after/&gt;
+      in its reply to allow the client to page through them by timestamp.</p>
+      <example caption='Client without RSM requests too many results'>
+      <![CDATA[
+<iq type='error' id='fetch-set-rsm1'>
+  <query xmlns='urn:xmpp:chat-markers:tmp'>
+      <set xmlns='http://jabber.org/protocol/rsm'>
+         <max>10</max>
+      </set>
+  </query>
+  <error type='modify'>
+    <policy-violation xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <text>Too many results</text>
+  </error>
+</iq>
+      ]]>
+      </example>
+      </section3>
+  </section2>
+
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <section2 topic='Interaction with Delivery Receipts' anchor='chatstates'>
+    <p>If a delivery receipt is sent to a resource that advertises support, 
+      then a delivery receipt MUST be sent if it is satisfies &xep0184;.</p>
+    <p>If a resource advertises both Chat Maker and Delivery Receipt support it 
+      SHOULD NOT request a receipt.</p>
+  </section2>
+  <section2 topic='Interaction with Chat States' anchor='chatstates'>
+    <p>Chat Markers can be used alongside Chat States.</p>
+  </section2>
+  <section2 topic='Auto Mark' anchor='auto-responses'>
+    <p>Clients MUST NEVER mark a message as acknowledged without any user interaction.</p>
+  </section2>
+  <section2 topic='Mobile Considerations' anchor='mobile'>
+    <p>Since mobile devices often must pay for network traffic based
+    on usage, you may wish not to enable Chat Marker Subscription.</p>
+  </section2>
+</section1>
+
+<section1 topic='Determining support' anchor='disco'>
+	<p>If an entity supports the Chat Markers protocol, it MUST report that by including a &xep0030;
+	 feature of "urn:xmpp:chat-markers:tmp" in response to disco#info requests:</p>
+<example caption='Client queries for server features'><![CDATA[
+<iq type='get' id='disco1' to='capulet.lit' from='juliet@capulet.lit/balcony'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+
+<example caption='Server responds with features'><![CDATA[
+<iq type='result' id='disco1' from='capulet.lit' to='juliet@capulet.lit/balcony'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:chat-markers:tmp'/>
+    ...
+  </query>
+</iq>
+]]></example>
+	<p>Support can also be determined via &xep0115;, a.k.a. "caps".</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>A user may not wish to disclose that they have received, read or acknowledge a message.</p>
+  <p>It is possible for a recipient to leak its presence when updating Chat Markers; 
+    therefore, a recipient SHOULD NOT return message delivery receipts to senders who are not otherwise authorized to view its presence.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA).</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+	<p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>'urn:xmpp:chat-markers:tmp'</li>
+    </ul>
+  </section2>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema attributeFormDefault="unqualified" 
+  elementFormDefault="qualified" 
+  targetNamespace="urn:xmpp:chat-markers:tmp" 
+  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+    
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      XEP-XXXX: http://xmpp.org/extensions/xep-XXXX.html
+    </xs:documentation>
+  </xs:annotation>
+
+
+  <xs:complexType name='Received'>
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute type="xs:string" name="message-id" use="optional"/>
+        <xs:attribute type="xs:string" name="message-stamp" use="optional"/>
+        <xs:attribute type="xs:string" name="to" use="optional"/>
+        <xs:attribute type="xs:string" name="from" use="optional"/>
+        <xs:attribute type="xs:string" name="stamp" use="optional"/>
+        <xs:attribute type="xs:string" name="room" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name='Read'>
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+       <xs:attribute type="xs:string" name="message-id" use="optional"/>
+       <xs:attribute type="xs:string" name="message-stamp" use="optional"/>
+       <xs:attribute type="xs:string" name="to" use="optional"/>
+       <xs:attribute type="xs:string" name="from" use="optional"/>
+       <xs:attribute type="xs:string" name="stamp" use="optional"/>
+       <xs:attribute type="xs:string" name="room" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name='Acknowledged'>
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute type="xs:string" name="message-id" use="optional"/>
+         <xs:attribute type="xs:string" name="message-stamp" use="optional"/>
+         <xs:attribute type="xs:string" name="to" use="optional"/>
+         <xs:attribute type="xs:string" name="from" use="optional"/>
+         <xs:attribute type="xs:string" name="stamp" use="optional"/>
+         <xs:attribute type="xs:string" name="room" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:element name="chat-markers">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded" minOccurs="0">
+      <xs:element name="received" type='Received'>
+      <xs:element name="read" type='Read'>
+      <xs:element name="acknowledged" type='Acknowledged'>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="query">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded" minOccurs="0">
+      <xs:element name='with' type='xs:string' use='optional'/>
+      <xs:element name="received" type='Received'>
+      <xs:element name="read" type='Read'>
+      <xs:element name="acknowledged" type='Acknowledged'>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>
+    ]]></code>
+</section1>
+</xep>
