@@ -1,0 +1,206 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>SIP/SDP Over XMPP (SoX)</title>
+  <abstract>This specification defines an XMPP protocol extension for communicating Session Description Protocol (SDP) data, along with relevant Session Initiation Protocol (SIP) headers. The SoX protocol is designed for use by XMPP-only endpoints that need to communicate raw SDP information (e.g., in WebRTC scenarios), not as a general-purpose replacement for the XMPP Jingle extensions.</abstract>
+  &LEGALNOTICE;
+  <number>XXXX</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  &stpeter;
+  &hildjj;
+  <author>
+    <firstname>Cullen</firstname>
+    <surname>Jennings</surname>
+    <email>fluffy@cisco.com</email>
+    <jid>fluffy@cisco.com</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2013-06-12</date>
+    <initials>psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>The Session Description Protocol (SDP) &rfc4566; is widely used to communicate information about media sessions, typically using the offer/answer model &rfc3264;. For example, when the Session Initiation Protocol (SIP) &rfc3261; is used for establishing media sessions, the payloads of the SIP messages contain SDP payloads. The use of SDP continues to gain force, since SDP has been adopted for use in the WebRTC technologies being defined at the &IETF; and &W3C; for real-time communication among web browsers.</p>
+  <p>Some user agents that might want to participate in WebRTC interactions use XMPP as their primary or only communication channel. For example, a browser-based XMPP application might use a JavaScript library that connects to an XMPP server using &xmppoverwebsocket; or using &xep0124; and &xep0206;. Although such an application could use &xep0166; and &xep0167; between the client and the server, converting the Jingle XML format into SDP (and associated SIP headers) might require use of a server-side gateway, and such a gateway might introduce unnecessary complexity into the system (e.g., keeping session state in the gateway). Enabling the user agent to natively send SDP (and a minimal set of SIP headers) can make it easier for XMPP client developers to build real-time communication applications using existing SDP and SIP libraries, especially in the context of WebRTC.</p>
+  <p>By specifying a way to send SDP/SIP over XMPP (a.k.a. "SoX"), this document effectively defines another reliable transport method for SIP/SDP messages. However, it is envisioned that this method will be used only by XMPP-only endpoints, not by native SIP or dual-stack SIP/XMPP &cusax; endpoints. It is important to note that SoX is not intended to deprecate Jingle, only to provide a convenient way to reliably transport SIP/SDP traffic for communication with native SIP and dual-stack SIP/XMPP endpoints. Finally, because SoX payloads contain only minimal SIP headers (needed for message delivery in certain scenarios) and SDP content, the method is not designed for sending arbitrary SIP message bodies, only SDP.</p>
+</section1>
+
+<section1 topic='Protocol' anchor='protocol'>
+  <p>The syntax is extremely simple: an XMPP &MESSAGE; element contains a &lt;sox/&gt; child element qualified by the 'urn:xmpp:sox:0' namespace, and the &lt;sox/&gt; element contains the SIP/SDP data. An example follows.</p>
+  <example caption='A Basic SoX Example'><![CDATA[
+<message from='romeo@example.net/orchard' to='juliet@example.com' id='hr0znyj0'
+  <sox xmlns='urn:xmpp:sox:0'>
+INVITE sip:juliet@im.example.com sip/2.0
+Via: SIP/2.0/tcp example.net;branch=z9hG4bK1602341dcb7
+From: <sip:romeo@example.net>;tag=0019
+To: <sip:juliet@im.example.com>
+Contact: <sip:romeo@example.net>;gr=orchard
+Call-Info: <xmpp:romeo@example.net>;purpose=impp
+Call-ID: 0019aa04-50550007-660c7034-529a811b
+Date: Mon, 6 May 2013 21:27:24 GMT
+User-Agent: foo
+CSeq: 101 INVITE
+Max-Forwards: 70
+Expires: 180
+Allow: ACK,BYE,CANCEL,INVITE
+Content-Type: application/sdp
+Content-Length: nnnn
+
+v=0
+o=<username> <ntp> <ntp> IN IP4 <client_ip>
+s=SoX Media Setup
+c=IN IP4 <client_ip>
+t=0 0
+m=audio 9000 RTP/AVP 105 106 121
+a=rtpmap:105 opus/48000/2
+a=fmtp:105 maxplaybackrate=16000; sprop-maxcapturerate=16000; maxaveragebitrate=24000; stereo=1; useinbandfec=1; usedtx=0
+a=rtpmap:106 iLBC/8000
+a=ptime:40
+a=maxptime:40
+a=recv-source 1,2,3
+a=rtpmap:121 mix/90000/1
+a=fmtp: 121 105/106
+a=sendrecv
+  </sox>
+</message>
+  ]]></example>
+</section1>
+
+<section1 topic='Inclusion of SIP Headers' anchor='headers'>
+  <p>Including minimal SIP headers makes it possible for XMPP-only endpoints to pass a complete SIP/SDP payload directly to an existing SIP/SDP stack. This is deemed more convenient for implementers than including only the SDP itself, since standalone SDP parsers are less common than complete SIP/SDP stacks.</p>
+  <p>In addition, the SIP headers are helpful for server-side encapsulation/decapsulation scenarios as described in the next section.</p>
+  <p>Note that certain SIP headers are required in SIP, or in particular kinds of SIP messages (e.g., the Contact header is required in SIP INVITE messages).</p>
+</section1>
+
+<section1 topic='Forwarding Messages to Native SIP Entities' anchor='sip'>
+  <p>Part of the reason for including minimal SIP headers in the SoX format is to enable stateless server-side components that can forward SoX messages to native SIP entities. For example, based on vCard data or a directory lookup, a server-side component might determine that the JID within the XMPP 'to' address of a SoX message is associated with a registered SIP user, and forward the SIP/SDP payload to the registered SIP address.</p>
+  <p>For example, in the basic SoX example shown above Romeo sends a SoX message to Juliet's JID (juliet@im.example.com), but his server might know that Juliet actually has a SIP address (say, juliet@voice.example.com). If so, a server-side component (say, sox.example.net) could strip off the enclosing XML elements (&lt;message&gt;&lt;sox&gt; and &lt;/sox&gt;&lt;/message&gt;) and forward the SIP/SDP on to the correct SIP address. An example of the forwarded payload follows.</p>
+  <example caption='A SoX Payload, Forwarded'><![CDATA[
+INVITE sip:juliet@voice.example.com sip/2.0
+Via: SIP/2.0/tcp sox.example.net;branch=z9hG4bK1602341dcb7
+From: <sip:romeo@example.net>;tag=0019
+To: <sip:juliet@im.example.com>
+Contact: <sip:romeo@example.net>;gr=orchard
+Call-Info: <xmpp:romeo@example.net>;purpose=impp
+Call-ID: 0019aa04-50550007-660c7034-529a811b
+Date: Mon, 6 May 2013 21:27:24 GMT
+User-Agent: foo
+CSeq: 101 INVITE
+Max-Forwards: 70
+Expires: 180
+Allow: ACK,BYE,CANCEL,INVITE
+Content-Type: application/sdp
+Content-Length: nnnn
+
+v=0
+o=<username> <ntp> <ntp> IN IP4 <client_ip>
+s=SoX Media Setup
+c=IN IP4 <client_ip>
+t=0 0
+m=audio 9000 RTP/AVP 105 106 121
+a=rtpmap:105 opus/48000/2
+a=fmtp:105 maxplaybackrate=16000; sprop-maxcapturerate=16000; maxaveragebitrate=24000; stereo=1; useinbandfec=1; usedtx=0
+a=rtpmap:106 iLBC/8000
+a=ptime:40
+a=maxptime:40
+a=recv-source 1,2,3
+a=rtpmap:121 mix/90000/1
+a=fmtp: 121 105/106
+a=sendrecv
+  ]]></example>
+</section1>
+
+<section1 topic='Address Mapping' anchor='addressing'>
+  <p>Address mapping between SIP and XMPP can be a challenge. See &xmppsipcore; for details.</p>
+  <p>The 'to' attribute and 'from' attribute of the XMPP &MESSAGE; stanza need not match the "To" header and "From" header of the SoX payload. For example, the sender might know (based on vCard data or a directory lookup) that the SIP address of the intended recipient is different from the XMPP address of the intended recipient. This is possible in so-called CUSAX scenarios; although the CUSAX specification recommends that all SDP signalling be sent over SIP rather than XMPP, the sender might be an XMPP-only endpoint and the intended recipient might be a CUSAX endpoint.</p>
+  <p>However, in general it is easier for a user agent to simply set the SIP "To" and "From" headers to the same identifiers (JIDs) used for the XMPP 'to' and 'from' attributes.</p>
+</section1>
+
+<section1 topic='Error Handling' anchor='error'>
+  <p>For errors related to the SoX payload (e.g., invalid SIP headers), the proper response by a SoX-aware entity is another SoX message containing the appropriate SIP error (e.g., "406 Not Acceptable").</p>
+  <p>For errors related to the XMPP "wrapper" (including the fact that the recipient does not understand the SoX payload), the proper response is the appropriate XMPP error.</p>
+</section1>
+
+<section1 topic='Determining Support' anchor='disco'>
+  <p>If an entity supports SoX, it MUST advertise that fact in its responses to &xep0030; information ("disco#info") requests by returning a feature of "urn:xmpp:sox:0":</p>
+  <example caption='A disco#info query'><![CDATA[
+<iq type='get' 
+    from='romeo@example.net/orchard'
+    to='juliet@example.com/chamber'
+    id='hx62f49'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+  ]]></example>
+  <example caption='A disco#info response'><![CDATA[
+<iq type='result' 
+    from='juliet@example.com/chamber'
+    to='romeo@example.net/orchard'
+    id='hx62f49'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <feature var='urn:xmpp:sox:0'/>
+  </query>
+</iq>
+  ]]></example>
+  <p>In order for an application to determine whether an entity supports this protocol, where possible it SHOULD use the dynamic, presence-based profile of service discovery defined in &xep0115;. However, if an application has not received entity capabilities information from an entity, it SHOULD use explicit service discovery instead.</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Crossing protocol boundaries can lead to security mismatches.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p> 
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='reg'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:sox:0</li>
+    </ul>
+    <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespace to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
+  </section2>
+  <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:sox:0'
+    xmlns='urn:xmpp:sox:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='sox' type='xs:string'>
+
+</xs:schema>
+    ]]></code>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>Thanks to Vikram Khurana, Lance Stout, Field Tian, Duanpei Wu, and Weixin Xia for their feedback.</p>
+  <p>In 2006, Dirk Griffoen (on behalf of Voipster) proposed a similar approach, called Zoep &lt;<link url='http://xmpp.org/extensions/inbox/zoep.html'>http://xmpp.org/extensions/inbox/zoep.html</link>&gt;.</p>
+</section1>
+
+</xep>
