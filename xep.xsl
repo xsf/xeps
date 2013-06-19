@@ -44,6 +44,11 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <link href="../prettify.css" type="text/css" rel="stylesheet" />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
         <script type="text/javascript" src="../prettify.js"></script>
+        <!-- making things mobile-friendly... -->
+        <meta>
+          <xsl:attribute name='name'><xsl:text>viewport</xsl:text></xsl:attribute>
+          <xsl:attribute name='content'>width=device-width; initial-scale=1.0; maximum-scale=2.0</xsl:attribute>
+        </meta>
         <!-- BEGIN META TAGS FOR DUBLIN CORE -->
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Title</xsl:text></xsl:attribute>
