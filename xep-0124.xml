@@ -11,6 +11,7 @@
     &LEGALNOTICE;
     <number>0124</number>
     <status>Draft</status>
+    <interim/>
     <type>Standards Track</type>
     <jig>Standards</jig>
     <dependencies>
@@ -28,6 +29,13 @@
     &dizzyd;
     &stpeter;
     &metajack;
+    &lance;
+    <revision>
+      <version>1.11rc1</version>
+      <date>2013-11-08</date>
+      <initials>ls</initials>
+      <remark><p>Incorporated patches from community review.</p></remark>
+    </revision>
     <revision>
       <version>1.10</version>
       <date>2010-07-02</date>
@@ -204,19 +212,92 @@
     <p>Furthermore, no aspect of this protocol limits its use to communication between a client and a server. For example, it could be used for communication between a server and a peer server if such communication can occur for the relevant application (e.g., in XMPP). However, this document focuses exclusively on use of the transport by clients that cannot maintain arbitrary persistent TCP connections with a server. We assume that servers and components are under no such restrictions and thus would use the native connection transport for the relevant application. (However, on some unreliable networks, BOSH might enable more stable communication between servers.)</p>
   </section1>
   <section1 topic="The BOSH Technique" anchor='technique'>
-    <p>Since HTTP is a synchronous request/response protocol, the traditional solution to emulating a bidirectional-stream over HTTP involved the client intermittently polling the connection manager to discover if it has any data queued for delivery to the client. This naive approach wastes a lot of network bandwidth by polling when no data is available. It also reduces the responsiveness of the application since the data spends time queued waiting until the connection manager receives the next poll (HTTP request) from the client. This results in an inevitable trade-off between responsiveness and bandwidth, since increasing the polling frequency will decrease latency but simultaneously increase bandwidth consumption (or vice versa if polling frequency is decreased).</p>
-    <p>The technique employed by BOSH achieves both low latency and low bandwidth consumption by encouraging the connection manager not to respond to a request until it actually has data to send to the client. As soon as the client receives a response from the connection manager it sends another request, thereby ensuring that the connection manager is (almost) always holding a request that it can use to "push" data to the client.</p>
-    <p>If the client needs to send some data to the connection manager then it simply sends a second request containing the data. Unfortunately most constrained clients do not support HTTP Pipelining (concurrent requests over a single connection), so the client typically needs to send the data over a second HTTP connection. The connection manager always responds to the request it has been holding on the first connection as soon as it receives a new request from the client -- even if it has no data to send the client. It does so to make sure the client can send more data immediately if necessary. (The client SHOULD NOT open more than two HTTP connections to the connection manager at the same time, <note>In order to reduce network congestion, <cite>RFC 2616</cite> recommends that clients SHOULD NOT keep more than two HTTP connections to the same HTTP server open at the same time. Clients running in constrained enviroments typically have no choice but to abide by that recommendation.</note> so it would otherwise have to wait until the connection manager responds to one of the requests.)</p>
-    <p>BOSH works reliably even if network conditions force every HTTP request to be made over a different TCP connection. However, if as is usually the case, the client is able to use HTTP/1.1, then (assuming reliable network conditions) all requests during a session will pass over the same two persistent TCP connections. Almost all of the time (see below) the client is able to push data on one of the connections, while the connection manager is able to push data on the other (so latency is as low as a standard TCP connection). It's interesting to note that the roles of the two connections typically switch whenever the client sends data to the connection manager.</p>
-    <p>If there is no traffic in either direction for an agreed amount of time (typically several minutes), then the connection manager responds to the client with no data, and that response immediately triggers a fresh client request. The connection manager does so to ensure that if a network connection is broken then both parties will realise within a reasonable amount of time. This exchange is similar to the "keep-alive" or "ping" that is common practice over most persistent TCP connections. Since the BOSH technique involves no polling, bandwidth consumption is not significantly greater than a standard TCP connection. <note>If there is no traffic other than the "pings" then bandwidth consumption will be double that of a TCP connection (although double nothing is still nothing). If data is sent in large packets then bandwidth consumption will be almost identical.</note></p>
-    <p>Most of the time data can be pushed immediately. However, if one of the endpoints has just pushed some data then it will usually have to wait for a network round trip until it is able to push again. If HTTP Pipelining is available to the client then multiple concurrent requests are possible. Thus the client can always push data immediately. It can also ensure the connection manager is always holding enough requests such that even during bursts of activity it will never have to wait before pushing data. Furthermore, if the pool of requests being held by the connection manager is large enough, then the client will not be under pressure to send a new empty request immediately after receiving data from the connection manager. It can instead wait until it needs to send data. Therefore, if over time the traffic to and from the client is balanced, bandwidth consumption will be about the same as if a standard TCP connection were being used.</p>
-    <p>Each block of data pushed by the connection manager is a complete HTTP response. So, unlike the Comet technique, the BOSH technique works through intermediate proxies that buffer partial HTTP responses. It is also fully compliant with HTTP/1.0 -- which does not provide for chunked transfer encoding.</p>
+    <p>The technique employed by BOSH, which is sometimes called "HTTP long polling", reduces latency and bandwidth consumption over other HTTP polling techniques. When the client sends a request, the connection manager does not immediately send a response; instead it holds the request open until it has data to actually send to the client (or an agreed-to length of inactivity has elapsed). The client then immediately sends a new request to the connection manager, continuing the long polling loop.</p>
+    <p>If the connection manager does not have any data to send to the client after some agreed-to length of time<note>This time is typically on the order of tens of seconds (e.g., 60), and is determined during session creation</note>, it sends a response with an empty &lt;body/&gt;. This serves a similar purpose to whitespace keep-alives or &xep0199;; it helps keep a socket connection active which prevents some intermediaries (firewalls, proxies, etc) from silently dropping it, and helps to detect breaks in a reasonable amount of time.</p>
+    <p>Where clients and connection managers support persistent connections (i.e. "Connection: keep-alive" from HTTP/1.0, and which is the default state for HTTP/1.1), these sockets remain open for an extended length of time, awaiting the client's next request. This reduces the overhead of socket establishment, which can be very expensive if HTTP over Secure Sockets Layer (SSL) is used.</p>
+    <p>If the client has data to send while a request is still open, it establishes a second socket connection to the connection manager to send a new request. The connection manager immediately responds to the previously held request (possibly with no data) and holds open this new request. This results in the connections switching roles;  the "old" connection is responded to and left awaiting new requests, while the "new" connection is now used for the long polling loop.</p>
+    <p>The following diagram illustrates this technique (possibly after XMPP session establishment)</p>
+    <code><![CDATA[
+  |
+ +-+ <-- empty body request
+ |X|
+ |-|
+ | |
+ | |
+ | |
+ | |
+ |-| <-- empty body response
+ |*|
+ +-+
+  |
+ +-+ <-- empty body request
+ |X|
+ |-|
+ | |
+ | |
+ | |
+ | |
+ |-| <-- empty body response
+ |*|
+ +-+
+  |
+ +-+ <-- empty body request
+ |X|                                      socket opened --> === 
+ |-|                                                         |
+ | |                                    new message out --> +-+
+ |-| <-- empty body response                                |X|
+ |*|                                                        |-|
+ +-+                                                        | |
+  |                                                         | |
+  |                                                         | |
+  |                                                         | |
+  |                                 empty body response --> |-|
+  |                                                         |*|
+  |                                                         +-+
+  |                                                          |
+  |                                  empty body request --> +-+
+  |                                                         |X|
+  |                                                         |-|
+  |                                                         | |
+ +-+ <-- new message out                                    | |
+ |X|                                empty body response --> |-|
+ |-| <-- new message in                                     |*|
+ |*|                                                        +-+
+ +-+                                                         |
+  |                                                          |
+ +-+ <-- empty body request                                  |
+ |X|                                                         |
+ |-|                                                         |
+ | |                                                         |
+ | |                                    new message out --> +-+
+ |-| <-- new message in                                     |X|
+ |*|                                                        |-|
+ +-+                                                        | |
+  |                                                         | |
+  |                                                         | |
+  |                                                         | |
+  |                                 empty body response --> |-|
+  |                                                         |*|
+  |                                                         +-+
+  |                                                          |
+  |                                  empty body request --> +-+
+  |                                                         |X| 
+  |                                                         |-|
+  |                                                         | |
+  |                                                         | |
+  |                                                         | |
+  |                                                         | |
+  |                                 empty body response --> |-|
+  |                                                         |*|
+  |                                                         +-+
+  |                                                          |
+      ]]></code>
   </section1>
   <section1 topic="HTTP Overview" anchor='overview'>
+    <p>The requirements of <cite>RFC 2616</cite> MUST be met for both requests and responses. Additional HTTP headers not specified herein MAY be included, but receivers SHOULD ignore any such headers. Clients and connection managers MAY omit headers that are not mandated by <cite>RFC 2616</cite> and would otherwise be ignored (e.g. if the client has constrained bandwidth), but clients are advised that network and proxy policies could block such requests.</p>
     <p>All information is encoded in the body of standard HTTP POST requests and responses. Each HTTP body contains a single &lt;body/&gt; wrapper which encapsulates the XML elements being transferred (see <link url="#wrapper">&lt;body/&gt; Wrapper Element</link>).</p>
     <p>Clients SHOULD send all HTTP requests over a single persistent HTTP/1.1 connection using HTTP Pipelining. However, a client MAY deliver its POST requests in any way permitted by <cite>RFC 1945</cite> or <cite>RFC 2616</cite>. For example, constrained clients can be expected to open more than one persistent connection instead of using Pipelining, or in some cases to open a new HTTP/1.0 connection to send each request. However, clients and connection managers SHOULD NOT use Chunked Transfer Coding, since intermediaries might buffer each partial HTTP request or response and only forward the full request or response once it is available.</p>
     <p>Clients MAY include an HTTP Accept-Encoding header in any request. If the connection manager receives a request with an Accept-Encoding header, it MAY include an HTTP Content-Encoding header in the response (indicating one of the encodings specified in the request) and compress the response body accordingly.</p>
-    <p>Requests and responses MAY include HTTP headers not specified herein. The receiver SHOULD ignore any such headers.</p>
     <p>Each BOSH session MAY share the HTTP connection(s) it uses with other HTTP traffic, including other BOSH sessions and HTTP requests and responses completely unrelated to this protocol (e.g., web page downloads). However, the responses to requests that are not part of the session sent over the same connection using HTTP pipelining (or queued to be sent over the same connection) might be delayed if they were sent while a request that is part of the session is being held (since the connection manager MUST send its responses in the same order that the requests were received, and the connection manager typically delays its responses).</p>
     <p>The HTTP Content-Type header of all client requests SHOULD be "text/xml; charset=utf-8". However, clients MAY specify another value if they are constrained to do so (e.g., "application/x-www-form-urlencoded" or "text/plain"). The client and connection manager SHOULD ignore all HTTP Content-Type headers they receive.</p>
   </section1>
@@ -273,6 +354,7 @@ Content-Length: 104
       <ul>
         <li><strong>'sid'</strong> -- This attribute specifies the SID</li>
         <li><strong>'wait'</strong> -- This is the longest time (in seconds) that the connection manager will wait before responding to any request during the session. The time MUST be less than or equal to the value specified in the session request.</li>
+        <li><strong>'hold'</strong> -- This attribute informs the client about the maximum number of requests the connection manager will keep waiting at any one time during the session. This value MUST NOT be greater than the value specified by the client in the session request.</li>
       </ul>
       <p>The &lt;body/&gt; element SHOULD also include the following attributes (they SHOULD NOT be included in any other responses):</p>
       <ul>
@@ -280,14 +362,14 @@ Content-Length: 104
         <li><strong>'polling'</strong> -- This attribute specifies the shortest allowable polling interval (in seconds). This enables the client to not send empty request elements more often than desired (see <link url="#poll">Polling Sessions</link> and <link url="#overactive">Overactivity</link>).</li>
         <li><strong>'inactivity'</strong> -- This attribute specifies the longest allowable inactivity period (in seconds). This enables the client to ensure that the periods with no requests pending are never too long (see <link url="#poll">Polling Sessions</link> and <link url="#inactive">Inactivity</link>).</li>
         <li><strong>'requests'</strong> -- This attribute enables the connection manager to limit the number of simultaneous requests the client makes (see <link url="#overactive">Overactivity</link> and <link url="#poll">Polling Sessions</link>). The RECOMMENDED values are either "2" or one more than the value of the 'hold' attribute specified in the session request.</li>
-        <li><strong>'hold'</strong> -- This attribute informs the client about the maximum number of requests the connection manager will keep waiting at any one time during the session. This value MUST NOT be greater than the value specified by the client in the session request.</li>
+        <li><strong>'requests'</strong> -- This attribute enables the connection manager to limit the number of simultaneous requests the client makes (see <link url="#overactive">Overactivity</link> and <link url="#poll">Polling Sessions</link>). This value must be larger than the 'hold' attribute value specified in the session request.  The RECOMMENDED value is one more than the value of the 'hold' attribute specified in the session request.</li>
         <li><strong>'to'</strong> -- This attribute communicates the identity of the backend server to which the client is attempting to connect.</li>
       </ul>
-      <p>The connection manager MAY include an <strong>'accept'</strong> attribute in the session creation response element, to specify a space-separated list of the content encodings it can decompress. After receiving a session creation response with an 'accept' attribute, clients MAY include an HTTP Content-Encoding header in subsequent requests (indicating one of the encodings specified in the 'accept' attribute) and compress the bodies of the requests accordingly.</p>
+      <p>The connection manager MAY include an <strong>'accept'</strong> attribute in the session creation response element, to specify a comma-separated list of the content encodings it can decompress. After receiving a session creation response with an 'accept' attribute, clients MAY include an HTTP Content-Encoding header in subsequent requests (indicating one of the encodings specified in the 'accept' attribute) and compress the bodies of the requests accordingly.</p>
       <p>A connection manager MAY include an <strong>'ack'</strong> attribute (set to the value of the 'rid' attribute of the session creation request) to indicate that it will be using acknowledgements throughout the session and that the absence of an 'ack' attribute in any response is meaningful (see <link url="#ack">Acknowledgements</link>).</p>
       <p>If the connection manager supports session pausing (see <link url="#inactive">Inactivity</link>) then it SHOULD advertise that to the client by including a <strong>'maxpause'</strong> attribute in the session creation response element. The value of the attribute indicates the maximum length of a temporary session pause (in seconds) that a client can request.</p>
       <p>For both requests and responses, the &lt;body/&gt; element and its content SHOULD be UTF-8 encoded. If the HTTP Content-Type header of a request/response specifies a character encoding other than UTF-8, then the connection manager MAY convert between UTF-8 and the other character encoding. However, even in this case, it is OPTIONAL for the connection manager to convert between encodings. The connection manager MAY inform the client which encodings it can convert by setting the optional <strong>'charsets'</strong> attribute in the session creation response element to a space-separated list of encodings. <note>Each character set name (or character encoding name -- we use the terms interchangeably) SHOULD be of type NMTOKEN, where the names are separated by the white space character #x20, resulting in a tokenized attribute type of NMTOKENS (see Section 3.3.1 of &w3xml;). Strictly speaking, the Character Sets registry maintained by the Internet Assigned Numbers Authority (see &lt;<link url='http://www.iana.org/assignments/character-sets'>http://www.iana.org/assignments/character-sets</link>&gt;) allows a character set name to contain any printable US-ASCII character, which might include characters not allowed by the NMTOKEN construction of XML 1.0; however, the only existing character set name which includes such a character is "NF_Z_62-010_(1973)".</note></p>
-      <p>As soon as the connection manager has established a connection to the server and discovered its identity, it MAY forward the identity to the client by including a <strong>'from'</strong> attribute in a response, either in its session creation response, or (if it has not received the identity from the server by that time) in any subsequent response to the client. If it established a secure connection to the server (as defined in <link url='#session'>Initiating a BOSH Session</link>), then in the same response the connection manager SHOULD also include the <strong>'secure'</strong> attribute set to "true" or "1".</p>
+      <p>As soon as the connection manager has established a connection to the server and discovered its identity, it MAY forward the identity to the client by including a <strong>'from'</strong> attribute in a response, either in its session creation response, or (if it has not received the identity from the server by that time) in any subsequent response to the client.</p>
       <example caption="Session creation response">
 <![CDATA[HTTP/1.1 200 OK
 Content-Type: text/xml; charset=utf-8
@@ -308,7 +390,7 @@ Content-Length: 128
       xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
 
 
-      <example caption="Subsequent response with 'from' and 'secure' attributes">
+      <example caption="Subsequent response with 'from' attribute">
 <![CDATA[HTTP/1.1 200 OK
 Content-Type: text/xml; charset=utf-8
 Content-Length: 128
@@ -500,7 +582,7 @@ Content-Length: 68
       xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
     <p>Note: If the connection manager did not specify a 'polling' attribute in the session creation response, then it MUST allow the client to poll as frequently as it chooses.</p>
   </section1>
-  <section1 topic='Terminating the HTTP Session' anchor='terminate'>
+  <section1 topic='Terminating the BOSH Session' anchor='terminate'>
     <p>At any time, the client MAY gracefully terminate the session by sending a &lt;body/&gt; element with a 'type' attribute set to "terminate". The termination request MAY include one or more payloads that the connection manager MUST forward to the server to ensure graceful logoff.</p>
     <example caption="Session termination by client">
 <![CDATA[POST /webclient HTTP/1.1
@@ -544,7 +626,9 @@ Content-Length: 68
     </section2>
     <section2 topic='Broken Connections' anchor='rids-broken'>
       <p>Unreliable network communications or client constraints can result in broken connections. The connection manager SHOULD remember the 'rid' and the associated HTTP response body of the client's most recent requests which were not session pause requests (see <link url="#inactive">Inactivity</link>) and which did not result in an HTTP or binding error. The number of responses to non-pause requests kept in the buffer SHOULD be either the same as the maximum number of simultaneous requests allowed by the connection manager or, if <link url="#ack">Acknowledgements</link> are being used, the number of responses that have not yet been acknowledged.</p>
-      <p>If the network connection is broken or closed before the client receives a response to a request from the connection manager, then the client MAY resend an exact copy of the original request. Whenever the connection manager receives a request with a 'rid' that it has already received, it SHOULD return an HTTP 200 (OK) response that includes the buffered copy of the original XML response to the client (i.e., a &lt;body/&gt; wrapper possessing appropriate attributes and optionally containing one or more XML payloads). If the original response is not available (e.g., it is no longer in the buffer), then the connection manager MUST return an 'item-not-found' terminal binding error:</p>
+      <p>If the network connection is broken or closed before the client receives a response to a request from the connection manager, then the client MAY resend an exact copy of the original request. Whenever the connection manager receives a request with a 'rid' that it has already received, it SHOULD return an HTTP 200 (OK) response that includes the buffered copy of the original XML response to the client (i.e., a &lt;body/&gt; wrapper possessing appropriate attributes and optionally containing one or more XML payloads).</p>
+      <p>If the connection manager receives a request for a 'rid' which has already been received but to which it has not yet responded then it SHOULD respond immediately to the existing request with a recoverable binding condition (see <link url="#errorstatus-recover">Recoverable Binding Conditions</link>) and send any future response to the latest request. There is a possibility that a client might subvert polling frequency limits by deliberately sending requests for the same 'rid' multiple times, and so a connection manager implementation MAY choose to impose a limit to the frequency or number of requests for the same 'rid'. If the client exceeds this limit then the connection manager SHOULD terminate the HTTP session and return a 'policy-violation' terminal binding error to the client (see <link url="#errorstatus-terminal">Terminal Binding Conditions</link>).</p>
+      <p>If the original response is not available (e.g., it is no longer in the buffer), then the connection manager MUST return an 'item-not-found' terminal binding error:</p>
       <example caption="Response not in buffer error">
 <![CDATA[HTTP/1.1 200 OK
 Content-Type: text/xml; charset=utf-8
@@ -574,6 +658,7 @@ Content-Length: 68
         ...
         K(n) = hex(SHA-1(K(n-1)))
       </example>
+      <p>Because case is not significant in hexadecimal encoding, key comparisons SHOULD be case insensitive.</p>
     </section2>
     <section2 topic="Use of Keys" anchor='keys-use'>
       <p>The client MUST set the 'newkey' attribute of the first request in the session to the value K(n).</p>
@@ -604,7 +689,7 @@ Content-Length: 88
       sid='SomeSID'
       key='bfb06a6f113cd6fd3838ab9d300fdb4fe3da2f7d'
       xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
-      <p>The connection manager MAY verify the key by calculating the SHA-1 hash of the key and comparing it to the 'newkey' attribute of the previous request (or the 'key' attribute if the 'newkey' attribute was not set). If the values do not match (or if it receives a request without a 'key' attribute and the 'newkey' or 'key' attribute of the previous request was set), then the connection manager MUST NOT process the element, MUST terminate the session, and MUST return an 'item-not-found' terminal binding error.</p>
+      <p>The connection manager MAY verify the key by calculating the SHA-1 hash of the key and performing a case insensitive comparison of it to the 'newkey' attribute of the previous request (or the 'key' attribute if the 'newkey' attribute was not set). If the values do not match (or if it receives a request without a 'key' attribute and the 'newkey' or 'key' attribute of the previous request was set), then the connection manager MUST NOT process the element, MUST terminate the session, and MUST return an 'item-not-found' terminal binding error.</p>
       <example caption="Invalid Key Sequence Error">
 <![CDATA[HTTP/1.1 200 OK
 Content-Type: text/xml; charset=utf-8
@@ -670,7 +755,7 @@ Content-Length: 128
       xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
     </section2>
     <section2 topic="Adding Streams To A Session" anchor='multi-add'>
-      <p>If the connection manager included a 'stream' attribute in its session creation response then the client MAY ask it to open another stream at any time by sending it an empty &lt;body/&gt; element with a 'to' attribute. The request MUST include valid 'sid' and 'rid' <note>The 'rid' attribute is always incremented normally without reference to any 'stream' attribute.</note> attributes, and SHOULD also include an 'xml:lang' attribute. The request MAY include 'route', 'from' and 'secure' attributes (see <link url="#session-request">Session Creation Request</link>), but it SHOULD NOT include 'ver', 'content', 'hold' or 'wait' attributes (since a new session is not being created).</p>
+      <p>If the connection manager included a 'stream' attribute in its session creation response then the client MAY ask it to open another stream at any time by sending it an empty &lt;body/&gt; element with a 'to' attribute. The request MUST include valid 'sid' and 'rid' <note>The 'rid' attribute is always incremented normally without reference to any 'stream' attribute.</note> attributes, and SHOULD also include an 'xml:lang' attribute. The request MAY include either 'route' or 'from' attributes (see <link url="#session-request">Session Creation Request</link>), but it SHOULD NOT include 'ver', 'content', 'hold' or 'wait' attributes (since a new session is not being created).</p>
       <example caption="Requesting another stream">
 <![CDATA[POST /webclient HTTP/1.1
 Host: httpcm.example.com
@@ -684,7 +769,7 @@ Content-Length: 104
       route='xmpp:example.com:9999'
       xml:lang='en'
       xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
-      <p>If the connection manager did not indicate its support for multiple streams at the start of the session, then it MUST ignore the extra attributes and treat the request as a normal empty request for payloads (see <link url="#payloads">Sending and Receiving XML Payloads</link>). <note>This helps to ensure backwards-compatibility with older implementations.</note> Otherwise it MUST open a new stream with the specified server (see <link url="#session-response">Session Creation Response</link>), generate a new stream name, and respond to the client with the name. The response MAY also include 'from' and 'secure' attributes, but it SHOULD NOT include 'sid', 'requests', 'polling', 'hold', 'inactivity', 'maxpause', 'accept', 'charsets', 'ver' or 'wait' attributes.</p>
+      <p>If the connection manager did not indicate its support for multiple streams at the start of the session, then it MUST ignore the extra attributes and treat the request as a normal empty request for payloads (see <link url="#payloads">Sending and Receiving XML Payloads</link>). <note>This helps to ensure backwards-compatibility with older implementations.</note> Otherwise it MUST open a new stream with the specified server (see <link url="#session-response">Session Creation Response</link>), generate a new stream name, and respond to the client with the name. The response MAY also include the 'from' attribute, but it SHOULD NOT include 'sid', 'requests', 'polling', 'hold', 'inactivity', 'maxpause', 'accept', 'charsets', 'ver' or 'wait' attributes.</p>
       <example caption="Add stream response">
 <![CDATA[HTTP/1.1 200 OK
 Content-Type: text/xml; charset=utf-8
@@ -693,12 +778,12 @@ Content-Length: 128
 <body stream='secondStreamName'
       from='example.com'
       xmlns='http://jabber.org/protocol/httpbind'/>]]></example>
-      <p>Note: If the response did not include either 'from' or 'secure' attributes then they MAY be sent in a subsequent response instead (see <link url="#session-response">Session Creation Response</link>). In that case the 'stream' attribute MUST also be specified.</p>
+      <p>Note: If the response did not include a 'from' attribute then they MAY be sent in a subsequent response instead (see <link url="#session-response">Session Creation Response</link>). In that case the 'stream' attribute MUST also be specified.</p>
     </section2>
     <section2 topic="Transmitting Payloads" anchor='multi-transmit'>
       <p>If more than one stream has been opened within a session, then all non-empty &lt;body/&gt; elements sent by the connection manager MUST include a 'stream' attribute that specifies which stream <em>all</em> the payloads it contains belong to. The client SHOULD include a 'stream' attribute for the same purpose. The client MAY omit the 'stream' attribute if it wants the connection manager to broadcast the payloads over all open streams. Note: A &lt;body/&gt; element MUST NOT contain different payloads for different streams.</p>
       <p>If a stream name does not correspond to one of the session's open streams, then the receiving connection manager SHOULD return an 'item-not-found' terminal binding error, or the receiving client SHOULD terminate the session. However, if the receiving entity has only just closed the stream (and the sender might not have been aware of that when it sent the payloads), then it MAY instead simply silently ignore any payloads the &lt;body/&gt; element contains.</p>
-      <p>Note: Empty &lt;body/&gt; elements that do not include a 'from' or 'secure' attribute SHOULD NOT include a 'stream' attribute (since nothing is being transmitted for any stream). If such a &lt;body/&gt; element does include a 'stream' attribute then the receiving entity SHOULD ignore the attribute.</p>
+      <p>Note: Empty &lt;body/&gt; elements that do not include a 'from' attribute SHOULD NOT include a 'stream' attribute (since nothing is being transmitted for any stream). If such a &lt;body/&gt; element does include a 'stream' attribute then the receiving entity SHOULD ignore the attribute.</p>
     <example caption="Client sends payload with a stream name">
 <![CDATA[POST /webclient HTTP/1.1
 Host: httpcm.example.com
@@ -747,7 +832,7 @@ Content-Length: 188
 </body>]]></example>
     </section2>
     <section2 topic='Closing a Stream' anchor='multi-close'>
-      <p>If more than one stream is open within a session, the client MAY close one open stream at any time using the procedure described in the section <link url="#terminate">Terminating the HTTP Session</link> above, taking care to specify the stream name with a 'stream' attribute. If the client closes the last stream the connection manager MUST terminate the session. If the client does not specify a stream name then the connection manager MUST close all open streams (sending any payloads the terminate request contains to all streams), and terminate the session.</p>
+      <p>If more than one stream is open within a session, the client MAY close one open stream at any time using the procedure described in the section <link url="#terminate">Terminating the BOSH Session</link> above, taking care to specify the stream name with a 'stream' attribute. If the client closes the last stream the connection manager MUST terminate the session. If the client does not specify a stream name then the connection manager MUST close all open streams (sending any payloads the terminate request contains to all streams), and terminate the session.</p>
       <example caption="Client closes one stream">
 <![CDATA[POST /webclient HTTP/1.1
 Host: httpcm.example.com
@@ -952,7 +1037,7 @@ Content-Length: 68
   <section1 topic='Implementation Notes' anchor='impl'>
     <section2 topic='HTTP Pipelining' anchor='impl-pipelining'>
       <p>Even if the client requests HTTP Pipelining and the connection manager supports it, there is no guarantee that pipelining will succeed, because it might not be supported by intermediate proxies.</p>
-      <p>The best the client can do is to request the use of HTTP Pipelining by setting the 'hold' attribute to a value of "1". If HTTP Pipelining does not work (because the server returns HTTP 1.0 or connection:close), then the client SHOULD degrade gracefully by using multiple connections.</p>
+      <p>The client SHOULD set the 'hold' attribute to a value of "1". If HTTP Pipelining does not work (because the server returns HTTP 1.0 or connection:close), then the client SHOULD degrade gracefully by using multiple connections.</p>
     </section2>
   </section1>
   <section1 topic='Security Considerations' anchor='security'>
@@ -1075,6 +1160,6 @@ Content-Length: 68
     ]]></code>
   </section1>
 <section1 topic='Acknowledgements' anchor='acks'>
-  <p>Thanks to Mike Cumings, Tomas Karasek, Tobias Markmann, Chris Seymour, Safa Sofuo&#287;lu, Stefan Strigler, Matthew Wild, Kevin Winters, and Christopher Zorn for their feedback.</p>
+  <p>Thanks to Dave Cridland, Mike Cumings, Tomas Karasek, Steffen Larsen, Tobias Markmann, Matt Miller, Chris Seymour, Safa Sofuo&#287;lu, Stefan Strigler, Mike Taylor, Winfriend Tilanus, Matthew Wild, Kevin Winters, and Christopher Zorn for their feedback.</p>
 </section1>
 </xep>
