@@ -316,6 +316,11 @@
   <cmd name="textbf"><parm><xsl:apply-templates/></parm></cmd>
 </xsl:template>
 
+<!-- sub -->
+<xsl:template match="sub">
+  <math><cmd name="textsuperscript"><parm><xsl:apply-templates/></parm></cmd></math>
+</xsl:template>
+
 <!-- span[@class='super'] -->
 <xsl:template match="span[@class='super']">
   <math><spec cat="sup"/><spec cat="bg"/><xsl:apply-templates/><spec cat="eg"/></math>
