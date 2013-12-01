@@ -306,6 +306,16 @@
   <cmd name="footnote"><parm><xsl:apply-templates/></parm></cmd>
 </xsl:template>
 
+<!-- em -->
+<xsl:template match="em">
+  <cmd name="emph"><parm><xsl:apply-templates/></parm></cmd>
+</xsl:template>
+
+<!-- strong -->
+<xsl:template match="strong">
+  <cmd name="textbf"><parm><xsl:apply-templates/></parm></cmd>
+</xsl:template>
+
 <!-- span[@class='super'] -->
 <xsl:template match="span[@class='super']">
   <math><spec cat="sup"/><spec cat="bg"/><xsl:apply-templates/><spec cat="eg"/></math>
