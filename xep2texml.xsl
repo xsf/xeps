@@ -99,8 +99,8 @@
 
 \usepackage{fontspec,xltxtra,xunicode}
 \defaultfontfeatures{Mapping=tex-text}
-\setromanfont[Ligatures={Common}]{Gentium}
-\setsansfont[Scale=MatchLowercase]{Gentium}
+\setromanfont[Ligatures={Common}]{Gentium Basic}
+\setsansfont[Scale=MatchLowercase]{Gentium Basic}
 \setmonofont[Scale=MatchLowercase]{Inconsolata}
 
 \setkomafont{descriptionlabel}{\normalfont\bfseries}
