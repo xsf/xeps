@@ -99,8 +99,8 @@
 
 \usepackage{fontspec,xltxtra,xunicode}
 \defaultfontfeatures{Mapping=tex-text}
-\setromanfont[Ligatures={Common}]{Gentium}
-\setsansfont[Scale=MatchLowercase]{Gentium}
+\setromanfont[Ligatures={Common}]{Gentium Basic}
+\setsansfont[Scale=MatchLowercase]{Gentium Basic}
 \setmonofont[Scale=MatchLowercase]{Inconsolata}
 
 \setkomafont{descriptionlabel}{\normalfont\bfseries}
@@ -304,6 +304,21 @@
 <!-- note -->
 <xsl:template match="note">
   <cmd name="footnote"><parm><xsl:apply-templates/></parm></cmd>
+</xsl:template>
+
+<!-- em -->
+<xsl:template match="em">
+  <cmd name="emph"><parm><xsl:apply-templates/></parm></cmd>
+</xsl:template>
+
+<!-- strong -->
+<xsl:template match="strong">
+  <cmd name="textbf"><parm><xsl:apply-templates/></parm></cmd>
+</xsl:template>
+
+<!-- sub -->
+<xsl:template match="sub">
+  <math><cmd name="textsuperscript"><parm><xsl:apply-templates/></parm></cmd></math>
 </xsl:template>
 
 <!-- span[@class='super'] -->
