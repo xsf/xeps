@@ -2,7 +2,7 @@
 
 <!--
 
-Copyright (c) 1999 - 2013 XMPP Standards Foundation
+Copyright (c) 1999 - 2014 XMPP Standards Foundation
 
 Permission is hereby granted, free of charge, to any 
 person obtaining a copy of this software and 
@@ -131,7 +131,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           </xsl:if>
           <tr valign='top'>
             <td><strong>Copyright:</strong></td>
-            <td>&#169; 1999 - 2013 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</td>
+            <td>&#169; 1999 - 2014 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</td>
           </tr>
           <tr valign='top'>
             <td><strong>Status:</strong></td>
