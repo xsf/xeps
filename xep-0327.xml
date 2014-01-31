@@ -36,8 +36,14 @@
   </author>
   <revision>
     <version>0.2</version>
+    <date>2014-01-30</date>
+    <initials>bl</initials>
+    <remark><p>Further updates.</p></remark>
+  </revision>
+  <revision>
+    <version>0.2</version>
     <date>2013-06-10</date>
-    <initials>psa</initials>
+    <initials>bl</initials>
     <remark><p>Updates to address open issues.</p></remark>
   </revision>
   <revision>
@@ -556,7 +562,7 @@
     </section3>
 
     <section3 topic='Inbound Call' anchor='session-establishment-inbound'>
-      <p>When the system receives a call from one of its connected networks, it MUST then expose that requested session to Rayo clients. It SHOULD use an implementation-specific routing mechanism to map incoming calls to some set of registered JIDs which are considered appropriate controlling parties. From this set, it SHOULD then remove any parties whom it can identify as being temporarily inappropriate for control (either unavailable based on presence, under too much load, or any other metric which the server has available). If, as a result, the set of Potentially Controlling Parties is empty, the server MUST reject the call with a 'decline' reason.</p>
+      <p>When the system receives a call from one of its connected networks, it MUST then expose that requested session to Rayo clients. It SHOULD use an implementation-specific routing mechanism to map incoming calls to some set of registered JIDs which are considered appropriate controlling parties. From this set, it SHOULD then remove any parties whom it can identify as being temporarily inappropriate for control (either unavailable based on presence, under too much load, or any other metric which the server has available). If, as a result, the set of Potentially Controlling Parties is empty, the server MUST reject the call indicating that the requested service was unavailable.</p>
 
       <p>If the server can identify active Potential Controlling Parties, it MUST offer them control of the call simultaneously. The server must broadcast an offer on behalf of the call to all Potential Controlling Parties, using applicable to/from/header data from the incoming session. The server MUST also include entity capabilities information in the presence stanza containing the offer, in order to advertise the fact that the entity is a call, qualified by the node name "urn:xmpp:rayo:call:1".</p>
       <example caption="New call announces itself to a potential controlling party"><![CDATA[
@@ -1598,6 +1604,14 @@
 
       <section4 topic='Events' anchor='session-component-execution-prompt-events'>
         <p>The prompt component emits intermediate events from the nested output and input components.</p>
+        <p>It also emits an 'input-timers-started' event when the input component's timers are started, which corresponds to the completion of the output sub-component.</p>
+
+        <example caption='Prompt component announces that the input timers have started'><![CDATA[
+<presence from='9f00061@call.shakespeare.lit/eh3u28'
+          to='juliet@capulet.lit/courtyard'>
+  <input-timers-started xmlns='urn:xmpp:rayo:prompt:1'/>
+</presence>
+      ]]></example>
       </section4>
 
       <section4 topic='Completion' anchor='session-component-execution-prompt-completion'>
@@ -1692,7 +1706,7 @@
           type='unavailable'>
   <complete xmlns='urn:xmpp:rayo:ext:1'>
     <stop xmlns='urn:xmpp:rayo:ext:complete:1'/>
-    <recording xmlns='urn:xmpp:rayo:record:complete:1' uri='xmpp:http://rayo.io/recordings/foo.mp3' duration='20000' size='12287492817'/>
+    <recording xmlns='urn:xmpp:rayo:record:complete:1' uri='xmpp:http://rayo.io/recordings/foo.wav' duration='20000' size='12287492817'/>
   </complete>
 </presence>
         ]]></example>
@@ -1717,7 +1731,7 @@
     </ul>
 
     <section3 topic='Call Redirection' anchor='session-termination-redirection'>
-      <p>If a client can determine a more appropriate target for an incoming call, it may wish to relay this information to the caller in the form of a URI (eg SIP). The client MUST do this before accepting a call. The target URI must be specified in the 'to' attribute of the redirect element.</p>
+      <p>If a client can determine a more appropriate target for an incoming call, it may wish to relay this information to the caller in the form of a URI (eg SIP). The target URI must be specified in the 'to' attribute of the redirect element.</p>
       <example caption="Client instructs a call to redirect, with some headers"><![CDATA[
 <iq from='juliet@capulet.lit/balcony'
     to='9f00061@call.shakespeare.lit'
@@ -1741,8 +1755,8 @@
     id='h7ed2'/>
       ]]></example>
 
-      <p>If the server is unable to perform the redirect because the call has already been accepted, it should return a not-allowed (cancel) error indicating such:</p>
-      <example caption="Server indicates that the call already has another DCP and that control of the call is no longer available."><![CDATA[
+      <p>If the server is unable to perform the redirect because the call is in a state where a redirect is not possible, it should return an unexpected-request (wait) error indicating such:</p>
+      <example caption="Server indicates that the call is in a state where a redirect is not possible."><![CDATA[
 <iq from='9f00061@call.shakespeare.lit'
     to='juliet@capulet.lit/balcony'
     type='error'
@@ -1752,8 +1766,8 @@
     <header name="x-skill" value="agent" />
     <header name="x-customer-id" value="8877" />
   </redirect>
-  <error type='cancel'>
-    <not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  <error type='wait'>
+    <unexpected-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
   </error>
 </iq>
       ]]></example>
@@ -1883,6 +1897,35 @@
 </iq>
     ]]></example>
   </section2>
+
+  <section2 topic='Instant Messages' anchor='session-im'>
+    <section3 topic='Call-bound Messages' anchor='session-im-call-bound'>
+      <p>XMPP message stanzas directed to the call's JID with a type of 'normal' MAY be forwarded to the calling party by translating the message into the calling party's protocol. In the case of SIP, this SHOULD follow the conventions set out in <a href="http://tools.ietf.org/html/draft-ietf-stox-im-06">draft-ietf-stox-im-06</a> with the exception of the &lt;thread/&gt; to Call-ID mapping, as the Call-ID will always be that of the calling party.</p>
+
+      <p>If a message is directed to the call's JID with a type other than 'normal' then the server MUST return a &lt;feature-not-implemented/&gt; error with a type of 'modify'. If no translation is possible then the server SHOULD return the same error but with a type of 'cancel'.</p>
+
+      <example caption="Translation of a XMPP message into a SIP MESSAGE"><![CDATA[
+<message
+    from='juliet@capulet.lit/balcony'
+    to='9f00061@call.shakespeare.lit'
+    type='normal'>
+  <body>Art thou not Romeo, and a Montague?</body>
+</message>
+
+MESSAGE sip:romeo@montague.lit SIP/2.0
+Via: SIP/2.0/UDP call.shakespeare.lit;branch=AmRHlGRD0WD7BHgM5fKc
+Max-Forwards: 70
+From: <sip:call.shakespeare.lit>;tag=78aBN3CgAB8MK
+To: <sip:romeo@montague.lit>;tag=Z7nlVUbvTOmV6
+Call-ID: 2819297471
+CSeq: 55119460 MESSAGE
+Content-Type: text/plain
+Content-Length: 35
+
+Art thou not Romeo, and a Montague?
+      ]]></example>
+    </section3>
+  </section2>
 </section1>
 <section1 topic='Formal Definition' anchor='def'>
 
@@ -1949,7 +1992,21 @@
     <p>The &lt;end/&gt; element has no attributes.</p>
 
     <section3 topic='End Reason Element' anchor='def-end-reason'>
-      <p>The following are valid end reason elements. Unless otherwise stated, they all MUST be empty, and they do not have any attributes.</p>
+      <p>The following are valid end reason elements. Unless otherwise stated, they all MUST be empty.</p>
+
+      <p>The attributes of the end reason element are as follows.</p>
+      <table caption='Attributes of End Reason Element'>
+        <tr>
+          <th>Attribute</th>
+          <th>Definition</th>
+          <th>Inclusion</th>
+        </tr>
+        <tr>
+          <td>platform-code</td>
+          <td>A platform-specific end code. This could be a SIP code, ITU-T Q.850 or some other system. The code may be an arbitrary string.</td>
+          <td>OPTIONAL</td>
+        </tr>
+      </table>
 
       <dl>
         <di>
@@ -2137,12 +2194,12 @@
       <tr>
         <td>call-uri</td>
         <td>Indicates the 3rd party call URI from which the target call should be unjoined.</td>
-        <td>REQUIRED unless mixer-name is set. MUST NOT be set if mixer-name is set.</td>
+        <td>OPTIONAL. MUST NOT be set if mixer-name is set.</td>
       </tr>
       <tr>
         <td>mixer-name</td>
         <td>Indicates the mixer name from which the target call should be unjoined.</td>
-        <td>REQUIRED unless call-uri is set. MUST NOT be set if call-uri is set.</td>
+        <td>OPTIONAL. MUST NOT be set if call-uri is set.</td>
       </tr>
     </table>
   </section2>
@@ -2469,7 +2526,7 @@
           <tr>
             <td>mode</td>
             <td>The method by which to collect input.</td>
-            <td>any|dtmf|voice</td>
+            <td>any|dtmf|voice|cpa</td>
             <td>any</td>
             <td>OPTIONAL</td>
           </tr>
@@ -2571,8 +2628,8 @@
       <section4 topic='Match' anchor='def-component-input-match'>
         <p>Indicates that the component came to an end due to one of its grammars matching the received input.</p>
         <p>The &lt;match/&gt; element MUST contain a valid response document within CDATA.</p>
-        <p>The attributes of the &lt;matchr/&gt; element are as follows.</p>
-          <table caption='Attributes of Grammar Element'>
+        <p>The attributes of the &lt;match/&gt; element are as follows.</p>
+          <table caption='Attributes of Match Element'>
             <tr>
               <th>Attribute</th>
               <th>Definition</th>
@@ -2627,6 +2684,12 @@
           </tr>
         </table>
       </section4>
+
+      <section4 topic='Input Timers Started Element' anchor='def-component-prompt-input-timers-started'>
+        <p>Indicates that the component's input timers have started.</p>
+        <p>The &lt;input-timers-started/&gt; element MUST be empty.</p>
+        <p>The &lt;input-timers-started/&gt; element has no attributes.</p>
+      </section4>
     </section3>
 
     <section3 topic='Media Recording' anchor='def-component-record'>
@@ -2648,7 +2711,7 @@
             <td>format</td>
             <td>File format used during recording.</td>
             <td>A valid format token, such as 'mp3', 'wav', 'h264'. Implementation specific.</td>
-            <td>mp3</td>
+            <td>wav</td>
             <td>OPTIONAL</td>
           </tr>
           <tr>
@@ -2996,6 +3059,16 @@
     </annotation>
   </element>
 
+  <complexType name="endReasonType">
+    <attribute name="platform-code" type="string" use="optional">
+      <annotation>
+        <documentation>
+          A platform-specific end code. This could be a SIP code, ITU-T Q.850 or some other system. The code may be an arbitrary string.
+        </documentation>
+      </annotation>
+    </attribute>
+  </complexType>
+
   <!-- End Event -->
   <element name="end">
     <annotation>
@@ -3006,42 +3079,42 @@
     <complexType>
       <sequence>
         <choice>
-          <element name="hungup" type="tns:empty">
+          <element name="hungup" type="tns:endReasonType">
             <annotation>
               <documentation>
                 Indication that the call ended due to a normal hangup by the remote party.
               </documentation>
             </annotation>
           </element>
-          <element name="hangup-command" type="tns:empty">
+          <element name="hangup-command" type="tns:endReasonType">
             <annotation>
               <documentation>
                 Indication that the call ended due to a normal hangup triggered by a hangup command.
               </documentation>
             </annotation>
           </element>
-          <element name="timeout" type="tns:empty">
+          <element name="timeout" type="tns:endReasonType">
             <annotation>
               <documentation>
                 Indication that the call ended due to a timeout in contacting the remote party.
               </documentation>
             </annotation>
           </element>
-          <element name="busy" type="tns:empty">
+          <element name="busy" type="tns:endReasonType">
             <annotation>
               <documentation>
                 Indication that the call ended due to being rejected by the remote party subsequent to being accepted.
               </documentation>
             </annotation>
           </element>
-          <element name="rejected" type="tns:empty">
+          <element name="rejected" type="tns:endReasonType">
             <annotation>
               <documentation>
                 Indication that the call ended due to being rejected by the remote party before being accepted.
               </documentation>
             </annotation>
           </element>
-          <element name="error" type="tns:empty">
+          <element name="error" type="tns:endReasonType">
             <annotation>
               <documentation>
                 Indication that the call ended due to a system error.
@@ -3798,6 +3871,7 @@
               <enumeration value="any" />
               <enumeration value="voice" />
               <enumeration value="dtmf" />
+              <enumeration value="cpa" />
             </restriction>
           </simpleType>
         </attribute>
@@ -3992,6 +4066,15 @@
     </complexType>
   </element>
 
+  <!-- Input Timers Started Event -->
+  <element name="input-timers-started">
+    <annotation>
+      <documentation>
+        Indicates that the component's input timers have started.
+      </documentation>
+    </annotation>
+  </element>
+
 </schema>
     ]]></code>
   </section2>
@@ -4018,7 +4101,7 @@
       </documentation>
     </annotation>
     <complexType>
-      <attribute name="format" type="token" use="optional" default="mp3">
+      <attribute name="format" type="token" use="optional" default="wav">
         <annotation>
           <documentation>
             File format used during recording.
