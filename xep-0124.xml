@@ -30,10 +30,11 @@
     &stpeter;
     &metajack;
     &lance;
+    &winfried;
     <revision>
-      <version>1.11rc2</version>
-      <date>2013-12-10</date>
-      <initials>ls</initials>
+      <version>1.11rc3</version>
+      <date>2014-02-10</date>
+      <initials>ls/wt</initials>
       <remark><p>Incorporated patches from community review.</p></remark>
     </revision>
     <revision>
@@ -218,6 +219,9 @@
     <p>If the client has data to send while a request is still open, it establishes a second socket connection to the connection manager to send a new request. The connection manager immediately responds to the previously held request (possibly with no data) and holds open this new request. This results in the connections switching roles;  the "old" connection is responded to and left awaiting new requests, while the "new" connection is now used for the long polling loop.</p>
     <p>The following diagram illustrates this technique (possibly after XMPP session establishment)</p>
     <code><![CDATA[
+(timeline running top-down)
+
+first socket                                      second socket
   |
  +-+ <-- empty body request
  |X|
@@ -353,7 +357,7 @@ Content-Length: 104
       <ul>
         <li><strong>'sid'</strong> -- This attribute specifies the SID</li>
         <li><strong>'wait'</strong> -- This is the longest time (in seconds) that the connection manager will wait before responding to any request during the session. The time MUST be less than or equal to the value specified in the session request.</li>
-        <li><strong>'hold'</strong> -- This attribute informs the client about the maximum number of requests the connection manager will keep waiting at any one time during the session. This value MUST NOT be greater than the value specified by the client in the session request.</li>
+        <li><strong>'requests'</strong> -- This attribute enables the connection manager to limit the number of simultaneous requests the client makes (see <link url="#overactive">Overactivity</link> and <link url="#poll">Polling Sessions</link>). This value must be larger than the 'hold' attribute value specified in the session request.  The RECOMMENDED value is one more than the value of the 'hold' attribute specified in the session request.</li>
       </ul>
       <p>The &lt;body/&gt; element SHOULD also include the following attributes (they SHOULD NOT be included in any other responses):</p>
       <ul>
@@ -361,7 +365,6 @@ Content-Length: 104
         <li><strong>'polling'</strong> -- This attribute specifies the shortest allowable polling interval (in seconds). This enables the client to not send empty request elements more often than desired (see <link url="#poll">Polling Sessions</link> and <link url="#overactive">Overactivity</link>).</li>
         <li><strong>'inactivity'</strong> -- This attribute specifies the longest allowable inactivity period (in seconds). This enables the client to ensure that the periods with no requests pending are never too long (see <link url="#poll">Polling Sessions</link> and <link url="#inactive">Inactivity</link>).</li>
         <li><strong>'hold'</strong> -- This attribute informs the client about the maximum number of requests the connection manager will keep waiting at any one time during the session. This value MUST NOT be greater than the value specified by the client in the session request.</li>
-        <li><strong>'requests'</strong> -- This attribute enables the connection manager to limit the number of simultaneous requests the client makes (see <link url="#overactive">Overactivity</link> and <link url="#poll">Polling Sessions</link>). This value must be larger than the 'hold' attribute value specified in the session request.  The RECOMMENDED value is one more than the value of the 'hold' attribute specified in the session request.</li>
         <li><strong>'to'</strong> -- This attribute communicates the identity of the backend server to which the client is attempting to connect.</li>
       </ul>
       <p>The connection manager MAY include an <strong>'accept'</strong> attribute in the session creation response element, to specify a comma-separated list of the content encodings it can decompress. After receiving a session creation response with an 'accept' attribute, clients MAY include an HTTP Content-Encoding header in subsequent requests (indicating one of the encodings specified in the 'accept' attribute) and compress the bodies of the requests accordingly.</p>
@@ -582,7 +585,7 @@ Content-Length: 68
     <p>Note: If the connection manager did not specify a 'polling' attribute in the session creation response, then it MUST allow the client to poll as frequently as it chooses.</p>
   </section1>
   <section1 topic='Terminating the BOSH Session' anchor='terminate'>
-    <p>At any time, the client MAY gracefully terminate the session by sending a &lt;body/&gt; element with a 'type' attribute set to "terminate". The termination request MAY include one or more payloads that the connection manager MUST forward to the server to ensure graceful logoff.</p>
+    <p>At any time, the client MAY gracefully terminate the session by sending a <body/> element with a 'type' attribute set to "terminate". The termination request MAY include one or more payloads that the connection manager MUST forward to the server to ensure graceful logoff. The payload in the termination request SHOULD NOT need any response from the server.</p>
     <example caption="Session termination by client">
 <![CDATA[POST /webclient HTTP/1.1
 Host: httpcm.example.com
@@ -597,7 +600,7 @@ Content-Length: 153
   <presence type='unavailable'
             xmlns='jabber:client'/>
 </body>]]></example>
-    <p>The connection manager SHOULD respond to this request with an HTTP 200 OK containing an empty &lt;body/&gt; element.</p>
+    <p>The connection manager SHOULD respond to this request with an HTTP 200 OK containing an empty &lt;body/&gt; element. The connection manager SHOULD acknowledge the session termination on the oldest connection with a HTTP 200 OK containing a <body/> element of the type 'terminate'. On all other open connections, the connection manager SHOULD respond with an HTTP 200 OK containing an empty <body/> element.</p>
       <example caption="Connection manager acknowledges termination">
 <![CDATA[HTTP/1.1 200 OK
 Content-Type: text/xml; charset=utf-8
