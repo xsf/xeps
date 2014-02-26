@@ -55,7 +55,7 @@ def getText(nodelist):
 # READ in XEP filename (sans extension)
 
 xepname = sys.argv[1];
-if len(sys.argv) < 3:
+if len(sys.argv) >= 3:
     approver = sys.argv[2]
 else:
     approver = "XMPP Council"
@@ -114,7 +114,7 @@ fromaddr = "editor@xmpp.org"
 # for testing...
 # toaddrs = "editor@jabber.org"
 # for real...
-toaddrs = "editor@xmpp.org"
+toaddrs = "standards@xmpp.org"
 
 thesubject = 'Proposed XMPP Extension: ' + title
 introline = 'The XMPP Extensions Editor has received a proposal for a new XEP.'
@@ -143,4 +143,3 @@ server.sendmail(fromaddr, toaddrs, msg)
 server.quit()
 
 # END
-
