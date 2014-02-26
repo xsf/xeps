@@ -6,7 +6,7 @@
 # Last Modified: 2004-09-14
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
-# HowTo: ./inxep.py filename
+# HowTo: ./inxep.py filename approver
 # (note: do not include extension!)
 
 ## LICENSE ##
@@ -55,6 +55,10 @@ def getText(nodelist):
 # READ in XEP filename (sans extension)
 
 xepname = sys.argv[1];
+if len(sys.argv) < 3:
+    approver = sys.argv[2]
+else:
+    approver = "XMPP Council"
 
 xepfile = 'inbox/' + xepname + '.xml'
 
@@ -102,7 +106,7 @@ remark = getText(remarkNode.childNodes)
 #
 #    URL: http://xmpp.org/extensions/inbox/$xepname.html
 #
-#    The XMPP Council will now consider whether to accept
+#    The $approver will now consider whether to accept
 #    this proposal as a full XEP.
 #
 
@@ -110,14 +114,14 @@ fromaddr = "editor@xmpp.org"
 # for testing...
 # toaddrs = "editor@jabber.org"
 # for real...
-toaddrs = "standards@xmpp.org"
+toaddrs = "editor@xmpp.org"
 
 thesubject = 'Proposed XMPP Extension: ' + title
 introline = 'The XMPP Extensions Editor has received a proposal for a new XEP.'
 titleline = 'Title: ' + title
 abstractline = 'Abstract: ' + abstract
 urlline = 'URL: http://xmpp.org/extensions/inbox/' + xepname + '.html'
-actionline = 'The XMPP Council will decide in the next two weeks whether to accept this proposal as an official XEP.'
+actionline = 'The ' + approver + ' will decide in the next two weeks whether to accept this proposal as an official XEP.'
 
 msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr
 msg = msg + "To: %s\r\n" % toaddrs
