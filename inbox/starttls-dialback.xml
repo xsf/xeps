@@ -1,0 +1,309 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Impact of TLS and DNSSEC on Dialback</title>
+  <abstract>This specification provides documentation how Server Dialback is used together with Transport Layer Security, and discusses how the security considerations of Dialback are changed by the introduction of TLS and/or DNSSEC.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Historical</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0220</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <revision>
+    <version>0.0.3</version>
+    <date>2014-02-28</date>
+    <initials>dwd</initials>
+    <remark>
+       <p>Changed title and added more security considerations.</p>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2013-11-13</date>
+    <initials>dwd</initials>
+    <remark><p>Added some narrative and a section on dwd.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2013-11-04</date>
+    <initials>ph</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+  &fippo;
+  &dcridland;
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Although &xep0220; describes dialback as being run before any other negotiation, it is typically run over TLS where supported. This allows it to be used as a simple convenient fallback to X.509 Strong Authentication within the TLS layer, as described in &rfc6120;, and also affords greater protection to the exchange.</p>
+  <p>This document describes these practises, and also describes various functionally equivalent shortcuts to the protocol, including that known as "dialback without dialback".</p>
+</section1>
+<section1 topic='Protocol' anchor='protocol'>
+  <section2 topic='Dramatis Personae'>
+    <p>This document will tell a tale of two servers; orchard.capulet.example is trying to contact home.montague.example. Each server operates a single domain; these are capulet.example and montague.example respectively.</p>
+  </section2>
+  <section2 topic='Classic Dialback Flow'>
+    <p>The traditional pattern is shown here:</p>
+  <code><![CDATA[
+orchard.capulet.     home.montague.
+example              example 
+(as Initiating)      (as Receiving
+   Server)              Server)
+----------------     -------------
+    |                    |
+    |  [if necessary,    |
+    |   perform DNS      |
+    |   lookup on        |
+    |   Target Domain,   |
+    |   open TCP         |
+    |   connection,      |
+    |   and establish    |
+    |   stream]          |
+    | -----------------> |
+    |  (ID D60000229F)   |
+    |                    |
+    |      send          |               capulet.example
+    |  dialback key      |             (as Authoritative 
+    | -----(STEP 1)----> |                 Server)
+    |                    |             -----------------
+    |                    |  [if necessary,    |
+    |                    |   perform DNS      |
+    |                    |   lookup on        |
+    |                    |   Sender Domain,   |
+    |                    |   open TCP         |
+    |                    |   connection,      |
+    |                    |   and establish    |
+    |                    |   stream]          |
+    |                    | -----------------> |
+    |                    |                    |
+    |                    |       send         |
+    |                    |   verify request   |
+    |                    | ----(STEP 2)-----> |
+    |                    |                    |
+    |                    |       send         |
+    |                    |   verify response  |
+    |                    | <----(STEP 3)----- |
+    |                    |                    |
+    |      report        |                    |
+    |  dialback result   |                    |
+    | <-----(STEP 4)---- |                    |
+  ]]></code>
+  </section2>
+  <section2 topic='XMPP Exchanges in Classic Dialback over TLS'>
+    <p>This traditional pattern involves the following protocol exchanges when dialback over TLS is used:</p>
+      <example caption="Initiating Server Opens Stream"><![CDATA[
+<stream:stream 
+        xmlns:stream='http://etherx.jabber.org/streams' 
+        xmlns='jabber:server' 
+        from='capulet.example' 
+        to='montague.example' 
+        version='1.0'>
+      ]]></example>
+      <example caption="Receiving Server Responds with a stream header and advertises TLS feature"><![CDATA[
+<stream:stream 
+        xmlns:stream='http://etherx.jabber.org/streams' 
+        xmlns='jabber:server' 
+        id='D60000229F' 
+        from='montague.example' 
+        to='capulet.example'
+        version='1.0'>
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+</stream:features>
+      ]]></example>
+      <example caption="Initiating Server Sends STARTTLS command"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+      ]]></example>
+      <example caption="Receiving Server informs Initiating Server to proceed"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+      ]]></example>
+      <example caption="Initiating Server Opens Stream"><![CDATA[
+<stream:stream 
+        xmlns:stream='http://etherx.jabber.org/streams' 
+        xmlns='jabber:server' 
+        from='capulet.example' 
+        to='montague.example' 
+        version='1.0'>
+      ]]></example>
+      <example caption="Receiving Server Responds with a stream header"><![CDATA[
+<stream:stream 
+        xmlns:stream='http://etherx.jabber.org/streams' 
+        xmlns='jabber:server' 
+        id='D60000229F' 
+        from='montague.example' 
+        to='capulet.example'
+        version='1.0'>
+<stream:features>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+  </mechanisms>
+</stream:features>
+      ]]></example>
+      <example caption="Initiating Server Sends Dialback Key (Step 1)"><![CDATA[
+<db:result
+    from='capulet.example'
+    to='montague.example'>
+  b4835385f37fe2895af6c196b59097b16862406db80559900d96bf6fa7d23df3
+</db:result>
+      ]]></example>
+      <example caption="Receiving Server Sends Verification Request to Authoritative Server (Step 2)"><![CDATA[
+<db:verify
+    from='montague.example'
+    id='D60000229F'
+    to='capulet.example'>
+  b4835385f37fe2895af6c196b59097b16862406db80559900d96bf6fa7d23df3
+</db:verify>
+      ]]></example>
+      <example caption="Receiving Server is Informed by Authoritative Server that Key is Valid (Step 3)"><![CDATA[
+<db:verify
+  from='capulet.example'
+  id='D60000229F'
+  to='montague.example'
+  type='valid'/>
+      ]]></example>
+      <example caption="Initiating Server Receives Valid Verification Result from Receiving Server (Step 4)"><![CDATA[
+<db:result
+  from='montague.example'
+  to='capulet.example'
+  type='valid'/>
+      ]]></example>
+  </section2>
+  <section2 topic='Dialback without dialback flow' anchor='dwd'>
+    <p>If during the initial connection, home.montague.example is able to determine that the certificate presented is trustworthy, and authenticates orchard.capulet.example as authorized to offer the XMPP service for capulet.example, then the flow can be shortcutted heavily, allowing the entire Authoritative Server process to be elided.</p>
+    <p>This is particularly useful in cases where the dialback exchange is a subsequent exchange used in piggybacking, as it remains the only solution for piggybacking with strong authentication.</p>
+  <code><![CDATA[
+orchard.capulet.     home.montague.
+example              example 
+(as Initiating)      (as Receiving
+   Server)              Server)
+----------------     -------------
+    |                    |
+    |  [if necessary,    |
+    |   perform DNS      |
+    |   lookup on        |
+    |   Target Domain,   |
+    |   open TCP         |
+    |   connection,      |
+    |   and establish    |
+    |   stream]          |
+    | -----------------> |
+    |  (ID D60000229F)   |
+    |                    |
+    |      send          |
+    |  dialback key      |
+    | -----(STEP 1)----> |
+    |                    |
+    |                    |  [observe certificate
+    |                    |   trustworthy and
+    |                    |   correct for capulet.example
+    |                    |   as per RFC 6125]
+    |                    |
+    |      report        |
+    |  dialback result   |
+    | <-----(STEP 4)---- |
+  ]]></code>
+  </section2>
+  <section2 topic='XMPP Exchanges in Dialback without dialback'>
+    <p>This traditional pattern involves the following protocol exchanges when dialback over TLS is used:</p>
+      <example caption="Initiating Server Opens Stream"><![CDATA[
+<stream:stream 
+        xmlns:stream='http://etherx.jabber.org/streams' 
+        xmlns='jabber:server' 
+        from='capulet.example' 
+        to='montague.example' 
+        version='1.0'>
+      ]]></example>
+      <example caption="Receiving Server Responds with a stream header and advertises TLS feature"><![CDATA[
+<stream:stream 
+        xmlns:stream='http://etherx.jabber.org/streams' 
+        xmlns='jabber:server' 
+        id='D60000229F' 
+        from='montague.example' 
+        to='capulet.example'
+        version='1.0'>
+<stream:features>
+  <starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'>
+    <required/>
+  </starttls>
+</stream:features>
+      ]]></example>
+      <example caption="Initiating Server Sends STARTTLS command"><![CDATA[
+<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+      ]]></example>
+      <example caption="Receiving Server informs Initiating Server to proceed"><![CDATA[
+<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>
+      ]]></example>
+      <example caption="Initiating Server Opens Stream"><![CDATA[
+<stream:stream 
+        xmlns:stream='http://etherx.jabber.org/streams' 
+        xmlns='jabber:server' 
+        from='capulet.example' 
+        to='montague.example' 
+        version='1.0'>
+      ]]></example>
+      <example caption="Receiving Server Responds with a stream header"><![CDATA[
+<stream:stream 
+        xmlns:stream='http://etherx.jabber.org/streams' 
+        xmlns='jabber:server' 
+        id='D60000229F' 
+        from='montague.example' 
+        to='capulet.example'
+        version='1.0'>
+<stream:features>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    <mechanism name='EXTERNAL'/>
+  </mechanisms>
+</stream:features>
+      ]]></example>
+      <p>Note that having authenticated the certificate and found it authorized for capulet.example, montague.example has offered EXTERNAL above. It's not clear why capulet.example does not avail itself of the offer below; however it should be noted that EXTERNAL would not be available with piggybacking for example.</p>
+      <example caption="Initiating Server Sends Dialback Key (Step 1)"><![CDATA[
+<db:result
+    from='capulet.example'
+    to='montague.example'>
+  b4835385f37fe2895af6c196b59097b16862406db80559900d96bf6fa7d23df3
+</db:result>
+      ]]></example>
+      <p>Critically, it is at this point that home.montague.example both authenticates and checks authorization on the certificate, or at least ensure that the certificate presented at this stage matches that presented at the initial handshake.</p>
+      <example caption="Initiating Server Receives Valid Verification Result from Receiving Server (Step 4)"><![CDATA[
+<db:result
+  from='montague.example'
+  to='capulet.example'
+  type='valid'/>
+  from='montague.example'
+  to='capulet.example'
+  type='valid'/>
+      ]]></example>
+  </section2>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>With respect to <strong>XEP-0220</strong>'s security considerations, the adaptations in this document add at minimum channel encryption and integrity, which forces an attacker into making an active attack, rather than passive eavesdropping. This raises the cost of an attack significantly. However, unless the certificates are authenticated, there is still a man-in-the-middle attack possible, and the reliance on unauthenticated DNS remains problematic.</p>
+  <section2 title='Same Certificate shortcut'>
+  <p>Use of the "Same Certificate" shortcut described in XXXX is not thought to materially alter the security profile beyond that described above. In particular, it does not alter the level of trust an implementation may put in authentication.</p>
+  </section2>
+  <section2 title='Dialback without dialback shortcut'>
+  <p>Use of the "Dialback without dialback" shortcut described in XXXX raises the level of authentication to that of the TLS/SASL-EXTERNAL process described in <strong>RFC 6120</strong>, and is thought to be indistinguishable from a security standpoint. As such, the security considerations relating to this in <strong>RFC 6120</strong> et al apply.</p>
+  </section2>
+  <section2 title="DNSSEC">
+    <p>If both SRV and A/AAAA records are protected by DNSSEC, this means that the correct address for the peer can be proven, removing DNS forgery as an attack vector. Without TLS, it is however still possible to mount an array of attacks, including IP spoofing and eavesdropping.</p>
+    <p>With TLS, however, the situation improves. Since TLS protects against a naïve IP spoofing attack, a routing protocol attack (such as BGP hijacking) is required to forge the server.</p>
+  </section2>
+  <p>In addition, it is of critical importance to check the certificate at the time when the dialback result is received, and not only in the initial handshake. This protects against an attack based around renegotiation.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This document requires no interaction with the XMPP Registrar.</p>
+</section1>
+</xep>
