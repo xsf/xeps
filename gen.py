@@ -74,10 +74,10 @@ def serializeInlineImage(output_dir, no, attrValue):
 	plaindata = base64.b64decode(data)
 
 	# Do something smart with mime_type
-	if mime_type in ('image/png'):
+	if mime_type in ('image/png', 'image/jpeg'):
 		file_ext = mime_type.split('/')[1]
-		with open(output_dir + '/' + 'inlineimage-' + str(no) + '.' + file_ext, 'wb') as f:
-			f.write(plaindata)
+		f = open(output_dir + '/' + 'inlineimage-' + str(no) + '.' + file_ext, 'wb')
+		f.write(plaindata)
 
 def serializeXEPInlineImages(output_dir, filename):
 	dom = parse(filename)
@@ -418,7 +418,7 @@ def main(argv):
 	
 	executeCommand("sed -e '1s/<?[^?]*?>//' " + CONFIGPATH + "/extensions.xml > " + XEPPATH + "/../includes/xeplist.txt")
 	
-	#executeCommand("rm -rfd /tmp/xepbuilder")
+	executeCommand("rm -rfd /tmp/xepbuilder")
 	
 	makeBundle()
 	
