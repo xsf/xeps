@@ -402,7 +402,7 @@ def main(argv):
 	executeCommand("mkdir /tmp/xepbuilder")
 	executeCommand("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
 	executeCommand("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
-	executeCommand("cp -r deps /tmp/xepbuilder")
+	executeCommand("cp -r deps/* /tmp/xepbuilder/")
 	
 	executeCommand("cp xep.ent /tmp/xep.ent")
 	files_to_delete.append("/tmp/xep.ent")
