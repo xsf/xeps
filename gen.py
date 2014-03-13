@@ -58,7 +58,7 @@ last_build = {}
 
 files_to_delete = [];
 
-def serializeInlineImage(output_dir, no, attrValue):
+def serializeInlineImage(output_dir, xep_nr, no, attrValue):
 	up = urlparse.urlparse(attrValue)
 	head, data = up.path.split(',')
 	bits = head.split(';')
@@ -76,14 +76,14 @@ def serializeInlineImage(output_dir, no, attrValue):
 	# Do something smart with mime_type
 	if mime_type in ('image/png', 'image/jpeg'):
 		file_ext = mime_type.split('/')[1]
-		f = open(output_dir + '/' + 'inlineimage-' + str(no) + '.' + file_ext, 'wb')
+		f = open(output_dir + '/' + 'inlineimage-' + xep_nr + '-' + str(no) + '.' + file_ext, 'wb')
 		f.write(plaindata)
 
-def serializeXEPInlineImages(output_dir, filename):
+def serializeXEPInlineImages(output_dir, xep_nr, filename):
 	dom = parse(filename)
 	imgs = dom.getElementsByTagName('img')
 	for (no, img) in enumerate(imgs):
-		serializeInlineImage(output_dir, no, img.attributes["src"].value)
+		serializeInlineImage(output_dir, xep_nr, no, img.attributes["src"].value)
 
 def getText(nodelist):
     thisText = ""
@@ -270,7 +270,7 @@ def buildXHTML( file, nr ):
 	return True
 
 def buildPDF( file, nr ):
-	serializeXEPInlineImages("/tmp/xepbuilder", file)
+	serializeXEPInlineImages("/tmp/xepbuilder", nr, file)
 
 	error, desc = executeCommand("xsltproc -o /tmp/xepbuilder/xep-" + nr + ".tex.xml xep2texml.xsl " + file)
 	if not checkError(error, desc):
@@ -402,7 +402,7 @@ def main(argv):
 	executeCommand("mkdir /tmp/xepbuilder")
 	executeCommand("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
 	executeCommand("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
-	executeCommand("cp deps/tabu.sty /tmp/xepbuilder/tabu.sty")
+	executeCommand("cp -r deps /tmp/xepbuilder")
 	
 	executeCommand("cp xep.ent /tmp/xep.ent")
 	files_to_delete.append("/tmp/xep.ent")

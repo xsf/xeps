@@ -409,8 +409,7 @@
 <xsl:template match="img">
   <env name="figure"><opt>H</opt>
     <cmd name="centering" />
-    <!--<cmd name="includegraphics"><opt><TeXML escape="0">width=.9\textwidth</TeXML></opt><parm>inlineimage-<xsl:value-of select="count(preceding::img)" /></parm></cmd>-->
-    <cmd name="adjustimage"><parm><TeXML escape="0">max size={.9\textwidth}{.9\textheight}</TeXML></parm><parm>inlineimage-<xsl:value-of select="count(preceding::img)" /></parm></cmd>
+    <cmd name="adjustimage"><parm><TeXML escape="0">max size={.9\textwidth}{.9\textheight}</TeXML></parm><parm>inlineimage-<xsl:value-of select="/xep/header/number" />-<xsl:value-of select="count(preceding::img)" /></parm></cmd>
   </env>
 </xsl:template>
 
