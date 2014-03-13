@@ -48,6 +48,7 @@ from xml.dom.minidom import parse,parseString,Document,getDOMImplementation
 # for serializing inline images
 import base64
 import urlparse
+import urllib
 
 XEPPATH = "/var/www/vhosts/xmpp.org/extensions"
 CONFIGPATH = "/var/local/xsf"
@@ -60,24 +61,28 @@ files_to_delete = [];
 
 def serializeInlineImage(output_dir, xep_nr, no, attrValue):
 	up = urlparse.urlparse(attrValue)
-	head, data = up.path.split(',')
-	bits = head.split(';')
-	mime_type = bits[0] if bits[0] else 'text/plain'
-	charset, b64 = 'ASCII', False
-	for bit in bits[1]:
-		if bit.startswith('charset='):
-			charset = bit[8:]
-		elif bit == 'base64':
-			b64 = True
-
-	# Do something smart with charset and b64 instead of assuming
-	plaindata = base64.b64decode(data)
-
-	# Do something smart with mime_type
-	if mime_type in ('image/png', 'image/jpeg'):
-		file_ext = mime_type.split('/')[1]
-		f = open(output_dir + '/' + 'inlineimage-' + xep_nr + '-' + str(no) + '.' + file_ext, 'wb')
-		f.write(plaindata)
+	if up.scheme == 'data':
+		head, data = up.path.split(',')
+		bits = head.split(';')
+		mime_type = bits[0] if bits[0] else 'text/plain'
+		charset, b64 = 'ASCII', False
+		for bit in bits[1]:
+			if bit.startswith('charset='):
+				charset = bit[8:]
+			elif bit == 'base64':
+				b64 = True
+	
+		# Do something smart with charset and b64 instead of assuming
+		plaindata = base64.b64decode(data)
+	
+		# Do something smart with mime_type
+		if mime_type in ('image/png', 'image/jpeg'):
+			file_ext = mime_type.split('/')[1]
+			f = open(output_dir + '/' + 'inlineimage-' + xep_nr + '-' + str(no) + '.' + file_ext, 'wb')
+			f.write(plaindata)
+	elif up.scheme == 'http':
+		file_name, file_ext = os.path.splitext(up.path)
+		urllib.urlretrieve(attrValue, output_dir + '/' + 'inlineimage-' + xep_nr + '-' + str(no) + file_ext)
 
 def serializeXEPInlineImages(output_dir, xep_nr, filename):
 	dom = parse(filename)
