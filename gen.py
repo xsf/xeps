@@ -45,6 +45,10 @@ from xeputil import getLatestXEPFilename
 
 from xml.dom.minidom import parse,parseString,Document,getDOMImplementation
 
+# for serializing inline images
+import base64
+import urlparse
+
 XEPPATH = "/var/www/vhosts/xmpp.org/extensions"
 CONFIGPATH = "/var/local/xsf"
 
@@ -53,6 +57,33 @@ fast = False
 last_build = {}
 
 files_to_delete = [];
+
+def serializeInlineImage(output_dir, no, attrValue):
+	up = urlparse.urlparse(attrValue)
+	head, data = up.path.split(',')
+	bits = head.split(';')
+	mime_type = bits[0] if bits[0] else 'text/plain'
+	charset, b64 = 'ASCII', False
+	for bit in bits[1]:
+		if bit.startswith('charset='):
+			charset = bit[8:]
+		elif bit == 'base64':
+			b64 = True
+
+	# Do something smart with charset and b64 instead of assuming
+	plaindata = base64.b64decode(data)
+
+	# Do something smart with mime_type
+	if mime_type in ('image/png'):
+		file_ext = mime_type.split('/')[1]
+		with open(output_dir + '/' + 'inlineimage-' + str(no) + '.' + file_ext, 'wb') as f:
+			f.write(plaindata)
+
+def serializeXEPInlineImages(output_dir, filename):
+	dom = parse(filename)
+	imgs = dom.getElementsByTagName('img')
+	for (no, img) in enumerate(imgs):
+		serializeInlineImage(output_dir, no, img.attributes["src"].value)
 
 def getText(nodelist):
     thisText = ""
@@ -239,7 +270,8 @@ def buildXHTML( file, nr ):
 	return True
 
 def buildPDF( file, nr ):
-    	
+	serializeXEPInlineImages("/tmp/xepbuilder", file)
+
 	error, desc = executeCommand("xsltproc -o /tmp/xepbuilder/xep-" + nr + ".tex.xml xep2texml.xsl " + file)
 	if not checkError(error, desc):
 		return False
@@ -386,7 +418,7 @@ def main(argv):
 	
 	executeCommand("sed -e '1s/<?[^?]*?>//' " + CONFIGPATH + "/extensions.xml > " + XEPPATH + "/../includes/xeplist.txt")
 	
-	executeCommand("rm -rfd /tmp/xepbuilder")
+	#executeCommand("rm -rfd /tmp/xepbuilder")
 	
 	makeBundle()
 	
