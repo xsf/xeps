@@ -281,7 +281,7 @@ def buildPDF( file, nr ):
 	if not checkError(error, desc):
 		return False
 	
-	error, desc = executeCommand("texml -e utf8 /tmp/xepbuilder/xep-" + nr + ".tex.xml /tmp/xepbuilder/xep-" + nr + ".tex")
+	error, desc = executeCommand("./texml -e utf8 /tmp/xepbuilder/xep-" + nr + ".tex.xml /tmp/xepbuilder/xep-" + nr + ".tex")
 	if not checkError(error, desc):
 		return False
 	
@@ -310,7 +310,7 @@ def buildPDF( file, nr ):
 	#	os.chdir(olddir)
 	#	return False
 		
-	error, desc = executeCommand("xelatex -interaction=batchmode xep-" + nr + ".tex")
+	#error, desc = executeCommand("xelatex -interaction=batchmode xep-" + nr + ".tex")
 	#if not checkError(error, desc):
 	#	os.chdir(olddir)
 	#	return False

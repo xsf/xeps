@@ -38,6 +38,7 @@ do
     xsltproc xep.xsl xep-$f.xml > $xeppath/xep-$f.html
     xsltproc ref.xsl xep-$f.xml > $xeppath/refs/reference.XSF.XEP-$f.xml
     xsltproc examples.xsl xep-$f.xml > $xeppath/examples/$f.xml
+    ./gen.py $f
     cp xep-$f.xml $xeppath/
     ./gen.py $f
 done < nums.txt
