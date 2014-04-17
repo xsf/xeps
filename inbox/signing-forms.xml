@@ -1,0 +1,540 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+	<header>
+		<title>Signing Forms</title>
+		<abstract>This specification describes a method whereby a client can sign a form using credentials not related to the current connection.</abstract>
+		&LEGALNOTICE;
+		<number>xxxx</number>
+		<status>ProtoXEP</status>
+		<type>Standards Track</type>
+		<sig>Standards</sig>
+		<approver>Council</approver>
+		<dependencies>
+			<spec>XMPP Core</spec>
+			<spec>XEP-0004</spec>
+			<spec>XEP-0030</spec>
+			<spec>XEP-0068</spec>
+			<spec>XEP-0077</spec>
+		</dependencies>
+		<supersedes/>
+		<supersededby/>
+		<shortname>signing-forms</shortname>
+		<author>
+			<firstname>Peter</firstname>
+			<surname>Waher</surname>
+			<email>peter.waher@clayster.com</email>
+			<jid>peter.waher@jabber.org</jid>
+			<uri>http://www.linkedin.com/in/peterwaher</uri>
+		</author>
+		<revision>
+			<version>0.0.1</version>
+			<date>2014-04-16</date>
+			<initials>pw</initials>
+			<remark>
+				<p>First draft.</p>
+			</remark>
+		</revision>
+	</header>
+	<section1 topic='Introduction' anchor='intro'>
+		<p>
+			Sometimes there might be a need for an application to sign a data form (&xep0004;) using other credentials than provided by the XMPP account or connection. An example can
+			be automatic account creation using &xep0077;. Many server operators disable the in-band registration feature since it makes it possible for malicious
+			users or robots to freely create accounts on the server. One way to combat robots, has been through the use of &xep0158;. But in some cases, like in the Internet of Things,
+			it is not robots that are the problem, but malicious users.
+		</p>
+		<p>
+			This document describes a method whereby forms can be signed using other credentials. This can be used in an In-band registration form to sign the form with the credentials
+			of a special account on the server with permissions to create new XMPP accounts, with perhaps a limit on number of accounts that can be created. This method can be used by
+			manufacturers of devices for Internet of Things, so that devices can create accounts automatically on XMPP servers in an orderly fashion, and manufacturers are allowed to
+			administer and control their automatically created accounts separately. It also provides a mechanism whereby server operators can monitor who is responsible for account creation
+			and to what extent.
+		</p>
+		<p>
+			The algorithm used to sign a form, is the <span class='ref'>
+				<link url='http://tools.ietf.org/html/rfc5849'>OAuth 1.0 Protocol</link>
+			</span>
+			<note>
+				RFC-5849: The OAuth 1.0 Protocol &lt;<link url='http://tools.ietf.org/html/rfc5849'>http://tools.ietf.org/html/rfc5849</link>&gt;.
+			</note>. It is a popular algorithm used to sign API calls. Even though <span class='ref'>
+			<link url='http://tools.ietf.org/html/rfc6749'>OAuth version 2</link>
+		</span>
+		<note>
+			RFC-6749: The OAuth 2.0 Authorization Framework &lt;<link url='http://tools.ietf.org/html/rfc6749'>http://tools.ietf.org/html/rfc6749</link>&gt;.
+		</note> exists, it has not been chosen due to
+			<span class='ref'>
+				<link url='http://hueniverse.com/2012/07/26/oauth-2-0-and-the-road-to-hell/'>controversy</link>
+			</span>
+			<note>
+				OAuth 2.0 and the Road to Hell &lt;<link url='http://hueniverse.com/2012/07/26/oauth-2-0-and-the-road-to-hell/'>http://hueniverse.com/2012/07/26/oauth-2-0-and-the-road-to-hell/</link>&gt;.
+			</note>. and that it is not sure it provides a better solution.
+		</p>
+		<p>
+			A fixed algorithm has been chosen in favor of SASL, to avoid multiple callbacks during form signature.
+			The idea is to make form signature possible without having to do any intermediate server callbacks, or having to change the original request returning the form. Using SASL and
+			recommended SASL authentication methods, such as SCRAM-SHA-1, at least one extra server callback would be necessary. If including a callback when selecting SASL method after
+			having retrieved the form, at least two extra callbacks would be required in some cases. Even by fixing SASL algorithm, the common algorithms not requiring server callback, such 
+			as DIGEST-MD5, are not considered secure enough.
+		</p>
+	</section1>
+	<section1 topic='Signing a form' anchor='signingform'>
+		<p>
+			A form that needs to be signed by the client using external credentials, shows this by including a hidden <strong>FORM_TYPE</strong> field valued
+			<strong>urn:xmpp:xdata:signature:oauth1</strong>. The sub-namespace <strong>:oauth1</strong> identifies the algorithm to be used, in this case OAUTH v1.0.
+		</p>
+		<example caption='Form requiring signature'>
+			<![CDATA[
+    <x xmlns='jabber:x:data' type='form'>
+      <title>Create Account</title>
+      <field type='hidden' var='FORM_TYPE'>
+        <value>urn:xmpp:xdata:signature:oauth1</value>
+      </field>
+      <field type='hidden' var='oauth_version'>
+        <value>1.0</value>
+      </field>
+      <field type='hidden' var='oauth_signature_method'>
+        <value>HMAC-SHA1</value>
+      </field>
+      <field type='hidden' var='oauth_token'>
+        <value>...<value>
+      </field>
+      <field type='hidden' var='oauth_token_secret'>
+        <value>...<value>
+      </field>
+      <field type='hidden' var='oauth_nonce'>
+        <value/>
+      </field>
+      <field type='hidden' var='oauth_timestamp'>
+        <value/>
+      </field>
+      <field type='hidden' var='oauth_consumer_key'>
+        <value/>
+      </field>
+      <field type='hidden' var='oauth_signature'>
+        <value/>
+      </field>
+      <field type='text-single' label='User Name' var='UserName'>
+        <required/>
+      </field>
+      <field type='text-single' label='Password' var='Password'>
+        <required/>
+      </field>
+    </x>]]>
+		</example>
+		<p>
+			The form contains a set of invisible parameters that the underlying software signing the form and supporting this specification must understand. These are:
+		</p>
+		<table caption='OAUTH parameters'>
+			<tr>
+				<th>Name</th>
+				<th>Description</th>
+			</tr>
+			<tr>
+				<td>oauth_version</td>
+				<td>Must be 1.0. Is not changed by the client performing the signing.</td>
+			</tr>
+			<tr>
+				<td>oauth_signature_method</td>
+				<td>Specifies the signature method, or hash function, to use when signing the form. This can be changed by the client. Possible values are: HMAC-SHA1, RSA-SHA1 and PLAINTEXT.</td>
+			</tr>
+			<tr>
+				<td>oauth_token</td>
+				<td>This is a token provided by the server to the client. This parameter might not be available if the server has provided the client with this token earlier during the session.</td>
+			</tr>
+			<tr>
+				<td>oauth_token_secret</td>
+				<td>This is a temporary secret shared between the server and client, and is related to the token. This parameter might not be available if the server has provided the client with this token earlier during the session.</td>
+			</tr>
+			<tr>
+				<td>oauth_nonce</td>
+				<td>A nonce value that the client has to set. Can be a random alphanumerical string.</td>
+			</tr>
+			<tr>
+				<td>oauth_timestamp</td>
+				<td>Number of seconds since 1st of January 1970, 00:00:00 GMT. The client has to set this at the time of signature.</td>
+			</tr>
+			<tr>
+				<td>oauth_consumer_key</td>
+				<td>A key identifying the account doing the signing of the form. The client has to set this to identify who performs the signature.</td>
+			</tr>
+			<tr>
+				<td>oauth_signature</td>
+				<td>The signature, signing the form. The client has to set this with the signature of the form, as calculated and described below.</td>
+			</tr>
+		</table>
+		<p>
+			Before calculating the signature, the following functions need to be defined:
+		</p>
+		<dl>
+			<di>
+				<dt>Base64(x)</dt>
+				<dd>
+					<p>
+						Converts the sequence of octets <strong>x</strong> into a Base-64 encoded string.
+					</p>
+				</dd>
+			</di>
+			<di>
+				<dt>Escape(s)</dt>
+				<dd>
+					<p>
+						The string <strong>s</strong> are escaped using the &rfc3986; percent-encoding (%xx) mechanism. Characters not in the unreserved character set (§ 2.3) MUST be encoded.
+						Characters in the unreserved character set MUST NOT be encoded. Hexadecimal characters in encodings MUST be upper case. Text names and values MUST be encoded as UTF-8
+						octets before percent-encoding them per <span class='ref'>
+							<link url='http://www.ietf.org/rfc/rfc3629.txt'>RFC 3629</link>
+						</span> <note>
+							RFC 3629: UTF-8, a transformation format of ISO 10646 &lt;<link url='http://www.ietf.org/rfc/rfc3629.txt'>http://www.ietf.org/rfc/rfc3629.txt</link>&gt;.
+						</note>.
+					</p>
+					<p>
+						Unreserved characters are alphanumeric characters (a-z, A-Z, 0-9), hyphen ('-'), period ('.'), underscore ('_') and tilde ('~').
+					</p>
+				</dd>
+			</di>
+			<di>
+				<dt>H(x)</dt>
+				<dd>
+					<p>
+						Corresponds to the Hash-function to use, according to the parameter <strong>oauth_signature_method</strong>. It computes the hash value of the octets <strong>x</strong>,
+						and returns a sequence of octets.
+					</p>
+				</dd>
+			</di>
+		</dl>
+		<p>
+			To calculate the signature of the form, follow the steps in the following subsections, in the same order.
+		</p>
+		<section2 topic='Choose Hash function' anchor='hashfunction'>
+			<p>
+				You choose Hash function by setting the parameter <strong>oauth_signature_method</strong> to either <strong>HMAC-SHA1</strong>, <strong>RSA-SHA1</strong> or <strong>PLAINTEXT</strong>.
+			</p>
+		</section2>
+		<section2 topic='Sort parameters' anchor='sortparameters'>
+			<p>
+				First, all form parameters to be signed, including hidden parameters and the OAUTH parameters except <strong>oauth_token_secret</strong> and <strong>oauth_signature</strong>,
+				are sorted by variable name (<strong>var</strong>).
+			</p>
+		</section2>
+		<section2 topic='Calculating Parameter String (PStr)' anchor='pstr'>
+			<p>
+				Each (name, value) pair in the list of sorted parameters are first transformed into pairs of <strong>Escape(name)=Escape(value)</strong> segments, and then concatenated
+				into one string, where each segment is delimited using an ampersand ('&amp;') character.
+			</p>
+			<example caption='Calculating Parameter String'>
+				<![CDATA[
+    PStr:=Escape(name_1)+'='+Escape(value_1)+'&'+...+Escape(name_N)+'='+Escape(value_N)]]>
+			</example>
+		</section2>
+		<section2 topic='Calculating Signature Base String (BStr)' anchor='bstr'>
+			<p>
+				The Signature Base String (BStr) is then formed concatenating <strong>Escape(type)</strong> (the form type used when submitting the form),
+				<strong>Escape(to)</strong> (the full destination address, including resource, if any) and <strong>Escape(PStr)</strong>, using ampersands ('&amp;') as
+				delimiter.
+			</p>
+			<example caption='Calculating Signature Base String'>
+				<![CDATA[
+    BStr:=Escape(type)+'&'+Escape(to)+'&'+Escape(PStr)]]>
+			</example>
+		</section2>
+		<section2 topic='Generating Signature' anchor='signature'>
+			<p>
+				Depending on which signature method is chosen, different Hash functions are used. If <strong>HMAC-SHA1</strong> is chosen, then the Hash function
+				<strong>HMAC(text, key)</strong> according to &rfc2104; is used as follows:
+			</p>
+			<example caption='HMAC-SHA1'>
+				<![CDATA[
+    H(x):=HMAC-SHA1(x,Escape(oauth_consumer_secret)+'&'+Escape(oauth_token_secret))
+    oauth_signature:=Escape(Base64(H(BStr)))]]>
+			</example>
+			<p>
+				Here, the client signing the form must have the <strong>oauth_consumer_secret</strong> available to be able to sign the form correctly.
+			</p>
+			<p>
+				If <strong>RSA-SHA1</strong> is chosen, then the signature method <strong>RSASSA-PKCS1-v1_5(K, M)</strong> according to &rfc3447; is used as follows:
+			</p>
+			<example caption='RSA-SHA1'>
+				<![CDATA[
+    H(x):=RSASSA-PKCS1-v1_5(oauth_consumer_secret,x)
+    oauth_signature:=Escape(Base64(H(BStr)))]]>
+			</example>
+			<p>
+				In this example, the <strong>oauth_consumer_secret</strong> must be an RSA private key.
+			</p>
+			<p>
+				If <strong>PLAINTEXT</strong> is chosen, no Hash function is used. Instead, the signature is calculated as follows:
+			</p>
+			<example caption='RSA-SHA1'>
+				<![CDATA[
+    oauth_signature:=Escape(oauth_consumer_secret)+Escape(oauth_token_secret)]]>
+			</example>
+		</section2>
+		<section2 topic='Sending Form' anchor='sendingform'>
+			<p>
+				Once the signature has been calculated, the corresponding parameter <strong>oauth_signature</strong> has to be set in the form before sending it to the destination
+				address.
+			</p>
+		</section2>
+		<section2 topic='Validating Form' anchor='validatingform'>
+			<p>
+				When the recipient receives the signed formm it performs the same calculations as above, based on the parameters received, and knowledge of the shared secret which it
+				can look up by using the parameter <strong>oauth_consumer_key</strong>.
+			</p>
+		</section2>
+	</section1>
+	<section1 topic='Use Cases' anchor='usecases'>
+		<section2 topic='Securing In-Band Registration of new accounts' anchor='ibr'>
+			<p>
+				As mentioned above, a major use case for signing forms, is in-band registration for creating new accounts on an XMPP Server, as defined in XEP-0077.
+			</p>
+			<example caption='Entity Requests Registration Fields from Host'>
+				<![CDATA[
+    <iq type='get'
+        from='juliet@capulet.com/balcony'
+        to='contests.shakespeare.lit'
+        id='reg3'>
+      <query xmlns='jabber:iq:register'/>
+    </iq>]]>
+			</example>
+			<example caption='Host Returns Registration Form to Entity requiring signature'>
+				<![CDATA[
+    <iq type='result'
+        from='contests.shakespeare.lit'
+        to='juliet@capulet.com/balcony'
+        id='reg3'>
+      <query xmlns='jabber:iq:register'>
+        <instructions>
+          Use the enclosed form to register. If your Jabber client does not
+          support Data Forms, visit http://www.shakespeare.lit/contests.php
+        </instructions>
+        <x xmlns='jabber:x:data' type='form'>
+          <title>Contest Registration</title>
+          <instructions>
+            Please provide the following information
+            to sign up for our special contests!
+          </instructions>
+          <field type='hidden' var='FORM_TYPE'>
+            <value>urn:xmpp:xdata:signature:oauth1</value>
+          </field>
+          <field type='text-single' label='Given Name' var='first'>
+            <required/>
+          </field>
+          <field type='text-single' label='Family Name' var='last'>
+            <required/>
+          </field>
+          <field type='text-single' label='Email Address' var='email'>
+            <required/>
+          </field>
+          <field type='list-single' label='Gender' var='x-gender'>
+            <option label='Male'><value>M</value></option>
+            <option label='Female'><value>F</value></option>
+          </field>
+          <field type='hidden' var='oauth_version'>
+            <value>1.0</value>
+          </field>
+          <field type='hidden' var='oauth_signature_method'>
+            <value>HMAC-SHA1</value>
+          </field>
+          <field type='hidden' var='oauth_token'>
+            <value>...<value>
+          </field>
+          <field type='hidden' var='oauth_token_secret'>
+            <value>...<value>
+          </field>
+          <field type='hidden' var='oauth_nonce'>
+            <value/>
+          </field>
+          <field type='hidden' var='oauth_timestamp'>
+            <value/>
+          </field>
+          <field type='hidden' var='oauth_consumer_key'>
+            <value/>
+          </field>
+          <field type='hidden' var='oauth_signature'>
+            <value/>
+          </field>
+        </x>
+      </query>
+    </iq>]]>
+			</example>
+			<example caption='User Submits Signed Registration Form'>
+				<![CDATA[
+    <iq type='set'
+        from='juliet@capulet.com/balcony'
+        to='contests.shakespeare.lit'
+        id='reg4'>
+      <query xmlns='jabber:iq:register'>
+        <x xmlns='jabber:x:data' type='submit'>
+          <field type='hidden' var='FORM_TYPE'>
+            <value>urn:xmpp:xdata:signature:oauth1</value>
+          </field>
+          <field type='text-single' label='Given Name' var='first'>
+            <value>Juliet</value>
+          </field>
+          <field type='text-single' label='Family Name' var='last'>
+            <value>Capulet</value>
+          </field>
+          <field type='text-single' label='Email Address' var='email'>
+            <value>juliet@capulet.com</value>
+          </field>
+          <field type='list-single' label='Gender' var='x-gender'>
+            <value>F</value>
+          </field>
+          <field type='hidden' var='oauth_version'>
+            <value>1.0</value>
+          </field>
+          <field type='hidden' var='oauth_signature_method'>
+            <value>HMAC-SHA1</value>
+          </field>
+          <field type='hidden' var='oauth_token'>
+            <value>...<value>
+          </field>
+          <field type='hidden' var='oauth_token_secret'>
+            <value>...<value>
+          </field>
+          <field type='hidden' var='oauth_nonce'>
+            <value>...<value>
+          </field>
+          <field type='hidden' var='oauth_timestamp'>
+            <value>...<value>
+          </field>
+          <field type='hidden' var='oauth_consumer_key'>
+            <value>...<value>
+          </field>
+          <field type='hidden' var='oauth_signature'>
+            <value>...<value>
+          </field>
+        </x>
+      </query>
+    </iq>]]>
+			</example>
+			<p>
+				In case a form signature is not value, the server MUST respond with a <strong>bad-request</strong> error message, as follows:
+			</p>
+			<example caption='Error message when form signature is invalid'>
+				<![CDATA[
+    <iq type='error'
+        from='contests.shakespeare.lit'
+        to='juliet@capulet.com/balcony'
+        id='reg4'>
+      <error code='400' type='modify'>
+        <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+      </error>
+    </iq>]]>
+			</example>
+		</section2>
+	</section1>
+	<section1 topic='Determining Support' anchor='support'>
+		<p>If an entity supports signing forms as specified herein, it MUST advertise that fact by returning a feature of "urn:xmpp:xdata:signature:oauth1" in response to &xep0030; information requests.</p>
+		<example caption="Service discovery information request">
+			<![CDATA[
+    <iq type='get'
+        from='clayster.com'
+        to='device@clayster.com'
+        id='disco1'>
+      <query xmlns='http://jabber.org/protocol/disco#info'/>
+    </iq>]]>
+		</example>
+		<example caption="Service discovery information response">
+			<![CDATA[
+    <iq type='result'
+        from='device@clayster.com'
+        to='clayster.com'
+        id='disco1'>
+      <query xmlns='http://jabber.org/protocol/disco#info'>
+        ...
+        <feature var='urn:xmpp:xdata:signature:oauth1'/>
+        ...
+      </query>
+    </iq>]]>
+		</example>
+		<p>
+			In order for an application to determine whether an entity supports this protocol, where possible it SHOULD use the dynamic, presence-based profile of service discovery defined
+			in &xep0115;. However, if an application has not received entity capabilities information from an entity, it SHOULD use explicit service discovery instead.
+		</p>
+	</section1>
+	<section1 topic='Implementation Notes' anchor='impl'>
+		<section2 topic='Signature algorithms and namespaces' anchor='namespaces'>
+			<p>
+				This document only specifies signatures using OAUTH v1.0. Each entity that supports form signatures using this method, reports this by including the
+				namespace <strong>urn:xmpp:xdata:signature:oauth1</strong> in its features. The specification is extensible, in that it can allow for future signature
+				methods to be used, by defining new namespaces replacing <strong>oauth1</strong> by another string corresponding to the desired method, but leaving the
+				base part of the namespace <strong>urn:xmpp:xdata:signature:</strong> intact.
+			</p>
+		</section2>
+	</section1>
+	<section1 topic='Security Considerations' anchor='security'>
+		<section2 topic='PLAINTEXT' anchor='secplaintext'>
+			<p>
+				The PLAINTEXT signature method should only be used if SSL/TLS is used by both the entity signing the form as well as the creator of the form. If the creator of the form
+				is a server, this later part can be ignored. If unsure, PLAINTEXT should only be used in development &amp; debugging cycles of an application, and not in production environments.
+			</p>
+		</section2>
+		<section2 topic='Session parameters' anchor='secsession'>
+			<p>
+				If the server provides information to be used in signing a form, it must also verify that the client only changes values it is allowed to change. An alternative is to
+				not use the values provided by the client for the corresponding server-side parameters when calculating the signature on the server side. This makes sure a client
+				cannot willfully alter server-side parameters when it returns the signed form.
+			</p>
+		</section2>
+	</section1>
+	<section1 topic='IANA Considerations' anchor='iana'>
+		<p>This document requires no interaction with &IANA;.</p>
+	</section1>
+	<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+		<p>
+			The &REGISTRAR; includes the following information in its registries.
+		</p>
+		<section2 topic='Field Standardization' ancor='fieldstandardization'>
+			<p>
+				&xep0068; defines a process for standardizing the fields used within Data Forms qualified by a particular namespace, and XEP-0128 describes how to use
+				field standardization in the context of service discovery. This section registers fields for server information scoped by the "urn:xmpp:xdata:signature:oauth1" FORM_TYPE.
+			</p>
+			<example caption="Registry submission">
+				<![CDATA[
+<form_type>
+  <name>urn:xmpp:xdata:signature:oauth1</name>
+  <doc>XEP-xxxx</doc>
+  <desc>
+    Forms that require signatures using OAuth v1.0 signature algorithm.
+  </desc>
+  <field
+      var='oauth_version'
+      type='hidden'
+      label='OAuth version. Must be 1.0.'/>
+  <field
+      var='oauth_signature_method'
+      type='hidden'
+      label='OAuth signature method. Can be "HMAC-SHA1", "RSA-SHA1" or "PLAINTEXT".'/>
+  <field
+      var='oauth_token'
+      type='hidden'
+      label='OAuth token. Provided by the creator of the form.'/>
+  <field
+      var='oauth_token_secret'
+      type='hidden'
+      label='OAuth token secret. Provided by the creator of the form.'/>
+  <field
+      var='oauth_nonce'
+      type='hidden'
+      label='Nonce value. Random string, created by the entity signing the form.'/>
+  <field
+      var='oauth_timestamp'
+      type='hidden'
+      label='Seconds since 1st of January 1970, 00:00:00 GMT. Value provided by the entity signing the form.'/>
+  <field
+      var='oauth_consumer_key'
+      type='hidden'
+      label='Consumer Key, identifying the entity signing the form using an external set of credentials. Value provided by the entity signing the form.'/>
+  <field
+      var='oauth_signature'
+      type='hidden'
+      label='Form signature. Value provided by the entity signing the form.'/>
+</form_type>]]>
+			</example>
+		</section2>
+	</section1>
+</xep>
