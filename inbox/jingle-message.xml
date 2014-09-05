@@ -1,0 +1,327 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Jingle Message Initiation</title>
+  <abstract>This specification provides a way for the initiator of a Jingle session to propose sending an invitation in an XMPP message stanza, thus taking advantage of message delivery semantics instead of sending IQ stanzas to all of the responder's online resources or choosing a particular online resource.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XEP-0166</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>jingle-message</shortname>
+  &fippo;
+  &stpeter;
+  <revision>
+    <version>0.0.2</version>
+    <date>2014-08-28</date>
+    <initials>psa/ph</initials>
+    <remark><p>Added explanatory text; defined more granular actions (propose, retract, accept, reject, proceed); mandated inclusion of description elements within the propose element, as in jingle-pub; defined schema.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2014-07-15</date>
+    <initials>ph</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Because &xep0166; uses &IQ; stanzas for all interactions between the parties to a session, when sending an invitation the initiator needs to either pick one of the responder's resources (e.g., based on &xep0115; information) or send the invitation to all of the responder's resources that support Jingle. The first method is prone to error (e.g., in cases where more than one resource supports Jingle) and the second method requires sending a separate invitation to each resource. Neither of these is ideal. Although &xep0276; proposed a way to overcome the problem, it too has issues (e.g., dependency on a presence service and the need to reveal all supported XMPP features) and in any case has not been widely implemented.</p> 
+  <p>This document proposes an alternative solution: exchanging a &MESSAGE; stanza before sending the Jingle invitation in an &IQ; stanza. (Indeed, in the early discussions leading up to the Jingle protocol the authors considered using &MESSAGE; stanzas instead of &IQ; stanzas, but chose the latter for their deterministic handling semantics.) This method effectively results in a kind of decloaking for Jingle purposes.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>This protocol was designed with the following requirements in mind:</p>
+  <ul>
+    <li>Allow responder to choose the resource or device on which to take the call.</li>
+    <li>Result in "ring-on-all-devices" behavior.</li>
+    <li>Not rely on presence.</li>
+    <li>Make use of "forking" semantics for message stanzas.</li>
+    <li>Allow indication of session content.</li>
+    <li>Work with push notifications.</li>
+  </ul>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Indicating Intent to Start a Session' anchor='intent'>
+    <p>In order to prepare for sending a Jingle invitation, the initiator (e.g., Romeo) sends a &MESSAGE; stanza containing a &lt;propose/&gt; element qualified by the 'urn:xmpp:jingle-message:0' namespace. The &lt;propose/&gt; element MUST possess an 'id' attribute that will be used for the session invitation and MUST contain one &lt;description/&gt; element for each media type associated with the intended session.</p>
+    <example caption="Initiator Sends Intent Message"><![CDATA[
+<message from='romeo@montague.example/orchard'
+    to='juliet@capulet.example'>
+  <propose xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'>
+    <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'/>
+  </propose>
+</message>
+    ]]></example>
+    <p>The server of the responder (e.g., Juliet) distributes this message stanza to all of Juliet's available resources (and to push resources as appropriate). Those devices might start ringing as a result.</p>
+    <example caption="Responder's Server Distributes Intent Message"><![CDATA[
+<!-- delivered to juliet@capulet.example/desktop -->
+<message from='romeo@montague.example/orchard'
+         to='juliet@capulet.example'>
+  <propose xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'>
+    <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'/>
+  </propose>
+</message>
+
+<!-- delivered to juliet@capulet.example/tablet -->
+<message from='romeo@montague.example/orchard'
+         to='juliet@capulet.example'>
+  <propose xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'>
+    <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'/>
+  </propose>
+</message>
+
+<!-- delivered to juliet@capulet.example/phone -->
+<message from='romeo@montague.example/orchard'
+         to='juliet@capulet.example'>
+  <propose xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'>
+    <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'/>
+  </propose>
+</message>
+    ]]></example>
+    <p>Consistent with the recommendation for one-to-one chat sessions in Section 5.1 of &rfc6121;, the initiator SHOULD also send directed presence to the responder if the two entities do not already share presence information; including Entity Capabilities (XEP-0115) information in this directed presence stanza enables the responder to know the availability of the initiator (e.g., in case the message is actually delivered quite a bit later because it is saved to offline storage) and also to know the XMPP feautures supported by the initiator.</p>
+    <example caption="Initiator Sends Directed Presence"><![CDATA[
+<presence to='romeo@montague.example/orchard'
+          from='juliet@capulet.example'>
+  <c xmlns='http://jabber.org/protocol/caps' 
+     hash='sha-1'
+     node='http://psi-im.org'
+     ver='q07IKJEyjvHSyhy//CH0CxmKi8w='/>
+</presence>
+    ]]></example>
+  </section2>
+  <section2 topic='Disavowing Intent to Start a Session' anchor='retract'>
+    <p>It can happen that the initiator might want to disavow intent to send a session invitation (e.g., because the initiator has accepted another session). The initiator can do so by sending a message stanza containing a &lt;retract/&gt; element specifying the same session ID.</p>
+    <example caption="Initiator Sends Stop Message"><![CDATA[
+<message from='romeo@montague.example/orchard'
+    to='juliet@capulet.example'>
+  <retract xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'/>
+</message>
+    ]]></example>
+  </section2>
+  <section2 topic='Accepting Intent to Start a Session' anchor='accept'>
+  <p>Upon receiving the intent message, the responder's various devices will "ring" and the responder will answer the call on a particular device. Here we assume that since this is an audio-only call, Juliet chooses to take the call on the device associated with her "phone" resource.</p>
+  <p>As a first step, her "phone" resource informs all of her resources about accepting the call by sending a message to her own bare JID containing an &lt;accept/&gt; element specifying the session ID of the original &lt;propose/&gt; message.</p>
+  <example caption="One of Responder's Resources Accepts the Call"><![CDATA[
+<message from='juliet@capulet.example/phone'
+         to='juliet@capulet.example'>
+  <accept xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'/>
+</message>
+]]></example>
+  <p>Juliet's server broadcasts this accept message to all of her available resources (as described in RFC 6121), which stop ringing:</p>
+  <example caption="Responder's Server Delivers Accept Message"><![CDATA[
+<!-- delivered to juliet@capulet.example/desktop -->
+<message from='juliet@capulet.example/phone'
+         to='juliet@capulet.example'>
+  <accept xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'/>
+</message>
+
+<!-- delivered to juliet@capulet.example/tablet -->
+<message from='juliet@capulet.example/phone'
+         to='juliet@capulet.example'>
+  <accept xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'/>
+</message>
+
+<!-- delivered to juliet@capulet.example/phone -->
+<message from='juliet@capulet.example/phone'
+         to='juliet@capulet.example'>
+  <accept xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'/>
+</message>
+    ]]></example>
+    <p>Next, the device from which Juliet accepted the call tells Romeo to proceed with the session (via a message stanza containing a &lt;proceed/&gt; element), and also sends directed presence for the reasons described above.</p>
+    <example caption="Responder Sends Directed Presence and Start Message"><![CDATA[
+<message from='juliet@capulet.example/phone'
+         to='romeo@montague.example/orchard'>
+  <proceed xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'/>
+</message>
+
+<presence from='juliet@capulet.example/phone'
+    to='romeo@montague.example/orchard'>
+  <c xmlns='http://jabber.org/protocol/caps' 
+     hash='sha-1'
+     node='http://code.google.com/p/exodus'
+     ver='QgayPKawpkPSDYmwT/WM94uAlu0='/>
+</presence>
+    ]]></example>
+  </section2>
+  <section2 topic='Rejecting Intent to Start a Session' anchor='reject'>
+  <p>Instead of accepting the call, the responder might want to ignore the call and tell all of her devices to stop ringing (e.g., perhaps because Romeo is getting to be a bit of a nuisance). She does this by rejecting the call on one of her devices and having that device tell all of the other devices to stop ringing, in the form of a message to her own bare JID containing an &lt;reject/&gt; element specifying the session ID of the original &lt;propose/&gt; message.</p>
+  <example caption="One of Responder's Resources Rejects the Call"><![CDATA[
+<message from='juliet@capulet.example/tablet'
+         to='juliet@capulet.example'>
+  <reject xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'/>
+</message>
+]]></example>
+  <p>Juliet's server broadcasts this reject message to all of her available resources (as described in RFC 6121), which stop ringing:</p>
+  <example caption="Responder's Server Delivers Reject Message"><![CDATA[
+<!-- delivered to juliet@capulet.example/desktop -->
+<message from='juliet@capulet.example/tablet'
+         to='juliet@capulet.example'>
+  <reject xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'/>
+</message>
+
+<!-- delivered to juliet@capulet.example/tablet -->
+<message from='juliet@capulet.example/tablet'
+         to='juliet@capulet.example'>
+  <reject xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'/>
+</message>
+
+<!-- delivered to juliet@capulet.example/phone -->
+<message from='juliet@capulet.example/tablet'
+         to='juliet@capulet.example'>
+  <reject xmlns='urn:xmpp:jingle-message:0' id='a73sjjvkla37jfea'/>
+</message>
+    ]]></example>
+  </section2>
+  <section2 topic='Initiating the Jingle Session' anchor='initiate'>
+    <p>Now Romeo actually initiates the session (segue to Jingle itself).</p>
+    <example caption="Initiation"><![CDATA[
+<iq from='romeo@montague.example/orchard'
+    id='ih28sx61'
+    to='juliet@capulet.example/phone'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-initiate'
+          initiator='romeo@montague.example/orchard'
+          sid='a73sjjvkla37jfea'>
+    <content creator='initiator' name='voice'>
+      <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'>
+        <payload-type id='96' name='speex' clockrate='16000'/>
+        <payload-type id='97' name='speex' clockrate='8000'/>
+        <payload-type id='18' name='G729'/>
+        <payload-type id='0' name='PCMU'/>
+        <payload-type id='103' name='L16' clockrate='16000' channels='2'/>
+        <payload-type id='98' name='x-ISAC' clockrate='8000'/>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:ice-udp:1'
+                 pwd='asd88fgpdd777uzjYhagZg'
+                 ufrag='8hhy'>
+        <candidate component='1'
+                   foundation='1'
+                   generation='0'
+                   id='el0747fg11'
+                   ip='10.0.1.1'
+                   network='1'
+                   port='8998'
+                   priority='2130706431'
+                   protocol='udp'
+                   type='host'/>
+        <candidate component='1'
+                   foundation='2'
+                   generation='0'
+                   id='y3s2b30v3r'
+                   ip='192.0.2.3'
+                   network='1'
+                   port='45664'
+                   priority='1694498815'
+                   protocol='udp'
+                   rel-addr='10.0.1.1'
+                   rel-port='8998'
+                   type='srflx'/>
+      </transport>
+    </content>
+  </jingle>
+</iq>
+    ]]></example>
+  </section2>
+</section1>
+<section1 topic='Open Issues' anchor='issues'>
+  <p>The following issues remain to be closed:</p>
+  <ul>
+    <li>Specify how this works (if at all) with resource locking.</li>
+    <li>Specify if and how to use messages of type 'headline'.</li>
+  </ul>
+</section1>
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>Thanks to Lance Stout for his feedback.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Because exchanging messages with other entities is effectively is a presence leak, an XMPP client that implements the receiving side of this specification MUST disable sending of proceed messages by default and MUST enable the feature only as a result of explicit user confirmation. Such confirmation can be provided per request, by whitelisting requests received from Jingle initiators in the responder's contact list, or through some other suitable means as long as sending proceed messages does not occur by default.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:jingle:jingle-message:0</li>
+    </ul>
+    <p>The &REGISTRAR; includes the foregoing namespace to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
+  </section2>
+  <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    xmlns:xml='http://www.w3.org/XML/1998/namespace'
+    targetNamespace='urn:xmpp:jingle-message:0'
+    xmlns='urn:xmpp:jingle-message:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='accept'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='id' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='proceed'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='id' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='propose'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace='##other' minOccurs='1' maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='id' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='reject'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='id' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='retract'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='empty'>
+          <xs:attribute name='id' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>
+  ]]></code>
+</section1>
+</xep>
