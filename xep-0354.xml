@@ -1,0 +1,413 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Customizable Message Routing</title>
+  <abstract>This specification specifies customizable behavior of RFC 6121 section 8.5.2.1.1 to allow various message routing algorithms (e.g., for load balancing).</abstract>
+  <legal>
+    <copyright>This XMPP Extension Protocol is copyright (c) 1999 - 2014 by the XMPP Standards Foundation (XSF).</copyright>
+    <permissions>Permission is hereby granted, free of charge, to any person obtaining a copy of this specification (the &quot;Specification&quot;), to make use of the Specification without restriction, including without limitation the rights to implement the Specification in a software program, deploy the Specification in a network service, and copy, modify, merge, publish, translate, distribute, sublicense, or sell copies of the Specification, and to permit persons to whom the Specification is furnished to do so, subject to the condition that the foregoing copyright notice and this permission notice shall be included in all copies or substantial portions of the Specification. Unless separate permission is granted, modified works that are redistributed shall not contain misleading information regarding the authors, title, number, or publisher of the Specification, and shall not claim endorsement of the modified works by the authors, any organization or project to which the authors belong, or the XMPP Standards Foundation.</permissions>
+    <warranty>## NOTE WELL: This Specification is provided on an &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. In no event shall the XMPP Standards Foundation or the authors of this Specification be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the Specification or the implementation, deployment, or other use of the Specification. ##</warranty>
+    <liability>In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall the XMPP Standards Foundation or any author of this Specification be liable for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising out of the use or inability to use the Specification (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if the XMPP Standards Foundation or such author has been advised of the possibility of such damages.</liability>
+    <conformance>This XMPP Extension Protocol has been contributed in full conformance with the XSF's Intellectual Property Rights Policy (a copy of which may be found at &lt;<link url='http://xmpp.org/extensions/ipr-policy.shtml'>http://xmpp.org/extensions/ipr-policy.shtml</link>&gt; or obtained by writing to XSF, P.O. Box 1641, Denver, CO 80201 USA).</conformance>
+  </legal>
+  <number>0354</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>XEP-0030</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <author>
+    <firstname>Florian</firstname>
+    <surname>Schmaus</surname>
+    <email>flo@geekplace.eu</email>
+    <jid>flo@geekplace.eu</jid>
+  </author>
+  <revision>
+    <version>0.1</version>
+    <date>2014-10-15</date>
+    <initials>XEP Editor (aw)</initials>
+    <remark><p>Initial published version approved by the XMPP Council.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2014-09-22</date>
+    <initials>fs</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>
+The "Server Rules for Processing XML Stanzas" section in &rfc6121; defines only a "one receives" or "all receive" algorithm for message routing if the receiving entity of a message stanza has multiple connected resources and the message is addressed to a bare JID. Also RFC 6121 does not define a method to check or change the currently used message routing algorithm. Furthermore, none of the described routing algorithms is a good match when it comes down to achieve load-balancing between the connected resources, which is sometimes desirable.
+</p>
+  <p>
+  This extensions solves those issues by allowing clients to configure their desired message routing algorithm. By exploiting the freedom provided by RFC 6121 which allows servers to implement their own algorithm for determining the "most available" resource.
+  </p>
+<p>
+&xep0254; defines a XEP to queue PubSub items, which could be used as alternative approach, instead of the herein defined message routing algorithms ('urn:xmpp:cmr:roundrobin' and 'urn:xmpp:cmr:weighted'). But this solution requires more and complexer code on the server and client side, while the guarantees provided by XEP-0254 are not always required.
+</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+<p>
+The authors have designed the customizable message routing protocol with the following requirements in mind:
+</p>
+<ul>
+<li><p>The protocol MUST NOT violate the server rules for processing XML Stanzas as defined in RFC 6121 § 8</p></li>
+<li><p>The protocol should be easy to use by clients and easy to adopt by server implementations</p></li>
+<li><p>The protocol must by extensible by further message routing algorithms</p></li>
+</ul>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+<p>The following terms are used throughout this document</p>
+  <dl>
+  <di><dt>Customizable Message Routing (CMR)</dt><dd>The name of this XEP and the protocol defined by it.</dd></di>
+  <di><dt>Message Routing Algorithm</dt><dd>An algorithm that defines how a server processes message stanzas send to a server-local bare JID of type 'message' or 'chat', with at least one available or connected resource of the receiver (RFC 6121 § 8.5.2.1.1).</dd></di>
+</dl>
+</section1>
+
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Non-balancing Message Routing Algorithms'>
+<p>
+Non-balancing message algorithms consists of the traditional algorithms that are widely used by XMPP implementations as defined in RFC 6121 § 8.5.2.1.1 and &rfc3921;. They usually try to send a message either to the all resources or try to determine the best resource based on some heuristic. They where designed with human-to-human interaction in mind.
+</p>
+<p>
+Examples for non-balancing algorithms include:
+</p>
+<ul>
+<li><p>Deliver to all ('urn:xmpp:cmr:all')</p></li>
+<li><p>Deliver to most active resource ('urn:xmpp:cmr:mostactive')</p></li>
+</ul>
+</section2>
+<section2 topic='Balancing Message Routing Algorithms'>
+<p>
+Balanced message routing algorithms try to distribute messages between the available resources of the receiver. They are ideal for use with the Internet of Things (IoT) and especially machine to machine (M2M) technologies.
+</p>
+<p>
+Consider a large deployment of sensor nodes send their data to a cluster for further processing. Every cluster node establishes a connection using the same bare JID but a different resource for receiving the sensor data. Furthermore, after a cluster connection is authenticated, it queries the XMPP service for the CMR status, and enables a balancing message routing algorithm.
+</p>
+<p>
+The sensor nodes can now send their data as payload of a message stanza to the cluster. The server will evenly distributed the data between the cluster nodes by using a round-robin scheme.
+</p>
+<p>
+Since CMR balances message stanzas of type 'normal' or 'chat', PubSub notifications will also be evenly distributed between the connected resources of an connection where CMR is active.
+</p>
+<p>
+Examples for balancing algorithms include:
+</p>
+<ul>
+<li><p>Load balance using round robin ('urn:xmpp:cmr:roundrobin')</p></li>
+<li><p>Weighted load balancing ('urn:xmpp:cmr:weighted')</p></li>
+</ul>
+</section2>
+  <section2 topic='Non-Use Cases'>
+	  <p>
+		  CMR is not suitable for scenarios where the routing behavior should also consider resources with negative priority. This would violate RFC 6121 § 8.5.2.1.1. A suitable specification for such use cases may already exists. For example a proper solution that involves forking of messages even to resources with negatives priorities is explained in Section 6 of &xep0280;.
+	  </p>
+  </section2>
+</section1>
+
+<section1 topic='Protocol' anchor='protocol'>
+<section2 topic='Discovering Support'>
+
+An entity advertises support for this protocol by including the 'urn:xmpp:cmr:0' feature in its service discovery information features as specified in &xep0030; or section 6.3 of &xep0115;.
+
+<example caption='Service discovery information request'><![CDATA[
+<iq xmlns='jabber:client'
+    from='romeo@montague.example/garden'
+    id='info1'
+    to='montague.example'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+
+<example caption='Service discovery information response'><![CDATA[
+<iq xmlns='jabber:client'
+    from='montague.example'
+    id='info1'
+    to='romeo@montague.example/garden'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:cmr:0'/>
+    ...
+  </query>
+</iq>
+]]></example>
+</section2>
+<section2 topic='Quering the current active and available message routing algorithms'>
+<p>
+Clients are able to query the server for the currently active and available message routing algorithms.
+</p>
+<example caption='Client requests the current CMR state'><![CDATA[
+<iq xmlns='jabber:client'
+    from='romeo@montague.example/garden'
+    id='state1'
+    type='get'>
+  <query xmlns='urn:xmpp:cmr:0'/>
+</iq>
+]]></example>
+
+<p>
+ The result IQ, must include exactly one &lt;active/&gt; element and at least one &lt;available/&gt; element. Both elements must posses a &apos;algorithm&apos; attribute, which contains the name of the available or active algorithm.
+</p>
+<example caption='Server returns information about the CMR state'><![CDATA[
+<iq xmlns='jabber:client'
+  from='romeo@montague.example'
+  id='state1'
+  to='romeo@montague.example/garden'
+  type='result'>
+<query xmlns='xmlns='urn:xmpp:cmr:0'>
+  <active algorithm='urn:xmpp:cmr:all' />
+  <available algorithm='urn:xmpp:cmr:all'/>
+  <available algorithm='urn:xmpp:cmr:mostactive'/>
+  <available algorithm='urn:xmpp:cmr:roundrobin'/>
+  <available algorithm='urn:xmpp:cmr:weighted'/>
+</iq>
+]]></example>
+
+</section2>
+<section2 topic='Changing the active message routing algorithm'>
+<p>
+To change the active message routing algorithm, the client sends an &IQ; of type &apos;set&apos; containing a &apos;cmr&apos; child element which contains the desired algorithm as value of the &apos;algorithm&apos; attribute.
+</p>
+<example caption='Client requests to change the active message routing algorithm'><![CDATA[
+<iq xmlns='jabber:client'
+    from='romeo@montague.example/garden'
+    id='change1'
+    type='set'>
+  <cmr xmlns='urn:xmpp:cmr:0'
+       algorithm='urn:xmpp:cmr:roundrobin' />
+</iq>
+]]></example>
+
+<p>
+The server will respond with an result &IQ; if the routing algorithm was successfully changed.
+</p>
+<example caption='Server acknowledges the change of the active message routing algorithm'><![CDATA[
+<iq xmlns='jabber:client'
+    from='romeo@montague.example'
+    id='change1'
+    to='romeo@montague.example/garden'
+    type='result'/>
+]]></example>
+
+<p>
+If the server is unable to change the message routing algorithm, then an error &IQ; is returned to the client.
+</p>
+  <example caption='Server informs client that the routing algorithm was not changed'><![CDATA[
+<iq xmlns='jabber:client'
+    from='romeo@montague.example'
+    id='change1'
+    to='romeo@montague.example/garden'
+    type='error'>
+  <error type='cancel'>
+    <not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>]]></example>
+</section2>
+
+<section2 topic='Message Routing Hints'>
+
+If allowed and supported by the server, clients are able to annotate message stanza with a routing hint, that SHOULD affect the used message routing algorithm for the annotated stanza.
+
+<section3 topic='Determing support'>
+
+<example caption='Client sends service discovery information request'><![CDATA[
+<iq xmlns='jabber:client'
+    from='romeo@montague.example/garden'
+    id='info2'
+    to='bar.example'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+
+<example caption='Server replies with service discovery information response'><![CDATA[
+  <iq xmlns='jabber:client'
+    from='bar.example'
+    id='info2'
+    to='romeo@montague.example/garden'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:cmr:hints:0'/>
+    ...
+  </query>
+</iq>
+]]></example>
+
+</section3>
+<section3 topic='Determing available message routing algorithms of a (remote) server'>
+
+<example caption='Client requests available message routing algorithms'><![CDATA[
+<iq xmlns='jabber:client'
+    from='romeo@montague.example/garden'
+    to='bar.example'
+    id='state1'
+    type='get'>
+  <query xmlns='urn:xmpp:cmr:0'/>
+</iq>
+]]></example>
+
+<example caption='Server replies with available message routing algorithms'><![CDATA[
+<iq xmlns='jabber:client'
+  from='bar.example'
+  id='state1'
+  to='romeo@montague.example/garden'
+  type='result'>
+<query xmlns='xmlns='urn:xmpp:cmr:0'>
+  <available algorithm='urn:xmpp:cmr:all'/>
+  <available algorithm='urn:xmpp:cmr:mostactive'/>
+  <available algorithm='urn:xmpp:cmr:roundrobin'/>
+  <available algorithm='urn:xmpp:cmr:weighted'/>
+  <available algorithm='urn:xmpp:cmr:forkalways'/>
+</iq>
+]]></example>
+
+</section3>
+<section3 topic='Sending a message with routing hint'>
+
+<example caption='Client sends a message with a routing hint'><![CDATA[
+<message xmlns='jabber:client'
+    from='romeo@montague.example/garden'
+    to='foo@bar.example'>
+  <body>Hello everyone</body>
+  <cmr xmlns='urn:xmpp:cmr:0'
+       algorithm='run:xmpp:cmr:forkalways'/>
+</message>
+]]></example>
+</section3>
+</section2>
+</section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <section2 topic='General Rules'>
+	  <p>
+Clients are allowed to change the CMR state at any time. CMR MUST only affect the routing of message stanzas of type 'normal' or 'chat', which are addressed to a bare JID and where the receiving entity has more then one available resource with a non-negative presence priority. That is, it affects the routing decision as described in RFC 6121 § 8.5.2.1.1 for messages of type 'normal' and 'chat'.
+	  </p>
+	  <p>
+The CMR state, ie. the used routing algorithm, is identical for every session of an XMPP client. Therefore implementations MUST NOT allow different CMR states between the resources of the same bare JID.
+	  </p>
+	  <p>
+		  If an entity advertises support for CMR as described in 3. it MUST support at least one message routing algorithm.
+	  </p>
+  </section2>
+<section2 topic='Routing Algorithm Specification'>
+
+<section3 topic='Deliver to all'>
+<p>
+<strong>Algorithm Namespace:</strong> 'urn:xmpp:cmr:all'
+</p>
+Deliver to all non-negative resources with share the same maximum priority. And if message type is 'chat', only to those that have opted in to receive chat messages.
+
+</section3>
+
+<section3 topic='Deliver to most active resource'>
+<p>
+<strong>Algorithm Namespace:</strong> 'urn:xmpp:cmr:mostactive'
+</p>
+Deliver the message to the "most available" resource or resources, depending on the server's implementation.
+
+</section3>
+
+<section3 topic='Load balance using round robin'>
+<p>
+<strong>Algorithm Namespace:</strong> 'urn:xmpp:cmr:roundrobin'
+</p>
+Deliver the message to the next resource selected by a round-robin algorithm.
+
+</section3>
+
+<section3 topic='Weighted load balancing'>
+<p>
+<strong>Algorithm Namespace:</strong> 'urn:xmpp:cmr:weighted'
+</p>
+Deliver the message to a resource selected by a weighted round-robin algorithm. The weight of a resource is determined by its priority.
+
+</section3>
+</section2>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>Servers implementing CMR MUST at least implement one message routing algorithm, and offer at least one of of 'urn:xmpp:cmr:all' and 'urn:xmpp:cmr:mostactive'. Technically this is a constraint derived from Section 8.5.2.1.1. of RFC 6121.</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>This specification introduces no known security considerations.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:cmr:0</li>
+    </ul>
+    <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespace to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
+  </section2>
+  <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:cmr:0'
+    xmlns='urn:xmpp:cmr:0'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      XEP-XXXX: http://www.xmpp.org/extensions/xep-xxxx.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name='query'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='active'
+                    minOccurs='1'
+                    maxOccurs='1'/>
+        <xs:element ref='available'
+                    minOccurs='1'
+                    maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='active' type='cmrtype'/>
+
+  <xs:element name='available' type='cmrtype'/>
+
+  <xs:element name='cmr' type='cmrtype'/>
+
+  <xs:complexType name='cmrtype'>
+    <xs:complexType>
+      <xs:attribute name='algorithm' type='xs:string' use='required'/>
+    </xs:complexContent>
+  </xs:complexType>
+
+</xs:schema>
+  ]]></code>
+</section1>
+</xep>
