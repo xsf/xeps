@@ -1,0 +1,386 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Privileged Entity</title>
+  <abstract>This specification provides a way for XMPP entities to have a privileged access to some other entities data</abstract>
+  &LEGALNOTICE;
+  <number>0356</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.1</version>
+    <date>2015-01-27</date>
+    <initials>XEP Editor (mam)</initials>
+    <remark><p>Initial published version approved by the XMPP Council.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.4</version>
+    <date>2014-12-18</date>
+    <initials>jp</initials>
+    <remark><ul>
+                <li>Big simplification and restriction following council's veto and standard@ discussions</li>
+                <li>Configuration is now done only on server own configuration</li>
+                <li>No more client mode</li>
+                <li>Permissions are adverised using &MESSAGE;</li>
+                <li>The only &IQ; privilege still available is jabber:iq:roster</li>
+            </ul>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.3</version>
+    <date>2014-11-13</date>
+    <initials>jp</initials>
+    <remark><ul>
+                <li>giving permission to manage this XEP namespace is forbidden</li>
+                <li>Added configuration section; with well-defined command node</li>
+                <li>better specification of persistent permissions</li>
+                <li>fixed erroneous example (server returns bookmarks)</li>
+                <li>added special permissions</li>
+                <li>better specification of &QUERY; element</li>
+            </ul>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2014-09-17</date>
+    <initials>jp</initials>
+    <remark><ul>
+                <li>changed for privileged entity</li>
+                <li>fixes after feedbacks on standard mailing list</li>
+                <li>completed missing required parts</li>
+            </ul>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2014-05-09</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+    <p>XMPP components are used for long through &xep0114;, but are quite limited: they have a restricted access to other entities data, similar to what a client can do. This is sufficient for components like gateways, but very limiting for more complex components like a PubSub service. The goal of this XEP is to allow a component or any entity to have a "privileged" status, and access some other entity data with the same privileges than the entity itself, that means manage an entity roster on its behalf, send &MESSAGE; or receive &PRESENCE; stanzas in the name of the server.</p>
+    <p>Privileged entities have numerous advantages, including:</p>
+        <ul>
+            <li>a step forward in decentralization: it is possible for an entity to do tasks which were before reserved to server itself. For example, a privileged pubsub component can offer access model based on publisher's roster</li>
+            <li>better integration of components: a gateway can add items to an entity roster itself</li>
+            <li>possibility to overpass a server limitation (typically: incomplete PEP implementation)</li>
+            <li>quick development cycle: developers can implement the components they need without waiting for a new server release</li>
+            <li>server agnostic</li>
+        </ul>
+        <p>Privileged entity has been created with the main goal to create an external, server agnostic, PEP service. It is restricted to only a couple of features, see <link url='#acks'>Acknowledgements section</link> for more details</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+    <p>A privileged entity must be able to do what a PEP service can do and to access roster, so it must be able to (according to configuration):</p>
+        <ul>
+            <li>get and modify the roster of any entity managed by the server</li>
+            <li>send a &MESSAGE; stanza on behalf of the server</li>
+            <li>access &PRESENCE; informations for entities in a managed entity's roster (and for managed entity itself)</li>
+        </ul>
+    <p>The privilege mechanism MUST be totally transparent for the managed entities.</p>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+  <ul>
+    <li><strong>Privileged entity</strong> — the entity which has a privileged status.</li>
+    <li><strong>Managed entity</strong> — the entity that is managed by a privileged entity.</li>
+  </ul>
+</section1>
+
+<section1 topic='Accessing Roster' anchor='access_roster'>
+
+    <section2 topic='Server Allows Roster Access' anchor='server_roster'>
+        <p>Roster access is granted in the server configuration. Roster access can have 4 types:</p> 
+            <ul>
+                <li><strong>none</strong> — the entity is not allowed to access managed entity roster at all. This MUST be the default value.</li>
+                <li><strong>get</strong> — the entity is allowed to send &IQ; stanzas of type <em>'get'</em> for the namespace 'jabber:iq:roster'.</li>
+                <li><strong>set</strong> — the entity is allowed to send &IQ; stanzas of type <em>'set'</em> for namespace 'jabber:iq:roster'.</li>
+                <li><strong>both</strong> — the entity is allowed to send &IQ; stanzas of type <em>'get'</em> and <em>'set'</em> for namespace 'jabber:iq:roster'.</li>
+            </ul>
+    </section2>
+
+    <section2 topic='Server Advertise Entity Of Allowed Permission' anchor='advertise_roster'>
+        <p>Once an entity is authenticated and stream is started, the server send it a &MESSAGE; stanza with a &lt;privilege&gt; elements which MUST have the namespace 'urn:xmpp:privilege:0'. This element contains &lt;perm&gt; elements which MUST contain a 'namespace' attribute of the value "jabber:iq:roster" and a 'type' attribute which must correspond to the type configured as specified in <link url='#server_roster'>"Server Allows Roster Access" section</link></p>
+            <example caption='Server Advertise Roster Privilege'><![CDATA[
+<message from='capulet.net' to='pubub.capulet.lit' id='12345'>
+    <privilege xmlns='urn:xmpp:privilege:0'>
+        <perm namespace='jabber:iq:roster' type='both'/>
+    </privilege>
+</message>
+    ]]></example>
+<p>Here <em>pubsub.capulet.lit</em> is allowed to do <em>get</em> and <em>set</em> operations on all entities managed by capulet.lit</p>
+    </section2>
+
+    <section2 topic='Privileged Entity Manage Roster' anchor='priv_manage_roster'>
+        <p>Doing a <em>get</em> or <em>set</em> operation on the roster of a managed entity is done in the usual way (as described in &rfc6121;  section 2), except that the 'to' attribute is set to the attribute of the managed entity. The server MUST check that the privileged entity has right to <em>get</em> or <em>set</em> the roster of managed entity, and MUST return a &forbidden; error if it is not the case:</p>
+            <example caption='Privileged Entity Get Managed Entity Roster'><![CDATA[
+<iq id='roster1'
+    from='pubsub.capulet.lit'
+    to='juliet@example.com'
+    type='get'
+    id='roster1'>
+        <query xmlns='jabber:iq:roster'/>
+</iq>
+            ]]></example>
+
+        <p>The server then answers normally, as it would have done to the managed entity:</p>
+            <example caption='Server Answers To Privileged Entity'><![CDATA[
+<iq id='roster1'
+    from='juliet@example.com'
+    to='pubsub.capulet.net'
+    type='result'>
+    <query xmlns='jabber:iq:roster' ver='ver7'>
+        <item jid='nurse@example.com'/>
+        <item jid='romeo@example.net'/>
+    </query>
+</iq>
+            ]]></example>
+
+    </section2>
+</section1>
+
+<section1 topic='Message Permission' anchor='message'>
+    <section2 topic='Authorizing Messages' anchor='auth_mess'>
+        <p>In some cases, it can be desirable to send notifications (e.g. PEP service), so the privileged entity must be able to send &MESSAGE; stanzas. This is allowed in server configuration in the same way as for roster permission. The permission type can have the following values:</p>
+            <ul>
+                <li><strong>none</strong> — the entity is not allowed to send &MESSAGE; stanza in the name of the server. This MUST be the default value.</li>
+                <li><strong>outgoing</strong> — the entity is allowed to send &MESSAGE; stanzas in the name of the server, according to following restrictions.</li>
+            </ul>
+        <p>A privileged entity can then send message on the behalf either of the server or of a bare JID of the server, using &xep0297;, with the following restrictions:</p>
+        <ol>
+            <li>forwarded &MESSAGE; 'type' attribute has the value of "headline"</li>
+            <li>forwarded &MESSAGE; 'from' attribute MUST be a bare JID from the server, no resource is allowed</li>
+        </ol>
+        <p>If any of this rules is violated, the server MUST return a &lt;not-authorized/&gt; stream error and close the connection, as explained in &rfc6120; section 4.9.3.12.</p>
+    </section2>
+
+    <section2 topic='Advertising Permission' anchor='advertise_mess'>
+        <p>Server advertise "message" permission in the same way as for "roster" permission, except that 'namespace' attribute has the value of "message", and the 'type' attribute as a value of 'outgoing':</p>
+        <example caption='Server Advertise Roster And Message Privileges'><![CDATA[
+<message from='capulet.net' to='pubub.capulet.lit' id='54321'>
+    <privilege xmlns='urn:xmpp:privilege:0'>
+        <perm namespace='jabber:iq:roster' type='both'/>
+        <perm namespace='message' type='outgoing'/>
+    </privilege>
+</message>
+]]></example>
+    </section2>
+
+    <section2 topic='Sending Messages' anchor='sending_mess'>
+        <p>Now that <em>pubsub.capulet.lit</em> is allowed, it can send messages using &lt;forwarded/&gt; elements.</p>
+        <example caption='privileged entity send a notificaction message'><![CDATA[
+<message from='pubsub.capulet.lit' to='capulet.lit' id='notif1'>
+    <forwarded xmlns='urn:xmpp:forward:0'>
+        <message from='juliet@capulet.lit'
+            id='foo'
+            to='romeo@montague.lit/orchard'
+            type='headline'
+            xmlns='jabber:client'>
+            <event xmlns='http://jabber.org/protocol/pubsub#event'>
+                <items node='http://jabber.org/protocol/tune'>
+                    <item>
+                        <tune xmlns='http://jabber.org/protocol/tune'>
+                            <artist>Gerald Finzi</artist>
+                            <length>255</length>
+                            <source>Music for "Love's Labors Lost" (Suite for small orchestra)</source>
+                            <title>Introduction (Allegro vigoroso)</title>
+                            <track>1</track>
+                        </tune>
+                    </item>
+                </items>
+            </event>
+            <delay xmlns='urn:xmpp:delay' stamp='2014-11-25T14:34:32Z'/>
+        </message>
+    </forwarded>
+</message>
+        ]]></example>
+        <p>The server sees that forwarded message type is '<em>headline</em>', that <em>juliet@capulet.lit</em> is a bare JID of the server, and that outgoing message permission was granted in admin mode (so all bare JIDs from server are allowed); it can now send the notification:</p>
+        <example caption='server sends the notification as if it was originating from him'><![CDATA[
+<message from='juliet@capulet.lit'
+    id='bar'
+    to='romeo@montague.lit/orchard'
+    type='headline'>
+    <event xmlns='http://jabber.org/protocol/pubsub#event'>
+        <items node='http://jabber.org/protocol/tune'>
+            <item>
+                <tune xmlns='http://jabber.org/protocol/tune'>
+                    <artist>Gerald Finzi</artist>
+                    <length>255</length>
+                    <source>Music for "Love's Labors Lost" (Suite for small orchestra)</source>
+                    <title>Introduction (Allegro vigoroso)</title>
+                    <track>1</track>
+                </tune>
+            </item>
+        </items>
+    </event>
+    <delay xmlns='urn:xmpp:delay' stamp='2014-11-25T14:34:32Z'/>
+</message>
+    ]]></example>
+    </section2>
+</section1>
+
+<section1 topic='Presence Permission' anchor='presence'>
+    <section2 topic='Managed Entity Presence' anchor='managed_ent_presence'>
+        <p>It can be often desirable for a privileged entity to have presence information of the managed entities (e.g. to know when to send them notificiations). As privileges must be transparent for the managed entity, this presence has to be sent by the server without modifying managed entity roster.</p>
+        <p>This is allowed in server configuration in the same way as for <em>roster</em> and <em>message</em> permissions. The "presence" type can have the following values:</p>
+            <ul>
+                <li><strong>none</strong> — the entity is not allowed to access &PRESENCE; informations at all. This MUST be the default value.</li>
+                <li><strong>managed_entity</strong> — the entity is allowed to receive managed entity presence (see below).</li>
+                <li><strong>roster</strong> — the entity is allowed to receive presence informations of managed entity contacts, see <link url='#roster_presence'>Roster Presence section</link>.</li>
+            </ul>
+        <p>If the privilege is granted, the server MUST use a directed presence, as specified in &rfc6121; section 4.6 on the behalf of managed entity each time its presence information change.</p>
+    </section2>
+
+    <section2 topic='Advertising Permission' anchor='advertise_managed_presence'>
+        <p>Server advertise "presence" permission in the same way as for "roster" or "message" permissions, except that 'namespace' attribute has the value of "presence", and the 'type' attribute has a value of "managed_entity"</p>
+    </section2>
+
+    <section2 topic="Server Send presence informations" anchor='server_send_presence'>
+        <p>Once the "presence" permission is granted, the server send presence informations:</p>
+<example caption='server receives new presence from Juliet'><![CDATA[
+<presence from='juliet@capulet.lit/balcony'
+          id='presence1'
+          xml:lang='en'>
+    <show>chat</show>
+    <status>Staying on the balcony</status>
+</presence>
+]]></example>
+
+<example caption='server redirects presence to privileged entity'><![CDATA[
+<presence from='juliet@capulet.lit/balcony'
+          to='pubsub.capulet.lit'
+          id='presence1'
+          xml:lang='en'>
+    <show>chat</show>
+    <status>Staying on the balcony</status>
+</presence>
+]]></example>
+
+    </section2>
+
+    <section2 topic='Roster Presence' anchor='roster_presence'>
+        <p>In addition to "<link url='#managed_ent_presence'>managed entity presence</link>", a privileged entity may need to know when a contact in managed entity roster is online (for example, it's necessary for a PEP service because of the presence default access model).</p>
+        <p>As for other permissions, the access in granted in server's configuration, but there is a additional restriction: the privileged entity MUST have read permission on roster namespace (i.e. 'type' attribute in allowed &lt;perm&gt; of namespace <em>jabber:iq:roster</em> MUST have a value of either <strong>get</strong> or <strong>both</strong>).</p>
+    <p>If the delegation is granted, the server MUST send to the privileged entity every presence information that the privileged entity is receiving. Having "roster" type for "presence" permission imply that you have also implicitly "managed_entity" type.</p><p>The server MUST reject the permission if the privileged entity doesn't have read permission on roster namespace.</p>
+    <p>Note: this permission should be given carefully, as it gives access to presence of potentially a lot of entities to the privileged entity (see <link url='#security'>security considerations</link>).</p>
+    </section2>
+            
+    <section2 topic='Advertising Permission' anchor='advertise_roster_presence'>
+        <p>Server advertise roster "presence" permission in the same way as for other permissions, except that the 'namespace' attribute has the value of "presence", and the 'type' attribute has a value of "roster"</p>
+        <example caption='Server Advertise Roster, Message, Managed Entity Presence and Roster Presence Privileges'><![CDATA[
+<message from='capulet.net' to='pubub.capulet.lit' id='54321'>
+    <privilege xmlns='urn:xmpp:privilege:0'>
+        <perm namespace='jabber:iq:roster' type='both'/>
+        <perm namespace='message'/>
+        <perm namespace='presence' type='roster'/>
+    </privilege>
+</message>
+]]></example>
+<p>Note the presence of <em>jabber:iq:roster</em> permission request.</p>
+    </section2>
+
+    <section2 topic="Privileged Entity Receive Roster Presences" anchor='priv_rec_roster_presence'>
+<example caption="server receives new presence from Romeo, which is in Juliet's roster"><![CDATA[
+<presence from='romeo@montaigu.lit/orchard'/>
+]]></example>
+<example caption='server sends the presence as usually, but also to the privileged entity'><![CDATA[
+<presence from='romeo@montaigu.lit/orchard'
+          to='juliet@capulet.lit'/>
+<presence from='romeo@montaigu.lit/orchard'
+          to='pubsub.capulet.lit'/>
+]]></example>
+</section2>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+    <ol>
+        <li>Privileged entitiy has access to sensitive data, and can act as the server itself, permissions should be granted carefuly, only if you absolutely trust the entity.</li>
+        <li><link url='#roster_presence'>Roster presence</link> is particulary sensitive, because presence informations of whole rosters are shared.</li>
+    </ol>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>The &REGISTRAR; includes 'urn:xmpp:privilege:0' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+    <ul>
+      <li>urn:xmpp:privilege:0</li>
+    </ul>
+  </section2>
+  <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:privilege:0'
+    xmlns='urn:xmpp:privilege:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='privilege'>
+      <xs:complexType>
+          <xs:element name='perm'
+                      maxOccurs='unbounded'>
+              <xs:complexType>
+                  <xs:attribute name='namespace' use='required' type='xs:string'/>
+                      <xs:simpleType base='xs:NMTOKEN'>
+                          <xs:enumeration value='jabber:iq:roster'/>
+                          <xs:enumeration value='message'/>
+                          <xs:enumeration value='presence'/>
+                      </xs:simpleType>
+                  <xs:attribute name='type' use='required'>
+                      <xs:simpleType base='xs:NMTOKEN'>
+                          <xs:enumeration value='none'/>
+                          <xs:enumeration value='get'/>
+                          <xs:enumeration value='set'/>
+                          <xs:enumeration value='both'/>
+                          <xs:enumeration value='outgoing'/>
+                          <xs:enumeration value='managed_entity'/>
+                          <xs:enumeration value='roster'/>
+                      </xs:simpleType>
+                  </xs:attribute>
+              </xs:complexType>
+          </xs:element>
+      </xs:complexType>
+</xs:element>
+
+</xs:schema>
+    ]]></code>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>Thanks to Sergey Dobrov, Dave Cridland, Steven Lloyd Watkin, Lance Stout and Johannes Hund for their feedbacks. Thanks to Adrien Cossa for his typos/style corrections.</p>
+  <p>Privileged entity was initialy written to be a generic identity based access control (IBAC) which allows an entity to access sensitive data. After <link url='http://mail.jabber.org/pipermail/standards/2014-December/029378.html'>a discussion on standard mailing list</link>, it has been decided to restrict the current XEP to immediate needs to build an external PEP service, and to implement separately an Attribute Based Access Control (ABAC) which is more modern, generic and flexible. This XEP is still interesting for being easy to implement and doing the job.</p>
+
+</section1>
+
+</xep>
