@@ -1,0 +1,516 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+<!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+    <header>
+        <title>Push</title>
+        <abstract>This specification defines a way for an XMPP servers to broadcast information for use in push notifications to mobile and other devices.</abstract>
+        &LEGALNOTICE;
+        <number>xxxx</number>
+        <status>ProtoXEP</status>
+        <type>Standards Track</type>
+        <sig>Standards</sig>
+        <dependencies>
+            <spec>XMPP Core</spec>
+            <spec>XMPP IM</spec>
+            <spec>XEP-0004</spec>
+            <spec>XEP-0030</spec>
+            <spec>XEP-0060</spec>
+        </dependencies>
+        <supersedes />
+        <supersededby/>
+        <shortname>NOT_YET_ASSIGNED</shortname>
+        <author>
+            <firstname>Lance</firstname>
+            <surname>Stout</surname>
+            <email>lancestout@gmail.com</email>
+            <jid>lance@lance.im</jid>
+        </author>
+        <revision>
+            <version>0.0.1</version>
+            <date>2015-02-23</date>
+            <initials>lance</initials>
+            <remark><p>Initial version.</p></remark>
+        </revision>
+    </header>
+    <section1 topic='Introduction' anchor='intro'>
+        <p>The purpose of push notifications is to inform users of new messages or other pertinent information even when they have no XMPP clients online.</p>
+        <p>Typically, these notifications are delivered to a user's mobile device, displaying a notice that can trigger opening an XMPP client to continue a conversation or answer a Jingle session request.</p>
+
+        <p>There have been several push noticiations implementations by mobile XMPP client vendors. However, experience has shown that these implementations carried several drawbacks:</p>
+        <ul>
+            <li>Treated the XMPP client and XMPP server as one unified service, such that push notifications only worked using the "official" client.</li>
+            <li>Proxied a user's session through the client provider's backend services in order to monitor for and trigger push notifications.</li>
+        </ul>
+
+        <p>The goal for this document is to make the generalized case possible, whereby a user may use their XMPP client of choice with their own server of choice. The requirements are thus:</p>
+        <ul>
+            <li>Allow XMPP servers to support push notifications to multiple client implementations, via multiple external or proprietary push services.</li>
+            <li>Allow clients to receive push notifications from multiple third-party XMPP servers.</li>
+            <li>Eliminate the need for clients to proxy a user's XMPP session in order to enable push notifications.</li>
+        </ul>
+
+        <p class='em'>Note: Any publish-subscribe use cases not described herein are described in <cite>XEP-0060</cite>. Also, this document does not show error flows related to the generic publish-subscribe use cases referenced herein, since they are exhaustively defined in <cite>XEP-0060</cite>. The reader is referred to <cite>XEP-0060</cite> for all relevant protocol details related to the XMPP publish-subscribe extension. This document merely defines a "subset" or "profile" of XMPP publish-subscribe.</p>
+    </section1>
+
+    <section1 topic='Concepts and Approach' anchor='concepts'>
+        <p>XMPP Push works between the user's XMPP server and two push notification services in tandem:</p>
+        <ol>
+            <li>The user's XMPP server publishes notifications to the XMPP Push Service of each of the user's client applications.</li>
+            <li>The XMPP Push Service (as defined here) for a client application then delivers the notification to a third-party notification delivery service.</li>
+            <li>The third-party (and potentially proprietary or platform-dependent) push service delivers the notification from the client application's backend service to the user's device.</li>
+        </ol>
+
+        <p>This two-tiered push architecture allows the user's XMPP server to deliver notifications to arbitrary third-pary clients, and in turn allows those clients to use the appropriate delivery mechanism for their platforms without having to share any private keys or other credentials with the XMPP server.</p>
+
+        <section2 topic='General Architecture of a Push Notification Service' anchor='general-architecture'>
+            <p>The current state-of-the-art for a generic push notification service requires four actors:</p>
+            <dl>
+                <di>
+                    <dt>App Client</dt>
+                    <dd>The app client is the software installed and ran by the user, and is the final receiver of a push notification.</dd>
+                </di>
+                <di>
+                    <dt>App Server</dt>
+                    <dd>The app server is a backend service for the app client. At minimum, the app server exists to trigger push notifications, but it often also performs business logic for the app.</dd>
+                </di>
+                <di>
+                    <dt>User Agent</dt>
+                    <dd>The user agent is a service running locally on the user's device which receives push notifications and delivers them to the appropriate application.</dd>
+                </di>
+                <di>
+                    <dt>Push Service</dt>
+                    <dd>The push service is what ferries notifications from the App Server to the User Agent. How it does so is often proprietary and vendor/platform dependent.</dd>
+                </di>
+            </dl>
+
+            <p>Enabling notifications is a five step process:</p>
+            <ol>
+                <li>The App Client asks the User Agent to authorize the delivery of notifications.</li>
+                <li>The User Agent then requests a token from the Push Service which authorizes delivery of notifications to that User Agent and App Client.</li>
+                <li>The Push Service issues the token to the User Agent.</li>
+                <li>The User Agent gives the token to the App Client.</li>
+                <li>The App Client sends the token to the App Server for later use.</li>
+            </ol>
+            <example caption='The five general steps to enable push notifications'><![CDATA[
++------------+          +------------+   
+|            |    5     |            |   
+| App Client +----------> App Server |   
+|            |          |            |   
++-+--------^-+          +------------+   
+  |1       |4                            
+  |        |                             
++-v--------+-+  3       +---------------+
+|            <----------+               |
+| User Agent |          | Push Service  |
+|            +---------->               |
++------------+  2       +---------------+
+]]></example>
+            <p>To send a push notification, the App Server sends the notification data to the Push Service along with the saved token.</p>
+
+            <example caption='General delivery of a push notification'><![CDATA[
++------------+          +------------+   
+|            |          |            |   
+| App Client |          | App Server |   
+|            |          |            |   
++-----^------+          +------+-----+   
+      |                        |         
+      |                        |         
++-----+------+          +------v--------+
+|            |          |               |
+| User Agent <----------+ Push Service  |
+|            |          |               |
++------------+          +---------------+
+]]></example>
+        </section2>
+
+        <section2 topic='Mapping the General Architecture to XMPP' anchor='xmpp-architecture'>
+            <p>To build an XMPP Push service on top of a general push service, we perform the following mapping:</p>
+            <ul>
+                <li>The general App Client becomes the XMPP User Agent</li>
+                <li>The general App Server becomes the XMPP Push Service</li>
+                <li>The XMPP server is now the new logical "App Server"</li>
+                <li>The XMPP client portion of the application is the new logical "App Client"</li>
+            </ul>
+            <example caption='Mapping the generic push architecture to use XMPP'><![CDATA[
++-------------+         +-------------+ 
+|             |   5     |             |
+| XMPP Client +---------> XMPP Server |
+|             |         |             |
++-+--------^--+         +-------------+
+  |1       |4
+  |        | 
++-v--------+-+  3       +------------+-------------------+
+|            <----------+            |                   |
+| App Client |          | App Server | XMPP Push Service |
+|            +---------->            |                   |
++------------+  2       +------------+-------------------+
+]]></example>
+        </section2>
+    </section1>
+
+    <section1 topic='XMPP Push Service'>
+        <p>An XMPP Push Service is a PubSub service as defined by the XMPP &xep0060; extension. The functional difference between a Push Service and a generic pubsub service is that a Push Service will generally summarize and re-broadcast published content via non-XMPP mechanisms.</p>
+        <p class='em'>Note: a Push Service is provided by a specific client application as part of the App Server. A user's XMPP server will typically <em>not</em> act as a Push Service itself, but will instead publish to the Push Services for the user's client applications.</p>
+
+        <section2 topic='Recommended Defaults'>
+            <p>A Push Service MUST:</p>
+            <ul>
+                <li>Support the 'whitelist' access model and set it to the default.</li>
+                <li>Support the 'publish-only' affiliation.</li>
+            </ul>
+        </section2>
+        <section2 topic='Business Rules'>
+            <p>Each PubSub node is a delivery target for the Push Service, which could represent multiple devices for a single user.</p>
+            <p>In order to prevent information leaks, each node SHOULD be configured with a 'whitelist' access model so that only trusted entities are able to view or subscribe to published notifications. Furthermore, the 'publish-only' affiliation SHOULD be used to allow acceptable entities (such as the user's bare JID) to publish to the node to trigger notifications.</p>
+            <p>Care ought to be taken to ensure that publish requests are coming from the user's server and not from other third-party client applications using the full JID of a user. A Push Service MAY opt to only accept or further process publish requests from bare JIDs to ensure that only a user's server is able to publish, but it SHOULD instead use publish options with credentials shared only with the user's server (see <link url='#publish-options'>Enabling Notifications</link>).</p>
+        </section2>
+    </section1>
+
+    <section1 topic='Discovering Support' anchor='disco'>
+        <section2 topic='Account Owner Service Discovery'>
+            <p>Before enabling or disabling push services, a client SHOULD determine whether the user's server supports publishing push notifications; to do so, it MUST send a &xep0030; information quest to the user's bare JID:</p>
+            <example caption='Client queries server regarding protocol support'><![CDATA[
+<iq from='user@example.com/mobile'
+    to='user@example.com'
+    id='x13'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+            <p>If the user's server supports publishing push notifications and the account is provisioned to allow them, the server MUST include the feature 'urn:xmpp:push:0' in its list of supported features.</p>
+
+            <example caption='Server communicates protocol support'><![CDATA[
+<iq from='juliet@capulet.lit'
+    to='juliet@capulet.lit/balcony'
+    id='disco1'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='account' type='registered'/>
+    <feature var='urn:xmpp:push:0'/>
+    ...
+  </query>
+</iq>
+]]></example>
+        </section2>
+
+        <section2 topic='Push Service Discovery'>
+            <p>If a service supports the XMPP Push Service publish-subscribe profile described herein, it MUST include an identity of "pubsub/push" in "disco#info" results.</p>
+            <example caption='Service identifies as a Push Services'><![CDATA[
+<iq from='push-5.client.example'
+    to='user@example.com/mobile'
+    id='x23'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='pubsub' type='push' />
+    <feature var='urn:xmpp:push:0'/>
+    ...
+  </query>
+</iq>
+]]></example>
+        </section2>
+    </section1>
+
+    <section1 topic='Enabling Notifications' anchor='enabling'>
+        <p>The full process for enabling notifications requires initializing two separate push services: between the App Client and App Server, and between the App Server and the user's XMPP server.</p>
+        <p class='em'>Note: It is assumed that an App Client is able to perform any registration procedures it requires to bootstrap its own preferred push notification system. Furthermore, it is assumed that the App Client or App Server is able to provision a node on its own XMPP Push Service. It is possible, but not required, to perform these actions over XMPP using &xep0077;.</p>
+
+        <ol>
+            <li>The App Client performs any necessary bootstrapping and registration for its preferred push service.</li>
+            <li>The App Client registers itself with the App Server.</li>
+            <li>The App Server allocates or reuses a node on the App Server's XMPP Push Service.</li>
+            <li>The App Server informs the App Client of the provisioned node, along with any additional parameters required for publishing to that node.</li>
+            <li>The App Client requests the XMPP server to publish notifications to the given node.</li>
+        </ol>
+
+        <example caption='The full flow of enabling push notifications for an application'><![CDATA[
++-------------+         +-------------+                   
+|             |         |             |                   
+| XMPP Client +---------> XMPP Server |                   
+|             |  5b     |             |                   
++------^------+         +-------------+                   
+       |5a                                                
+       |                                                  
++------+-----+   4      +--------------+---------------------+
+|            <----------+              |                     |
+| App Client |          | App Server <-3-> XMPP Push Service |
+|            +---------->              |                     |
++--+------^--+   2      +--------------+---------------------+
+   |1a    |1d                                             
+   |      |                                               
++--v------+--+   1c     +---------------+                 
+|            <----------+               |                 
+| User Agent |          | Push Service  |                 
+|            +---------->               |                 
++------------+   1b     +---------------+                 
+]]></example>
+
+        <p>For the last step, the App Client sends an IQ-set to the user's bare JID with an &lt;enable /&gt; element qualified by the 'urn:xmpp:push:0' namespace, which MUST contain a 'jid' attribute of the XMPP Push Service being enabled. It SHOULD contain a 'node' attribute which is set to the provisioned node specified by the App Server.</p>
+
+        <example caption='Enabling Notifications'><![CDATA[
+<iq type='set' id='x42'>
+  <enable xmlns='urn:xmpp:push:0' jid='push-5.client.example' node='yxs32uqsflafdk3iuqo' />
+</iq>
+]]></example>
+
+        <p>An App Server MAY require additional information to be provided with each published notification, such as authentication credentials. These parameters are included in the enable request by adding a <cite>XEP-0004</cite> data form with a FORM_TYPE of 'http://jabber.org/protocol/pubsub#publish-options'.</p>
+
+        <example caption='Enabling Notifications, with provided publish options'><![CDATA[
+<iq type='set' id='x43'>
+  <enable xmlns='urn:xmpp:push:0' jid='push-5.client.example' node='yxs32uqsflafdk3iuqo'>
+    <x xmlns='jabber:x:data'>
+      <field var='FORM_TYPE'><value>http://jabber.org/protocol/pubsub#publish-options</value></field>
+      <field var='secret'><value>eruio234vzxc2kla-91<value></field>
+    </x>
+  </enable>
+</iq>
+]]></example>
+
+       <p>The JID for a Push Service MAY be enabled multiple times for a user only if different node values are provided. If the combination of JID and node has already been enabled, then the server SHOULD use the last received request for any publish options.</p>
+    </section1>
+
+    <section1 topic='Disabling Notifications' anchor='disabling'>
+        <p>If the user decides to stop push notifications for a particular client application, the App Client SHOULD send an IQ-set to the user's bare JID with a &lt;disable /&gt; element qualified by the 'urn:xmpp:push:0' namespace, which MUST include a 'jid' attribute of the service to be removed.</p>
+
+        <example caption='Disabling all notifications to a given service'><![CDATA[
+<iq type='set' id='x97'>
+  <disable xmlns='urn:xmpp:push:0' jid='push-5.client.example' />
+</iq>
+]]></example>
+
+        <p>A 'node' attribute MAY be included to remove a particular JID and node combination if multiple nodes have been enabled for a single service JID.</p>
+
+        <example caption='Disabling notifications'><![CDATA[
+<iq type='set' id='x97'>
+  <disable xmlns='urn:xmpp:push:0' jid='push-5.client.example' node='yxs32uqsflafdk3iuqo' />
+</iq>
+]]></example>
+
+        <p>If a 'node' attribute is provided, then only that combination of JID and node SHOULD be removed from the set of enabled services. Otherwise, the server SHOULD disable all enabled entries for the specified service for the user.</p>
+
+        <p>When a service is not enabled, the server MUST NOT attempt publishing notifications to the service.</p>
+    </section1>
+
+    <section1 topic='Publishing Notifications' anchor='publishing'>
+        <p>When the user's server detects an event warranting a push notification, it performs a PubSub publish to all XMPP Push Services registered for the user, where the item payload is a &lt;notification /&gt; element in the 'urn:xmpp:push:0' namespace.</p>
+        <p>A <cite>XEP-0004</cite> data form whose FORM_TYPE is 'urn:xmpp:push:summary' MAY be included to provide summarized information such as the number of unread messages or number of pending subscription requests.</p>
+        <p>Other elements MAY be included if relevant for the notification.</p>
+        <example caption='Server publishes a push notification'><![CDATA[
+<iq type='set'
+    from='user@example.com'
+    to='push-5.client.example'
+    id='n12'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='yxs32uqsflafdk3iuqo'>
+      <item>
+        <notification xmlns='urn:xmpp:push:0'>
+          <x xmlns='jabber:x:data'>
+            <field var='FORM_TYPE'><value>urn:xmpp:push:summary</value></field>
+            <field var='message-count'><value>1</value></field>
+            <field var='last-message-sender'><value>juliet@capulet.example/balcony</value></field>
+            <field var='last-message-body'><value>Wherefore art thou, Romeo?</value></field>
+          </x>
+          <additional xmlns='http://example.com/custom'>Additional custom elements</additional>
+        </notification>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+]]></example>
+
+        <p>If additional data was provided when enabling the service, the publish request SHOULD include the data as publish options.</p>
+
+        <example caption='Server publishes a push notifictation with provided publish options'><![CDATA[
+<iq type='set'
+    from='user@example.com'
+    to='push-5.client.example'
+    id='n12'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='yxs32uqsflafdk3iuqo'>
+      <item>
+        <notification xmlns='urn:xmpp:push:0'>
+          <x xmlns='jabber:x:data'>
+            <field var='FORM_TYPE'><value>urn:xmpp:push:summary</value></field>
+            <field var='message-count'><value>1</value></field>
+            <field var='last-message-sender'><value>juliet@capulet.example/balcony</value></field>
+            <field var='last-message-body'><value>Wherefore art thou, Romeo?</value></field>
+          </x>
+          <additional xmlns='http://example.com/custom'>Additional custom elements</additional>
+        </notification>
+      </item>
+    </publish>
+    <publish-options>
+      <x xmlns='jabber:x:data'>
+        <field var='FORM_TYPE'><value>http://jabber.org/protocol/pubsub#publish-options</value></field>
+        <field var='secret'><value>eruio234vzxc2kla-91<value></field>
+      </x>
+    </publish-options>
+  </pubsub>
+</iq>
+]]></example>
+
+        <section2 topic='Publish Errors'>
+            <p>If a publish request is returned with an IQ-error, then the server SHOULD consider the particular JID and node combination to be disabled.</p>
+            <p>However, a server MAY choose to keep a service enabled if the error is deemed recoverable or transient, until a sufficient number of errors have been received in a row.</p>
+        </section2>
+
+        <section2 topic='Notification Delivery'>
+            <p>Once the notification has been published to the XMPP Push Service, it is left to the implementation how to deliver the notification to the user's device. However, the general flow for the process looks like so:</p>
+            <example caption='The full path of a push notification, from XMPP server to user client'><![CDATA[
++-------------+         +-------------+ 
+|             |         |             | 
+| XMPP Client |         | XMPP Server +--------+ 
+|             |         |             |        | 
++-----^-------+         +-------------+        | 
+      .                                        | 
+      .                                        | 
++-----+------+          +------------+---------v---------+
+|            |          |            |                   |
+| App Client |          | App Server < XMPP Push Service |
+|            |          |            |                   |
++-----^------+          +------+-----+-------------------+
+      |                        | 
+      |                        | 
++-----+------+          +------v--------+
+|            |          |               |
+| User Agent <----------+ Push Service  |
+|            |          |               |
++------------+          +---------------+
+]]></example>
+        </section2>
+    </section1>
+
+    <section1 topic='Remote Disabling of Notifications'>
+        <p>It can be desirable for an XMPP Push Service to stop accepting notifications the user's XMPP server. To do so, the XMPP Push Service removes the 'publish-only' (or other publish-enabling affiliation) from the user's JID, and MAY send an affiliation change notice to the user's bare JID:</p>
+
+        <example caption='Push Service announces stop of push support'><![CDATA[
+<message from='push-5.client.example' to='user@example.com'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub' node='yxs32uqsflafdk3iuqo'>
+    <affiliation jid='user@example.com' affiliation='none' />
+  </pubsub>
+</message>
+]]></example>
+
+        <p>Upon receiving an affiliation change event, the server MAY remove the received JID and node combination from the set of enabled services. If a server does not do so, then the service will be removed from the enabled set through the error handling process.</p>
+    </section1>
+
+    <section1 topic='Security Considerations' anchor='security'>
+        <p>Push notifications require routing private information, such as message bodies, through third parties. As such, server implmentations SHOULD allow users to limit the information sent via push notifications.</p>
+        <p>It is NOT RECOMMENDED to allow in-band modification of push notification settings. Such operations SHOULD be done out-of-band to prevent privilege escalation.</p>
+    </section1>
+
+    <section1 topic='IANA Considerations' anchor='iana'>
+        <p>This document requires no interaction with &IANA;.</p>
+    </section1>
+
+    <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+        <section2 topic='Protocol Namespaces' anchor='ns'>
+            <p>The &REGISTRAR; includes 'urn:xmpp:push:0' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+            <ul>
+                <li>urn:xmpp:push:0</li>
+            </ul>
+        </section2>
+        <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+            &NSVER;
+        </section2>
+        <section2 topic='Field Standardization' anchor='registrar-formtypes'>
+            <p><cite>XEP-0068</cite> defines a process for standardizing the fields used within Data Forms scoped by a particular namespace, and the XMPP Registrar maintains a registry of such FORM_TYPES (see &FORMTYPES;).</p>
+
+            <section3 topic='urn:xmpp:push:summary FORM_TYPE' anchor='registrar-formtypes'>
+                <code><![CDATA[
+<form_type>
+  <name>urn:xmpp:push:summary</name>
+  <doc>XEP-XXXX</doc>
+  <desc>Provides summarizing information about a user for use in push notifications.</desc>
+  <field
+      var='message-count'
+      type='text-single'
+      label='The number of unread or undelivered messages'/>
+  <field
+      var='pending-subscription-count'
+      type='text-single'
+      label='The number of pending incoming presence subscription requests'/>
+  <field
+      var='last-message-sender'
+      type='jid-single'
+      label='The sender of the last received message'/>
+  <field
+      var='last-message-body'
+      type='text-single'
+      label='The body text of the last received message'/>
+</form_type>
+]]></code>
+            </section3>
+        </section2>
+        <section2 topic='Service Discovery Category/Type' anchor='registrar-disco'>
+            <p>The &REGISTRAR; includes a category of "component" in its registry of Service Discovery identities (see &DISCOCATEGORIES;); as a result of this document, the Registrar includes a type of "jidprep" to that category.</p>
+            <p>The registry submission is as follows:</p>
+            <code><![CDATA[
+<category>
+  <name>pubsub</name>
+  <type>
+    <name>push</name>
+    <desc>
+      A push notification service that supports the publish-subscribe profile defined in XEP-XXXX.
+    </desc>
+    <doc>XEP-XXXX</doc>
+  </type>
+</category>
+]]></code>
+        </section2>
+    </section1>
+
+    <section1 topic='XML Schema' anchor='schema'>
+        <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:push:0'
+    xmlns='urn:xmpp:push:0'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      XEP-xxxx: http://www.xmpp.org/extensions/xep-xxxx.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:import
+      namespace='jabber:x:data'
+      schemaLocation='http://xmpp.org/schemas/x-data.xsd' />
+
+  <xs:element name='enable'>
+    <xs:complexType>
+       <xs:sequence minOccurs='0' maxOccurs='unbounded' xmlns:xdata='jabber:x:data'>
+         <xs:element ref='xdata:x' />
+       </xs:sequence>
+       <xs:attribute name='jid' type='xs:string' use='required' />
+       <xs:attribute name='node' type='xs:string' use='required' />
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='disable'>
+    <xs:complexType>
+       <xs:attribute name='jid' type='xs:string' use='required' />
+       <xs:attribute name='node' type='xs:string' use='optional' />
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='notification'>
+    <xs:complexType>
+       <xs:sequence minOccurs='0' maxOccurs='unbounded' xmlns:xdata='jabber:x:data'>
+         <xs:element ref='xdata:x' />
+         <xs:any />
+       </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>
+]]></code>
+    </section1>
+</xep>
