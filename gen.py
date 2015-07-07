@@ -323,9 +323,24 @@ def buildPDF( file, nr ):
 		
 	return True
 
+def getTempContents(filename):
+	try:
+		with open(filename, 'r') as h:
+			content = h.read()
+		(fd, name) = tempfile.mkstemp();
+		handle = os.fdopen(fd, "w+b")
+		handle.write(content)
+		handle.close()
+		return name;
+	except Exception as e:
+		print e
+		return False
+
 def buildXEP( filename ):
 	nr = re.match("xep-(\d\d\d\d).xml", filename).group(1)
-	xepfilepath = getLatestXEPFilename("../", nr);
+	xepfilepath = getLatestXEPFilename("../", nr)
+	if not xepfilepath:
+		xepfilepath = getTempContents(filename)
 	if not xepfilepath:
 		print "getLatestXEPContent (ERROR)"
 		return
