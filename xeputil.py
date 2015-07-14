@@ -50,7 +50,7 @@ class XEP:
 
 	def revisions(self):
 		repo = hg.repository(ui.ui(), self.BASEDIR)
-		fctx = repo.filectx('extensions/' + "xep-" + self.nr + ".xml", 'tip')
+		fctx = repo.filectx("xep-" + self.nr + ".xml", 'tip')
 		revs = []
 		for rev in fctx.filelog():
 			revs.append(fctx.filectx(rev).rev())
@@ -59,7 +59,7 @@ class XEP:
 
 	def contentOfRevision(self, revision):
 		repo = hg.repository(ui.ui(), self.BASEDIR)
-		fctx = repo.filectx('extensions/' + "xep-" + self.nr + ".xml", revision)
+		fctx = repo.filectx("xep-" + self.nr + ".xml", revision)
 		
 		# load content for that revision
 		file_text = fctx.data()
