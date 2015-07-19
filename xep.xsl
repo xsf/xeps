@@ -310,7 +310,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
               <br />
             </xsl:if>
             <xsl:variable name='sourceHTML'>
-              <xsl:text>http://gitorious.org/xmpp/xmpp/blobs/master/extensions/xep-</xsl:text>
+              <xsl:text>https://github.com/xsf/xeps/blob/master/xep-</xsl:text>
               <xsl:value-of select='/xep/header/number'/>
               <xsl:text>.xml</xsl:text>
             </xsl:variable>
