@@ -2,7 +2,7 @@
 
 <!--
 
-Copyright (c) 1999 - 2014 XMPP Standards Foundation
+Copyright (c) 1999 - 2015 XMPP Standards Foundation
 
 Permission is hereby granted, free of charge, to any 
 person obtaining a copy of this software and 
@@ -131,7 +131,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           </xsl:if>
           <tr valign='top'>
             <td><strong>Copyright:</strong></td>
-            <td>&#169; 1999 - 2014 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</td>
+            <td>&#169; 1999 - 2015 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</td>
           </tr>
           <tr valign='top'>
             <td><strong>Status:</strong></td>
@@ -169,7 +169,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           <p style='color:green'>NOTICE: This Procedural document defines a process or activity of the XMPP Standards Foundation (XSF) that has been approved by the XMPP Council and/or the XSF Board of Directors. The XSF is currently following the process or activity defined herein and will do so until this document is deprecated or obsoleted.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Deferred"'>
-          <p style='color:red'>WARNING: Consideration of this document has been <strong>Deferred</strong> by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended.</p>
+          <p style='color:red'>WARNING: This document has been automatically Deferred after 12 months of inactivity in its previous Experimental state. Implementation of the protocol described herein is not recommended for production systems. However, exploratory implementations are encouraged to resume the standards process.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Deprecated"'>
           <p style='color:red'>WARNING: This document has been <strong>Deprecated</strong> by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one (if any).</p>
