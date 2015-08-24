@@ -23,5 +23,7 @@ page:
 
 http://xmpp.org/xmpp-protocols/xmpp-extensions/submitting-a-xep/
 
+[XEP-0001: XMPP Extension Protocols](http://xmpp.org/extensions/xep-0001.html) defines the standards process followed by the XMPP Standards Foundation.
+
 Thanks!
 
