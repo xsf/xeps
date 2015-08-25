@@ -1,0 +1,404 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Entity Versioning</title>
+  <abstract>
+    A method by which rosters and disco items may be versioned so that servers
+    will not need to send the entire list if it has not been modified, saving
+    bandwidth and time during session initialization with minimal state being
+    stored by the server and client.
+  </abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>RFC 6120</spec>
+    <spec>RFC 6121</spec>
+  </dependencies>
+  <supersedes />
+  <supersededby />
+  <shortname>EV</shortname>
+  <author>
+    <firstname>Sam</firstname>
+    <surname>Whited</surname>
+    <email>swhited@atlassian.com</email>
+    <jid>sam@samwhited.com</jid>
+  </author>
+  <author>
+    <firstname>Doug</firstname>
+    <surname>Keen</surname>
+    <email>dkeen@atlassian.com</email>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2015-08-25</date>
+    <initials>ssw</initials>
+    <remark><p>First draft</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>
+    This problem of "downloading the world" (downloading the entire roster
+    every time a session is initialized) was partially addressed by &xep0237;
+    which was later merged into &rfc6121; §2.6. While this solved the problem
+    for the roster, it didn't account for other entities (eg.  MUC
+    disco#items). Furthermore, roster versioning requires that the server
+    maintain a great deal of state (multiple versions of the roster) which can
+    be difficult to implement in a large, distributed system. This XEP defines
+    a method by which entities other than the roster can be versioned and
+    cached.
+  </p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>
+      An extra round trip MUST NOT be required to initiate entity versioning.
+    </li>
+    <li>
+      Clients that do not implement the protocol (but which use servers that
+      do) MUST still be able to request and receive entities normally.
+    </li>
+    <li>
+      Servers which implement this protocol MUST NOT be required to store
+      multiple versions of an entity list or maintain other redundant state.
+    </li>
+    <li>
+      Inconsistant state between servers in a cluster should not cause cache
+      invalidation for the entire entity list.
+    </li>
+    <li>
+      Large changes SHOULD NOT be required for existing servers / clients.
+    </li>
+  </ul>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <dt>Aggregate Token</dt>
+    <dd>
+      A hash which represents the state of a list of entities, and changes if
+      any of those entities changes.
+    </dd>
+    <dt>Versioned Entity</dt>
+    <dd>Any abstract object which may be versioned (eg. rooms, users).</dd>
+    <dt>Version Token</dt>
+    <dd>
+      A generally short, case sensitive string which represents an entity and
+      changes if that entity changes.
+    </dd>
+  </dl>
+</section1>
+
+<section1 topic='Use Cases' anchor='use_cases'>
+  <section2 topic='Clients' anchor='client_use_cases'>
+    <ul>
+      <li>
+        A client on a mobile device where bandwidth and throughput are limited
+        has a very large roster which cause connections to take an unacceptable
+        amount of time. With entity versioning, connections after the first
+        connection do not take as long, and use less bandwidth.
+      </li>
+      <li>
+        A client often wants to view the list of multi-user chat rooms
+        available on a servers MUC service. However, the list is very long and
+        takes a long time to download. After enabling entity versioning the
+        client can fetch the list, and then poll for changes at a later date
+        without re-requesting the entire list.
+      </li>
+    </ul>
+  </section2>
+  <section2 topic='Servers' anchor='server_use_cases'>
+    <ul>
+      <li>
+        A server is running in an environment where storing multiple versions
+        of each users roster may put too much pressure on the storage backend.
+        After enabling entity versioning, they only have to store a small token
+        per user and can calculate the diffs to send to the client afterwards.
+      </li>
+      <li>
+        A server maintains an out-of-band HTTP API for fetching information
+        about MUC rooms to display on their web page. They wish to use a
+        reverse proxy to cache API requests based on etags. Instead of
+        attempting to check if the backend page has changed and generate etags,
+        the room's entity version token is used as a weakly-validated ETag.
+      </li>
+    </ul>
+  </section2>
+</section1>
+
+<section1 topic='Protocol' anchor='proto'>
+  <section2 topic='Discovering Support' anchor='disco'>
+    <p>
+      If a server supports entity versioning, it MUST inform the connecting
+      client when returning stream features during the stream negotiation
+      process. This is done by including a &lt;ver/&gt; element, qualified by
+      the 'urn:xmpp:features:entityver:0' namespace. At the latest, this SHOULD
+      be done when informing a client that resource binding is required. For
+      example:
+    </p>
+    <example caption="Stream Features"><![CDATA[
+<stream:features>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+    <required/>
+  </bind>
+  <ver xmlns='urn:xmpp:features:entityver:0'/>
+</stream:features>
+    ]]></example>
+  <p>
+    The entity versioning stream feature is merely informative and therefore
+    is never mandatory-to-negotiate.
+  </p>
+</section2>
+
+  <section2 topic='Version Tokens' anchor='version_tokens'>
+    <p>
+      Version tokens are short case-sensitive strings which are generated by
+      the server. Their format is not defined in this spec, but a
+      recommendation may be found in the Implementation Notes. Version tokens
+      are akin to a weakly-validated etag for the entity in question.
+    </p>
+    <p>
+      Servers that implement this protocol must assign such a version token to
+      each entity that is controlled by the server. The server MUST then update
+      this version every time any mutable property of the entity changes (eg.
+      when the subscription status of a user changes). The server MAY choose to
+      update this token at any time (to force the clients to invalidate their
+      cached representation fo the object). This version token MUST then be
+      included with every object representation of that entity sent down in the
+      stream. This is done by including a sub-node called "version" qualified
+      by the entity versioning XML namespace defined in this document.
+      Similarly, clients MAY also add version nodes for each version token they
+      possess to the request for a list (not specifying a version token will
+      force the server to send information on that entity to the client). If a
+      server sends up a list of version tokens, the server MUST then check to
+      see if those tokens correspond to any entity which it knows about, and
+      not send down any entities with matching version tokens in the response.
+    </p>
+    <p>For example, a roster request might look like:</p>
+    <example caption="Roster Request"><![CDATA[
+<!-- Client -->
+<iq from='romeo@montague.lit/home' id='56' to='romeo@montague.lit' type='get'>
+  <query xmlns='jabber:iq:roster'>
+    <item jid='bill@shakespeare.lit'>
+      <version xmlns='urn:xmpp:features:entityver:0'>25P2A7H8</version>
+    </item>
+    <item jid='anne@shakespeare.lit'>
+      <version xmlns='urn:xmpp:features:entityver:0'>VIZSVF0D</version>
+    </item>
+  </query>
+</iq>
+
+<!-- Server -->
+<iq from='romeo@montague.lit' id='56' to='romeo@montague.lit/home' type='result>
+    <query xmlns='jabber:iq:roster'>
+      <item subscription='both' jid='bill@shakespeare.lit' />
+      <version xmlns='urn:xmpp:features:entityver:0'>9ZFZXVP9</version>
+      </item>
+    </query>
+</iq>
+    ]]></example>
+    <p>
+      Note that in this case there may be three roster items total (and the
+      client only knows about two of them), or there may be two total roster
+      items and the server is informing the client about a change to
+      "bill@shakespeare.lit". Version tokens MUST also be present in roster
+      pushes:
+    </p>
+    <example caption="Roster Push"><![CDATA[
+<!-- Server -->
+<iq from='romeo@montague.lit' id='ah382g678jka7' to='romeo@montague.lit/home' type='set'>
+    <query xmlns='jabber:iq:roster' ver='ver34'>
+      <item jid='tybalt@shakespeare.lit' subscription='remove>
+        <version xmlns='urn:xmpp:features:entityver:0'>XWE4MUUP</version>
+      </item>
+    </query>
+</iq>
+    ]]></example>
+    <p>A disco request for rooms (as defined in &xep0045;) might look like:</p>
+    <example caption="MUC Disco"><![CDATA[
+<!-- Client -->
+<iq from='hag66@shakespeare.lit/phone'
+    id='zb8q41fas6yn4'
+    to='chat.shakespeare.lit'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#items>
+    <item jid='coven@chat.shakespeare.lit'>
+      <version xmlns='urn:xmpp:features:entityver:0'>25P2A7H8</version>
+    </item>
+    <item jid='inverness@chat.shakespeare.lit'>
+      <version xmlns='urn:xmpp:features:entityver:0'>4OLGSVNY</version>
+    </item>
+  </query>
+</iq>
+
+<!-- Server -->
+<iq from='chat.shakespeare.lit'
+    id='zb8q41fas6yn4'
+    to='hag66@shakespeare.lit/phone'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#items'>
+    <item jid='coven@chat.shakespeare.lit'
+          name='A Dark Cave'>
+        <version xmlns='urn:xmpp:features:entityver:0'>VIZSVF0D</version>
+    </item>
+  </query>
+</iq>
+    ]]></example>
+  <p>
+    In this example coven@chat.shakespeare.lit has been modified (eg. the
+    room name might have been changed), but inverness@chat.shakespeare.lit
+    has not changed, therefore no update is sent down.
+  </p>
+  <p>
+    Clients that implement this protocol SHOULD then cache the entity in
+    question when a version token is received.
+  </p>
+</section2>
+<section2 topic='Aggregate Tokens' anchor='agg_tokens'>
+  <p>
+    While the version token approach to caching does not require a great deal
+    of state to be stored on the client or the server, it does require a lot
+    more information to be sent by the client when requesting a list of
+    entities. For a very large list which is not likely to have changed, it may
+    be useful know in advance if the roster has changed or not (so that we can
+    avoid sending the large request entirely). To do this, we can request an
+    aggregate version token from the server. This aggregate token is calculated
+    by constructing a string of comma separated "bare JID:version" pairs sorted
+    in byte-wise order, and taking the MD5 hash of the constructed string. For
+    example, if the server is calculating the aggregate version token for a
+    roster, it might end up with the following string:
+  </p>
+  <example caption="Aggregate token list"><![CDATA[
+anne@shakespeare.lit:VIZSVF0D,bill@shakespeare.lit:25P2A7H8
+  ]]></example>
+  <p>
+    Which results in the aggregate token:
+  </p>
+  <example caption="Aggregate token"><![CDATA[
+0514fc90e6c7981b06bbb2173bb8ef03
+  ]]></example>
+  <p>
+    The actual request is an IQ sent to the server, or entity handling the
+    versioned list which contains a query that specifies the namespace of the
+    list we want to fetch. Eg. to fetch the aggregate token for the roster one
+    would query the server:
+  </p>
+  <example caption="Roster aggregate token request"><![CDATA[
+
+    <!-- Client -->
+    <iq to='bill@shakespeare.lit' type='get' id='bill1'>
+      <query xmlns='urn:xmpp:features:entityver:0' type='jabber:iq:roster' />
+    </iq>
+
+    <!-- Server -->
+    <iq to='bill@shakespeare.lit/home' type='result' id='bill1'>
+      <query xmlns='urn:xmpp:features:entityver:0' type='jabber:iq:roster'>
+        0514fc90e6c7981b06bbb2173bb8ef03
+      </query>
+    </iq>
+  ]]></example>
+  <p>
+    Similarly, to fetch the aggregate token for a list of MUC rooms, one would
+    query the MUC component directly:
+  </p>
+  <example caption="MUC rooms aggregate token request"><![CDATA[
+    <!-- Client -->
+    <iq to='chat.shakespeare.lit' type='get' id='bill2'>
+      <query xmlns='urn:xmpp:features:entityver:0' type='http://jabber.org/protocol/disco#items' />
+    </iq>
+
+    <!-- Server -->
+    <iq to='bill@shakespeare.lit/home' type='result' id='bill2'>
+      <query xmlns='urn:xmpp:features:entityver:0' type='http://jabber.org/protocol/disco#items'>
+        32151d1d01440d5536a7f106afd3f4d8
+      </query>
+    </iq>
+  ]]></example>
+  <p>
+    Because aggregate tokens are OPTIONAL to implement, clients MUST fall back
+    to a normal request if any error is returned in response to an aggregate
+    token IQ.
+  </p>
+  <p>
+    Clients are also NOT REQUIRED to check aggregate tokens. However, clients
+    MAY wish to check aggregate tokens before making a roster or MUC request
+    when the cached roster or MUC list is very large. When to check aggregate
+    tokens is left up to the clients.
+  </p>
+</section2>
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>
+    Version tokens may not provide enough collision resistance across versioned
+    entities (hereafter simply called "entities"), and may vary from server to
+    server, and therefore they MUST NOT be used as an entity identifier.
+  </p>
+  <p>
+    Version tokens SHOULD always be considered opaque to the client (eg. even
+    if the version token is a derivable and consistant hash on the server side,
+    clients should not need to know how the server is calculating the token).
+  </p>
+  <p>
+    The author RECOMMENDS using 8 character (32-bit) random alphanumeric ASCII
+    strings (eg. AABd7z9T) for version tokens.
+  </p>
+  <p>
+    If a server which supports this XEP provides an HTTP API which can be used
+    to fetch information about entities (eg. for listing information about MUC
+    rooms that a server provides on the providers web page), the entities
+    version token MAY be used as a weakly validated ETag for any API requests
+    for that entity.
+  </p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>
+    Client-side caching of entity information across sessions (rather than
+    holding them in memory only for the life of a session) could pose a privacy
+    risk, especially on shared systems. Implementations SHOULD protect cached
+    entity data with strong encryption or other appropriate means.
+  </p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p> 
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:features:entityver:0</li>
+    </ul>
+    <p>
+      Upon advancement of this specification from a status of Experimental to a
+      status of Draft, the &REGISTRAR; shall add the foregoing namespace to the
+      registry located at &STREAMFEATURES;, as described in Section 4 of
+      &xep0053;.
+    </p>
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+TODO
+</section1>
+
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>
+    The original entity versioning proposal was engineered and written by
+    HipChat's Doug Keen.
+  </p>
+</section1>
+
+</xep>
