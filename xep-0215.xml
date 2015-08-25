@@ -123,6 +123,16 @@
       <th>Inclusion</th>
     </tr>
     <tr>
+      <td>action</td>
+      <td>When sending a push update, the action value indicates if the service is being added or deleted from the set of known services (or simply being modified). The defined values are "add", "remove", and "modify", where "add" is the default.</td>
+      <td>OPTIONAL</td>
+    </tr>
+    <tr>
+      <td>expires</td>
+      <td>A timestamp indicating when the provided username and password credentials will expire. The format MUST adhere to the dateTime format specified in &xep0082; and MUST be expressed in UTC.</td>
+      <td>OPTIONAL</td>
+    </tr>
+    <tr>
       <td>host</td>
       <td>Either a fully qualified domain name (FQDN) or an IP address (IPv4 or IPv6).</td>
       <td>REQUIRED</td>
@@ -141,6 +151,11 @@
       <td>port</td>
       <td>The communications port to be used at the host.</td>
       <td>RECOMMENDED</td>
+    </tr>
+    <tr>
+      <td>restricted</td>
+      <td>A boolean value indicating that username and password credentials are required and will need to be requested if not already provided (see <link url="#credentials">Requesting Credentials</link>).</td>
+      <td>OPTIONAL</td>
     </tr>
     <tr>
       <td>transport</td>
@@ -241,7 +256,7 @@
   </services>
 </iq>
     ]]></example>
-    <p>If a requesting entity requests services of a particular type, the responding service MAY as needed send an updated list of the relevant services by "pushing" the list to a requesting entity that has previously requested the list. However, it MUST NOT push updates to the requesting entity unless it has presence information about the requesting entity (e.g., because the requesting entity is connected to the XMPP server or because the requesting entity has shared presence with a remote discovery service). A push is an IQ set to the requesting entity containing a &lt;service/&gt; payload with updated data about services matching the requested type (e.g., new services or updated credentials)</p>
+    <p>If a requesting entity requests services of a particular type, the responding service MAY as needed send an updated list of the relevant services by "pushing" the list to a requesting entity that has previously requested the list. However, it MUST NOT push updates to the requesting entity unless it has presence information about the requesting entity (e.g., because the requesting entity is connected to the XMPP server or because the requesting entity has shared presence with a remote discovery service). A push is an IQ set to the requesting entity containing a &lt;services/&gt; payload with updated data about services matching the requested type (e.g., new services or updated credentials). Each &lt;service/&gt; element SHOULD contain an 'action' attribute indicating if the service is being added, deleted, or modified.</p>
     <example caption='Services Push'><![CDATA[
 <iq from='shakespeare.lit'
     id='lh3f1vc7'
@@ -249,32 +264,38 @@
     type='set'>
   <services xmlns='urn:xmpp:extdisco:1'
             type='turn'>
-    <service host='stun.shakespeare.lit' 
+    <service action='add'
+             host='stun.shakespeare.lit' 
              port='9999' 
              transport='udp'
              type='turn'
              username='1nas9dlm3hzl89d0b9v' 
              password='gh9023ljjdk109iajqn'>
-    <service host='192.0.2.2' 
+    <service action='add'
+             host='192.0.2.2' 
              port='7778' 
              transport='udp'
              type='turn'
              username='bnsv120afg48snsdozp' 
              password='zxp023na98dsfahn1kk'/>
+    <service action='delete'
+             host='192.0.2.1'
+             port='8889'
+             type='turn'/>
   </services>
 </iq>
     ]]></example>
     <p>Upon receiving a push, the requesting entity would then send an IQ-result to the responding service in accordance with &xmppcore;.</p>
   </section2>
   <section2 topic='Requesting Credentials' anchor='credentials'>
-    <p>An entity might know about an external service via DNS or some other means, but still might need short-term credentials to use the service. The entity can request credentials by sending a special request to the server.</p>
+      <p>An entity might know about an external service via DNS or some other means, but still might need short-term credentials to use the service. The entity can request credentials by sending a special request to the server composed of a &lt;credentials/&gt; element qualified by the 'urn:xmpp:extdisco:1' namespace and contains a &lt;service/&gt; element which MUST include the 'host' and 'type' attributes to identify the desired service (the 'port' attribute MAY be provided if there are multiple services with the same host and type but different ports).</p>
     <example caption='Entity Requests Credentials at a Service'><![CDATA[
 <iq from='bard@shakespeare.lit/globe'
     id='xi2cax48'
     to='shakespeare.lit'
     type='get'>
   <credentials xmlns='urn:xmpp:extdisco:1'>
-    <service host='turn.shakespeare.lit'/>
+    <service host='turn.shakespeare.lit' type='turn' />
   </credentials>
 </iq>
     ]]></example>
@@ -286,12 +307,14 @@
     type='get'>
   <credentials xmlns='urn:xmpp:extdisco:1'>
     <service host='turn.shakespeare.lit'
+             type='turn'
              password='jj929jkj5sadjfj93v3n'
              username='nb78932lkjlskjfdb7g8'/>
   </credentials>
 </iq>
     ]]></example>
     <p>For TURN, the server might construct time-limited credentials as described in &turn-rest;.</p>
+    <p>There MAY be multiple &lt;service/&gt; elements in the result if more than one service matched the requested service identity (e.g., the same host provides service on multiple ports).</p>
     <p>If the server cannot obtain credentials at the service, it returns an appropriate stanza error, such as &notfound;, &remoteserver;, &timeout;, or &notauthorized;.</p>
   </section2>
 </section1>
@@ -414,7 +437,7 @@
   <xs:element name='credentials'>
     <xs:complexType>
       <xs:sequence>
-        <xs:element ref='service' minOccurs='0' maxOccurs='1'/>
+        <xs:element ref='service' minOccurs='0' maxOccurs='unbounded'/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>
@@ -424,10 +447,21 @@
       <xs:sequence xmlns:xdata='jabber:x:data'>
         <xs:element ref='xdata:x' minOccurs='0'/>
       </xs:sequence>
+      <xs:attribute name='action' use='optional' default='add'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='add'/>
+            <xs:enumeration value='delete'/>
+            <xs:enumeration value='modify'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name='expires' type='xs:dateTime' use='optional'/>
       <xs:attribute name='host' type='xs:string' use='required'/>
       <xs:attribute name='name' type='xs:string' use='optional'/>
       <xs:attribute name='password' type='xs:string' use='optional'/>
       <xs:attribute name='port' type='xs:string' use='required'/>
+      <xs:attribute name='restricted' type='xs:boolean' use='optional'/>
       <xs:attribute name='transport' type='xs:NCName' use='optional'/>
       <xs:attribute name='type' type='xs:NCName' use='required'/>
       <xs:attribute name='username' type='xs:string' use='optional'/>
