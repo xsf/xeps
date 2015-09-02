@@ -43,7 +43,7 @@ xep-%.pdf: $(OUTDIR)/xep-%.pdf
 	
 
 $(OUTDIR)/%.html: %.xml $(XMLDEPS)
-	xsltproc xep.xsl "$<" > "$@"
+	xsltproc --path $(CURDIR) xep.xsl "$<" > "$@"
 
 $(OUTDIR)/%.pdf: %.xml $(TEMPDIR)/%.xml.texml $(TEMPDIR)/%.xml.texml.tex $(TEXMLDEPS)
 	cd $(TEMPDIR); xelatex $(TEMPDIR)/$<.texml.tex
