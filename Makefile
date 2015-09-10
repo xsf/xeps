@@ -43,11 +43,12 @@ xep-%.pdf: $(OUTDIR)/xep-%.pdf
 	
 
 $(OUTDIR)/%.html: %.xml $(XMLDEPS)
-	xsltproc --path $(CURDIR) xep.xsl "$<" > "$@"
+	xsltproc --path $(CURDIR) xep.xsl "$<" > "$@" && echo "Finished building $@"
 
 $(OUTDIR)/%.pdf: %.xml $(TEMPDIR)/%.xml.texml $(TEMPDIR)/%.xml.texml.tex $(TEXMLDEPS)
 	cd $(TEMPDIR); xelatex $(TEMPDIR)/$<.texml.tex
 	mv $(TEMPDIR)/$<.texml.pdf $(OUTDIR)/$(patsubst %.xml.pdf,%.pdf,$<.pdf)
+	echo "Finished building $(patsubst %.xml.pdf,%.pdf,$<.pdf)"
 
 $(TEMPDIR)/%.xml.texml: %.xml $(TEXMLDEPS) $(TEMPDIR)
 	xsltproc -o $(TEMPDIR)/$<.texml xep2texml.xsl "$<"
