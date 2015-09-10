@@ -15,15 +15,32 @@
   <sig>Standards</sig>
   <dependencies>
     <spec>XMPP Core</spec>
-    <spec>XEP-0047</spec>
-    <spec>XEP-0065</spec>
-    <spec>XEP-0096</spec>
     <spec>XEP-0166</spec>
+    <spec>XEP-0261</spec>
+    <spec>XEP-0300</spec>
   </dependencies>
   <supersedes/>
   <supersededby/>
   <shortname>NOT_YET_ASSIGNED</shortname>
   &stpeter;
+  &lance;
+  <revision>
+    <version>0.17</version>
+    <date>2015-09-08</date>
+    <initials>ls/psa</initials>
+    <remark>
+      <ul>
+        <li>Recast the document to match the registration procedure defined by XEP-0166 for new application types.</li>
+        <li>Explicitly defined the schema of the &lt;file/&gt; element instead of referencing XEP-0096.</li>
+        <li>Defined the use of a 'length' attribute on &lt;range/&gt; elements. This attribute was always there because the &lt;file/&gt; and &lt;range/&gt; elements had been defined as the same as the parallel elements in XEP-0096, but the 'length' attribute was not explicitly referenced in this document.</li>
+        <li>Clarified the need for the 'senders' attribute on Jingle &lt;content/&gt; elements to distinguish between File Offers and File Requests.</li>
+        <li>Added the &lt;file-not-found/&gt; and &lt;file-too-large/&gt; reason types.</li>
+        <li>Clarified how to abort a file transfer via 'content-remove' or 'session-terminate' actions.</li>
+        <li>Added &lt;received/&gt; element for indicating that a transfer was successful, particularly when there are multiple transfers.</li>
+        <li>Added SDP mapping.</li>
+      </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.16</version>
     <date>2014-08-11</date>
@@ -163,54 +180,200 @@
     <version>0.0.2</version>
     <date>2008-02-28</date>
     <initials>psa</initials>
-    <remark>Modified negotiation flow to use new content-replace action.</remark>
+    <remark><p>Modified negotiation flow to use new content-replace action.</p></remark>
   </revision>
   <revision>
     <version>0.0.1</version>
     <date>2008-01-29</date>
     <initials>psa</initials>
-    <remark>First draft.</remark>
+    <remark><p>First draft.</p></remark>
   </revision>
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
+  <p>&xep0166; can be used to initiate and negotiate a wide range of peer-to-peer sessions. One session type of interest is file transfer. This document specifies an application format for negotiating Jingle file transfer sessions, where files are exchanged via any available reliable transport.</p>
+</section1>
+
+<section1 topic='Requirements'>
   <p>&xep0096; was the original XMPP protocol extension for file transfer negotiation. However, that protocol has several drawbacks, most related to the &xep0095; protocol on which it depends:</p>
   <ol>
-    <li>It does not enable a true, bidirectional negotiation; instead, the initiator sets the terms for the file transfer and the responder either accepts the terms or cancels the negotiation.</li>
-    <li>It is the only technology in the Jabber/XMPP protocol "stack" that uses <cite>XEP-095: Stream Initiation</cite>. More modern technologies such as voice and video session negotiation use &xep0166;, and it would be helpful if implementors could re-use the same code for all negotiation use cases.</li>
+    <li><p>It does not enable a true, bidirectional negotiation; instead, the initiator sets the terms for the file transfer and the responder either accepts the terms or cancels the negotiation.</p></li>
+    <li><p>It is the only technology in the Jabber/XMPP protocol "stack" that uses <cite>XEP-0095: Stream Initiation</cite>. More modern technologies such as voice and video session negotiation use &xep0166;, and it would be helpful if implementors could re-use the same code for all negotiation use cases.</p></li>
   </ol>
   <p>To overcome these drawbacks, this specification defines a file transfer negotiation method that meets the following requirements:</p>
   <ul>
-    <li>Use the session negotiation semantics from <cite>XEP-0166</cite>.</li>
-    <li>Use &xep0260; and &xep0261; as transport methods.</li>
-    <li>Define a file description format that, unlike <cite>XEP-0096</cite>, enables hash agility (via &xep0300;).</li>
-    <li>Define a clear upgrade path from SI File Transfer to Jingle File Transfer.</li>
+    <li><p>Use the session negotiation semantics from <cite>XEP-0166</cite>.</p></li>
+    <li>
+      <p>Use any reliable Jingle transport mechanism, including but not limited to:</p>
+      <ul>
+        <li>ICE-TCP &rfc6544;</li>
+        <li>SOCKS5 Bytestreams &xep0260;</li>
+        <li>In-Band Bytestreams &xep0261;</li>
+      </ul>
+    </li>
+    <li><p>Define a file description format that, unlike <cite>XEP-0096</cite>, enables hash agility (via &xep0300;).</p></li>
+    <li><p>Define a clear upgrade path from SI File Transfer to Jingle File Transfer.</p></li>
   </ul>
-  <p>Jingle file transfer is only as reliable as the transports on which it depends. In particular, SOCKS5 Bytestreams ("S5B") does not always result in NAT or firewall traversal. To work around that problem, this specification requires all implementations to support as a fallback mechanism In-Band Bytestreams ("IBB"), which usually results in a successful (if slow) file transfer.</p>
-  <p>Note: It is likely that a future version of this specification will also recommend implementation of a Jingle transport method that emulates the IETF's ICE-TCP technology, as specified in &rfc6544;.</p>
+  <p>Note that Jingle file transfer is only as reliable as the transports on which it depends. In particular, SOCKS5 Bytestreams ("S5B") does not always result in NAT or firewall traversal. To work around that problem, this specification requires all implementations to support as a fallback mechanism In-Band Bytestreams ("IBB"), which usually results in a successful (if slow) file transfer. A more robust and adaptable option is ICE-TCP (RFC 6455); at the time of writing &xep0176; is being updated to include the ability to negotiate ICE-TCP candidates.</p>
 </section1>
 
-<section1 topic='How It Works' anchor='protocol'>
-  <p>This section provides a friendly introduction to Jingle file transfer.</p>
-  <p>First, the party that wishes to initiate the file transfer determines the responder's capabilities (via &xep0030; or &xep0115;). Here we assume that the responder supports the following service discovery features:</p>
-  <ul>
-    <li>urn:xmpp:jingle:1 as described in <cite>XEP-0166</cite></li>
-    <li>urn:xmpp:jingle:apps:file-transfer:4 as defined in this document &NSVER;</li>
-    <li>urn:xmpp:jingle:transports:s5b:1 as defined in <cite>XEP-0260</cite></li>
-    <li>urn:xmpp:jingle:transports:ibb:1 as defined in <cite>XEP-0261</cite></li>
-  </ul>
-  <p>The initiator then sends a Jingle session-initiation request to a potential responder. The content-type of the request specifies two things:</p>
+<section1 topic='Terminology' anchor='terms'>
+  <dl>
+    <di>
+      <dt>File Offer</dt>
+      <dd>A Jingle File Transfer Content is said to be a File Offer if the content creator is the same as the content sender (see <link url='#content-senders'>Use of Jingle Content Senders</link>).</dd>
+    </di>
+    <di>
+      <dt>File Request</dt>
+      <dd>A Jingle File Transfer Content is said to be a File Request if the content creator is the opposite of the content sender (see <link url='#content-senders'>Use of Jingle Content Senders</link>).</dd>
+    </di>
+    <di>
+      <dt>File Sender</dt>
+      <dd>The File Sender is the side of the Jingle session responsible for sending the file data. The File Sender is not necessarily the same entity as the Jingle session initiator, and an entity could be both a File Sender and File Receiver in the context of a single Jingle session with multiple files.</dd>
+    </di>
+    <di>
+      <dt>File Receiver</dt>
+      <dd>The File Receiver is the side of the Jingle session responsible for receiving the file data. The File Receiver is not necessarily the same entity as the Jingle session responder, and an entity could be both a File Receiver and File Sender in the context of a single Jingle session with multiple files.</dd>
+    </di>
+  </dl>
+</section1>
+
+<section1 topic='Jingle Conformance'>
+  <p>In accordance with Section 12 of <cite>XEP-0166</cite>, this document specifies the following information related to the Jingle File Transfer ("Jingle FT") application type:</p>
   <ol>
-    <li>An application type of "urn:xmpp:jingle:apps:file-transfer:4". In particular, the &lt;description/&gt; element contains a &lt;file/&gt; elements describing the file to be sent.</li>
-    <li>An appropriate transport method. So far the suggested methods are jingle-s5b (<cite>XEP-0260</cite>) and, as a fallback, jingle-ibb (<cite>XEP-0261</cite>).</li>
+    <li><p>The application format negotiation process is defined in the <link url='#negotiation'>Negotiating a Jingle File Transfer Session</link> section of this document.</p></li>
+    <li><p>The semantics of the &DESCRIPTION; element are defined in the <link url='#format'>Application Format</link> section of this document.</p></li>
+    <li><p>A mapping of Jingle semantics to the Session Description Protocol is provided in the <link url='#sdp'>Mapping to Session Description Protocol</link> section of this document.</p></li>
+    <li><p>A Jingle File Transfer session SHOULD use a streaming transport method, not a datagram transport method.</p></li>
+    <li><p>Transport components are not used in Jingle File Transfer.</p></li>
+    <li>
+      <p>Content is to be sent and received as follows:</p>
+      <p>For streaming transports, outbound content shall be encoded into packets (as defined by the transport mechanism) without any other framing mechanism and sent in succession over the transport. Incoming data received over the transport shall be processed as a stream of packets, where each packet's content payload is entirely composed of the next portion of file data to be processed.</p>
+    </li>
   </ol>
-  <p>In this example, the initiator is &lt;romeo@montague.lit&gt;, the responder is &lt;juliet@capulet.lit&gt;, the application type is a file offer, and the transport method is jingle-s5b.</p>
-  <p>The flow is as follows.</p>
+
+  <section2 topic='Use of Jingle Content Senders' anchor='content-senders'>
+    <p>Jingle File Transfer makes critical use of the 'senders' attribute of Jingle &CONTENT; elements in order to specify which party is responsible for sending the described file. As such, Jingle File Transfer content MUST include a 'senders' attribute, where the allowed values are "initiator" and "responder". The semantics of the values "both" and "none" are undefined in Jingle File Transfer and thus NOT RECOMMENDED for use with Jingle File Transfer content.</p>
+    <p>In general, a Jingle File Transfer content is said to be a "File Offer" if the 'senders' attribute is the same as the role of the party adding the content to the session, and a "File Request" if the 'senders' value is the opposite role of the party adding the content.</p>
+    <p>Note: The content 'creator' attribute does <em>not</em> specify who created or is sending the file, it only specifies which party to the session added the Jingle content to the session.</p>
+    <table caption='Distinguishing File Offers and Requests'>
+      <tr>
+        <th>Jingle Session Role</th>
+        <th>Content Senders</th>
+        <th>File Transfer Type</th>
+      </tr>
+      <tr>
+        <td>initiator</td>
+        <td>initiator</td>
+        <td>File Offer</td>
+      </tr>
+      <tr>
+        <td>initiator</td>
+        <td>responder</td>
+        <td>File Request</td>
+      </tr>
+      <tr>
+        <td>responder</td>
+        <td>initiator</td>
+        <td>File Request</td>
+      </tr>
+      <tr>
+        <td>responder</td>
+        <td>responder</td>
+        <td>File Offer</td>
+      </tr>
+    </table>
+  </section2>
+</section1>
+
+<section1 topic='Application Format'>
+  <p>A Jingle File Transfer session is described by a content type that contains one application format and one transport method. Each &CONTENT; element defines the details of a single file transfer. A Jingle negotiation MAY result in the establishment of multiple file transfers by including multiple &CONTENT; elements.</p>
+  <p>The application format consists of a file description contained within a &DESCRIPTION; element qualified by the "urn:xmpp:jingle:apps:file-transfer:4" namespace &VNOTE;. The file description is a &lt;file/&gt; element specifying metadata such as the name of the file, media type, etc., as illustrated in the following example.</p>
+  <code><![CDATA[
+<description xmlns='urn:xmpp:jingle:apps:file-transfer:4'>
+  <file>
+    <media-type>text/plain</media-type>
+    <name>test.txt</name>
+    <date>2015-07-26T21:46:00</date>
+    <size>6144</size>
+    <hash xmlns='urn:xmpp:hashes:1' 
+          algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
+  </file>
+</description>]]></code>
+  <p>The &DESCRIPTION; element is intended to be a child of a Jingle &CONTENT; element as specified in <cite>XEP-0166</cite>.</p>
+  <p>The child elements of the &lt;file/&gt; element are as follows:</p>
+  <table caption='File Description Elements'>
+    <tr>
+      <th>Element Name</th>
+      <th>Description</th>
+      <th>Inclusion</th>
+    </tr>
+    <tr>
+      <td>date</td>
+      <td>UTC timestamp specifying the last modified time of the file (which MUST conform to the DateTime profile of &xep0082;).</td>
+      <td>OPTIONAL</td>
+    </tr>
+    <tr>
+      <td>desc</td>
+      <td>A human readable description of the file. Multiple &lt;desc/&gt; elements MAY be included if different xml:lang values are specified.</td>
+      <td>OPTIONAL</td>
+    </tr>
+    <tr>
+      <td>hash</td>
+      <td>A hash of the file content, using the &lt;hash/&gt; element defined in &xep0300; and qualifed by the 'urn:xmpp:hashes:1' namespace. Multiple hashes MAY be included for hash agility.</td>
+      <td>REQUIRED when offering a file, otherwise OPTIONAL</td>
+    </tr>
+    <tr>
+      <td>media-type</td>
+      <td>The media type of the file content, which SHOULD be a valid MIME-TYPE as registered with &IANA; (specifically, as listed at &lt;<link url='http://www.iana.org/assignments/media-types'>http://www.iana.org/assignments/media-types</link>&gt;). If not specified, the content is assumed to be "application/octet-stream".</td>
+      <td>RECOMMENDED when offering a file, otherwise OPTIONAL</td>
+    </tr>
+    <tr>
+      <td>name</td>
+      <td>The name of the file. The name SHOULD NOT contain characters or character sequences that would be interpreted as a directory structure by the local file system (e.g. "/", "\", "../", etc.). If any such characters or character sequences are present (possibly because the local and remote file systems use different syntax for directory structure), they SHOULD be escaped (e.g., via percent-encoding) before using the name as part of any file system operation. See <link url='#security'>Security Considerations</link>.</td>
+      <td>OPTIONAL</td>
+    </tr>
+    <tr>
+      <td>size</td>
+      <td>The length of the file's content, in bytes.</td>
+      <td>OPTIONAL, but SHOULD be present when offering a file.</td>
+    </tr>
+    <tr>
+      <td>range</td>
+      <td>The presence of the &lt;range/&gt; element indicates support of ranged transfers, and can be used to control where a transfer starts.</td>
+      <td>OPTIONAL</td>
+    </tr>
+  </table>
+  <p>One or more &lt;hash/&gt; elements MUST be present when offering a file, but those elements MAY be empty if the hash has not yet been computed. If there is no computed hash value, the &lt;hash/&gt; element(s) MUST possess an 'algo' attribute specifying which hash algorithm will be used. Once a hash has been calculated by the File Sender, the File Sender SHOULD inform the File Receiver of the hash value as described in <link url='#checksum'>Checksum</link>.</p>
+  <p>Additional elements MAY be included as children of the &lt;file/&gt; element to provide additional metadata about the file, such as &xep0264;.</p>
+  <p>The optional &lt;range/&gt; element MAY possess two attributes:</p>
+  <table caption='Range Element Attributes'>
+    <tr>
+      <th>Attribute</th>
+      <th>Description</th>
+      <th>Inclusion</th>
+    </tr>
+    <tr>
+      <td>offset</td>
+      <td>Specifies the position, in bytes, from which to start transferring file data. This defaults to zero (0) if not specified.</td>
+      <td>OPTIONAL</td>
+    </tr>
+    <tr>
+      <td>length</td>
+      <td>Specifies the number of bytes to retrieve starting at offset. This defaults to the length of the file from offset to the end.</td>
+      <td>OPTIONAL</td>
+    </tr>
+  </table>
+  <p>Inclusion of a &lt;range/&gt; element in a File Offer indicates support of ranged transfers for future File Requests if the transfer is interrupted and needs to be restarted.</p>
+  <p>A &lt;range/&gt; element MAY include an 'offset' attribute set to begin the transfer at a point other than the start of the file, and MAY include a 'length' attribute to request a portion of the file smaller than the remaining length of the file. If no 'offset' or 'length' attributes are present then it is the same as if no &lt;range/&gt; element was present, because the default values of the attributes would indicate a requested range of the entire file. In general, the first byte of data to be transferred is at the (zero-indexed) position specified by the 'offset' value, with a total of 'length' bytes sent.</p>
+</section1>
+
+<section1 topic='Negotiating a Jingle File Transfer Session'>
+  <p>In general, the process for negotiating a Jingle File Transfer session is as follows:</p>
   <code><![CDATA[
 Initiator                    Responder
    |                             |
    |   session-initiate          |
-   |   (with <file/> and S5B)    | 
    |---------------------------->|
    |   ack                       |
    |<----------------------------|
@@ -218,25 +381,33 @@ Initiator                    Responder
    |<----------------------------|
    |   ack                       |
    |---------------------------->|
-   |   [ file transfer ]         |
+   |   [optional further         |
+   |    negotiation]             |
+   |<--------------------------->|
+   |   File Transfer             |
    |============================>|
-   |   session-terminate         |
-   |<----------------------------|
-   |   ack                       |
-   |---------------------------->|
-   |                             |
-  ]]></code>
-  <p>First the initiator sends a Jingle session-initiate.</p>
-  <example caption="Initiator sends session-initiate"><![CDATA[
-<iq from='romeo@montague.lit/orchard'
+   |                             |]]></code>
+
+  <section2 topic='Offering a File' anchor='offering'>
+    <p>To start a File Offer, the initiator sends a Jingle session-initiation request to a potential responder. The request specifies three things:</p>
+    <ol>
+      <li>A content 'senders' attribute with the value of 'initiator' to indicate this is a File Offer.</li>
+      <li>An application type of "urn:xmpp:jingle:apps:file-transfer:4". In particular, the &lt;description/&gt; element contains a &lt;file/&gt; elements describing the file to be sent.</li>
+      <li>An appropriate transport method.</li>
+    </ol>
+    <p>In this example, the initiator is &lt;romeo@montague.example&gt;, the responder is &lt;juliet@capulet.example&gt;, the application type is a File Offer, and the transport method is jingle-s5b (XEP-0260).</p>
+    <p>The flow is as follows.</p>
+    <p>First the initiator sends a Jingle session-initiate.</p>
+    <example caption="Initiator sends session-initiate"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
     id='nzu25s8'
-    to='juliet@capulet.lit/balcony'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
     type='set'>
   <jingle xmlns='urn:xmpp:jingle:1'
           action='session-initiate'
-          initiator='romeo@montague.lit/orchard'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
           sid='851ba2'>
-    <content creator='initiator' name='a-file-offer'>
+    <content creator='initiator' name='a-file-offer' senders='initiator'>
       <description xmlns='urn:xmpp:jingle:apps:file-transfer:4'>
         <file>
           <date>1969-07-21T02:56:15Z</date>
@@ -244,50 +415,49 @@ Initiator                    Responder
           <media-type>text/plain</media-type>
           <name>test.txt</name>
           <range/>
-          <size>1022</size>
-          <hash xmlns='urn:xmpp:hashes:1' algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
+          <size>6144</size>
+          <hash xmlns='urn:xmpp:hashes:1' 
+                algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
         </file>
       </description>
       <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
-        	 mode='tcp'
+                 mode='tcp'
                  sid='vj3hs98y'>
         <candidate cid='hft54dqy'
                    host='192.168.4.1'
-                   jid='romeo@montague.lit/orchard'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
                    port='5086'
                    priority='8257636'
                    type='direct'/>
         <candidate cid='hutr46fe'
                    host='24.24.24.1'
-                   jid='romeo@montague.lit/orchard'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
                    port='5087'
                    priority='8258636'
                    type='direct'/>
       </transport>
     </content>
   </jingle>
-</iq>
-  ]]></example>
-  <p>Note: As in <cite>XEP-0096</cite>, inclusion of the &lt;range/&gt; child of the &lt;file/&gt; element indicates that the initiatior supports ranged transfers as described below under <link url='#range'>Ranged Transfers</link>.</p>
-  <p>Note: Computing the hash of the file before sending it can slow down the process of file transfer, since the sending application needs to process the file twice. The sender might prefer to send the hash after the file transfer has begun, using a transport-info message as described under <link url='#hash'>Communicating the Hash</link>.</p>
-  <p>The responder immediately acknowledges receipt of the Jingle session-initiate.</p>
-  <example caption="Responder acknowledges session-initiate"><![CDATA[
-<iq from='juliet@capulet.lit/balcony'
+</iq>]]></example>
+    <p>Note: Inclusion of the &lt;range/&gt; child of the &lt;file/&gt; element indicates that the initiator supports ranged transfers as described below under <link url='#range'>Ranged Transfers</link>.</p>
+    <p>Note: Computing the hash of the file before sending it can slow down the process of file transfer, because the sending application needs to process the file twice. The File Sender might prefer to send the hash after the file transfer has begun, using a transport-info message as described under <link url='#hash'>Checksum</link>.</p>
+    <p>The responder immediately acknowledges receipt of the Jingle session-initiate.</p>
+    <example caption="Responder acknowledges session-initiate"><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
     id='nzu25s8'
-    to='romeo@montague.lit/orchard'
-    type='result'/>
-  ]]></example>
-  <p>The initiator then attempts to initiate a SOCKS5 Bytestream with the responder as described in <cite>XEP-0260</cite> and <cite>XEP-0065</cite>. In the meantime, the responder returns a Jingle session-accept. In the session-accept message, the &lt;file/&gt; element MAY contain a &lt;range/&gt; element to indicate that the receiver also supports ranged transfers as described below under <link url='#range'>Ranged Transfers</link>.</p>
-  <example caption="Responder sends session-accept"><![CDATA[
-<iq from='juliet@capulet.lit/balcony'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
+    type='result'/>]]></example>
+    <p>The initiator then attempts to initiate a SOCKS5 Bytestream with the responder as described in <cite>XEP-0260</cite> and <cite>XEP-0065</cite>. In the meantime, the responder returns a Jingle session-accept. In the session-accept message, the &lt;file/&gt; element MAY contain a &lt;range/&gt; element to indicate that the receiver also supports ranged transfers as described below under <link url='#range'>Ranged Transfers</link>.</p>
+    <example caption="Responder sends session-accept"><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
     id='jn2vs71g'
-    to='romeo@montague.lit/orchard'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
     type='set'>
   <jingle xmlns='urn:xmpp:jingle:1'
           action='session-accept'
-          initiator='romeo@montague.lit/orchard'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
           sid='851ba2'>
-    <content creator='initiator' name='a-file-offer'>
+    <content creator='initiator' name='a-file-offer' senders='initiator'>
       <description xmlns='urn:xmpp:jingle:apps:file-transfer:4'>
         <file>
           <date>1969-07-21T02:56:15Z</date>
@@ -295,122 +465,349 @@ Initiator                    Responder
           <media-type>text/plain</media-type>
           <name>test.txt</name>
           <range/>
-          <size>1022</size>
-          <hash xmlns='urn:xmpp:hashes:1' algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
+          <size>6144</size>
+          <hash xmlns='urn:xmpp:hashes:1' 
+                algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
         </file>
       </description>
       <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
-        	 mode='tcp'
+                 mode='tcp'
                  sid='vj3hs98y'>
         <candidate cid='ht567dq'
                    host='192.169.1.10'
-                   jid='juliet@capulet.lit/balcony'
+                   jid='juliet@capulet.example/yn0cl4bnw0yr3vym'
                    port='6539'
                    priority='8257636'
                    type='direct'/>
         <candidate cid='hr65dqyd'
                    host='134.102.201.180'
-                   jid='juliet@capulet.lit/balcony'
+                   jid='juliet@capulet.example/yn0cl4bnw0yr3vym'
                    port='16453'
                    priority='7929856'
                    type='assisted'/>
         <candidate cid='grt654q2'
                    host='2001:638:708:30c9:219:d1ff:fea4:a17d'
-                   jid='juliet@capulet.lit/balcony'
+                   jid='juliet@capulet.example/yn0cl4bnw0yr3vym'
                    port='6539'
                    priority='8257606'
                    type='direct'/>
       </transport>
     </content>
   </jingle>
-</iq>
-  ]]></example>
-  <p>The initiator acknowledges the Jingle session-accept.</p>
-  <example caption="Initiator acknowledges session-accept"><![CDATA[
-<iq from='romeo@montague.lit/orchard'
+</iq>]]></example>
+    <p>The initiator acknowledges the Jingle session-accept.</p>
+    <example caption="Initiator acknowledges session-accept"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
     id='jn2vs71g'
-    to='juliet@capulet.lit/balcony'
-    type='result'/>
-  ]]></example>
-  <p>Once one client has successfully created a connection, it sends a &lt;remote-candidate/&gt; element to the peer inside a Jingle transport-info message. If a client receives a remote-candidate notification it SHOULD continue trying to connect to candidates sent by its peer if it has not tried all candidates with a higher priority than the one successfully used by the peer.</p>
-  <example caption="Initiator sends remote-candidate in Jingle transport-info"><![CDATA[
-<iq from='romeo@montague.lit/orchard'
-    id='hjdi8'
-    to='juliet@capulet.lit/balcony'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='result'/>]]></example>
+  </section2>
+
+  <section2 topic='Requesting a File' anchor='requesting'>
+    <p>If the File Sender has advertised the existence of a file that it hosts, such as by &xep0358;, or if a previous file transfer attempt has failed and the File Receiver would like to initiate another attempt, the File Receiver can "pull" the file from the File Sender. This is done by sending a Jingle session-initiate to the File Sender which includes a &lt;content/&gt; with the 'senders' attribute set to the opposite Jingle session role of the party requesting the file (see <link url='#content-senders'>Use of Jingle Content Senders</link>) and a &lt;description/&gt; element qualified by the 'urn:xmpp:jingle:apps:file-transfer:4' namespace and which includes a &lt;file/&gt; element with enough information included to form a "file selector" (see Section 5 of &rfc5547;) to identify the requested file.</p>
+    <example caption="File Receiver requests hosted file"><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    id='wsn361c3'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
     type='set'>
   <jingle xmlns='urn:xmpp:jingle:1'
-          action='transport-info'
-          initiator='romeo@montague.lit/orchard'
-          sid='a73sjjvkla37jfea'>
-    <content creator='initiator' name='ex'>
+          action='session-initiate'
+          initiator='juliet@capulet.example/yn0cl4bnw0yr3vym'
+          sid='uj3b2'>
+    <content creator='initiator' name='a-file-request' senders='responder'>
+      <description xmlns='urn:xmpp:jingle:apps:file-transfer:4'>
+        <file>
+          <hash xmlns='urn:xmpp:hashes:1' 
+                algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
+        </file>
+      </description>
       <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
-                 sid='vj3hs98y'>
-        <remote-candidate cid='hr65dqyd'/>
+                 mode='tcp'
+                 sid='xig361fj'>
+        <candidate cid='ht567dq'
+                   host='192.169.1.10'
+                   jid='juliet@capulet.example/yn0cl4bnw0yr3vym'
+                   port='6539'
+                   priority='8257636'
+                   type='direct'/>
+        <candidate cid='hr65dqyd'
+                   host='134.102.201.180'
+                   jid='juliet@capulet.example/yn0cl4bnw0yr3vym'
+                   port='16453'
+                   priority='7929856'
+                   type='assisted'/>
+        <candidate cid='grt654q2'
+                   host='2001:638:708:30c9:219:d1ff:fea4:a17d'
+                   jid='juliet@capulet.example/yn0cl4bnw0yr3vym'
+                   port='6539'
+                   priority='8257606'
+                   type='direct'/>
       </transport>
     </content>
   </jingle>
-</iq>
-  ]]></example>
-  <p>The peer immediately acknowledges receipt.</p>
-  <example caption="Responder acknowledges remote-candidate message"><![CDATA[
-<iq from='juliet@capulet.lit/balcony'
-    id='hjdi8'
-    to='romeo@montague.lit/orchard'
-    type='result'/>
-  ]]></example>
-  <p>(See <cite>XEP-0260</cite> for further details.)</p>
-  <p>Now the parties exchange the file using the negotiated transport (here, SOCKS5 Bytestreams).</p>
-  <p>Once the transfer is completed, either party can acknowledge completion or terminate the Jingle session; preferably this is done by the entity that receives the file to ensure that the complete file (up to the advertised size) has been received.</p>
-  <example caption="Receiver sends session-terminate"><![CDATA[
-<iq from='juliet@capulet.lit/balcony'
-    id='og61bvs98'
-    to='romeo@montague.lit/orchard'
+</iq>]]></example>
+    <p>See <link url='#file-not-available'>File not Available</link> for how to respond if the requester does not have permission to request the file, or if the file cannot be found.</p>
+  </section2>
+
+  <section2 topic='Offering or Requesting Additional Files'>
+    <p>While the Jingle File Transfer session is active, either party MAY choose to add additional files (both offers and requests) to the transfer session. To do so, a Jingle content-add action is used, as shown in the following examples.</p>
+    <example caption="File Sender offers additional file"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='wsn361c9'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='content-add'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
+          sid='uj3b2'>
+    <content creator='initiator' name='additional' senders='initiator'>
+      <description xmlns='urn:xmpp:jingle:apps:file-transfer:4'>
+        <file>
+          <name>second-file.txt</name>
+          <media-type>text/plain</media-type>
+          <size>6144</size>
+          <hash xmlns='urn:xmpp:hashes:1' 
+                algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
+        </file>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
+                 mode='tcp'
+                 sid='vj3hs98y'>
+        <candidate cid='hft54dqy'
+                   host='192.168.4.1'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
+                   port='5086'
+                   priority='8257636'
+                   type='direct'/>
+        <candidate cid='hutr46fe'
+                   host='24.24.24.1'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
+                   port='5087'
+                   priority='8258636'
+                   type='direct'/>
+      </transport>
+    </content>
+  </jingle>
+</iq>]]></example>
+    <p>The other party then acks the content-add request.</p>
+    <example caption="File Receiver acks content-add request"><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
+    id='wsn361c9'
+    type='result' />]]></example>
+    <p>At this point, the content-add request needs to be either accepted or rejected using Jingle content-accept or content-reject actions.</p>
+  </section2>
+
+  <section2 topic='Ranged Transfers' anchor='range'>
+    <p>As in <cite>XEP-0096</cite>, a transfer can include only part of a file (e.g., to restart delivery of a truncated transfer session at a point other than the start of the file). This is done using the &lt;range/&gt; element. The usage is illustrated in the following examples.</p>
+    <p>Let us imagine that the parties negotiate a file transfer session using, say, In-Band Bytestreams. During the transfer, the recipient goes offline unexpectedly and IBB stanzas from the File Sender to the File Receiver begin to bounce. When the recipient comes back online, the File Sender could initiate a new Jingle session and specify that it wants to send all chunks after byte 270336 (which might be the 66th chunk of size 4096).</p>
+    <example caption="File Sender requests session to send file, with range"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='wsn361c3'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-initiate'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
+          sid='uj3b2'>
+    <content creator='initiator' name='restart' senders='initiator'>
+      <description xmlns='urn:xmpp:jingle:apps:file-transfer:4'>
+        <file>
+          <range offset='270336'/>
+          <hash xmlns='urn:xmpp:hashes:1' 
+                algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
+        </file>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
+             mode='tcp'
+                 sid='vj3hs98y'>
+        <candidate cid='hft54dqy'
+                   host='192.168.4.1'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
+                   port='5086'
+                   priority='8257636'
+                   type='direct'/>
+        <candidate cid='hutr46fe'
+                   host='24.24.24.1'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
+                   port='5087'
+                   priority='8258636'
+                   type='direct'/>
+      </transport>
+    </content>
+  </jingle>
+</iq>]]></example>
+  </section2>
+
+  <section2 topic='Aborting a Transfer'>
+    <p>At any point, either party MAY choose to abort the transfer of a single file, or end the session entirely to abort all active transfers.</p>
+    <p>When there is only a single Jingle content or if a party wishes to abort the transfer of all files in the session, a session-terminate including a Jingle reason of &lt;cancel /&gt; is sent.</p>
+    <example caption='File Receiver aborts all active file transfers'><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    id='jp2ba614'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
     type='set'>
   <jingle xmlns='urn:xmpp:jingle:1'
           action='session-terminate'
           sid='a73sjjvkla37jfea'>
     <reason>
-      <success/>
+      <cancel />    
     </reason>
   </jingle>
-</iq>
-  ]]></example>
-  <p>After terminating the session, the parties would close the data transport as described in the relevant specification (e.g., <cite>XEP-0260</cite> or <cite>XEP-0261</cite>).</p>
-  <p>For a description of the transport fallback scenario (from SOCKS5 Bytestreams to In-Band Bytestreams), refer to <cite>XEP-0260</cite>.</p>
+</iq>]]></example>
+    <p>If a party chooses to abort the transfer of a single file out of several active transfers, a Jingle content-remove action is used, which MAY include a Jingle reason of &lt;cancel/&gt;, as shown in the following example.</p>
+    <example caption='File Receiver aborts the transfer'><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    id='jp2ba614'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='content-remove'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
+          sid='a73sjjvkla37jfea'>
+    <content creator='initiator' name='a-file-offer' />
+    <reason>
+      <cancel />    
+    </reason>
+  </jingle>
+</iq>]]></example>
+    <p>The other party then acks the content-remove request.</p>
+    <example caption='File Sender acks abort request'><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='jp2ba614'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='result' />]]></example>
+    <p>If after removing the content there are no other Jingle contents the session MUST be terminated as described in the next section.</p>
+  </section2>
+
+  <section2 topic='Ending the Session'>
+    <p>Once all file content in the session has been transfered, either party MAY acknowledge receipt of the received files (see <link url='#received'>Received</link>) or, if there are no other active file transfers, terminate the Jingle session with a Jingle session of &lt;success/&gt;. Preferably, sending the session-terminate is done by the last entity to finish receiving a file to ensure that all offered or requested files by either party have been completely received (up to the advertised sizes).</p>
+    <example caption='File Receiver ends the session after successfully receiving all files'><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    id='jp2ba614'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-terminate'
+          sid='a73sjjvkla37jfea'>
+    <reason>
+      <success />    
+    </reason>
+  </jingle>
+</iq>]]></example>
+  </section2>
+
 </section1>
 
-<section1 topic='Communicating the Checksum or Hashing Algorithm' anchor='hash'>
-  <p>At any time during the lifetime of the file transfer session, the hosting entity (i.e., the entity where the file resides) can communicate the checksum of the file to the receiving entity.</p>
-  <p>This can be done in the session-initiate message if the sender already knows the checksum, as shown above in Example 1.</p>
-  <p>After the session-initiate message, this can also be done by sending a session-info message containing a &lt;checksum/&gt; element qualified by the 'urn:xmpp:jingle:apps:file-transfer:4' namespace, which in turn contains a &lt;file/&gt; element that MUST at least contain a child element of &lt;hash/&gt; qualified by the 'urn:xmpp:hashes:1' namespace and MAY contain other elements qualified by the 'urn:xmpp:jingle:apps:file-transfer:4' namespace (e.g. &lt;name/&gt; and &lt;date/&gt;). Each &lt;hash/&gt; element contains a checksum of the file contents produced in accordance with the hashing function specified by the 'algo' attribute, which MUST be one of the functions listed in the &ianahashes;.</p>
-  <example caption="Initiator sends checksum in session-info"><![CDATA[
-<iq from='romeo@montague.lit/orchard'
-    id='kqh401b5'
-    to='juliet@capulet.lit/balcony'
+<section1 topic='Mapping to Session Description Protocol' anchor='sdp'>
+  <p>&rfc5547; defines the general process for including file transfer information in SDP.</p>
+  <p>The SDP media type for Jingle File Transfer can be "message" (e.g. when used with &rfc4975;) or "application"; however, this media value is not reflected in the Jingle File Transfer application format.</p>
+  <p>Any combination of &lt;name/&gt;, &lt;size/&gt;, &lt;media-type/&gt;and &lt;hash/&gt; values MAY be used to form a "file selector" (see Section 5 of &rfc5547;), which would be mapped to SDP as follows:</p>
+  <code><![CDATA[
+a=file-selector [name:"<name>"] [size:<size>] [type:<media-type>] [hash:<hash algo>:<hash value>]]]></code>
+  <p>(The hash value MUST be encoded as hexadecimal with each byte separated by a colon.)</p>
+  <p>The &lt;date/&gt; value is the last modified time of the file, and thus is mapped as follows:</p>
+  <code><![CDATA[
+a=file-date:modification:"<date>"]]></code>
+  <p>Note: the format used here for &lt;date&gt; is the date-time format defined in &rfc5322;.</p>
+  <p>If a range is specified, the SDP mapping requires both a start and stop offset. If no length was specified for the range, the stop offset is "*". If a length was specified, the stop offset is the &lt;range/&gt; offset value plus the length.</p>
+  <code><![CDATA[
+a=file-range:<offset>-<(offset + length) | *>]]></code>
+  <p>As a full example, given the following Jingle File Transfer content description:</p>
+  <code><![CDATA[
+<description xmlns='urn:xmpp:jingle:apps:file-transfer:4'>
+  <file>
+    <media-type>text/plain</media-type>
+    <name>test.txt</name>
+    <date>2015-07-26T21:46:00</date>
+    <size>6144</size>
+    <hash xmlns='urn:xmpp:hashes:1' 
+          algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
+    <range offset='1024' />
+  </file>
+</description>]]></code>
+    <p>The equivalent SDP would be:</p>
+    <code><![CDATA[
+a=file-selector: name:"test.txt" size:6144 type:text/plain hash:sha-1:55:2D:A7:49:93:08:52:C6:9A:E5:D2:14:1D:37:66:B1
+a=file-date:modification:"26 Jul 2015 21:46:00"
+a=file-range:1024-*]]></code>
+</section1>
+
+<section1 topic='Informational Messages'>
+  <section2 topic='Received'>
+      <p>Once a file has been successfully received, the recipient MAY send a Jingle session-info message indicating receipt of the complete file, which consists of a &lt;received/&gt; element qualified by the 'urn:xmpp:jingle:apps:file-transfer:4' namespace. The &lt;received/&gt; element SHOULD contain 'creator' and 'name' attributes sufficient to identify the content that was received.</p>
+    <example caption='File Receiver sends ack in session-info'><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    id='jp2ba614'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
     type='set'>
   <jingle xmlns='urn:xmpp:jingle:1'
           action='session-info'
-          initiator='romeo@montague.lit/orchard'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
           sid='a73sjjvkla37jfea'>
-    <checksum xmlns='urn:xmpp:jingle:apps:file-transfer:4'>
+    <received xmlns='urn:xmpp:jingle:apps:file-transfer:4' 
+              creator='initiator' 
+              name='a-file-offer' />
+  </jingle>
+</iq>]]></example>
+  </section2>
+
+  <section2 topic='Checksum' anchor='hash'>
+    <p>At any time during the lifetime of the file transfer session, the File Sender can communicate the checksum of the file to the File Receiver.</p>
+    <p>This can be done in the session-initiate message if the File Sender already knows the checksum, as shown above in Example 3.</p>
+    <p>After the session-initiate message, this can also be done by sending a session-info message containing a &lt;checksum/&gt; element qualified by the 'urn:xmpp:jingle:apps:file-transfer:4' namespace. The &lt;checksum/&gt; element SHOULD contain 'creator' and 'name' attributes sufficient to identitfy the content the checksum belongs to.  Additionally, the &lt;checksum/&gt; element MUST contain a &lt;file/&gt; element which MUST contain at least one &lt;hash/&gt; element qualified by the 'urn:xmpp:hashes:1' namespace. Each &lt;hash/&gt; element contains a checksum of the file data produced in accordance with the hashing function specified by the 'algo' attribute, which MUST be one of the functions listed in the &ianahashes;.</p>
+    <example caption="Initiator sends checksum in session-info"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='kqh401b5'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-info'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
+          sid='a73sjjvkla37jfea'>
+    <checksum xmlns='urn:xmpp:jingle:apps:file-transfer:4' 
+              creator='initiator' 
+              name='a-file-offer'>
       <file>
-        <hash xmlns='urn:xmpp:hashes:1' algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
+        <hash xmlns='urn:xmpp:hashes:1' 
+              algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
       </file>
     </checksum>
   </jingle>
-</iq>
-  ]]></example>
-  <p>If the initiator wishes to communicate only the hashing algorithm as the beginning of the session (e.g., because it has not yet calculated the checksum), it can send an empty &lt;hash/&gt; element (without a checksum in the XML character data as shown in the previous examples) in the session-initiate message; this enables the recipient to check the file during the transfer session (which can be helpful in the case of transfers that are truncated or fail mid-stream).</p>
-  <example caption="Initiator communicates hashing algorithm in session-initiate"><![CDATA[
-<iq from='romeo@montague.lit/orchard'
+</iq>]]></example>
+    <p>If a ranged transfer was requested, the &lt;file/&gt; element inside the &lt;checksum/&gt; element MAY include a &lt;range/&gt; element specifying the offset and length of the requested range, which in turn includes &lt;hash/&gt; element(s) with hashes of the data that was transferred for that range.</p>
+    <example caption="Initiator sends checksum in session-info for a specific range"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='kqh401b5'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-info'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
+          sid='a73sjjvkla37jfea'>
+    <checksum xmlns='urn:xmpp:jingle:apps:file-transfer:4' 
+              creator='initiator' 
+              name='a-file-offer'>
+      <file>
+        <range offset='2048' length='1024'>
+          <hash xmlns='urn:xmpp:hashes:1' 
+                algo='sha-1'>4df403604e746f15062ffdbc29367886</hash>
+        </range>
+      </file>
+    </checksum>
+  </jingle>
+</iq>]]></example>
+    <p>If the initiator wishes to communicate only the hashing algorithm at the beginning of the session (e.g., because it has not yet calculated the checksum), it can send an empty &lt;hash/&gt; element (without a checksum in the XML character data as shown in the previous examples) in the session-initiate message; this enables the recipient to check the file during the transfer session (which can be helpful in the case of transfers that are truncated or fail mid-stream).</p>
+    <example caption="Initiator communicates hashing algorithm in session-initiate"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
     id='nzu25s8'
-    to='juliet@capulet.lit/balcony'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
     type='set'>
   <jingle xmlns='urn:xmpp:jingle:1'
           action='session-initiate'
-          initiator='romeo@montague.lit/orchard'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
           sid='851ba2'>
-    <content creator='initiator' name='a-file-offer'>
+    <content creator='initiator' name='a-file-offer' senders='initiator'>
       <description xmlns='urn:xmpp:jingle:apps:file-transfer:4'>
         <file>
           <date>1969-07-21T02:56:15Z</date>
@@ -418,146 +815,82 @@ Initiator                    Responder
           <media-type>text/plain</media-type>
           <name>test.txt</name>
           <range/>
-          <size>1022</size>
+          <size>6144</size>
           <hash xmlns='urn:xmpp:hashes:1' algo='sha-1'/>
         </file>
       </description>
       <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
-        	 mode='tcp'
+                 mode='tcp'
                  sid='vj3hs98y'>
         <candidate cid='hft54dqy'
                    host='192.168.4.1'
-                   jid='romeo@montague.lit/orchard'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
                    port='5086'
                    priority='8257636'
                    type='direct'/>
         <candidate cid='hutr46fe'
                    host='24.24.24.1'
-                   jid='romeo@montague.lit/orchard'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
                    port='5087'
                    priority='8258636'
                    type='direct'/>
       </transport>
     </content>
   </jingle>
-</iq>
-  ]]></example>
+</iq>]]></example>
+  </section2>
 </section1>
 
-<section1 topic='Ranged Transfers' anchor='range'>
-  <p>As in <cite>XEP-0096</cite>, a transfer can include only part of a file (e.g., to restart delivery of a truncated transfer session at a point other than the start of the file). This is done using the &lt;range/&gt; element from <cite>XEP-0096</cite>. The usage is illustrated in the following examples.</p>
-  <p>Let us imagine that the parties negotiate a file transfer session using, say, In-Band Bytestreams. During the transfer, the recipient goes offline unexpectedly and IBB stanzas from the sender to the recipient begin to bounce. When the recipient comes back online, the sender could initiate a new Jingle session and specify that it wants to send all chunks after byte 270336 (which might be the 66th chunk of size 4096).</p>
-  <example caption="Sender requests session to send file, with range"><![CDATA[
-<iq from='romeo@montague.lit/orchard'
-    id='wsn361c3'
-    to='juliet@capulet.lit/balcony'
+<section1 topic='Errors' anchor='errors'>
+  <section2 topic='File not Available' anchor='file-not-available'>
+    <p>If a requested file cannot be found (or the requester does not have permission to request or know about the existence of the file in question), then the File Sender SHOULD send either a session-terminate or content-reject action in response to the session-initiate or content-add request, and SHOULD include a Jingle reason of &lt;failed-application/&gt; and MAY include an application specific reason of a &lt;file-not-available/&gt; element qualified by the 'urn:xmpp:jingle:apps:file-transfer:errors:0' namespace.</p>
+     <example caption="File Sender rejects file request because the file could not be found"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='wsn361c9'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
     type='set'>
   <jingle xmlns='urn:xmpp:jingle:1'
-          action='session-initiate'
-          initiator='romeo@montague.lit/orchard'
+          action='content-reject'
           sid='uj3b2'>
-    <content creator='initiator' name='restart'>
-      <description xmlns='urn:xmpp:jingle:apps:file-transfer:4'>
-        <file>
-          <range offset='270336'/>
-          <hash xmlns='urn:xmpp:hashes:1' algo='sha-1'>552da749930852c69ae5d2141d3766b1</hash>
-        </file>
-      </description>
-      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
-        	 mode='tcp'
-                 sid='vj3hs98y'>
-        <candidate cid='hft54dqy'
-                   host='192.168.4.1'
-                   jid='romeo@montague.lit/orchard'
-                   port='5086'
-                   priority='8257636'
-                   type='direct'/>
-        <candidate cid='hutr46fe'
-                   host='24.24.24.1'
-                   jid='romeo@montague.lit/orchard'
-                   port='5087'
-                   priority='8258636'
-                   type='direct'/>
-      </transport>
-    </content>
+    <content creator='initiator' name='requesting-file' senders='initiator'>
+    <reason>
+      <failed-application />
+      <file-not-available xmlns='urn:xmpp:jingle:apps:file-transfer:errors:0' />
+    </reason>
   </jingle>
-</iq>
-  ]]></example>
+</iq>]]></example>
+  </section2>
+
+  <section2 topic='File too Large' anchor='file-too-large'>
+    <p>There are several situations where a File Receiver might wish to abort a transfer due to an excess of file data, for example:</p>
+    <ul>
+        <li>The File Receiver has reached a file system storage quota or other hard limit that prevents continuing to receive file data.</li>
+        <li>The File Sender has continued sending data past the initially specified size of the file.</li>
+    </ul>
+    <p>In such cases, the File Receiver MAY abort the transfer by sending a Jingle session-terminate (or content-remove as appropriate) which includes a Jingle reason of &lt;media-error/&gt; and MAY include an application specific reason of a &lt;file-too-large/&gt; element qualified by the 'urn:xmpp:jingle:apps:file-transfer:errors:0' namespace.</p>
+     <example caption="File Receiver rejects file offer because the file is too large"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='wsn361c9'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='content-remove'
+          sid='uj3b2'>
+    <content creator='initiator' name='big-file' senders='initiator'>
+    <reason>
+      <media-error />
+      <file-too-large xmlns='urn:xmpp:jingle:apps:file-transfer:errors:0' />
+    </reason>
+  </jingle>
+</iq>]]></example>
+  <p>To prevent denial of service and other attacks, the File Receiver is fully within its rights to drop received data or not send a session-terminate message.</p>
+  </section2>
 </section1>
 
-<section1 topic='Use of Jingle Actions' anchor='jingle'>
-  <p>Jingle file transfer uses only a few of the actions defined in <cite>XEP-0166</cite>. Jingle usage is summarized in the following table.</p>
-  <table caption='Jingle Actions Used in File Transfer'>
-    <tr>
-      <th>Action</th>
-      <th>Use</th>
-    </tr>
-    <tr>
-      <td>content-accept</td> 
-      <td>Unused</td>
-    </tr>
-    <tr>
-      <td>content-add</td> 
-      <td>Unused</td>
-    </tr>
-    <tr>
-      <td>content-modify</td> 
-      <td>Unused</td>
-    </tr>
-    <tr>
-      <td>content-reject</td> 
-      <td>Unused</td>
-    </tr>
-    <tr>
-      <td>content-remove</td> 
-      <td>Unused</td>
-    </tr>
-    <tr>
-      <td>description-info</td> 
-      <td>Unused</td>
-    </tr>
-    <tr>
-      <td>security-info</td> 
-      <td>Unused</td>
-    </tr>
-    <tr>
-      <td>session-accept</td> 
-      <td>Accepting a file offer or request</td>
-    </tr>
-    <tr>
-      <td>session-info</td> 
-      <td>Communicating the file hash</td>
-    </tr>
-    <tr>
-      <td>session-initiate</td> 
-      <td>Initiating a file offer or request</td>
-    </tr>
-    <tr>
-      <td>session-terminate</td> 
-      <td>Ending a file transfer session</td>
-    </tr>
-    <tr>
-      <td>transport-accept</td> 
-      <td>Accepting fallback from S5B to IBB</td>
-    </tr>
-    <tr>
-      <td>transport-info</td> 
-      <td>Used in SOCKS5 Bytestreams</td>
-    </tr>
-    <tr>
-      <td>transport-reject</td> 
-      <td>Rejecting fallback from S5B to IBB</td>
-    </tr>
-    <tr>
-      <td>transport-replace</td> 
-      <td>Fallback from S5B to IBB</td>
-    </tr>
-  </table>
-</section1>
 
 <section1 topic='Implementation Notes' anchor='impl'>
   <section2 topic='Mandatory to Implement Technologies' anchor='impl-mti'>
-    <p>All implementations MUST support the Jingle In-Band Bytestreams Transport Method (<cite>XEP-0261</cite>) as a reliable method of last resort. An implementation SHOULD support other transport methods as well, especially the Jingle SOCKS5 Bytestreams Transport Method (<cite>XEP-0260</cite>).</p>
+    <p>All implementations MUST support the Jingle In-Band Bytestreams Transport Method (<cite>XEP-0261</cite>) as a reliable method of last resort. An implementation SHOULD support other transport methods as well, especially ICE-TCP (RFC 6455) and the Jingle SOCKS5 Bytestreams Transport Method (<cite>XEP-0260</cite>).</p>
   </section2>
   <section2 topic='Preference Order of Transport Methods' anchor='impl-pref'>
     <p>An application MAY present transport methods in any order, except that the Jingle In-Band Bytestreams Transport Method MUST be the lowest preference.</p>
@@ -570,17 +903,16 @@ Initiator                    Responder
 <section1 topic='Determining Support' anchor='support'>
   <p>To advertise its support for the Jingle File Transfer, when replying to service discovery information ("disco#info") requests an entity MUST return URNs for any version of this protocol that the entity supports -- e.g., "urn:xmpp:jingle:apps:file-transfer:4" for this version &VNOTE;.</p>
   <example caption="Service discovery information request"><![CDATA[
-<iq from='romeo@montague.lit/orchard'
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
     id='uw72g176'
-    to='juliet@capulet.lit/balcony'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
     type='get'>
   <query xmlns='http://jabber.org/protocol/disco#info'/>
-</iq>
-  ]]></example>
+</iq>]]></example>
   <example caption="Service discovery information response"><![CDATA[
-<iq from='juliet@capulet.lit/balcony'
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
     id='uw72g176'
-    to='romeo@montague.lit/orchard'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
     type='result'>
   <query xmlns='http://jabber.org/protocol/disco#info'>
     <feature var='urn:xmpp:jingle:1'/>
@@ -588,16 +920,15 @@ Initiator                    Responder
     <feature var='urn:xmpp:jingle:transports:s5b:1'/>
     <feature var='urn:xmpp:jingle:transports:ibb:1'/>
   </query>
-</iq>
-  ]]></example>
-  <p>As noted, if an application supports exchange of multiple files, it MUST advertise a service discovery feature of "urn:xmpp:jingle:apps:file-transfer:multi".</p>
+</iq>]]></example>
   <p>In order for an application to determine whether an entity supports this protocol, where possible it SHOULD use the dynamic, presence-based profile of service discovery defined in &xep0115;. However, if an application has not received entity capabilities information from an entity, it SHOULD use explicit service discovery instead.</p>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
-  <p>It is RECOMMENDED for implementations to use the strongest hashing algorithm available to both parties. See XEP-0300 for further discussion.</p>
+    <p>Caution needs to be exercised when using the &lt;name/&gt; of a file offer or request to control any interaction with a file system. For example, a malicious user could request a file with &lt;name&gt;/etc/passwd&lt;/name&gt; or include file system specific control patterns such as &lt;name&gt;../../private.txt&lt;/name&gt; to try and access a sensitive file outside of the set of files intended to be shared. Or a malicious user could offer a file named "/etc/passwd" to try and trick the receiver into overwriting that or other sensitive files. Therefore, implementations SHOULD escape any file system path separators in the &lt;name/&gt; before using that value in any file system calls.</p>
+  <p>It is RECOMMENDED for implementations to use the strongest hashing algorithm available to both parties. See <cite>XEP-0300</cite> for further discussion.</p>
   <p>In order to secure the data stream, implementations SHOULD use encryption methods appropriate to the transport method being used. For example, end-to-end encryption can be negotiated over either SOCKS5 Bytestreams or In-Band Bytestreams as described in <cite>XEP-0260</cite> and <cite>XEP-0261</cite>.</p>
-  <p>Refer to <cite>XEP-0047</cite>, <cite>XEP-0065</cite>, <cite>XEP-0096</cite>, <cite>XEP-0260</cite>, and <cite>XEP-0261</cite> for related security considerations.</p>
+  <p>Refer to <cite>XEP-0047</cite>, <cite>XEP-0065</cite>, <cite>XEP-0096</cite>, <cite>XEP-0176</cite>, <cite>XEP-0260</cite>, <cite>XEP-0261</cite>, and <cite>RFC 6455</cite> for related security considerations.</p>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -616,17 +947,6 @@ Initiator                    Responder
   <section2 topic='Namespace Versioning' anchor='registrar-versioning'>
     &NSVER;
   </section2>
-  <section2 topic='Service Discovery Features' anchor='registrar-features'>
-    <p>The service discovery feature for advertising support for exchange of multiple files is "urn:xmpp:jingle:apps:file-transfer:multi".</p>
-    <p>The registry submission is as follows.</p>
-    <code caption='Registry Submission'><![CDATA[
-<var>
-  <name>urn:xmpp:jingle:apps:file-transfer:multi</name>
-  <desc>Signals support for exchange of multiple files.</desc>
-  <doc>XEP-0234</doc>
-</var>
-    ]]></code>
-  </section2>
   <section2 topic='Jingle Application Formats' anchor='registrar-content'>
     <p>The XMPP Registrar shall include "file-transfer" in its registry of Jingle application formats. The registry submission is as follows:</p>
     <code><![CDATA[
@@ -635,13 +955,14 @@ Initiator                    Responder
   <desc>Jingle sessions for the transfer of a file</desc>
   <transport>streaming</transport>
   <doc>XEP-0234</doc>
-</application>
-    ]]></code>
+</application>]]></code>
   </section2>
 </section1>
 
 <section1 topic='XML Schema' anchor='schema'>
-  <code><![CDATA[
+
+  <section2 topic='urn:xmpp:jingle:apps:file-transfer:4' anchor='schemas-file-transfer'>
+    <code><![CDATA[
 <?xml version='1.0' encoding='UTF-8'?>
 
 <xs:schema
@@ -654,38 +975,69 @@ Initiator                    Responder
 
   <xs:element name='description'>
     <xs:complexType>
-      <xs:choice>
+      <xs:all>
         <xs:element name='file' type='fileTransferElementType'/>
-      </xs:choice>
+      </xs:all>
     </xs:complexType>
   </xs:element>
 
-  <xs:element name='checksum' type='fileTransferElementType'/>
+  <xs:element name='checksum'>
+    <xs:complexType>
+      <xs:all>
+        <xs:element name='file' type='fileTransferElementType'/>
+      </xs:all>
+      <xs:attribute name='creator' use='required'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='initiator'/>
+            <xs:enumeration value='responder'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name='name' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
 
   <xs:complexType name='fileTransferElementType'>
-    <xs:sequence>
-      <xs:element name='file'/>
+    <xs:all xmlns:h='urn:xmpp:hashes:1' minOccurs='0'>
+      <xs:element name='date' type='xs:date'/>
+      <xs:element name='media-type' type='xs:string'/>
+      <xs:element name='name' type='xs:string'/>
+      <xs:element name='size' type='xs:positiveInteger'/>
+      <xs:element name='range' type='fileTransferRangeType'/>
+      <xs:element ref='h:hash' minOccurs='0' maxOccurs='unbounded'/>
     </xs:sequence>
   </xs:complexType>
 
-  <xs:element name='file'>
-    <xs:complexType>
-      <xs:sequence xmlns:h='urn:xmpp:hashes:1'>
-        <xs:element name='date' type='xs:date'/>
-        <xs:element name='media-type' type='xs:string'/>
-        <xs:element name='name' type='xs:string'/>
-        <xs:element name='size' type='xs:positiveInteger'/>
-        <xs:element ref='h:hash' minOccurs='0' maxOccurs='unbounded'/>
-      </xs:sequence>
-    </xs:complexType>
-  </xs:element>
+  <xs:complexType name='fileTransferRangeType'>
+    <xs:attribute name='offset' type='xs:nonNegativeInteger' use='optional' default='0' />
+    <xs:all xmlns:h='urn:xmpp:hashes:1' minOccurs='0'>
+      <xs:element ref='h:hash' minOccurs='0' maxOccurs='unbounded' />
+    </xs:all>
+  </xs:complexType>
 
-</xs:schema>
-  ]]></code>
+</xs:schema>]]></code>
+  </section2>
+
+  <section2 topic='urn:xmpp:jingle:apps:file-transfer:errors:0' anchor='schema-file-transfer-errors'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:jingle:apps:file-transfer:4'
+    xmlns='urn:xmpp:jingle:apps:file-transfer:errors:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='file-not-available' type='empty' />
+  <xs:element name='file-too-large' type='empty' />
+
+</xs:schema>]]></code>
+  </section2>
 </section1>
 
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>Thanks to Diana Cionoiu, Olivier Crête, Viktor Fast, Philipp Hancke, Waqas Hussain, Justin Karneges, Steffen Larsen, Yann Leboulanger, Marcus Lundblad, Robert McQueen, Joe Maissel, Glenn Maynard, Ali Sabil, Sjoerd Simons, Lance Stout, Will Thompson, Matthew Wild, and Jiří Zárevúcky for their feedback.</p>
+  <p>Thanks to Diana Cionoiu, Olivier Crête, Viktor Fast, Philipp Hancke, Waqas Hussain, Justin Karneges, Steffen Larsen, Yann Leboulanger, Marcus Lundblad, Robert McQueen, Joe Maissel, Glenn Maynard, Ali Sabil, Sjoerd Simons, Will Thompson, Matthew Wild, and Jiří Zárevúcky for their feedback.</p>
 </section1>
 
 </xep>
