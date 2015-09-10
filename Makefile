@@ -55,9 +55,9 @@ $(TEMPDIR)/%.xml.texml: %.xml $(TEXMLDEPS) $(TEMPDIR)
 
 $(TEMPDIR)/%.xml.texml.tex: $(TEMPDIR)/%.xml.texml $(OUTDIR) $(TEMPDIR)
 	texml -e utf8 $< $<.tex
-	sed -i 's|\([\s"]\)\([^"]http://[^ "]*\)|\1\\path{\2}|g' $<.tex
-	sed -i 's|\\hyperref\[#\([^}]*\)\]|\\hyperref\[\1\]|g' $<.tex
-	sed -i 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' $<.tex
+	sed -i -e 's|\([\s"]\)\([^"]http\://[^ "]*\)|\1\\path{\2}|g' \
+	       -e 's|\\hyperref\[#\([^}]*\)\]|\\hyperref\[\1\]|g' \
+	       -e 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' $<.tex
 
 $(TEMPDIR)/xmpp-text.pdf: $(TEMPDIR)
 	-[ -e $(TEMPDIR)/xmpp-text.pdf ] || curl -o "$(TEMPDIR)/xmpp-text.pdf" https://xmpp.org/images/xmpp-text.pdf
