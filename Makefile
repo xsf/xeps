@@ -1,9 +1,11 @@
 .SILENT:
 
 OUTDIR?=build
-TEMPDIR?=$(TMPDIR)/xepbuild
+RESOURCESDIR=$(OUTDIR)/resources
+TEMPDIR?=$(OUTDIR)/xepbuild
 XMLDEPS=xep.xsl xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
-TEXMLDEPS=xep2texml.xsl $(TEMPDIR) $(XMLDEPS) $(TEMPDIR)/xmpp.pdf $(TEMPDIR)/xmpp-text.pdf
+TEXMLDEPS=xep2texml.xsl $(TEMPDIR) $(XMLDEPS) $(RESOURCESDIR)/xmpp.pdf $(RESOURCESDIR)/xmpp-text.pdf
+XMPPIMAGESURL=https://xmpp.org/images
 
 
 .PHONY: help
@@ -56,19 +58,15 @@ $(TEMPDIR)/%.xml.texml.tex: $(TEMPDIR)/%.xml.texml $(OUTDIR) $(TEMPDIR)
 	       -e 's|\\hyperref\[#\([^}]*\)\]|\\hyperref\[\1\]|g' \
 	       -e 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' $<.tex
 
-$(TEMPDIR)/xmpp-text.pdf: $(TEMPDIR)
-	-[ -e $(TEMPDIR)/xmpp-text.pdf ] || curl -o "$(TEMPDIR)/xmpp-text.pdf" https://xmpp.org/images/xmpp-text.pdf
+$(RESOURCESDIR)/xmpp-text.pdf: $(RESOURCESDIR)
+	curl -o $@ $(XMPPIMAGESURL)/xmpp-text.pdf
 
-$(TEMPDIR)/xmpp.pdf: $(TEMPDIR)
-	-[ -e $(TEMPDIR)/xmpp.pdf ] || curl -o "$(TEMPDIR)/xmpp.pdf" https://xmpp.org/images/xmpp.pdf
+$(RESOURCESDIR)/xmpp.pdf: $(RESOURCESDIR)
+	curl -o $@ $(XMPPIMAGESURL)/images/xmpp.pdf
 
-$(TEMPDIR):
-	mkdir -p $(TEMPDIR)
-
-$(OUTDIR):
-	mkdir -p $(OUTDIR)
+$(TEMPDIR) $(OUTDIR) $(RESOURCESDIR):
+	mkdir -p $@
 
 .PHONY: clean
 clean:
-	rm -rf $(TEMPDIR)
 	rm -rf $(OUTDIR)
