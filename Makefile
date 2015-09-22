@@ -31,16 +31,13 @@ html: $(patsubst %.xml, $(OUTDIR)/%.html, $(wildcard *.xml))
 pdf: $(patsubst %.xml, $(OUTDIR)/%.pdf, $(wildcard *.xml))
 
 .PHONY: xep-%
-xep-%: $(OUTDIR)/xep-%.html $(OUTDIR)/xep-%.pdf
-	
+xep-%: $(OUTDIR)/xep-%.html $(OUTDIR)/xep-%.pdf ;
 
 .PHONY: xep-%.html
-xep-%.html: $(OUTDIR)/xep-%.html
-	
+xep-%.html: $(OUTDIR)/xep-%.html ;
 
 .PHONY: xep-%.pdf
-xep-%.pdf: $(OUTDIR)/xep-%.pdf
-	
+xep-%.pdf: $(OUTDIR)/xep-%.pdf ;
 
 $(OUTDIR)/%.html: %.xml $(XMLDEPS)
 	xsltproc --path $(CURDIR) xep.xsl "$<" > "$@" && echo "Finished building $@"
