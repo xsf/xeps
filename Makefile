@@ -17,6 +17,7 @@ help:
 	@echo '                   pdf  -  build all XEPs'
 	@echo '                  html  -  build all XEPs'
 	@echo '                 clean  -  recursively unlink the build tree'
+	@echo '               preview  -  builds html whenever an XEP changes (requires inotify-tools)'
 	@echo '              xep-xxxx  -  build xep-xxxx.html and xep-xxxx.pdf'
 	@echo '         xep-xxxx.html  -  build xep-xxxx.html'
 	@echo '          xep-xxxx.pdf  -  build xep-xxxx.html'
@@ -70,3 +71,12 @@ $(TEMPDIR) $(OUTDIR) $(RESOURCESDIR):
 .PHONY: clean
 clean:
 	rm -rf $(OUTDIR)
+
+.PHONY: preview
+preview:
+	inotifywait -m -e close_write,moved_to --format '%e %f' . | \
+	while read -r event file; do \
+		if [ "$${file: -4}" == ".xml" ]; then \
+			xsltproc --path $(CURDIR) xep.xsl "$${file}" > "$(OUTDIR)/$${file: :8}.html" && echo "Built $${file: :8}.html $${event}"; \
+		fi \
+	done
