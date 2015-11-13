@@ -6,11 +6,11 @@
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 <xep>
 <header>
-  <title>Domain-Based Service Names in XMPP SASL Negotiation</title>
-  <abstract>This specification defines a method by a connecting client can learn the domain-based service name of a Kerberos acceptor principal for SASL authentication using the GSSAPI mechanism.</abstract>
+  <title>XMPP Server Registration for use with Kerberos V5</title>
+  <abstract>This specification defines the Kerberos principal name of an XMPP server. It also details a method by which a connecting client can determine this Kerberos principal name when authenticating using the "GSSAPI" SASL mechanism.</abstract>
   &LEGALNOTICE;
   <number>0233</number>
-  <status>Deferred</status>
+  <status>Experimental</status>
   <type>Standards Track</type>
   <sig>Standards</sig>
   <approver>Council</approver>
@@ -25,6 +25,12 @@
   &linuxwolf;
   &stpeter;
   &hildjj;
+  <revision>
+    <version>0.5</version>
+    <date>2015-10-20</date>
+    <initials>mv</initials>
+    <remark><p>Included support for Microsoft SSPI (Mili Verma).</p></remark>
+  </revision>
   <revision>
     <version>0.4</version>
     <date>2011-08-26</date>
@@ -64,18 +70,52 @@
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
-  <p>In environments that make use of Kerberos V5 (&rfc4120;) and negotiation of Simple Authentication and Security Layer or SASL (&rfc4422;) over XMPP, a connecting client often needs to know the identity of the Kerberos acceptor principal so that it can obtain a proper ticket for authentication. This scenario was not addressed in &rfc3920; or &rfc6120;. However, the problem can be solved using the concept of domain-based service names (&rfc5178;). In particular, when an XMPP server uses the Kerberos V5 ("GSSAPI") SASL mechanism (&rfc4752;), it can communicate the identity of the acceptor principal as a Kerberos V5 service principal name (&rfc5179;). This document defines an XMPP method for such communication.</p>
+  <p>The Kerberos Network Authentication Service (V5) is described in &rfc4120;. An application can call the Kerberos library through the Generic Security Services Application Programming Interface (GSS-API) described in &rfc4121; or the proprietary Microsoft Windows Security Service Provider Interface (SSPI).</p>
+  <p>The Simple Authentication and Security Layer or SASL (&rfc4422;) is a framework for adding authentication support to connection-based protocols. The SASL mechanism used in environments that make use of Kerberos V5 is called "GSSAPI" and is described in &rfc4752;. Note that the <cite>RFC 4121</cite> API has a hyphen and the SASL mechanism does not.</p>
+  <p>Before using the "GSSAPI" SASL mechanism to authenticate to an XMPP server (which is referred to as the "acceptor" in Kerberos terminology), a connecting client needs to obtain a Kerberos ticket from the Key Distribution Centre (KDC). For this the client needs to determine the Kerberos principal name of the XMPP server. This scenario was not addressed in &rfc3920; or &rfc6120;.</p>
+  <p>This specification sets out the rules that must be followed when registering the Kerberos principal name of an XMPP server. It also details how a client can determine the hostname of the XMPP server which can then be used to construct the Kerberos principal name.</p>
 </section1>
 
-<section1 topic='Protocol' anchor='proto'>
-  <p>The acceptor principal's hostname is communicated by including a child element of the &lt;mechanisms/&gt; element during SASL negotation, as allowed by <cite>RFC 6120</cite> (see Section 6.3.5 and the schema for the 'urn:ietf:params:xml:ns:xmpp-sasl' namespace in Appendix A.4). In the case of the Kerberos V5 SASL mechanism, the child element is a &lt;hostname/&gt; element qualified by the 'urn:xmpp:domain-based-name:1' namespace &NSNOTE;. The XML character data of the &lt;hostname/&gt; element specifies the fully-qualified name of the acceptor principal. The client then generates a domain-based service name from the provided hostname, following the format specified in <cite>RFC 5179</cite> (i.e., "protocol/hostname/domainname@REALM") and setting the values as follows:</p>
+<section1 topic='Client Determination of Hostname' anchor='hostname'>
+  <p>An XMPP client will initiate a connection to the XMPP server.</p>
+  <p>The XMPP server will communicate its hostname in a child element of the &lt;mechanisms/&gt; element during SASL negotation, as allowed by <cite>RFC 6120</cite> (see Section 6.3.5 and the schema for the 'urn:ietf:params:xml:ns:xmpp-sasl' namespace in Appendix A.4).</p>
+  <p>This child element is &lt;hostname/&gt; qualified by the 'urn:xmpp:domain-based-name:1' namespace. &NSNOTE;.</p>
+  <p>The XML character data of the &lt;hostname/&gt; element specifies the fully-qualified name of the XMPP server. This should be used for constructing the Kerberos principal name and is independent of the usual rules that an XMPP client uses for establishing a network connection to the XMPP server.</p>
+</section1>
+
+<section1 topic='Kerberos Principal Name in the GSS-API environment' anchor='principal'>
+  <p>When the XMPP server is implemented using GSS-API, the domain-based service name (&rfc5178;, &rfc5179;) is used as the Kerberos principal name. Domain-based service names contain a domain name in addition to a hostname. This allows naming clustered servers after the domain which they service.</p>
+  <p>The domain-based service name is mapped to the Kerberos principal name following the format specified in <cite>RFC 5179</cite> (i.e., "service/hostname/domain@REALM") and setting the values as follows:</p>
   <ul>
-    <li>The <strong>protocol</strong> string MUST be "xmpp".</li>
-    <li>The <strong>hostname</strong> string MUST be the XML character data of the &lt;hostname/&gt; element.</li>
-    <li>The <strong>domainname</strong> string MUST be the canonical name of the service, such as typically communicated in the 'to' address of the initial stream header.</li>
+    <li>The <strong>service</strong> string MUST be "xmpp".</li>
+    <li>The <strong>hostname</strong> string MUST be the hostname of the XMPP server, as provided by the server in the XML character data of the &lt;hostname/&gt; element during SASL negotiation.</li>
+    <li>The <strong>domain</strong> string MUST be the canonical name of the service. This is typically communicated by the client in the 'to' address of the initial stream header.</li>
     <li>The <strong>REALM</strong> string SHOULD be determined according to the network policies in effect (usually the domain name, in an uppercase mapping).</li>
   </ul>
-  <p>Consider the example of an XMPP service whose canonical name is "example.com". A user might make use of an acceptor principal located at "auth42.us.example.com". The hostname would be communicated as follows.</p>
+</section1>
+
+<section1 topic='Kerberos Principal Name in the Microsoft SSPI environment' anchor='windows'>
+  <p>Microsoft Windows provides the proprietary SSPI to support the "GSSAPI" SASL mechanism. This section describes the Windows equivalent of the domain-based service name for an XMPP server.</p>
+  <p>In the Microsoft Windows environment, the concept of Service Principal Name (SPN) is used, which is specified in <link url='https://msdn.microsoft.com/en-us/library/ms677601%28v=vs.85%29.aspx'>https://msdn.microsoft.com/en-us/library/ms677601%28v=vs.85%29.aspx</link>. This format ("service class/host:port/service name") is similar to the one specified in <cite>RFC 5179</cite>. The SPN can be generated by setting the values as follows:</p>
+  <ul>
+    <li>The <strong>service class</strong> string MUST be "xmpp".</li>
+    <li>The <strong>host</strong> string MUST be the hostname of the XMPP server, as provided by the server in the XML character data of the &lt;hostname/&gt; element during SASL negotiation.</li>
+    <li>The <strong>port</strong> is optional. It can be used to differentiate between multiple XMPP servers on a single host computer and should be omitted if the XMPP server uses the default port of 5222 for accepting client connections.</li>
+    <li>The <strong>service name</strong> string MUST be the canonical name of the service. This is typically communicated by the client in the 'to' address of the initial stream header.</li>
+  </ul>
+</section1>
+
+<section1 topic='Interoperability between GSS-API and SSPI' anchor='interop'>
+  <p>The goal of this section is to help developers of applications so that clients and servers implemented over SSPI can interoperate with servers and clients implemented over GSS-API.</p>
+  <p>Interoperability is achieved by the GSS-API system joining the Windows Active Directory domain or by having a cross-realm trust between the KDCs of the GSS-API and SSPI systems.</p>
+  <p>The SPN of the SSPI server does not specify a realm. A GSS-API client constucts the Kerberos principal name according to the rules in the GSS-API environment and adds a realm to the Kerberos principal name, but the Kerberos principal name is mapped to the correct XMPP server on SSPI.</p>
+  <p>When the server uses GSS-API, the SPN for the server needs to be created in the SSPI environment. The SPN constructed by the SSPI client according to the rules in the SSPI environment is then mapped to the correct GSS-API XMPP server.</p>
+  <p>The domain-based service name of GSS-API does not specify a port, so the port option of the SPN in SSPI should only be used in testing scenarios when both the XMPP client and the XMPP server are implemented using SSPI. The port SHOULD NOT be used in any other scenarios.</p>
+  <p>So in effect, whether an endpoint uses SSPI or GSS-API does not affect interoperability as long as the port in SSPI is not used.</p>
+</section1>
+
+<section1 topic='Examples' anchor='examples'>
+  <p>Consider the example of an XMPP service "example.com" offered by the XMPP server located on the host "auth42.us.example.com", using the default port of 5222 for accepting client connections. When a client connects to the XMPP server, the server communicates its hostname along with supported SASL mechanisms as follows:</p>
   <example caption="Communicating the hostname"><![CDATA[
 <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
   <mechanism>GSSAPI</mechanism>
@@ -83,11 +123,15 @@
   <hostname xmlns='urn:xmpp:domain-based-name:1'>auth42.us.example.com</hostname>
 </mechanisms> 
   ]]></example>
-  <p>The client would then attempt to obtain a ticket for the domain-based principal "xmpp/auth42.us.example.com/example.com@EXAMPLE.COM".</p>
+  <p>To use the "GSSAPI" SASL mechanism, the client needs to determine the Kerberos principal name of the XMPP server, which will be:</p>
+  <ul>
+    <li>the domain-based service name "xmpp/auth42.us.example.com/example.com@EXAMPLE.COM" if the client is using GSS-API.</li>
+    <li>the SPN "xmpp/auth42.us.example.com/example.com" if the client is using SSPI.</li>
+  </ul>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
-  <p>The communication of acceptor principal hostname during SASL negotiation is not known to introduce new security vulnerabilities, as long as it is done after the underlying channel has been secured using Transport Layer Security (TLS; &rfc5246;) as described for XMPP in <cite>RFC 6120</cite>. For additional security considerations, refer to <cite>RFC5178</cite> and <cite>RFC 5179</cite>.</p>
+  <p>The communication of the XMPP server's hostname during SASL negotiation is not known to introduce new security vulnerabilities, as long as it is done after the underlying channel has been secured using Transport Layer Security (TLS; &rfc5246;) as described for XMPP in <cite>RFC 6120</cite>. For additional security considerations, refer to <cite>RFC 5178</cite> and <cite>RFC 5179</cite>.</p>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -124,7 +168,7 @@
 </section1>
 
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>Thanks to Owen Friel, Shane Hannon, Seamus Kerrigan, Eliot Lear, Alexey Melnikov, and Klaas Wierenga for their comments.</p>
+  <p>Thanks to Owen Friel, Shane Hannon, Seamus Kerrigan, Eliot Lear, Alexey Melnikov, Klaas Wierenga and Dave Cridland for their comments.</p>
 </section1>
 
 </xep>
