@@ -218,9 +218,10 @@
 
 <section1 topic='Use Cases' anchor='usecases'>
   <section2 topic='Common User Use Cases' anchor='usecases-user'>
-    <section3 topic='Joining a Conversation' anchor='usecase-user-join'>
-      <p>A user joins a conversation by sending a MIX "join" command. There's no default set of nodes: all nodes must be specified if the user wants that information (but clients should pick the standard MIX ones at least by default for normal usage). It's possible to forward-subscribe to nodes that don't yet exist, in case they're added (e.g., presence added to a MUC). The server injects a new item into the "urn:xmpp:mix:nodes:participants" node automatically. TODO: include the nickname at this point?</p>
-        <example caption="User Joins a Conversation"><![CDATA[
+    <section3 topic='Joining a Channel' anchor='usecase-user-join'>
+      <p>A user joins a channel by sending a MIX "join" command. There's no default set of nodes: all nodes must be specified if the user wants that information (but clients should select the standard MIX ones at least by default for normal usage). This will lead to the server subscribing the user to each of the requested nodes associated with the channel. The MIX server will also add the user to the particioant list by injecting a new item into the "urn:xmpp:mix:nodes:participants" node automatically. </p>
+      
+        <example caption="User Joins a Channel"><![CDATA[
 <iq type='set'
     from='hag66@shakespeare.example'
     to='coven@mix.shakespeare.example'
@@ -234,7 +235,7 @@
   </join>
 </iq>
 ]]></example>
-      <p>The conversation must process the join atomically. The conversation responds with an IQ-result. This stanza includes the nodes to which the user was subscribed, as well as the JID that will be used for the user in this room (real JID for non-anonymous rooms, proxy JID for semi-anonymous rooms). TODO: does this need to always be a proxyJID? List discussion.</p>
+      <p>The channel must process the join atomically. The channel responds with an IQ-result. This stanza includes the nodes to which the user has been successfully subscribed, as well as the proxy JID that will be used for the user in this channel.  If a user cannot be subscribed to one or more of the requested nodes (e.g., because the node does not exist), but can be subscribed to some the response simply lists the nodes successfully subscribed.    If none of the nodes requested are successully subscribed to, and error response is sent indicating the reason that the first node requested was not subscribed to.   This response will also include other nodes requested where subscription failed for the same reason.  A user may subsequently request subscription to nodes in a channel to which the user was not initially subscribed.  TODO: Add section on proxy jids</p>
       <example caption="Conversation Successfully Processes Join"><![CDATA[
 <iq type='result'
     from='coven@mix.shakespeare.example'
@@ -249,8 +250,8 @@
   </join>
 </iq>
       ]]></example>
-      <p>As noted, the participant might not be subscribed to all nodes (in this case only messages, participants, and subject).</p>
-      <example caption="Conversation Processes Join With Modifications"><![CDATA[
+      <p>As noted, the participant might not be subscribed to all nodes associated with the channel (in this case only messages, participants, and subject).</p>
+      <example caption="Channel Processes Join With Modifications"><![CDATA[
 <iq type='result'
     from='hag66@shakespeare.example'
     to='coven@mix.shakespeare.example'
@@ -262,7 +263,7 @@
   </join>
 </iq>
       ]]></example>
-      <p>The conversation also adds the user to the participants node and sends a notification.</p>
+      <p>The channel also adds the user to the participants node and sends a notification.</p>
       <example caption="Conversation Adds User to Participants Node"><![CDATA[
 <message from='coven@mix.shakespeare.example'
          to='hecate@shakespeare.example'
@@ -278,10 +279,65 @@
   </event>
 </message>
       ]]></example>
-      <p>Each &lt;participant&gt; element includes a 'jid' attribute, which is the stable participant identifier for this user in this conversation.  TODO: proxy/realJID mapping (admins might see real JIDs even in a semianon room)</p>
+      <p>Each &lt;participant&gt; element includes a 'jid' attribute, which is the stable participant identifier for this user in this channel.  TODO: proxy/realJID mapping (admins might see real JIDs even in a jid-hidden room)</p>
     </section3>
+    
+    
+
+    <section3 topic='Leaving a Channel' anchor='usecase-user-leaving'>
+      <p>Users generally remain in a channel for an extended period of time.  In particular membership of the channel does not change when the user goes offline as happens with &xep0045;. So, leaving the conversation is a permanent action for a user across all clients, not just a matter of telling the conversation that the user is not currently available or for a single client.  In order to  leave a channel, a user sends a MIX "leave" command to the channel.</p>
+      <example caption="User Leaves a Channel"><![CDATA[
+<iq type='set'
+    from='hag66@shakespeare.example'
+    to='coven@mix.shakespeare.example'
+    id='E6E10350-76CF-40C6-B91B-1EA08C332FC7'>
+  <leave xmlns='urn:xmpp:mix:0'/>
+</iq>
+      ]]></example>
+      <p>When the user leaves the channel, the MIX service is responsible for unsubscribing the user from all nodes in the channel and for removing the user from the participants and presence list.  The MIX service also need to inform channel participants that the user has permanently left the room, so that presence status can be upaded.  TO DO: How??  The original text said presence to offline, which is not right.   Need an "presence has gone" operarion</p>
+    </section3>
+    
+    <section3 topic="Setting a Nick" anchor="usecase-setting-nick"></section3>
+    <p>
+      Each member of a channel may have a nick, which is how other users in the channel will see the user.  In some cases a nick is not needed, for example where a user reads messages in a channel but does not send messages or share presence information.    A nick MUST be present for a user to send a message to a channel or for a user's presence to be shared on a channel.   There are four ways that a user's nick can be obtained.   The choice of mechanism or mechanisms is dependent on channel policy:
+    </p>
+    <ol>
+      <li>The nick is registered with the user account in some way, for example as part of user provisioning with nick configured as an attribute in a directory service.   This may be chosen by corporate services that wish to ensure consistent nick values for a set of users and channels.</li>
+      <li>The nick is registered with the MIX service, as described in  <link url='#usecase-user-register'> Registering a Nick </link>.</li>
+      <li>The user explicitly sets the nick, as described in this section.</li>
+      <li>The MIX service generates the nick.  TODO: make consistent with resolution in next section</li>
+    </ol>
+    <p>
+   A user will typically set a nick when joining a channel and may update this nick from time to time.   The user does this by sending a command to the channel to set the nick.  If the user wishes the channel to assign a nick (or knows that the channel will assign a nick) the nick field can be left blank, so that the user can see what is assiged in the result. 
+    </p>  
+    <example caption="User sets Nick on Channel"><![CDATA[
+<iq type='set'
+    from='hag66@shakespeare.example/pda'
+    to='coven@mix.shakespeare.example'
+    id='7nve413p'>
+  <query xmlns='urn:xmpp:mix:0'>
+    <nick>thirdwitch</nick>
+  </query>
+</iq>
+      ]]></example>
+    
+    <p>
+      The channel will return the nick that is to be used, noting that this may be different to the reqested nick.   MIX services SHOULD apply the "nickname" profile of the PRECIS OpaqueString class, which is defined in draft-ietf-precis-nickname.
+    </p>
+    
+    <example caption="Channel informs user of Nick"><![CDATA[
+<iq type='result'
+    from='hag66@shakespeare.example/pda'
+    to='coven@mix.shakespeare.example'
+    id='7nve413p'>
+  <query xmlns='urn:xmpp:mix:0'>
+    <nick>thirdwitch</nick>
+  </query>
+</iq>
+      ]]></example>
     <section3 topic='Registering a Nick' anchor='usecase-user-register'>
-      <p>A user can register a nick with either the MIX service or with a specific channel.  Where a user has registered a Nick with the MIX service, it will be used in each channel, unless the user has registered a nick with a channel.   Where the user has registered a nick with a channel, that nick will be used in the channel.  To register a nick with the MIX service the user sends
+      <p>A user can register a nick with either the MIX service.  Nick registration can be used ensure that a user is able to use the same nick in all channels in the service and to prevent other users from using a registered nick.   This can help achieve a consistent experience across a set of channels and prevent user confusion.  Support for nick registration is optional.  Where it is supported, nick registration may be optional or mandatory.
+        Where a user has registered a Nick with the MIX service, it may be used by each channel according to policy for the channel.    To register a nick with the MIX service the user sends 
  a &lt;register/&gt; command to the service. TODO: ** need to deal with "with discovery."</p>
       <example caption="User Registers with Service"><![CDATA[
 <iq type='set'
@@ -319,26 +375,13 @@
   </error>
 </iq>
       ]]></example>
-      <p>If the register request does not contain a &lt;nick/&gt; element, then the MIX service assigns one (this SHOULD be a UUID). TODO: Discuss - is there any reason for this to be a UUID? Surely anything the server wants to assign is fine (with security consideration about leaking JID information).</p>
-    <p>
-      Registering with a specifc channel the protocol is similar to registering with the service, but interaction is with the channel.
-    </p>  
-      <example caption="User Registers with Channel"><![CDATA[
-<iq type='set'
-    from='hag66@shakespeare.example/pda'
-    to='coven@mix.shakespeare.example'
-    id='7nve413p'>
-  <register xmlns='urn:xmpp:mix:0'>
-    <nick>thirdwitch</nick>
-  </register>
-</iq>
-      ]]></example>
-      
+      <p>If the register request does not contain a &lt;nick/&gt; element, then the MIX service assigns one (this SHOULD be a UUID). TODO: Discuss - is there any reason for this to be a UUID? Surely anything the server wants to assign is fine (with security consideration about leaking JID information).  *** Kev.  propose to allow user to assign anything, and also allow the approach where a nick is needed but user has not set one.</p>
+    
       
     </section3>
-    <section3 topic='Coming Online' anchor='usecase-user-presence'>
-      <p> A user joins a channel over an extended period, and membership in a channel does not generally change when user goes online or offline.   When a user comes online, the user will send broadcast presence to the room, advertizing availability.   A participant comes online by publishing availability to the "urn:xmpp:mix:nodes:presence" node. TODO: SORT rooms in rosters),  correct 'offline' behaviour, etc..</p>
-      <example caption="User Comes Online in the Conversation"><![CDATA[
+    <section3 topic='Setting User Presence' anchor='usecase-user-presence'>
+      <p> A user joins a channel over an extended period, and membership in a channel does not generally change when user goes online or offline.  A user may share presence information with the channel.  This may be full presence information or just online/offline status *** do we want this?? ***.  Some channels may require that all channel members share presence information with the channel.   Where a user shares presence information with a channel, the channel is entered by the server into the user's roster when the user subscribes to the channel.  When an XMPP client comes online or changes presence status, this will be communicated to the associated server using broadcast presence.  The XMPP server is then responsible to share this presence information to each entry in the roster and in particular to each MIX channel in the roster.   When a user comes online, the user's server published the user's  availability to the "urn:xmpp:mix:nodes:presence" node.</p>
+      <example caption="User Comes Online in the Channel"><![CDATA[
 
         <presence xmlns='jabber:client' from=‘hag66@shakespeare.example/pda’ to='coven@mix.shakespeare.example'>
           
@@ -349,30 +392,24 @@
         </presence>
       
       ]]></example>
-      <p>The user's presence information is then published by the service to the "urn:xmpp:mix:nodes:presence" node, with the 'publisher' attribute set to the user's participant identifier. TODO: List discussion on the benefits of wrapping vs. normal presence.</p>
-      <example caption="Conversation Distributes Presence"><![CDATA[
-<message from='mix.shakespeare.example'
-         to='hecate@shakespeare.example'
+      <p>The user's presence information is then published by the service to the "urn:xmpp:mix:nodes:presence" node, with the 'publisher' attribute set to the user's participant identifier. The MIX channel then broadcasts the presence change to all users who are subscribed to the "urn:xmpp:mix:nodes:presence" node.  *** should this reference proxy jid and/or nick??*** </p>
+      <example caption="Channel Distributes Presence"><![CDATA[
+<presence from='mix.shakespeare.example'
+         to='coven@mix.shakespeare.example'
          id='77E07BB0-55CF-4BD4-890E-3F7C0E686BBD'>
-  <event xmlns='http://jabber.org/protocol/pubsub#event'>
-    <items node='urn:xmpp:mix:nodes:presence'>
-      <item id='ae890ac52d0df67ed7cfdf51b644e901'
-            publisher='3608A5E0C4C8'>
-        <presence xmlns='jabber:client'>
+ 
           <nick xmlns='http://jabber.org/protocol/nick'>thirdwitch</nick>
           <c xmlns='http://jabber.org/protocol/caps'
              hash='sha-1'
              node='http://code.google.com/p/exodus'
              ver='QgayPKawpkPSDYmwT/WM94uAlu0='/>
         </presence>
-      </item>
-    </items>
-  </event>
-</message>
+ 
       ]]></example>
+      
     </section3>
     <section3 topic='Going Offline' anchor='usecase-user-offline'>
-      <p>To go offline, the user sends a normal unavailable stanza (usually through their server's usual offline broadcast rules).</p>
+      <p>*** to be merged with previous section and more prsence change examples *** To go offline, the user sends a normal unavailable stanza (usually through their server's usual offline broadcast rules).</p>
       <example caption="User Goes Offline in the Conversation"><![CDATA[
 <presence type='unavailable'
     from='hag66@shakespeare.example/pda'
@@ -411,19 +448,9 @@
   </event>
 </message>
       ]]></example>
-    </section3>
-    <section3 topic='Leaving a Conversation' anchor='usecase-user-leaving'>
-      <p>In order to permanently leave a conversation, a user sends a MIX "leave" command.</p>
-      <example caption="User Leaves a Conversation"><![CDATA[
-<iq type='set'
-    from='hag66@shakespeare.example'
-    to='coven@mix.shakespeare.example'
-    id='E6E10350-76CF-40C6-B91B-1EA08C332FC7'>
-  <leave xmlns='urn:xmpp:mix:0'/>
-</iq>
-      ]]></example>
-      <p>Note that leaving the conversation is a permanent action for a user across all clients, not just a matter of telling the conversation that the user is not currently available (as in MUC), or for a single client. If the user leaves the conversation, the MIX service is responsible for unsubscribing the user from all nodes in the conversation, and also for telling participants that the user is offline.</p>
-    </section3>
+    </section3>  
+    
+    
     <section3 topic='Inviting a Contact To a Conversation' anchor='usecase-user-invite'>
       <p>User sends to conversation requesting invite, receives it, forwards it to contact. Solves issues with both directed and mediated invites. ### TODO: Dave had a point about contact preverification about users' invites. Discuss.</p>
     </section3>
