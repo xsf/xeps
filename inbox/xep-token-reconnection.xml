@@ -7,7 +7,7 @@
 <xep>
 <header>
   <title>Token-based reconnection</title>
-  <abstract>This specification defines how to easily and quickly reconnect.</abstract>
+  <abstract>This specification defines a token-based session authentication mechanism loosely based on OAuth.</abstract>
   <legal>
     <copyright>This XMPP Extension Protocol is copyright (c) 1999 - 2016 by the XMPP Standards Foundation (XSF).</copyright>
     <permissions>Permission is hereby granted, free of charge, to any person obtaining a copy of this specification (the &quot;Specification&quot;), to make use of the Specification without restriction, including without limitation the rights to implement the Specification in a software program, deploy the Specification in a network service, and copy, modify, merge, publish, translate, distribute, sublicense, or sell copies of the Specification, and to permit persons to whom the Specification is furnished to do so, subject to the condition that the foregoing copyright notice and this permission notice shall be included in all copies or substantial portions of the Specification. Unless separate permission is granted, modified works that are redistributed shall not contain misleading information regarding the authors, title, number, or publisher of the Specification, and shall not claim endorsement of the modified works by the authors, any organization or project to which the authors belong, or the XMPP Standards Foundation.</permissions>
@@ -45,10 +45,11 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>While reconnecting to the XMPP server the client usually has to go again through the long process for SASL challenge-response exchange which may lead to noticably long time to finish the authenitcation, especially while using SCRAM-based mechanisms. This extenstion attempts to simplify reconnection by using tokens obtained from the XMPP server</p>
+  <p>Automatic reconnection in consequence of a spurious disconnection is a must-have feature of a modern IM application. One way of providing this feature is storing user login information on disk for reuse. However, plaintext storage of passwords is inherently insecure, while protecting the XMPP password with a master-password provides inconvenience for the end-user. With a token-based authentication mechanism, the user only has to provide login information once, for the initial connection to the XMPP server, and can later rely on the application using tokens for subsequent reconnections.</p>
+  <p>Moreover, while reconnecting to the XMPP server, the client usually has to go again through the long process of SASL challenge-response exchange which may lead to a noticably long reconnection time, especially while using SCRAM-based mechanisms. Providing a token to the XMPP server is both secure and doesn't require multiple challenge-response roundtrips, therefore might significantly speed up reconnection times.</p>
 </section1>
 <section1 topic='Requirements' anchor='reqs'>
-  <p>This extension requires the client application to authenticate to the XMPP server using a regular XMPP authentication mechanism like SCRAM-SHA-1, DIGEST-MD5 at least once. After that, the following authentications maybe done using X-OAUTH SASL mechanism, and only with a token obtained from the server.</p>
+  <p>This extension requires the client application to authenticate to the XMPP server using a regular XMPP authentication mechanism like SCRAM-SHA-1 or DIGEST-MD5 at least once. After that, the following authentications may be done using X-OAUTH SASL mechanism with a token obtained from the server.</p>
 </section1>
 <section1 topic='Glossary' anchor='glossary'>
   <section2 topic="Token types" anchor="token_types">
@@ -59,19 +60,27 @@
   Access tokens can be used as a payload for the X-OAUTH authentication mechanism
   and grant access to the system.
   Access tokens can't be revoked.
-  Access token is valid only until its expiry date is reached.</td></tr>
+  An access token is valid only until its expiry date is reached.</td></tr>
       <tr><td>Refresh token</td><td>These are longer lived tokens which are tracked by the server,
-  therefore require persistent storage.
+  therefore require persistent storage (as of now only PostgreSQL is supported).
   Refresh tokens can be used as a payload for the X-OAUTH authentication mechanism
-  and grant access to the system, as well as result in a new pair of tokens</td></tr>
+  and grant access to the system, as well as result in a new set of tokens being
+  returned upon successful authentication.
+  Refresh tokens can be revoked.
+  A refresh token is valid until it has expired, unless it has been revoked.
+  On revocation, it immediately becomes invalid.
+  As the server stores information about granted tokens, it can also
+  persistently mark them as revoked.</td></tr>
     </table>
+    <p>While only two token types have been described above, implementations might use other token types for specific purposes. For example, a particular token type could limit the access privileges of a user logged into the system or denote an affiliation with a Multi User Chat room. None of such capability grants are subject of this specification, though.</p>
   </section2>
   <section2 topic="Token format" anchor="token_formats">
-    <p>All tokens are to be exchanged as Base64 encoded binary data. Serialization format of the token before encoding with Base64 is dependent on its type. Common parts in every token are BARE_JID and EXPIRES_AT. EXPIRES_AT is a timestamp saying when given token will expire.</p>
+    <p><b>This section is informal.</b> The token formats described below are used in one of the experimental implementations, but are not proposed as standard. If such a standard turns out to be required, then <a href="http://jwt.io/">JSON Web Tokens</a> might be a viable format to adopt.</p>
+    <p>All tokens are exchanged as Base64 encoded binary data. Serialization format of the token before encoding with Base64 is dependent on its type. Common parts in every token are <tt>BARE_JID</tt> and <tt>EXPIRES_AT</tt>. <tt>EXPIRES_AT</tt> is a timestamp saying when given token will expire. <tt>\0</tt> stands for the ASCII null character (i.e. byte 0). Text in single quotes (<tt>'example'</tt>) is literal. <tt>ALL_CAPS</tt> denote parameters.</p>
     <section3 topic="Access token format">
       <code>
 BASE64_encode
-        ({'access', \0, BARE_JID, \0, EXPIRES_AT, \0, DATA})
+        ('access', \0, BARE_JID, \0, EXPIRES_AT, \0, DATA)
       </code>
       <p>Example, please note the line break was added only for readability:</p>
       <code>
@@ -82,7 +91,7 @@ BASE64_encode
     <section3 topic="Refresh token format">
       <code>
 BASE64_encode
-        ({'refresh', \0, BARE_JID, \0, EXPIRES_AT, \0, SEQUENCE_NO, \0, DATA})
+        ('refresh', \0, BARE_JID, \0, EXPIRES_AT, \0, SEQUENCE_NO, \0, DATA)
       </code>
       <p>Example, please note the line break was added only for readability:</p>
       <code>
