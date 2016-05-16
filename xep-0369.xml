@@ -1,0 +1,517 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<?xml-stylesheet type="text/css" href="xmpp.css"?>
+<xep>
+<header>
+  <title>Mediated Information eXchange (MIX)</title>
+  <abstract>This document defines Mediated Information eXchange (MIX), an XMPP protocol extension for the exchange of information among multiple participants through a mediating service. The protocol can be used to model group communication applications such as chatrooms, although with greater flexibility and extensibility than existing groupchat technologies such as Multi-User Chat (MUC). Although MIX supports standard groupchat features such as discussion topics and invitations, and also defines a strong access control model similar to that of MUC, it enables users to participate without sharing presence, allows communication of any structured data (not only textual messages), reuses Publish-Subscribe so that users can receive only the information formats in which they are interested, and reuses Message Archive Management (MAM) to provide more robust storage and archiving.</abstract>
+  &LEGALNOTICE;
+  <number>0369</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>XEP-0004</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0313</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>MIX</shortname>
+  &ksmithisode;
+  &stpeter;
+  <revision>
+    <version>0.1.1</version>
+    <date>2016-03-17</date>
+    <initials>XEP Editor (ssw)</initials>
+    <remark><p>Fix XML in join example.</p></remark>
+  </revision>
+  <revision>
+    <version>0.1</version>
+    <date>2016-01-07</date>
+    <initials>XEP Editor (asw)</initials>
+    <remark><p>Initial published version approved by the XMPP Council.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2015-10-12</date>
+    <initials>kis/psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Multi-User Chat (MUC) is a major application of XMPP that was developed in 2002 and standardized in &xep0045;. This Mediated Infromation eXchange (MIX) protocol defined here implements the same basic MUC patterns in a more flexible and extensible way in order to address requirements that have emerged since MUC was developed. MIX supports all of the core chatroom features that are familiar from MUC, such as discussion topics and invitations. Like MUC, it also defines a strong access control model, including the ability to kick and ban users, to name moderators and administrators, and to require membership in order to participate in conversations.</p>
+  <p>MUC exists and works, so why replace it? There are several reasons:</p>
+  <ul>
+    <li>A number of use cases for group communication have emerged since MUC was first published.</li>
+    <li>Experience has shown that it is difficult to use MUC to build several kinds of communication applications (such as a multimedia conference focus) without undesirable hacks.</li>
+    <li>It is impractical to address a number of the requirements listed in the next section with MUC or with extensions to MUC. </li>
+    <li>In the years after MUC was designed, both &xep0060; and &xep0313; have been developed and it is desirable to reuse these building blocks (e.g., MAM can be used for message history) rather than use the less robust methods defined in XEP-0045.</li>
+  </ul>
+  <p>Because it is anticipated that there will significant co-existence between MUC and MIX, this specification is designed so that:</p>
+  <ul>
+    <li>XMPP clients can implement MUC and this specification in a way that provides a coherent user experience.</li>
+    <li>XMPP servers can implement this specification and also provide a MUC interface in order to support clients that only implement MUC.</li>
+  </ul>
+  <p>If a server wishes to expose both MUC and MIX representations of chatrooms, it SHOULD do so by serving MUC and MIX on different domains. The MIX service SHOULD include a reference to the MUC mirror, so that clients understanding both protocols can choose to only show one copy of the service.</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Participation in a conversation can persist beyond clients being offline.</li>
+    <li>Multiple devices associated with the same account can share the same handle in the conversation, with well-defined rules and all resources individually addressable.</li>
+    <li>Conversations are not required to support or reflect presence for participants.</li>
+    <li>A client that rejoins a conversation can quickly resync with respect to messages.</li>
+    <li>A participant can be an invisible observer.</li>
+    <li>Configuration can be observed from outside the conversation (e.g., list of participants, ability to reading messages, etc.).</li>
+    <li>MIX services should not allow JIDs to be harvested.</li>
+    <li>Play nicely with Message Archive Management (MAM).</li>
+    <li>A user can can know which conversations they participate in, globally across all MIX services.</li>
+    <li>Provide extensibility regarding data formats that can be sent within a conversation (files, structured data, indications about media sources in multimedia conferences, etc.) as well as flexibility regarding which data formats a user wants to receive.</li>
+    <li>(Desirable) Make it easier to distribute a conversation across services in the spirit of "federated MUC" &xep0289;.</li>
+    <li>(Desirable) Make it easier to reduce duplicate traffic.</li>
+ </ul>
+</section1>
+
+<section1 topic='Concepts' anchor='reqs'>
+  <p>The following concepts underlie the design of MIX.</p>
+  <ul>
+    <li>MIX conversations (roughly equivalent to MUC rooms) are hosted on a MIX domain, e.g., `mix.example.com`, which is discoverable through &xep0030;. Each conversation on the service may then be discovered and queried.</li>
+    <li>Re-using the model from &xep0163; (where every user JID (e.g., `user@example.com`) is its own pubsub service), in MIX each conversation (e.g., `conversation@mix.example.com`) is a pubsub service.</li>
+    <li>A conversation's pubsub service can contains any number of nodes for different event types or data formats. As described below, this document defines several standard nodes; however, future specifications or proprietary services can define their own nodes for extensibility.</li>
+    <li>Affiliations with the nodes are, by default, tied together as affiliations on the conversation itself rather than individual nodes, so that allowing or denying access to a conversation is a single affiliation change.</li>
+    <li>&xep0313; (MAM) is used for all history access, with each node being individually addressable for MAM queries. This simplifies implementation compared to MUC (which had a specialized and rather limited history retrieval mechanism).</li>
+    <li>A client can achieve a 'quick resync' of a node by requesting just those changes it has not yet received, using standard MAM protocol. This solves the old MUC issue of either receiving duplicate messages when rejoining a room or potentially missing messages.</li>
+    <li>Because MAM is used for history, only those nodes that have a 'current value' need to store any items in them - e.g., 'urn:xmpp:mix:nodes:presence' and 'urn:xmpp:mix:nodes:subject' would store their current values (with older values being queryable through MAM), while 'urn:xmpp:mix:nodes:messages' would store no items.</li>
+    <li>A user's participation in a conversation outlives their presence session. A user who is offline will not share presence within the conversation, but will still be listed as an participant. This too is a significant departure from MUC.</li>
+    <li>MUC2 decouples addressing of occupants from their nicknames, such that nickname changes don't affect addressing, adding flexibility.</li>
+    <li>Each occupant is addressible by a single JID - in non-anonymous rooms these are just the ocucpant's 'real' JID such that messages between users are only mediated by the MUC2 service in semi-anonymous rooms. These are full JIDs, allowing transparency when a user has multiple online resources participating in the MIX.</li>
+  </ul>
+  <section2 topic="MIX and PubSub" anchor="concepts-pubsub">
+    <p>MIX is based upon domains providing a MIX service, such as `mix.shakespeare.example`. Note that although PubSub communication is used, a domain used for MIX is a MIX domain and not a standard &xep0060; domain. (Note that, like in MUC, there is no requirement on the naming of these domains; the label 'mix' and the fact that it is a subdomain of a 'shakespeare.example' service is purely an example).</p>
+    <p>Every MIX conversation is an addressable PubSub service (with additional MIX semantics) that will be addressed by an XMPP client using a bare JID, for example coven@mix.shakespeare.example. While &xep0060; is used as the basis for the MIX model, some protocol is added or optimised in this document for the MIX use cases. For example, when a message is published to the 'urn:xmpp:mix:nodes:messages' node, a message unlike a &xep0060; payload is distributed to occupants (more akin to the old &xep0045;); this enables standard XMPP semantics of message stanzas to be used.</p>
+  </section2>
+  <section2 topic="MIX and MAM" anchor="concepts-mam">
+    <p>Message Archive Management is used for all storage of historical data (such as the history of messages sent within the conversation). Each node can be archived separately (e.g., the presence node or the configuration node). MIX clients can retrieve information archived in MAM in order to quickly resync with regard to a conversation, and can do so without necessarily providing presence information.</p>
+  </section2>
+  <section2 topic="Standard Nodes" anchor="concepts-nodes">
+    <p>The standard nodes are as follows (although note that not every conversation will necessarily use each node):</p>
+    <ul>
+      <li>'urn:xmpp:mix:nodes:messages' for publishing messages. Each item of this node will contain one message, containing each of the distributed payloads.</li>
+      <li>'urn:xmpp:mix:nodes:subject' for publishing the subject of the conversation.</li>
+      <li>'urn:xmpp:mix:nodes:participants' for publishing the list of participants, including their details (e.g., the participant JIDs in an appropriately configured conversation). This is equivalent to the "room roster" in MUC.</li>
+      <li>'urn:xmpp:mix:nodes:presence' for publishing information about the availability status of the participants. This is a significant departure from MUC, where occupancy and presence were tightly coupled. In MIX it is possible to have a 'presenceless conversation' by not using this node. As another significant departure from MUC (where a participant is active in the room from multiple resources), information about the presence of each resource associated with an account is individually available, as is normal outside MUC.</li>
+      <li>'urn:xmpp:mix:nodes:config' for storing configuration information. In another departure from MUC, by storing configuration in the same manner as other data, it is possible to tweak access rights such that participants are able to read the configuration if desired. A further benefit is that notifications of configuration changes fall out "for free".</li>
+      <li>'urn:xmpp:mix:nodes:acl' for storing information about access control lists (such as the list of owners and moderators). Naturally this information might be restricted to authorized users.</li>
+    </ul>
+  </section2>
+</section1>
+
+<section1 topic='Discovery' anchor='discovery'>
+  <section2 topic='Discovering a MIX service' anchor='disco-service'>
+    <p>To determine if a domain hosts a MIX service, a &xep0030; info query should be sent in the usual manner</p>
+      <example caption="Entity queries a service" ><![CDATA[
+<iq from='hag66@shakespeare.example/intibo24'
+    id='lx09df27'
+    to='mix.shakespeare.example'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+    <p>The MIX service then MUST return its identity and the features it supports, which MUST include the 'urn:xmpp:mix:0' feature, and the identity MUST have a category of 'conference' and a type of 'text'. TODO: do we want a different type?</p>
+    <example caption="Service responds with Disco Info result" ><![CDATA[
+<iq from='mix.shakespeare.example'
+    id='lx09df27'
+    to='hag66@shakespeare.example/intibo24'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity
+        category='conference'
+        name='Shakespearean Chat Service'
+        type='text'/>
+    <feature var='urn:xmpp:mix:0'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:mix:0#serviceinfo</value>
+      </field>
+      <field var='urn:xmpp:mix:nodes:muc_mirror'
+             label='Location of MUC mirror service'>
+        <value>chat.shakespeare.example</value>
+      </field>
+    </x>
+  </query>
+</iq>
+]]></example>
+    <p>If the MIX service is mirrored to a MUC service for backwards-compatibility, this SHOULD be signaled by the inclusion of a 'urn:xmpp:mix:nodes:muc_mirror' field, the value of which is the mirrored MUC domain, in the extended disco results in a form whose type value is 'urn:xmpp:mix:0#serviceinfo'. Note that the MIX service itself doesn't advertise support for &xep0313;, nor is support for generic &xep0060; advertised.</p>
+  </section2>
+  <section2 topic='Discovering the Conversations on a Service' anchor='disco-conversation-list'>
+    <p>There is no need for using Service Discovery here, since the MIX service provides a node "urn:xmpp:mix:nodes:conversations" that pushes out one event for each conversation that has been created at the service.</p>
+  </section2>
+  <section2 topic='Discovering Conversation Information' anchor='disco-conversation-info'>
+    <p>In order to find out more information about a given conversation, a user can send a disco#info query to the conversation.</p>
+    <example caption='Entity Queries for Information about a Specific Conversation'><![CDATA[
+<iq from='hag66@shakespeare.lit/pda'
+    id='ik3vs715'
+    to='coven@mix.shakespeare.lit'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+    ]]></example>
+    <p>The conversation MUST return its identity and the features it supports:</p>
+    <example caption='Conversation Returns Disco Info Result'><![CDATA[
+<iq from='coven@mix.shakespeare.lit'
+    id='ik3vs715'
+    to='hag66@shakespeare.lit/pda'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity
+        category='conference'
+        name='A Dark Cave'
+        type='mix'/>
+    <feature var='urn:xmpp:mix:0'/>
+  </query>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Discovering Nodes at a Conversation' anchor='disco-conversation-nodes'>
+    <p>Use disco#items to find the nodes associated with a conversation.</p>
+    <example caption='Entity Queries for Nodes at a Conversation'><![CDATA[
+<iq from='hag66@shakespeare.lit/pda'
+    id='kl2fax27'
+    to='coven@mix.shakespeare.lit'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#items'/>
+</iq>
+    ]]></example>
+    <example caption='Room Returns Disco Items Result'><![CDATA[
+<iq from='coven@mix.shakespeare.lit'
+    id='kl2fax27'
+    to='hag66@shakespeare.lit/pda'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#items'>
+    <item jid='coven@mix.shakespeare.example'
+          node='urn:xmpp:mix:nodes:presence'/>
+    <item jid='coven@mix.shakespeare.example'
+          node='urn:xmpp:mix:nodes:participants'/>
+    <item jid='coven@mix.shakespeare.example'
+          node='urn:xmpp:mix:nodes:messages'/>
+    <item jid='coven@mix.shakespeare.example'
+          node='urn:xmpp:mix:nodes:subject'/>
+    <item jid='coven@mix.shakespeare.example'
+          node='urn:xmpp:mix:nodes:config'/>
+  </query>
+</iq>
+    ]]></example>
+  </section2>
+  <section2 topic='Discovering Participants in a Conversation' anchor='disco-conversation-participants'>
+    <p>*Not* done with disco#items (which returns nodes), instead query items on the "urn:xmpp:mix:nodes:participants" node (if you're allowed).</p>
+  </section2>
+</section1>
+
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Common User Use Cases' anchor='usecases-user'>
+    <section3 topic='Joining a Conversation' anchor='usecase-user-join'>
+      <p>A user joins a conversation by sending a MIX "join" command. There's no default set of nodes: all nodes must be specified if the user wants that information (but clients should pick the standard MIX ones at least by default for normal usage). It's possible to forward-subscribe to nodes that don't yet exist, in case they're added (e.g., presence added to a MUC). The server injects a new item into the "urn:xmpp:mix:nodes:participants" node automatically. TODO: include the nickname at this point?</p>
+        <example caption="User Joins a Conversation"><![CDATA[
+<iq type='set'
+    from='hag66@shakespeare.example'
+    to='coven@mix.shakespeare.example'
+    id='E6E10350-76CF-40C6-B91B-1EA08C332FC7'>
+  <join xmlns='urn:xmpp:mix:0'>
+    <subscribe node='urn:xmpp:mix:nodes:messages'/>
+    <subscribe node='urn:xmpp:mix:nodes:presence'/>
+    <subscribe node='urn:xmpp:mix:nodes:participants'/>
+    <subscribe node='urn:xmpp:mix:nodes:subject'/>
+    <subscribe node='urn:xmpp:mix:nodes:config'/>
+  </join>
+</iq>
+]]></example>
+      <p>The conversation must process the join atomically. The conversation responds with an IQ-result. This stanza includes the nodes to which the user was subscribed, as well as the JID that will be used for the user in this room (real JID for non-anonymous rooms, proxy JID for semi-anonymous rooms). TODO: does this need to always be a proxyJID? List discussion.</p>
+      <example caption="Conversation Successfully Processes Join"><![CDATA[
+<iq type='result'
+    from='coven@mix.shakespeare.example'
+    to='hag66@shakespeare.example'
+    id='E6E10350-76CF-40C6-B91B-1EA08C332FC7'>
+  <join xmlns='urn:xmpp:mix:0' jid='hag66@shakespeare.example'>
+    <subscribe node='urn:xmpp:mix:nodes:messages'/>
+    <subscribe node='urn:xmpp:mix:nodes:presence'/>
+    <subscribe node='urn:xmpp:mix:nodes:participants'/>
+    <subscribe node='urn:xmpp:mix:nodes:subject'/>
+    <subscribe node='urn:xmpp:mix:nodes:config'/>
+  </pubsub>
+</iq>
+      ]]></example>
+      <p>As noted, the participant might not be subscribed to all nodes (in this case only messages, participants, and subject).</p>
+      <example caption="Conversation Processes Join With Modifications"><![CDATA[
+<iq type='result'
+    from='hag66@shakespeare.example'
+    to='coven@mix.shakespeare.example'
+    id='E6E10350-76CF-40C6-B91B-1EA08C332FC7'>
+  <join xmlns='urn:xmpp:mix:0' jid='hag66@shakespeare.example'>
+    <subscribe node='urn:xmpp:mix:nodes:messages'/>
+    <subscribe node='urn:xmpp:mix:nodes:participants'/>
+    <subscribe node='urn:xmpp:mix:nodes:subject'/>
+  </pubsub>
+</iq>
+      ]]></example>
+      <p>The conversation also adds the user to the participants node and sends a notification.</p>
+      <example caption="Conversation Adds User to Participants Node"><![CDATA[
+<message from='coven@mix.shakespeare.example'
+         to='hecate@shakespeare.example'
+         id='5A9C7398-DB13-4BFA-A091-2D466C710AAF'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:xmpp:mix:nodes:participants'>
+      <item id='33EB6D2A-3473-4FFB-82DF-C4290FB761E4'>
+        <participant xmlns='urn:xmpp:mix:0'
+                     jid='hag66@shakespeare.example'
+                     nick='thirdwitch'/>
+      </item>
+    </items>
+  </event>
+</message>
+      ]]></example>
+      <p>Each &lt;participant&gt; element includes a 'jid' attribute, which is the stable participant identifier for this user in this conversation.  TODO: proxy/realJID mapping (admins might see real JIDs even in a semianon room)</p>
+    </section3>
+    <section3 topic='Registering with a MIX Service' anchor='usecase-user-register'>
+      <p>A user can register with the MIX service (not any particular conversation) by sending a &lt;register/&gt; command to the service. TODO: This should be available either room or service-based, with discovery.</p>
+      <example caption="User Registers with Service"><![CDATA[
+<iq type='set'
+    from='hag66@shakespeare.example/pda'
+    to='mix.shakespeare.example'
+    id='7nve413p'>
+  <register xmlns='urn:xmpp:mix:0'>
+    <nick>thirdwitch</nick>
+  </register>
+</iq>
+      ]]></example>
+      <p>On success, the service informs the user of its nick. The nick that is issued might be different from the nick that was requested, for example if the service completes normalization of nicknames for purposes of internationalization.</p>
+      <p>MIX services SHOULD apply the "nickname" profile of the PRECIS OpaqueString class, which is defined in draft-ietf-precis-nickname.</p>
+      <example caption="Service Returns User of Nick"><![CDATA[
+<iq type='result'
+    to='mix.shakespeare.example'
+    from='hag66@shakespeare.example/pda'
+    id='7nve413p'>
+  <register xmlns='urn:xmpp:mix:0'>
+    <nick>thirdwitch</nick>
+  </register>
+</iq>
+      ]]></example>
+      <p>If the requested nick is already taken, the MIX service returns a &lt;conflict/&gt; error:</p>
+      <example caption="Nick is Taken"><![CDATA[
+<iq type='error'
+    to='mix.shakespeare.example'
+    from='hag66@shakespeare.example/pda'
+    id='7nve413p'>
+  <register xmlns='urn:xmpp:mix:0'>
+    <nick>thirdwitch</nick>
+  </register>
+  <error type='cancel'>
+    <conflict xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+      ]]></example>
+      <p>If the register request does not contain a &lt;nick/&gt; element, then the MIX service assigns one (this SHOULD be a UUID). TODO: Discuss - is there any reason for this to be a UUID? Surely anything the server wants to assign is fine (with security consideration about leaking JID information).</p>
+    </section3>
+    <section3 topic='Coming Online' anchor='usecase-user-presence'>
+      <p>Participation in the conversation is decoupled from sending presence through the conversation. A participant comes online by publishing availability to the "urn:xmpp:mix:nodes:presence" node. TODO: Move back to using presence normally (suggested with rooms in rosters), for correct 'offline' behaviour, etc.</p>
+      <example caption="User Comes Online in the Conversation"><![CDATA[
+<iq type='set'
+    from='hag66@shakespeare.example/pda'
+    to='coven@mix.shakespeare.example'
+    id='hysf1v37'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:mix:nodes:presence'>
+      <item>
+        <presence xmlns='jabber:client'>
+          <nick xmlns='http://jabber.org/protocol/nick'>thirdwitch</nick>
+          <c xmlns='http://jabber.org/protocol/caps'
+             hash='sha-1'
+             node='http://code.google.com/p/exodus'
+             ver='QgayPKawpkPSDYmwT/WM94uAlu0='/>
+        </presence>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+      ]]></example>
+      <p>The user's presence information is then published by the service to the "urn:xmpp:mix:nodes:presence" node, with the 'publisher' attribute set to the user's participant identifier. TODO: List discussion on the benefits of wrapping vs. normal presence.</p>
+      <example caption="Conversation Distributes Presence"><![CDATA[
+<message from='mix.shakespeare.example'
+         to='hecate@shakespeare.example'
+         id='77E07BB0-55CF-4BD4-890E-3F7C0E686BBD'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:xmpp:mix:nodes:presence'>
+      <item id='ae890ac52d0df67ed7cfdf51b644e901'
+            publisher='3608A5E0C4C8'>
+        <presence xmlns='jabber:client'>
+          <nick xmlns='http://jabber.org/protocol/nick'>thirdwitch</nick>
+          <c xmlns='http://jabber.org/protocol/caps'
+             hash='sha-1'
+             node='http://code.google.com/p/exodus'
+             ver='QgayPKawpkPSDYmwT/WM94uAlu0='/>
+        </presence>
+      </item>
+    </items>
+  </event>
+</message>
+      ]]></example>
+    </section3>
+    <section3 topic='Going Offline' anchor='usecase-user-offline'>
+      <p>To go offline, the user sends a normal unavailable stanza (usually through their server's usual offline broadcast rules).</p>
+      <example caption="User Goes Offline in the Conversation"><![CDATA[
+<presence type='unavailable'
+    from='hag66@shakespeare.example/pda'
+    to='coven@mix.shakespeare.example'/>
+      ]]></example>
+      <p>The conversation retracts the item and notifies subscribers to the presence node. TODO: Update depending on discussion about events vs. presence.</p>
+    </section3>
+    <section3 topic='Sending a Message' anchor='usecase-user-message'>
+      <p>A user sends a message by publishing it to messages node. TODO: List discussion about type=groupchat messages vs. xep60 publish.</p>
+      <example caption="User Sends Message to Conversation"><![CDATA[
+<iq type='set'
+    from='hag66@shakespeare.example/pda'
+    to='coven@mix.shakespeare.example'
+    id='92vax143g'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:mix:nodes:messages'>
+      <item>
+        <body xmlns='jabber:client'>Harpier cries: 'tis time, 'tis time.</body>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+      ]]></example>
+      <p>The message comes from the conversation as a pubsub notification, with the 'publisher' attribute set to the participant identifier of the sender.</p>
+      <example caption="Conversation Reflects Message to Participants"><![CDATA[
+<message from='mix.shakespeare.example'
+         to='hecate@shakespeare.example'
+         id='77E07BB0-55CF-4BD4-890E-3F7C0E686BBD'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:xmpp:mix:nodes:messages'>
+      <item id='bnd81g37d61f49fgn581'
+            publisher='3608A5E0C4C8'>
+        <body xmlns='jabber:client'>Harpier cries: 'tis time, 'tis time.</body>
+      </item>
+    </items>
+  </event>
+</message>
+      ]]></example>
+    </section3>
+    <section3 topic='Leaving a Conversation' anchor='usecase-user-leaving'>
+      <p>In order to permanently leave a conversation, a user sends a MIX "leave" command.</p>
+      <example caption="User Leaves a Conversation"><![CDATA[
+<iq type='set'
+    from='hag66@shakespeare.example'
+    to='coven@mix.shakespeare.example'
+    id='E6E10350-76CF-40C6-B91B-1EA08C332FC7'>
+  <leave xmlns='urn:xmpp:mix:0'/>
+</iq>
+      ]]></example>
+      <p>Note that leaving the conversation is a permanent action for a user across all clients, not just a matter of telling the conversation that the user is not currently available (as in MUC), or for a single client. If the user leaves the conversation, the MIX service is responsible for unsubscribing the user from all nodes in the conversation, and also for telling participants that the user is offline.</p>
+    </section3>
+    <section3 topic='Inviting a Contact To a Conversation' anchor='usecase-user-invite'>
+      <p>User sends to conversation requesting invite, receives it, forwards it to contact. Solves issues with both directed and mediated invites. ### TODO: Dave had a point about contact preverification about users' invites. Discuss.</p>
+    </section3>
+    <section3 topic='Sending Private Messages' anchor='usecase-user-private-messages'>
+      <p>Users' JIDs are available from the "urn:xmpp:mix:nodes:participants" node if the conversation is transparent.</p>
+    </section3>
+  </section2>
+
+  <section2 topic='Administrative Use Cases' anchor='usecases-admin'>
+    <section3 topic='Checking For Permission To Create a Conversation' anchor='usecase-admin-check-create'>
+      <p></p>
+        <example caption="" ><![CDATA[
+
+]]></example>
+    </section3>
+    <section3 topic='Creating a Conversation' anchor='usecase-admin-create'>
+      <p></p>
+        <example caption="" ><![CDATA[
+
+]]></example>
+    </section3>
+    <section3 topic='Configuring a Conversation' anchor='usecase-admin-'>
+      <p></p>
+        <example caption="" ><![CDATA[
+
+]]></example>
+    </section3>
+    <section3 topic='Destroying a Conversation' anchor='usecase-admin-destroy'>
+      <p></p>
+        <example caption="" ><![CDATA[
+
+]]></example>
+    </section3>
+    <section3 topic='Modifying User Affiliations' anchor='usecase-admin-affiliations'>
+      <p></p>
+        <example caption="" ><![CDATA[
+
+]]></example>
+    </section3>
+    <section3 topic='Removing a User From a Conversation (Kicking)' anchor='usecase-admin-kick'>
+      <p></p>
+        <example caption="" ><![CDATA[
+
+]]></example>
+    </section3>
+
+  </section2>
+
+</section1>
+
+<section1 topic='Configuration options' anchor='config'>
+  <section2 topic='Transparency' anchor="config-transparency">
+    <p>TODO: transparent vs. opaque conversations</p>
+  </section2>
+</section1>
+
+<!--<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>.</li>
+  </ul>
+</section1>-->
+<!--<section1 topic='Implementation Notes' anchor='impl'>
+  <p>OPTIONAL.</p>
+</section1>
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>OPTIONAL.</p>
+</section1>-->
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>TBD.</p>
+  <p>Discuss normalization of nicknames.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>TBD.</p>
+  <p>Topics to cover:</p>
+  <ul>
+    <li>transparent vs. opaque conversations</li>
+    <li>nickname registration and security implications of normalization</li>
+  </ul>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>None.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>Register a namespace.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>TBD.</p>
+</section1>
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>Thanks to the participants in XMPP Summit 18 for their significant input during design sessions: Dave Cridland, Philipp Hancke, Waqas Hussain, Lance Stout, Sam Whited, and Matthew Wild.</p>
+</section1>
+</xep>
+
+<!--TODO: Query whole service for MAM. Provide data form for filtering by node ID.
+TODO: Two config nodes - one public read one private read?
+TODO: Open Issue: How many config nodes do you need? Do you do different access to different items within a node for reading? Writing?
+TODO: Subscription option to check conversation config (e.g., transparency of JIDs) before join.
+-->
