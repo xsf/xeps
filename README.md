@@ -6,7 +6,7 @@ This repository is used to manage work on XMPP Extension Protocols
 Foundation (XSF). See http://xmpp.org/ for details. The rendered
 documents can be found here:
 
-http://xmpp.org/xmpp-protocols/xmpp-extensions/
+https://xmpp.org/extensions/
 
 Please use this repository to raise issues and submit pull requests:
 
@@ -21,9 +21,9 @@ http://mail.jabber.org/mailman/listinfo/standards
 To submit a new proposal for consideration as a XEP, please read this
 page:
 
-http://xmpp.org/xmpp-protocols/xmpp-extensions/submitting-a-xep/
+https://xmpp.org/about/standards-process.html#submitting-a-xep
 
-[XEP-0001: XMPP Extension Protocols](http://xmpp.org/extensions/xep-0001.html)
+[XEP-0001: XMPP Extension Protocols](https://xmpp.org/extensions/xep-0001.html)
 defines the standards process followed by the XMPP Standards Foundation.
 
 Building XEPs
