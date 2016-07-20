@@ -1,0 +1,378 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>Pre-Authenticated Roster Subscription</title>
+    <abstract>This document defines a protocol and URI scheme for pre-authenticated roster links that allow a third party to automatically obtain the user's presence subscription. The goal of this is to make onboarding of new XMPP IM contacts as easy as possible.</abstract>
+    <legal>
+      <copyright>This XMPP Extension Protocol is copyright (c) 1999 - 2016 by the XMPP Standards Foundation (XSF).</copyright>
+      <permissions>Permission is hereby granted, free of charge, to any person obtaining a copy of this specification (the &quot;Specification&quot;), to make use of the Specification without restriction, including without limitation the rights to implement the Specification in a software program, deploy the Specification in a network service, and copy, modify, merge, publish, translate, distribute, sublicense, or sell copies of the Specification, and to permit persons to whom the Specification is furnished to do so, subject to the condition that the foregoing copyright notice and this permission notice shall be included in all copies or substantial portions of the Specification. Unless separate permission is granted, modified works that are redistributed shall not contain misleading information regarding the authors, title, number, or publisher of the Specification, and shall not claim endorsement of the modified works by the authors, any organization or project to which the authors belong, or the XMPP Standards Foundation.</permissions>
+      <warranty>## NOTE WELL: This Specification is provided on an &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. In no event shall the XMPP Standards Foundation or the authors of this Specification be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the Specification or the implementation, deployment, or other use of the Specification. ##</warranty>
+      <liability>In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall the XMPP Standards Foundation or any author of this Specification be liable for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising out of the use or inability to use the Specification (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if the XMPP Standards Foundation or such author has been advised of the possibility of such damages.</liability>
+      <conformance>This XMPP Extension Protocol has been contributed in full conformance with the XSF's Intellectual Property Rights Policy (a copy of which may be found at &lt;<link url='http://xmpp.org/extensions/ipr-policy.shtml'>http://xmpp.org/extensions/ipr-policy.shtml</link>&gt; or obtained by writing to XSF, P.O. Box 1641, Denver, CO 80201 USA).</conformance>
+    </legal>
+    <number>0379</number>
+    <status>Experimental</status>
+    <type>Standards Track</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XMPP Core</spec>
+      <spec>RFC 5122</spec>
+      <spec>XEP-0147</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>pars</shortname>
+    <author>
+      <firstname>Georg</firstname>
+      <surname>Lukas</surname>
+      <email>georg@op-co.de</email>
+      <jid>georg@yax.im</jid>
+    </author>
+    <revision>
+      <version>0.1.0</version>
+      <date>2016-07-20</date>
+      <initials>gl (XEP Editor: ssw)</initials>
+      <remark><p>First draft.</p></remark>
+    </revision>
+  </header>
+  <section1 topic='Introduction' anchor='intro'>
+    <p>Romeo is an active XMPP IM (Instant Messaging) user. He convinces Juliet
+      (who doesn't have an XMPP account yet) to install a client and
+      register with some server. Now, Romeo only needs to create a mutual
+      presence subscription with her, without yet knowing her JID.</p>
+    <p>This specification allows Romeo to create an out-of-band link (URI) which,
+      when opened in Juilet's (or another user's) client, will:</p>
+    <ul>
+      <li>Add Romeo to Juliet's roster (with a display name optionally specified by Romeo)</li>
+      <li>Add Juliet to Romeo's roster (without a pre-defined display name)</li>
+      <li>Establish a mutual presence subscription between Romeo and Juliet</li>
+    </ul>
+    <p>The perceivable effect is that with a single click, Romeo and Juliet
+      become "friends" in terms of XMPP presence subscription.</p>
+  </section1>
+  <section1 topic='Requirements' anchor='reqs'>
+    <p>This specification makes use of XMPP URIs. The basic URI scheme for XMPP
+      is defined in &rfc5122; and extended in &xep0147; to support different
+      actions like "roster" for roster addition and "subscribe" for presence
+      subscription.
+    </p>
+  </section1>
+  <section1 topic='Pre-Authenticated Roster Subscription' anchor='pars'>
+    <p>The process of mutual roster addition and subscription involves multiple
+      steps:</p>
+    <ol>
+      <li>Generation of invitation link</li>
+      <li>Out-of-band transmission and presentation of the link</li>
+      <li>Subcription request to the user by the link receiver (new contact)</li>
+      <li>Approval by the user and mutual subscription request</li>
+      <li>Approval by the new contact</li>
+    </ol>
+    <p>The general idea of the protocol and the details of the individual steps
+      are outlined in the following.</p>
+    <section2 topic='General Idea' anchor='general_idea'>
+      <p>As Romeo doesn't know Juliet's JID, he needs to send an out-of-band
+        invitation. Later, his client needs to match an incoming subscription
+        request to this invitation, so it can perform a secure automatic roster
+        addition and subscription approval. This matching is accomplished by
+        means of an authentication token, which is generated by Romeo's client,
+        added to the invitation link and then carried over into the subscription
+        request eventually made by Juliet's client. Romeo's client can then
+        compare the token received in a subscription request to the list of
+        issued tokens, and automatically approve the subscription.</p>
+<code caption='Successful PARS Protocol Flow'><![CDATA[
+Romeo          mongatague.net  capulet.net     Juliet
+   |              |               |               |
+   | Send out-of-band invitation link             |
+   | (xmpp:romeo@montague.net?preauth=token)      |
+   |- - - - - - - - - - - - - - - - - - - - - - ->|
+   |              |               |    roster add |
+   |              |               |<--------------|
+   |       presence subscription request w/ token |
+   |  <presence><preauth token="..."/></presence> |
+   |<---------------------------------------------|
+   | (token validation check)     |               |
+   | presence subscribed          |               |
+   |--------------------------------------------->|
+   | roster add   |               |               |
+   |------------->|               |               |
+   | presence subscription request|               |
+   |--------------------------------------------->|
+   |              |               (auto approval) |
+   |              |           presence subscribed |
+   |<---------------------------------------------|
+]]></code>
+    </section2>
+    <section2 topic='Generation of Invitation Link' anchor='link_generation'>
+      <p>Whenever Romeo wishes to invite somebody to his roster, his client will
+        generate an invitation link that contains a new authentication token.
+        This document extends the "roster" URI action defined in <cite>XEP-0147</cite> with
+        a new key-value parameter named "preauth" to store the generated token.
+        Romeo's client will create an <strong>xmpp:</strong> link containing Romeo's JID, the
+        "roster" action, the "preauth" parameter with the token value, and
+        optionally a "name" parameter with the suggested display name.
+      </p>
+<example caption='Invitation Link with Roster Action and Authentication Token'><![CDATA[
+xmpp:romeo@montague.net?roster;preauth=1tMFqYDdKhfe2pwp;name=Romeo%20Montague
+]]></example>
+      <p>
+        If the "preauth" parameter is present, the processing client is supposed
+        not only to add the user to the roster, but also to automatically send a
+        subscription request containing the authentication token.
+      </p>
+
+      <p></p>
+
+      <p><strong>Server-side implementation:</strong> it is
+        possible (but out-of-scope for this document), to let the user's server
+        handle generation of links as well as automatic approval of qualified
+        subscription requests. This requires an additional mechanism to query the
+        server for new (and possibly also for pending) invitation links.</p>
+
+    </section2>
+
+    <section2 topic='Out-of-band transmission and presentation of the link' anchor='link_transmission'>
+      <p>As Romeo doesn't know Juliet's JID in advance, he needs to use an out-of-band method (like e-mail, QR codes or NFC) to transmit the invitation link to Juliet. While these methods allow transmission of <strong>xmpp:</strong> URIs, there is no mechanism to ensure that Juliet actually has a client installed that can open the URI.</p>
+      <p>One way to solve this problem is to present Juliet with a web-based landing page that contains the following elements:</p>
+      <ul>
+        <li>A short text that this is an XMPP invitation from Romeo.</li>
+        <li>A client recommendation (based on the detected web browser) with download links.</li>
+        <li>A prominent button that activates the actual <strong>xmpp:</strong> link.</li>
+      </ul>
+      <p>There are multiple options where such a landing page could be hosted:</p>
+      <ol>
+        <li><strong>XSF:</strong> a central place would provide a common ground
+          for a curated client list and ensure long-term availability. However,
+          the operator would be able to collect meta-data and abuse authentication tokens.</li>
+        <li><strong>Client developer:</strong> the developer of Romeo's client can
+          provide a landing page for invitation requests created with this
+          client. This is a feasible short-term solution and allows to recommend
+          the same client as used by the link sender. However, it shares the
+          privacy objections of the XSF solution and can not guarantee
+          long-term availability of the service. If the client development shuts
+          down, invitation links created with the client will cease working.</li>
+        <li><strong>User's server:</strong> this is the optimal long-term
+          solution, as the user's server is already entrusted with the relevant
+          meta-data and will exist at least as long as the user's account on that
+          server. However, this requires an additional server component to query
+          for invitation URIs and a web server hosting the landing page.
+          Furthermore, the server operator needs to maintain the list of
+          recommended clients.</li>
+      </ol>
+<example caption='Developer-Hosted Landing Page Generated with yaxim'><![CDATA[
+https://yax.im/i/romeo/montague.net/1tMFqYDdKhfe2pwp/Romeo+Montague
+]]></example>
+      <p>A possible screen representation of the landing page would be:</p>
+      <div class="example">
+        <p><strong><em>Romeo Montague</em> has invited you to chat</strong></p>
+
+        <p><strong><link url='xmpp:romeo@montague.net?roster;preauth=1tMFqYDdKhfe2pwp;name=Romeo%20Montague'>Add <em>Romeo Montague</em></link></strong></p>
+        <p>If this link does not work, you need to install and configure
+          an XMPP client. Please visit this page again afterwards. Choose one of
+          these for your <em>Tomato OS</em>:</p>
+        <ul>
+          <li><strong>JuicyXMPP</strong> (link to XMPP client)</li>
+          <li><strong>VegetableChat</strong> (link to XMPP client)</li>
+        </ul>
+        <p>Check the <link url='http://xmpp.org/software/clients.html'>full list of XMPP clients</link>.</p>
+        <p>No further action is required if you do not know <em>Romeo Montague</em> or do not want to chat with them.</p>
+        <p>XMPP is a provider-independent form of instant messaging. That means
+          you can pick from many different clients and have a free choice of
+          server operators to communicate with <em>Romeo Montague</em>.</p>
+
+      </div>
+
+    </section2>
+
+    <section2 topic='Subcription request to the user by the link receiver (new contact)' anchor='link_transmission'>
+      <p>When Juliet opens the <strong>xmpp:</strong> URI (or the according client-supported
+        landing page URI) in her client, the client should perform the usual
+        roster addition action, i.e. display a dialog allowing to edit the entry
+        or to cancel the process. If Juliet completes the roster addition, the
+        client SHOULD also send a subscription request to Romeo. This request
+        SHOULD contain a 'preauth' element containing the authentication token
+        from the invitation link.
+      </p>
+<example caption='Subscription Request with Pre-Authenticated Roster Subscription Element'><![CDATA[
+<presence to='romeo@montague.net' type='subscribe'>
+  <preauth xmlns='urn:xmpp:pars:0' token='1tMFqYDdKhfe2pwp' />
+</presence>
+]]></example>
+      <p>If Juliet's server supports <link
+          url='http://xmpp.org/rfcs/rfc6121.html#sub-preapproval'>subscription
+          pre-approval</link>, the client SHOULD additionally pre-approve Romeo:
+      </p>
+<example caption='Juliet Pre-approves Romeo'><![CDATA[
+<presence to='romeo@montague.net' type='subscribed' />
+]]></example>
+      <p>If Juliet's server does not indicate pre-approval support, her client
+        SHOULD store Romeo's JID in a local auto-approval whitelist, together
+        with an appropriate expiration time.
+      </p>
+    </section2>
+
+    <section2 topic='Approval by the User and Mutual Subscription Request' anchor='sub_approval'>
+      <p>When Romeo's client receives a subscription request containing a
+        'preauth' element, it needs to extract the authentication token and
+        check if the token is a valid one and was previously issued by the client
+        (see security considerations below).</p>
+<example caption='Subscription Request With Tokens Received by Romeo'><![CDATA[
+<presence to='romeo@montague.net' from='juliet@capulet.net' type='subscribe'>
+  <preauth xmlns='urn:xmpp:pars:0' token='1tMFqYDdKhfe2pwp' />
+</presence>
+]]></example>
+      <p>If the token is considered valid, the client SHOULD automatically approve
+        the subscription request, add the sender of the subscription request to
+        the roster and send a subscription request of its own.</p>
+<example caption='Automatic Approval and Response Subscription Request'><![CDATA[
+<presence to='juliet@capulet.net' type='subscribed' />
+<presence to='juliet@capulet.net' type='subscribe' />
+]]></example>
+
+    </section2>
+
+    <section2 topic='Approval by the New Contact' anchor='sub_mutual_approval'>
+      <p>If Juliet's server support pre-approval, it will automatically handle the
+        incoming subscription request and issue a roster push. Otherwise, Juliet's
+        client will receive the subscription request:</p>
+<example caption='Mutual Subscription Request'><![CDATA[
+<presence from='romeo@montague.net' to='juliet@capulet.net' type='subscribe' />
+]]></example>
+      <p>Juliet's client SHOULD check the subscription request sender JID against
+        the whitelist, and either automatically approve the request or display an
+        according notification to Juliet.</p>
+
+    </section2>
+  </section1>
+  <section1 topic='Business Rules' anchor='rules'>
+    <section2 topic='Fallback to manual process' anchor='rules_fallback'>
+      <p>An implementation of this protocol MUST allow for a "graceful
+        degradation" to the manual subscription approval process. If a client
+        receives a malformed or unknown 'preauth' token, it MUST ignore it and act
+        as if no preauth token was contained.</p>
+    </section2>
+
+    <section2 topic='No expectaion of immediate approval' anchor='rules_expectation'>
+      <p>When sending a pre-authenticated subscription request, the contact's
+        client MUST NOT expect an immediate successful approval. If the user's
+        issuing client is currently offline, or if the token has expired, a manual
+        approval will be performed. Therefore, the contact's client should use the
+        same mechanism as before to indicate an unidirectional subscription.
+      </p>
+    </section2>
+
+    <section2 topic='Use of multiple clients' anchor='rules_multiclient'>
+      <p>If a user is logged in with multiple clients, some of their clients will
+        receive a subscription request with an unknown token. In this case, a client
+        MAY delay the user notification for a short time, to allow another logged-in
+        client to automatically handle the subscription request.</p>
+    </section2>
+
+    <section2 topic='Opening the landing page in an app' anchor='rules_multiclient'>
+      <p>Some mobile device platforms allow an app to register itself as a
+        handler for cetain URIs. This allows an XMPP client to register for <strong>xmpp:</strong>
+        URIs, but also to redirect handling of cetain HTTP/HTTPS URIs. A mobile
+        client SHOULD register for the associated landing page URIs and properly
+        handle the contained invitations. For example, the yaxim client should
+        register a handler for <strong>https://yax.im/i/*</strong>, and present
+        the "Add to roster" dialog if such a link is opened. A client MAY register
+        for the landing page URIs of other providers after obtaining the
+        operators' approval.
+      </p>
+    </section2>
+  </section1>
+  <section1 topic='Security Considerations' anchor='security'>
+    <section2 topic='Token Generation' anchor='security_token'>
+      <p>As the authentication token grants automatic addition to
+        Romeo's roster and automatic approval of presence subscription,
+        the token SHOULD be created with a cryptographically secure random
+        number generator <note>See for example <link
+            url='https://lwn.net/Articles/606141/'><tt>getrandom(2)</tt></link>,
+          <link
+            url='https://docs.oracle.com/javase/8/docs/api/java/security/SecureRandom.html'><tt>SecureRandom</tt></link>
+          or <tt>/dev/urandom</tt>. More information about the randomness
+          requirements for security can be found in &rfc4086;</note> and
+        provide sufficient entropy to make brute-force attacks
+        infeasible. It is suggested to generate at least 80 bits of
+        entropy, and to use an encoding that can be easily encoded as part
+        of an URI (e.g. Base-32).</p> <p>It is possible to use a different token
+        generation scheme like <cite>SAML</cite><note>Security Assertion Markup
+          Language (SAML) &lt;<link url='https://www.oasis-open.org/standards#samlv2.0'>https://www.oasis-open.org/standards#samlv2.0</link>&gt;</note>
+        or JWT (<cite><link url='http://tools.ietf.org/html/rfc7519'>RFC
+            7519</link></cite><note>RFC 7519: JSON Web Token (JWT) &lt;<link url='http://tools.ietf.org/html/rfc7519'>http://tools.ietf.org/html/rfc7519</link>&gt;</note>). In
+        such a case, the issuer must ensure a comparable security level
+        and limit token reuse.</p>
+    </section2>
+    <section2 topic='Checking Token Validity' anchor='security_validity'>
+      <p>To limit the potential for abuse, the token SHOULD be limited in as follows:</p>
+      <ul>
+        <li><strong>Usage:</strong> in the typical scenario, each token may only
+          be used once. While it is possible for a client to generate a token for
+          multiple uses (like for embedding it in a contact card), the
+          conventional manual roster management should be used for public
+          invitation links.</li>
+        <li><strong>Time:</strong> each token MUST have a limited validity time.
+          As the token is transmitted out-of-band, it should provide sufficient
+          reaction time, e.g. one week. This time limit also allows the issuer to
+          delete expired tokens.</li>
+        <li><strong>Identity:</strong> if the JID of the token receiver is known
+          in advance, the token sender MUST NOT allow a different JID to redeem
+          this token.</li>
+      </ul>
+      <p>If a token is considered invalid (due to failing any of the above
+        conditions, or for other reasons), a client MUST fall back to manual
+        roster addition and manual subscription approval.
+      </p>
+    </section2>
+    <section2 topic='Invitation Link Validity' anchor='security_link'>
+      <p>The invitation link that is generated by Romeo's client is considered a
+        personal invitation link for a single person. This, and the fact that the
+        link can only be used once, should be indicated by the client to Romeo.
+      </p>
+    </section2>
+    <section2 topic='Interception of Links' anchor='security_intercept'>
+      <p>A Monkey-in-the-Middle attacker who gains access to the invitation link
+        can manipulate its fields or redeem the link themselves. However, this is
+        true for all communication performed using the chosen medium and is out of
+        scope for this document.</p>
+      <p>Ideally, Romeo's client should highlight automatically-added roster items
+        and provide an easy mechanism to remove them and cancel their
+        subscription.</p>
+    </section2>
+    <section2 topic='Display Names' anchor='security_token'>
+      <p>An attacker can lure the user by providing an invitation link with a
+        'name' parameter that does not match the JID. Therefore, a client SHOULD
+        always display both the JID and the proposed display name when adding a
+        roster item.</p>
+      <p>When the user's client automatically approves a subscription, it SHOULD
+        add the new contact to the roster without a 'name' or with the 'name'
+        equal to the JID, to prevent impersonation attacks.</p>
+    </section2>
+  </section1>
+  <section1 topic='IANA Considerations' anchor='iana'>
+    <p>This document requires no interaction with &IANA;.</p>
+  </section1>
+  <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <p>Include the "urn:xmpp:pars:0" namespace in the registry of protocol
+      namespaces. Include "preauth" as an additional key-value parameter to the
+      roster query action.</p>
+<code caption='New Roster Query Action Parameter'><![CDATA[
+<querytype>
+  <name>roster</name>
+    ...
+    <key>
+      <name>preauth</name>
+      <desc>the token used to obtain an automatic approval from the target JID</desc>
+    </key>
+</querytype>
+]]></code>
+  </section1>
+  <section1 topic='XML Schema' anchor='schema'>
+    <p>REQUIRED for protocol specifications.</p>
+  </section1>
+</xep>
