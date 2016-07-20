@@ -42,7 +42,7 @@
 </header>
 <section1 topic='Introduction'>
   <p>The XMPP way is to have "disposable", or at least easily substituted, clients, maintaining long-term state on the server, and allowing it to be synchronized between clients. In particular, this can be seen on how the roster and presence fan-out operate - clients defer the operation of such things to the server, which manages the shared state and allows servers to access and manipulate it.</p>
-  <p>Historically, however, we have not done this for some more recently services, including Multi User Chat and PubSub. In both cases, different clients may be unaware of what chatrooms (etc) are joined (etc) by which other clients. This causes practical difficulty in seamlessly switching between devices and/or clients.</p>
+  <p>Historically, however, we have not done this for some more recently designed services, including Multi User Chat and PubSub. In both cases, different clients may be unaware of what chatrooms (etc) are joined (etc) by which other clients. This causes practical difficulty in seamlessly switching between devices and/or clients.</p>
 </section1>
 <section1 topic='User Stories' anchor='stories'>
   <section2 topic='Device Agility'>
@@ -73,20 +73,88 @@
 </section1>
 <section1 topic='Protocol' anchor='protocol'>
   <section2 topic='Advertising Support' anchor='disco'>
-    <p>Clients need to include a capability in Disco. Probably.</p>
-    <p>Servers need to advertise capability against account.</p>
+    <section3 topic='Clients'>
+      <p>Clients advertise support for this protocol via &xep0030; using a Disco Feature of 'urn:xmpp:pam:0'. This is required for local servers to detect support.</p>
+    </section3>
+    <section3 topic='Servers'>
+      <p>Servers advertise this support via &xep0030; on the user account (eg, &LOCALBARE;), using the same feature of 'urn:xmpp:pam:0'. This is used both by the local user and also remote pubsub services.</p>
+    </section3>
   </section2>
   <section2 topic='Subscribing' anchor='subs'>
-    <p>Clients use a modified XEP-0060 Subscribe with a newly added "jid" attribute? Presumably this may need to be in a distinct namespace.</p>
-    <p>It is tempted to suggest that all pubsub operations might be contained within a new namespace with the additional jid attribute, as they can be forwarded verbatim as required.</p>
-    <p>Servers use traditional XEP-0060 subscribes, but sent from the bare jid of the account.</p>
-    <p>Servers MUST send a Thing to indicate the new subscription to all clients capable of this protocol.</p>
+    <p>When a client wishes to subscribe to a node, either on the local server or remotely, using this protocol it does so by sending an &IQ; of type "set" to its own account, containing a pam element, which in turn has a service attribute (the target service jid) and a payload of a &xep0060; subscribe element (as described in &xep0060; §6.1). Example 32 from &xep0060; is thus performed in this protocol as follows:</p>
+    <example caption='Client subscribes to a node'><![CDATA[
+      <iq type='set' id='sub1'>
+        <pam xmln='urn:xmpp:pam:0' jid='pubsub.shakespeare.lit'>
+          <subscribe xmlns='http://jabber.org/protocol/pubsub'
+              node='princely_musings'
+              jid='francisco@denmark.lit'/>
+        </pam>
+      </iq>
+      ]]>
+    </example>
+    <p>Note that because the &xep0060; operation is intact within the pam element, local servers MAY interpret the operation, or MAY forward it verbatim. Note that the client SHALL always use its own bare jid (eg, &LOCALBARE;) within a subscribe, servers MUST verify this.</p>
+    <p>Such a request SHALL cause the local server to send a traditional &xep0060; request, from the account bare jid, to the remote service.</p>
+    <p>When the remote service replies, the local server SHALL first notify all joined clients of the new subscription (described more in #sublist)...</p>
+    <example caption='Server notifies about new subscription'><![CDATA[
+      <message>
+        <notify ver='aocolb' service='pubsub.shakespeare.lit' xmlns='urn:xmpp:pam:0'>
+          <subscription xmlns='http://jabber.org/protocol/pubsub'
+              node='princely_musings'
+              jid='francisco@denmark.lit'
+              subscription='subscribed'/>
+       </notify>
+     </message>
+      ]]>
+    </example>
+    <p>... and then MUST respond to the original &IQ;. Since the subscription has already been notified, this is an empty result &IQ;.</p>
+    <p>If the local server detects an error, it MUST NOT forward the request, and MUST respond with an &IQ; stanza of type error, which contains an error element which MAY be stamped with the local server as generator. Thus Example 34 from &xep0060; would be very similar:</p>
+    <example caption='An error generated remotely'><![CDATA[
+      <iq type='error' id='sub1'>
+        <error type='modify' by='francisco@denmark.lit'>
+          <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+          <invalid-jid xmlns='http://jabber.org/protocol/pubsub#errors'/>
+        </error>
+      </iq>
+      ]]>
+    </example>
+    <p>If the remote service rejects the subscription request, the local server simply forwards the response back as an &IQ; of type error, with the remote error copied through. The generator MUST be set to the remote service if missing. Thus Example 35 from &xep0060; might look as follows:</p>
+<example caption='An error generated remotely'><![CDATA[
+  <iq type='error' id='sub1'>
+    <error type='auth' by='pubsub.shakespeare.lit'>
+      <not-authorized xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+      <presence-subscription-required xmlns='http://jabber.org/protocol/pubsub#errors'/>
+    </error>
+  </iq>
+  ]]>
+    </example>
+    <p>Clients MAY assume that if the generator is missing, the error is generated by the local server and not a remote service.</p>
   </section2>
   <section2 topic='Unsubscribing' anchor='unsub'>
     <p>As above.</p>
   </section2>
   <section2 topic='Listing Subscriptions' anchor='sublist'>
-    <p>XEP-0237 FTW. Needs a new construct, since the subscriptions element in XEP-0060§5.6 will only list the user's local subscriptions (ie, to their PEP nodes). Maybe just the new namespace defaults to everything instead? But we'd still need the XEP-0237 model.</p>
+    <p>Clients obtain a current listing of the subscriptions, for example on initial connection, by sending a subscriptions request qualified by the pam namespace. If a client already has the opaque version identifier cached, it MAY include it within a "ver" attribute:</p>
+    <example caption='Client requests all current subscriptions'><![CDATA[
+      <iq type='get' id='subscriptions1'>
+        <subscriptions xml='urn:xmpp:pam:0' ver='asdvcjkasdjb'>
+      </iq>
+      ]]>
+    </example>
+    <p>The local server responds with either a response containing a subscription list (such as this, similar to &xep0060; Example 21):</p>
+    <example caption='Complete subscription list'><![CDATA[
+      <iq type='result' id='subscription1'>
+        <subscriptions xml='urn:xmpp:pam:0' ver='kjlsadhfsd'>
+          <subscription service='pubsub.shakespeare.lit' node='node1' jid='francisco@denmark.lit' subscription='subscribed'/>
+          <subscription service='pubsub.marlowe.lit' node='node2' jid='francisco@denmark.lit' subscription='subscribed'/>
+          <subscription service='pubsub.marlowe.lit' node='node5' jid='francisco@denmark.lit' subscription='unconfigured'/>
+          <subscription service='pubsub.shakespeare.lit' node='node6' jid='francisco@denmark.lit' subscription='subscribed' subid='123-abc'/>
+          <subscription service='pubsub.shakespeare.lit' node='node6' jid='francisco@denmark.lit' subscription='subscribed' subid='004-yyy'/>
+        </subscriptions>
+      </iq>
+      ]]>
+    </example>
+    <p>Alternately, a server MAY - if the client has supplied an opaque version identifier - send a sequence of &lt;notify> elements followed by an empty &IQ; result.</p>
+    <p>Clients MAY persistently store the last "ver" attribute seen from either the &lt;subscriptions> response or the last &lt;notify>, whichever is later. This can then be used to minimize the volume of subscription data transferred during resync.</p>
   </section2>
   <section2 topic='Auto Subscriptions' anchor='autosub'>
     <p>Servers need to subscribe to remote PEP services explicitly those nodes which are of interest. Interest needs to be detirmined by the client issuing a request; but this implies that servers would gradually acrue any node type which the user has had a capable client at any time.</p>
