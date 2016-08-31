@@ -43,7 +43,9 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <link rel='stylesheet' type='text/css' href='xmpp.css' />
         <link href="prettify.css" type="text/css" rel="stylesheet" />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
-        <script type="text/javascript" src="prettify.js"></script>
+        <script type="text/javascript" src="prettify.js">
+          <xsl:comment></xsl:comment>
+        </script>
         <!-- making things mobile-friendly... -->
         <meta>
           <xsl:attribute name='name'><xsl:text>viewport</xsl:text></xsl:attribute>
