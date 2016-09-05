@@ -8,7 +8,10 @@
 <xep>
 <header>
   <title>Mediated Information eXchange (MIX)</title>
-  <abstract>This document defines Mediated Information eXchange (MIX), an XMPP protocol extension for the exchange of information among multiple users through a mediating service. The protocol can be used to model group communication applications such as chatrooms, although with greater flexibility and extensibility than existing groupchat technologies such as Multi-User Chat (MUC). MIX supports standard groupchat features such as discussion topics and invitations, and  defines a strong access control model similar to that of MUC. MIX also enables users to participate without sharing presence, allows communication of any structured data (not only textual messages).  MIX uses Publish-Subscribe to provide flexible access and publication, and uses Message Archive Management (MAM) to provide storage and archiving. </abstract>
+  <abstract>This document defines Mediated Information eXchange (MIX), an XMPP protocol extension for the exchange of information among multiple users through a mediating service. The protocol can be used to provide human group communication and communication between non-human entities using channels, although with greater flexibility and extensibility than existing groupchat technologies such as Multi-User Chat (MUC).   MIX uses Publish-Subscribe to provide flexible access and publication, and uses Message Archive Management (MAM) to provide storage and archiving. </abstract>
+  
+
+  
   &LEGALNOTICE;
   <number>0369</number>
   <status>Experimental</status>
@@ -36,6 +39,14 @@
     <jid>Steve.Kille@isode.com</jid>
   </author>
   &stpeter;
+  
+  
+  <revision>
+    <version>0.3</version>
+    <date>2016-09-05</date>
+    <initials>sek</initials>
+    <remark><p>Addressing comments from review of 0.2 and expansion/clarification of MUC/MIX dual working</p></remark>
+  </revision>
   <revision>
     <version>0.2.3</version>
     <date>2016-09-01</date>
@@ -97,7 +108,9 @@
 </section1>
 
 <section1 topic='Requirements' anchor='reqs'>
-  <ul>
+
+<p>The following requirements have been identified, which MIX aims to address.</p>
+  <ol>
     <li>A user's participation in a channel persists and is not modified by the user's client going online and offline.</li>
     <li>Multiple devices associated with the same account can share the same nick in the channel, with well-defined rules making each client individually addressable.</li>
     <li>Channels are not required to support or reflect presence for participants.</li>
@@ -109,94 +122,128 @@
     <li>A user can determine which channels they participate in.</li>
     <li>Provide extensibility regarding data formats that can be sent within a channel (files, structured data, indications about media sources in multimedia conferences, etc.) as well as flexibility regarding which data formats a user wants to receive.</li>
     <li>Enable federation of a channel across multiple servers, to provide a service equivalent to "federated MUC" &xep0289;.</li>
+    <li>To enable sharing of messages on a channel without requiring sharing of presence.</li>
+    <li>To enable sharing of presence without requiring message sending.</li>
     <li>(Desirable) Make it easier to reduce duplicate traffic.</li>
- </ul>
+ </ol>
 </section1>
 
-<section1 topic='Concepts' anchor='reqs'>
+<section1 topic='Concepts' anchor='concepts'>
   <p>The following concepts underlie the design of MIX.</p>
-  <ul>
-    <li>MIX channels (roughly equivalent to MUC rooms) are hosted on one or more MIX domains, (examples: `mix.example.com`; 'conference.example.com'; 'talk.example.com'), which are discoverable through &xep0030;. Each channel on a MIX service may then be discovered and queried.</li>
-    <li> In MIX each channel (e.g., `channel@mix.example.com`) is a pubsub service. This is based on the model from &xep0163; where every user JID (e.g., `user@example.com`) is its own pubsub service. </li>
+  <ol>
+    <li>MIX channels (roughly equivalent to MUC rooms) are hosted on one or more MIX domains, (examples: 'mix.example.com'; 'conference.example.com'; 'talk.example.com'), which are discoverable through &xep0030;. Each channel on a MIX service may then be discovered and queried.</li>
+    <li> In MIX each channel (e.g., 'channel@mix.example.com') is a pubsub service. This is based on the model from &xep0163; where every user JID (e.g., 'user@example.com') is its own pubsub service. </li>
     <li>A channel's pubsub service contains a number of nodes for different event types or data formats. As described below, this document defines several standard nodes; however, future specifications or proprietary services can define their own nodes for extensibility.</li>
     <li>Affiliations with the nodes are managed by the MIX service by channel level operations, so that the user does not have to separately manage affiliations with the individual PubSub nodes.
      </li>
     <li>&xep0313; (MAM) is used for all history access, with each node being individually addressable for MAM queries. This simplifies implementation compared to MUC (which had a specialized and rather limited history retrieval mechanism).</li>
     <li>A client can achieve a 'quick resync' of a node by requesting just those changes it has not yet received, using standard MAM protocol. This solves the old MUC issue of either receiving duplicate messages when rejoining a room or potentially missing messages.</li>
     <li>Because MAM is used for history, only those nodes that have a 'current value' need to store any items in them &mdash; e.g., 'urn:xmpp:mix:nodes:presence' and 'urn:xmpp:mix:nodes:subject' would store their current values (with older values being queryable through MAM), while 'urn:xmpp:mix:nodes:messages' would store no items.</li>
-    <li>A user's participation in a channel outlives their session. A user who is offline will not share presence within the channel, but will still be listed as an participant. This too is a significant departure from MUC.</li>
+    <li>A user's participation in a channel outlives their client sessions. A client which is offline will not share presence within the channel, but the associated user will still be listed as an participant. </li>
+    <li>Presence is sent to all participants using bare JID, whether or not the user has an online client. </li>
+    <li>Online clients MAY register presence, which is then shared with participants who have subscribed to presence.</li>
     <li>MIX decouples addressing of occupants from their nicknames, so that nickname changes do not affect addressing.</li>
     <li>Each participant is addressable by a single bare JID, which is a proxy JID (not the user's real JID) to make it straightforward to hide the user's real JID from other channel participants. Full JIDs comprised of this bare JID plus a resource are then constructed, allowing visibility into the number of online resources participating in a channel.</li>
-  </ul>
+    <li>MIX requires client support and server support from the server providing the MIX service.  Although some protocol is shared with MUC, MUC clients are not interoperable with MIX servers.  This means that where a user chooses to use MIX, all of the users clients need to support MIX.</li>
+  </ol>
   <section2 topic="MIX and PubSub" anchor="concepts-pubsub">
-    <p>MIX is based upon domains providing a MIX service, such as `mix.shakespeare.example`. Note that although PubSub communication is used, a domain used for MIX is a MIX domain and not a standard &xep0060; domain. Like MUC, there is no requirement on the naming of these domains; the label 'mix' and the fact that it is a subdomain of a 'shakespeare.example' service are purely for example.</p>
-    <p>Every MIX channel is an addressable PubSub service (with additional MIX semantics) that will be addressed by an XMPP client using a bare JID, for example coven@mix.shakespeare.example. While &xep0060; is used as the basis for the MIX model, MIX uses standard presence and groupchat messages to provide an interface to the MIX service that does not expose PubSub for many of the more common functions.
+    <p>MIX is based upon domains providing a MIX service, such as 'mix.shakespeare.example'. Note that although PubSub communication is used, a domain used for MIX is a MIX domain and not a standard &xep0060; domain. Like MUC, there is no requirement on the naming of these domains; the label 'mix' and the fact that it is a subdomain of a 'shakespeare.example' service are purely for example.</p>
+    <p>Every MIX channel is an addressable PubSub service (with additional MIX semantics) that will be addressed using a bare JID by other XMPP entities, for example coven@mix.shakespeare.example. While &xep0060; is used as the basis for the MIX model, MIX uses standard presence and groupchat messages to provide an interface to the MIX service that does not expose PubSub protocol for many of the more common functions.
 </p>
   </section2>
   <section2 topic="MIX and MAM" anchor="concepts-mam">
-    <p>Message Archive Management is used for all storage of historical data (such as the history of messages sent within the channel). Each node can be archived separately (e.g., the presence node or the configuration node). MIX clients can retrieve archived information with MAM in order to quickly resync messages with regard to a channel, and may do so without providing presence information.</p>
+    <p> Historical data (such as the messages sent to the channel) is stored in an archive supporting  Message Archive Management (MAM) so that clients can subsequently access this data with MAM. Each node can be archived separately (e.g., the presence node or the configuration node). MIX clients can retrieve archived information with MAM in order to quickly resync messages with regard to a channel, and can do so without providing presence information.</p>
   </section2>
   <section2 topic="Delivering Messages to Users" anchor="concepts-delivery">
      <p>
        The primary model is that a user will join a channel over an extended period, and that the user (not a specific client used by the user) joins the channel. The primary subscription is with the client's bare JID. The user will receive messages from the channel and/or access channel presence from time to time with one or more clients.
      </p>
     <p>
-      Where a user has no clients active, the approach expected by MIX is that messages will be archived using MAM and that when clients come online they will use MAM to access messages that have not been delivered to the client.   Following the rules of &rfc6121;, arriving MIX messages (which will be of type=groupchat) will be discarded if all clients are offline. Offline messages are not used with MIX.
+      Where a user has no clients active, the approach is that all messages will be archived by the MIX channel (on arrival at the MIX channel) so that when clients come online they will use MAM to communicate to the MIX channel to access messages that have not been delivered to the client.   Following the rules of &rfc6121;, arriving MIX messages (which will be of type=groupchat)  and presence information will be discarded if all clients are offline. Offline messages are not used with MIX.  This means that a MIX client needs to resynchronize with the MIX service when it comes online.
     </p>
     <p>
-      Online clients are handled use &xep0376;.
-      The model is that the server will know which of the user's clients are interested in MIX messages, possibly filtered by MIX channel, and will deliver messages appropriately to these clients. MIX will send messages to the user's server addressed with the bare JID of the user. The user's server will then deliver messages to the user's clients, in a manner that is transparent to the MIX server. The same approach is used for sending presence updates to the user, noting that presence information is distributed by a channel to the bare JID of subscribers and then the user's server will distribute to clients as appropriate.
+      MIX delivery does not require any special support from the XMPP server to which the MIX client connects.   When using a basic XMPP server for this service,  all online clients for a user will receive the same set of messages and presence information, as MIX sends this information to the bare JID.
+    </p>
+  </section2>
+  
+  <section2 topic="Advanced Delivery to Online Users" anchor="concepts-online-delivery">
+    
+    <p>
+      It may be desirable in some situations to provide different service to different clients.  For example, a mobile client may participate in a smaller set of MIX channels than a desktop client.  This needs support from the server to which the client connects, so that MIX client and the connected server can negotiate which channels to send.   This is not supported by the core MIX specification, but it is anticipated that this will be supported by another specification.  
+     This may be &xep0376; (PAM) or a new specification similar to PAM developed specifically in support of MIX.
     </p>
   </section2>
   <section2 topic="User Presence in MIX" anchor="concepts-presence">
     <p>
-      MIX channels store presence in the presence node using the proxy JID of each online client for a user.   User presence may be included for all or selected clients of a given user, based on client choice to publish presence.    Where a user publishes presence for multiple clients, this information is available to all users subscribing to the channel presence. Queries such as disco requests will be directed to a specific client, routing through the MIX channel, while private messaging will be addressed to the user's bare proxy JID, and routed by the MIX to the user's bare real JID, where standard distribution rules will apply.
+      MIX channels store presence in the presence node using the proxy JID of each online client for a user.   User presence may be included for all or selected clients of a given user, based on client choice to publish presence.    Where a user publishes presence for multiple clients, this information is available to all users subscribing to the channel presence. 
+    </p>
+    <p>
+      External XMPP entities can direct stanzas to clients publishing their presence by sending them to the appropriate full proxy JID in the presence node.   These stanzas MAY be routed to the client by the MIX channel.  The choice to do this is dependent on MIX channel policy.   For example, a disco request MAY be routed through the MIX channel to the client. 
     </p>
     <p>
       Presence updates are distributed by a channel to the bare JID of subscribers and then the subscriber's server will distribute to each of the subscriber's currently online clients.
+    </p>
+  </section2>
+  <section2 topic="Private Messages" anchor="concepts-pm">
+    <p>
+      Private messages MAY be sent to channel participants if allowed by channel policy.   Private messages are 
+ addressed to the user's bare proxy JID determined from the participants node, and routed by the MIX to the user's bare real JID, where standard distribution rules will apply.  
+    </p>
+    <p>
+      Private messages MAY also be sent to specific clients identified by the full proxy JID of the client in the participants list, if allowed by channel policy.
     </p>
   </section2>
   <section2 topic="Proxy JIDs and JID Visibility" anchor="proxy-jid">
     <p>
       MIX channels have two modes controlling JID visibility:
     </p>
-    <ul>
-      <li>'JID Visible': In these channels, some or all participant JIDs are visible to all channel members.</li>
-      <li>'JID Hidden': In these channels, no participant JIDs are visible to channel members, but they are visible to channel administrators.</li>
-    </ul>
+    <table caption="JID Visibility Modes">
+      <tr><th>Mode</th><th>Description</th></tr>
+      <tr><td>'JID Visible'</td><td>In these channels, some or all participant JIDs are visible to all channel members.</td></tr>
+      
+      <tr><td>'JID&nbsp;Hidden'</td><td>In these channels, no participant JIDs are visible to channel members, but they are visible to channel administrators.</td></tr>
+    </table>
+   
     <p>
       A channel member may specify their preferences for JID visibility, with one of the following values:
     </p>
-    <ul>
-      <li>'No JID Visibility Preference': The users JID will be visible in JID Visible channels and hidden in JID Hidden channels.</li>
-      <li>'Prefer Hidden': The user's JID will be hidden in JID Visible channels if the channel policy allows this.</li>
-      <li>'Enforce Hidden': The user's JID will never be shown and the user will be removed from channel if channel administrator enforces visibility.</li>
-      <li>'Enforce Visible': The users JID will always be shown and the user will be removed from channel if mode is changed to 'JID Hidden'.</li>
-    </ul>
+    <table caption="JID Visibility Preference Options">
+      <tr><th>Preference</th><th>Description</th></tr>
+      <tr><td>'No JID Visibility Preference'</td><td>The users JID will be visible in JID Visible channels and hidden in JID Hidden channels.</td></tr>
+      <tr><td>'Prefer Hidden'</td><td>The user's JID will be hidden in JID Visible channels if the channel policy allows this.</td></tr>
+      <tr><td>'Enforce Hidden'</td><td>The user's JID will never be shown and the user will be removed from channel if channel administrator enforces visibility.</td></tr>
+      <tr><td>'Enforce Visible'</td><td>The users JID will always be shown and the user will be removed from channel if mode is changed to 'JID Hidden'.</td></tr>
+    </table>
+    
     <p>
-      The primary representation of a participant in a MIX channel is a proxy JID, which is an anonymized JID using the same domain as the channel and with the name of the channel encoded, using the format "&lt;channel&gt;+&lt;generated identifier&gt;@&lt;mix domain&gt;".   For example in the channel 'coven@mix.shakespeare.example',   the user 'hag66@shakespeare.example' might have a proxy JID of 'coven+123456@mix.shakespeare.example'.   The reason for the proxy JID is to support JID Hidden channels.   Proxy JIDs are also used in JID Visible channels, for consistency and to enable switching of JID visibility.  The "urn:xmpp:mix:nodes:jidmap" node maps from proxy JID to real JID.
+      The primary representation of a participant in a MIX channel is a proxy JID, which is an anonymized JID using the same domain as the channel and with the name of the channel encoded, using the format "&lt;channel&gt;+&lt;generated identifier&gt;@&lt;mix domain&gt;".  They generated identifier MUST NOT contain the '+' characters.  The Channel name MAY contain the '+' character.   For example in the channel 'coven@mix.shakespeare.example',   the user 'hag66@shakespeare.example' might have a proxy JID of 'coven+123456@mix.shakespeare.example'.   The reason for the proxy JID is to support JID Hidden channels.   Proxy JIDs are also used in JID Visible channels, for consistency and to enable switching of JID visibility.  The "urn:xmpp:mix:nodes:jidmap" node maps from proxy JID to real JID.  While a user is a participant in a Channel, the mapping between real JID and proxy JID MUST NOT be changed,
     </p>
      <p>
-       The full JIDs held in presence are anonymized using a similar mechanism.  First the bare JID is mapped to a bare proxy JID, using the mapping held in the "urn:xmpp:mix:nodes:jidmap" node for the bare JID.  Then the resource is replaced with a generated value.   For example,   'hag66@shakespeare.example' in the channel coven might have a proxy JID of 'coven+123456@mix.shakespeare.example/789'.   There is no client visible mapping of proxy full JIDs maintained as this is not needed.   The MIX channel will need to maintain a mapping, to support directly addressing clients, such as for client to client disco#info queries.
+       The full JIDs held in the  presence nodes are anonymized using a similar mechanism.  First the bare JID is mapped to a bare proxy JID, using the mapping held in the "urn:xmpp:mix:nodes:jidmap" node for the bare JID.  Then the resource is replaced with a generated value.   For example,   'hag66@shakespeare.example' in the channel coven might have a proxy JID of 'coven+123456@mix.shakespeare.example/789'.   There is no client visible mapping of proxy full JIDs maintained as this is not needed.   The MIX channel will need to maintain a mapping, to support directly addressing clients, such as for client to client disco#info queries.  While an anonymized JID is held in the presence node, the mapping to real JID MUST NOT be changed.  When an anonoymized full JID is added to the presence node, mapping to a real full JID that was previously in the presence node, the same anonymized JID as the previous time MAY be used or a different anonymized JID MAY be used.
      </p>
   </section2>
   <section2 topic="Standard Nodes" anchor="concepts-nodes">
     <p>The standard nodes are as follows (although note that not every channel will necessarily use each node):</p>
-    <ul>
-      <li>'urn:xmpp:mix:nodes:messages' for publishing messages. Each item of this node will contain a message sent to the channel.</li>
-      <li>'urn:xmpp:mix:nodes:subject' for publishing the subject of the channel.</li>
-      <li>'urn:xmpp:mix:nodes:participants' for publishing the list of participants (identified by anonymized bare proxy JID), and identifying the nick.  This is a list of users who would receive messages (by subscription to the messages node) and/or would receive presence (by subscription to the presence node).</li>
-
-      <li>'urn:xmpp:mix:nodes:jidmap' for publishing a list of anonymized bare JIDs from the participants node with a 1:1 mapping to the corresponding real JIDs.</li>
-
-
-      <li>'urn:xmpp:mix:nodes:presence' for publishing information about the availability status of online participants, which may include multiple clients for a single participant. </li>
-
-
-      <li>'urn:xmpp:mix:nodes:config' for storing configuration information. </li>
-
-      <li>'urn:xmpp:mix:nodes:acl' for storing information about access control lists (such as the list of owners and administrators). This information will generally be restricted to authorized users.</li>
-    </ul>
+    
+    <table caption="Standard Nodes">
+      <tr><th>Node</th><th>Description</th></tr>
+      
+      <tr><td>'urn:xmpp:mix:nodes:messages'</td><td>For publishing messages. Each item of this node will contain a message sent to the channel.</td></tr>
+      
+      <tr><td>'urn:xmpp:mix:nodes:subject'</td><td>For publishing the subject of the channels</td></tr>
+      
+      <tr><td>'urn:xmpp:mix:nodes:participants'</td><td>For publishing the list of participants (identified by anonymized bare proxy JID), and identifying the nick.  This is a list of users who would receive messages (by subscription to the messages node) and/or would receive presence (by subscription to the presence node).</td></tr>
+      
+      <tr><td>'urn:xmpp:mix:nodes:jidmap'</td><td>For publishing a list of anonymized bare JIDs from the participants node with a 1:1 mapping to the corresponding real JIDs.</td></tr>
+      
+      <tr><td>'urn:xmpp:mix:nodes:presence'</td><td>For publishing information about the availability status of online participants, which may include multiple clients for a single participant.</td></tr>
+      
+      <tr><td>'urn:xmpp:mix:nodes:config'</td><td>For storing configuration information.</td></tr>
+      
+      <tr><td>'urn:xmpp:mix:nodes:acl'</td><td>For storing information about access control lists (such as the list of owners and administrators). This information will generally be restricted to authorized users.</td></tr>
+    </table>
+    
+  
     <p>
       jidmap is the only node that will always be present for a MIX channel and all other nodes are optional.   All channels will have either a message node, a presence node or both, because a channel will always share messages and/or presence.   MIX provides mechanisms to allow users to conveniently subscribe to a chosen set of nodes and to unsubscribe to all nodes with a single operation.
     </p>
@@ -208,7 +255,7 @@
       <p>Private Messages are not stored in the messages node.</p>
     </section3>
     <section3 topic="Subject Node" anchor="subject-node">
-      <p>The subject node publishes the current subject of channel. Subject history is stored in MAM. A single item is stored in this node at a time which MUST contain a "text" element and MAY contain additional text elements. Where multiple text elements are provided, each MUST posess an xml:lang attribute that describes the natural language of the subject. Users subscribe to this node to receive subject updates. The following example shows the format of a item in the subject node.</p>
+      <p>The subject node publishes the current subject of channel. Subject history is stored in MAM. A single item is stored in this node at a time which MUST contain a "text" element and MAY contain additional text elements. Where multiple text elements are provided, each MUST posses an xml:lang attribute that describes the natural language of the subject. Users subscribe to this node to receive subject updates. The following example shows the format of a item in the subject node.</p>
       <example caption="Subject Node">
 <![CDATA[<items node='urn:xmpp:mix:nodes:subject'>
   <item>
@@ -218,7 +265,7 @@
 </items>]]></example>
     </section3>
     <section3 topic="Participants Node" anchor="participants-node">
-      <p>Each channel participant is represented as an item of the 'urn:xmpp:mix:nodes:participants' channel node. Each item is named by the bare proxy JID of the participant. For example 'coven+123456@mix.shakespeare.example' might name the node item associated with participant 'hag66@shakespeare.example'. The nick associated with the user is mandatory and is stored in the item.
+      <p>Each channel participant is represented as an item of the 'urn:xmpp:mix:nodes:participants' channel node. Each item is named by the bare proxy JID of the participant. For example 'coven+123456@mix.shakespeare.example' might name the node item associated with participant 'hag66@shakespeare.example'. The nick associated with the user is mandatory and is stored in the item.  The nick for each channel participant MUST be different to the nick of other participants.
       This node may be subscribed to for jid-visible channels that permit subscription to this node - this will allow users to see changes to channel membership.
       </p>
       <example caption="Value of Participants Node"><![CDATA[
@@ -359,22 +406,14 @@
         name='Shakespearean Chat Service'
         type='text'/>
     <feature var='urn:xmpp:mix:0'/>
-    <x xmlns='jabber:x:data' type='result'>
-      <field var='FORM_TYPE' type='hidden'>
-        <value>urn:xmpp:mix:0#serviceinfo</value>
-      </field>
-      <field var='muc-mirror'
-             type='jid-single'
-             label='Location of MUC mirror service'>
-        <value>chat.shakespeare.example</value>
-      </field>
     </x>
   </query>
 </iq>
 ]]></example>
     <p>The result is returned in an extended disco results in a form whose type value is 'urn:xmpp:mix:0#serviceinfo'.
-      If the MIX service is mirrored to a MUC service for backwards-compatibility, this SHOULD be signaled by the inclusion of field with var='muc-mirror', the value of which is the mirrored MUC domain's JID.  Where a MIX server supports MIX channels as &xep0045; rooms, the domain used for MUC may be different to the MIX domain or it MAY be the same.</p>
-    <p>Note that the MIX service doesn't advertise support for &xep0313;, nor is support for generic &xep0060; advertised.</p>
+     </p>
+    <p>A MIX service MUST NOT advertise support for &xep0313;, as MAM is supported by the channels and not by the service.   A  MIX service MUST NOT advertise support for generic &xep0060;, as although MIX makes use of PubSub it is not a generic PubSub service.</p>
+    
   </section2>
   <section2 topic='Discovering the Channels on a Service' anchor='disco-channel-list'>
     <p>The list of channels supported by a MIX service is obtained by a disco command.</p>
@@ -393,7 +432,7 @@
   <query xmlns='http://jabber.org/protocol/disco#info'/>
 </iq>
 ]]></example>
-    <p>The channel MUST return its identity and the features it supports:</p>
+    <p>The channel MUST return its identity and the features it supports.  Note that a MIX channel MUST support MAM and so the response will always include both MIX and MAM support.</p>
     <example caption='Channel Returns Disco Info Result'><![CDATA[
 <iq from='coven@mix.shakespeare.lit'
     id='ik3vs715'
@@ -405,6 +444,7 @@
         name='A Dark Cave'
         type='mix'/>
     <feature var='urn:xmpp:mix:0'/>
+    <feature var='urn:xmpp:mam:1'/>
   </query>
 </iq>
 ]]></example>
@@ -527,11 +567,21 @@
        <li>'Never Show JID'.  If this is set, JID will never be shared and user will be removed from the channel if its mode changes to JID-visible-mandatory.</li>
        <li>'Prefer Not Show JID.   If this is set, JID will only be shared if mode is JID-visible-mandatory.</li>
      </ol>
+     <p>
+       AUTHOR'S NOTE AND QUESTION: Dave Cridland has suggested.   I would prefer:
+      
+        a) User options be sent in the initial join/>.
+        b) Unknown options are ignored.
+       c) User options can be requested (as a form). If clients require an option to
+        be supported, they should request the form.
+       
+       
+     </p>
      <p>AUTHOR'S NOTE AND QUESTION:  Add protocol specifications  and examples.   Are there any other specific per user values that should be listed here? </p>
    </section3>
 
     <section3 topic='Leaving a Channel' anchor='usecase-user-leaving'>
-      <p>Users generally remain in a channel for an extended period of time.  In particular membership of the channel does not change when the user goes offline as happens with &xep0045;. So, leaving the channel is a permanent action for a user across all clients, not just a matter of telling the channel that the user is not currently available or for a single client.  In order to  leave a channel, a user sends a MIX "leave" command to the channel. When a user leaves the channel, the user's server will remove the channel from the user's roster.</p>
+      <p>Users generally remain in a channel for an extended period of time.  In particular membership of the channel does not change when the user goes offline as happens with &xep0045;. So, leaving the channel is a permanent action for a user across all clients, not just a matter of telling the channel that the user is not currently available or for a single client.  In order to  leave a channel, a user sends a MIX "leave" command to the channel. When a user leaves the channel, the user's client will remove the channel from the user's roster.</p>
       <example caption="User Leaves a Channel"><![CDATA[
 <iq type='set'
     from='hag66@shakespeare.example/pda'
@@ -575,7 +625,7 @@
       <li>The user explicitly sets the nick, as described in this section.</li>
       <li>The MIX service generates the nick.  In this case it is recommended that the assigned nick is a UUID following &rfc4122;.</li>
     </ol>
-    <p>AUTHOR'S NOTE AND QUESTION:  REVIEW use of UUID.  Can it make sense for other algorithms, such as a string from the JID</p>
+   
     <p>
    A user will typically set a nick when joining a channel and may update this nick from time to time.   The user does this by sending a command to the channel to set the nick.  If the user wishes the channel to assign a nick (or knows that the channel will assign a nick) the nick field can be left blank, so that the user can see what is assigned in the result.
     </p>
@@ -636,7 +686,10 @@
 </iq>
 ]]></example>
       <p>On success, the service informs the user of its nick. The nick that is issued might be different from the nick that was requested, for example if the service completes normalization of nicknames for purposes of internationalization.</p>
-      <p>MIX services SHOULD apply the "nickname" profile of the PRECIS OpaqueString class, which is defined in draft-ietf-precis-nickname.</p>
+      <p>
+        MIX services SHOULD apply the "nickname" profile of the PRECIS OpaqueString class, as defined in &rfc7700;.
+      </p>
+      
       <example caption="Service Returns User of Nick"><![CDATA[
 <iq type='result'
     to='mix.shakespeare.example'
@@ -736,7 +789,7 @@
           from='hag66@shakespeare.example/pda'
           to='coven@mix.shakespeare.example'/>
 ]]></example>
-      <p>The MIX channel will retract (remove) the item in the presence node of the MIX channel identified by the client's full JID.  The MIX channel will notify subscribers to the presence node of the user going offline using a presence stanza from the proxy JID of the client.</p>
+      <p>The MIX channel will retract (remove) the item in the presence node of the MIX channel identified by the client's full JID.  The MIX channel will notify subscribers to the presence node of the user going offline by sending a presence stanza to the full proxy JID of each client.</p>
       <example caption="Channel Distributes Notification of Client going Offline">
 <![CDATA[<presence from='coven+12345@mix.shakespeare.example/678'
           to='hecate@shakespeare.example'
@@ -763,7 +816,8 @@
   <body>Harpier cries: 'tis time, 'tis time.</body>
 </message>
 ]]></example>
-      <p>The message comes from the channel as a pubsub notification, with the 'publisher' attribute set to the participant identifier of the sender.</p>
+      <p>The message comes from the channel as a standard groupchat message, compatible with MUC.</p>
+      <p>AUTHOR NOTE AND QUESTION:  Message id coming back is different in example.  This is because the reflected message uses MAM ID, which seems helpful.  However, it makes it harder for sender to correlate reflections. Need to be explicit as to compliant behaviour.  Input as to whether the ID should change is solicited.  A more complex option would be to include both IDs in some way.</p>
       <example caption="Channel Reflects Message to Participants"><![CDATA[
 <message from='coven+12345@mix.shakespeare.example/678'
          to='hecate@shakespeare.example'
@@ -792,7 +846,34 @@
         <li>The channel member sends the invitation to the invitee.</li>
         <li>The invitee uses the invitation to construct a request to join the channel.</li>
       </ol>
-      <p> AUTHOR'S NOTES AND QUESTION:   To be expanded considerably.   Dave (Cridland?) raised a point about contact preverification about users' invites.  If this is still relevant, please raise it again and we will consider how to address it. </p>
+      <p> AUTHOR'S NOTES AND QUESTION:   To be expanded considerably and perhaps modified based on the following:  Dave Cridland notes: 
+        > There are three actors - the Member (who is the inviter), the Invitee, and
+        > the Channel.
+        > 
+        > A) The Member obtains an Invitation (containing a verifiable token) from the
+        > Channel. This allows the Channel to reject attempts to invite users who
+        > should not be able to join the channel, but it might provide the token anyway
+        > to avoid probes discovering who is allowed to join the room. This is your step
+        > 1.
+        > 
+        > B) The Member sends this Invitation (including the token) to the Invitee.
+        > (Step 2)
+        > 
+        > C) The Invitee can optionally request from the Channel the validity of the
+        > Invitation. (Not included)
+        > 
+        > D) The Invitee can use the Invitation. (Step 3)
+        > 
+        > The idea behind my step C is that it allows a client to validate that the entity
+        > sending an invitation really is a member of the channel, and could
+        > legitimately act as a Member. This could be folded into (D), although it
+        > depends on whether we want to present the Invitation without knowing its
+        > validity.
+        > 
+        > It feels as if an Invitee executing on an Invitation ought to be able to tell if the
+        > Invitation was genuine or not.
+        > 
+        . </p>
     </section3>
 
 
@@ -807,8 +888,8 @@
 
 
     <section3 topic="Requesting vCard" anchor="usecase-vcard">
-      <p>A user may request the vCard of a channel participant by sending a requestion through the channel.</p>
-      <p> AUTHOR'S NOTES:   To be expanded considerably. </p>
+      <p>A user may request the vCard of a channel participant by sending a request through the channel.</p>
+      <p> AUTHOR'S NOTES:   To be expanded considerably. ( is essentially "send the vCard request to the bare Proxy JID")</p>
     </section3>
   </section2>
 
@@ -943,6 +1024,104 @@
 </section1>
 
 
+<section1 topic="Supporting MIX and MUC together" anchor="mix-and-muc-together">
+  <p>
+    MIX is specified as a service that can be used independent of MUC and a MIX service may be implemented without MUC.  If both MIX and MUC are implemented, three approaches are noted.
+  </p>
+  <ol>
+    <li>Entirely separate MIX and MUC implementation, with MIX and MUC using separate domains and MIX channels being completely separate from MUC rooms.</li>
+    
+    <li>Fully integrated MIX and MUC implementation, with MIX and MUC sharing a single domain and rooms/channels equivalent.</li>
+    
+    <li>Partially integrated MIX and MUC implementation, with MIX and MUC using separate domains, but rooms/channel are common.  This means that each MIX channel will have MUC room of the same name and common membership.</li>
+  </ol>
+  
+  <p>The fully integrated approach would be transparent to clients.    Disco of a room or channel would show support for both MUC and MIX, which would enable a client to choose whether to use MUC or MIX.  The following example shows how a MIX service that also supported MUC would respond:</p>
+  
+  <example caption="Service responds with Disco Info result showing MIX and MUC support" ><![CDATA[
+<iq from='mix.shakespeare.example'
+    id='lx09df27'
+    to='hag66@shakespeare.example/intibo24'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity
+        category='conference'
+        name='Shakespearean Chat Service'
+        type='text'/>
+    <feature var='urn:xmpp:mix:0'/>
+    <feature var='http://jabber.org/protocol/muc'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:mix:0#serviceinfo</value>
+      </field>
+    </x>
+  </query>
+</iq>
+]]></example>
+  
+  
+  <p>For the partially integrated service, it will be useful for clients that support both MIX and MUC to be able to determine that the server supports both protocols.   For a MIX client, it will be useful to know the MUC service, so that this information can be shared with a MUC client invitation.   This information is provided by the initial service discovery:</p>
+  
+  
+    <example caption="MIX Service responds with Disco Info result sharig MUC service location" ><![CDATA[
+<iq from='mix.shakespeare.example'
+    id='lx09df27'
+    to='hag66@shakespeare.example/intibo24'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity
+        category='conference'
+        name='Shakespearean Chat Service'
+        type='text'/>
+    <feature var='urn:xmpp:mix:0'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:mix:0#serviceinfo</value>
+      </field>
+      <field var='muc-mirror'
+             type='jid-single'
+             label='Location of MUC mirror service'>
+        <value>chat.shakespeare.example</value>
+      </field>
+    </x>
+  </query>
+</iq>
+]]></example>
+    
+    <p>The result is returned in an extended disco results in a form whose type value is 'urn:xmpp:mix:0#serviceinfo'.  The  field with var='muc-mirror' is the value of which is the mirrored MUC domain's JID.  </p>
+   
+    <p>Where a client supporting both MIX and MUC is given a reference to a MUC room, it is desirable that the client can determine the MIX channel and join using MIX.   This is achieved by an equivalent extension to MUC service discover.</p>
+  
+  <example caption="MUC Service responds with Disco Info result sharig MIX service location" ><![CDATA[
+<iq from='chat.shakespeare.example'
+    id='lx09df27'
+    to='hag66@shakespeare.example/intibo24'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity
+        category='conference'
+        name='Shakespearean Chat Service'
+        type='text'/>
+    <feature var='http://jabber.org/protocol/muc'/>    
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:mix:0#serviceinfo</value>
+      </field>
+      <field var='mix-mirror'
+             type='jid-single'
+             label='Location of MUC mirror service'>
+        <value>mix.shakespeare.example</value>
+      </field>
+    </x>
+  </query>
+</iq>
+]]></example>
+  
+  <p>The result is returned in an extended disco results in a form whose type value is 'urn:xmpp:mix:0#serviceinfo'.  The  field with var='mix-mirror' is the value of which is the mirrored MIX domain's JID.  </p>
+  
+  
+
+</section1>
 
 
 <!--<section1 topic='Implementation Notes' anchor='impl'>
@@ -969,7 +1148,7 @@
        <li>Describe in an updated version of this XEP.</li>
        <li>Do not specify in a XEP and leave to implementer.</li>
      </ol>
-     <p>QUESTION: Input on these choices is solicited.</p>
+     <p>QUESTION: Input on these choices is solicited.  Dave Cridland votes for new XEP.</p>
    </section2>
 
    <section2 topic="Voice Control" anchor="voice-control">
@@ -1003,8 +1182,7 @@
   <p>TBD.</p>
 </section1>
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>Thanks to the following who have made contributions: Dave Cridland, Philipp Hancke, Waqas Hussain, Ralph Meijer, Lance Stout, Sam Whited, and Matthew Wild.</p>
-  <p>TEMPORARY NOTE: If you have been missed off, or know anyone who has been missed off, let Steve Kille know.</p>
+  <p>Thanks to the following who have made contributions: Dave Cridland, Philipp Hancke, Waqas Hussain, Georg Lukas, Ralph Meijer, Edwin Mons, Emmanuel Gil Peyrot, Florian Schmaus, Lance Stout, Sam Whited, and Matthew Wild.</p>
 </section1>
 </xep>
 
