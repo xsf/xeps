@@ -36,19 +36,12 @@
 A script for checking XEPs for dead links.
 '''
 
-import glob
-import os
-from select import select
-import socket
 from argparse import ArgumentParser
-from string import split,strip,join,find
 import sys
-import time
 import re
-import urllib
 import urllib2
 
-from xml.dom.minidom import parse,parseString,Document
+from xml.dom.minidom import parse
 
 def is_dead(url):
     if re.match("^(http|https)", url):
