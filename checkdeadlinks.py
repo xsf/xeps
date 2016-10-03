@@ -3,7 +3,7 @@
 # File: checkdeadlinks.py
 # Version: 0.1
 # Description: a script for checking XEPs for dead links
-# Last Modified: 2009-04-06
+# Last Modified: 2016-10-03
 # Author: Tobias Markmann (tm@ayena.de)
 # License: public domain
 # HowTo: ./checkdeadlinks.py --xep=xepnum
