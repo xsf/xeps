@@ -36,31 +36,36 @@
 A script for checking XEPs for dead links.
 '''
 
+from __future__ import print_function
+
 from argparse import ArgumentParser
 import sys
 import re
-import urllib2
 
 from xml.dom.minidom import parse
+
+try:
+    from urllib.request import Request, urlopen
+except ImportError:
+    # We are on python2
+    from urllib2 import Request, urlopen
 
 def is_dead(url):
     if re.match("^(http|https)", url):
         if verbose:
-            print url + ' :',
-        page = 0
+            print(url + ' :', end=' ')
         try:
-            request = urllib2.Request(url)
+            request = Request(url)
             request.add_header('User-Agent', "Mozilla/5.001 (windows; U; NT4.0; en-US; rv:1.0) Gecko/25250101")
-            opener = urllib2.build_opener()
-            page = opener.open(request).read()
-        except Exception, e:
+            urlopen(request).read()
+        except Exception as e:
             reason = str(e)
             if verbose:
-                print "XEP-" + xepnum + " - DEAD: " + url + " [" + reason + "]"
+                print("XEP-" + xepnum + " - DEAD: " + url + " [" + reason + "]")
             return True
         else:
             if verbose:
-                print 'OK'
+                print('OK')
             return False
     else:
         return False
@@ -81,7 +86,7 @@ def main():
     thexep = parse(xepfile)
 
     if verbose:
-        print 'Checking XEP-' + xepnum + ':'
+        print('Checking XEP-' + xepnum + ':')
 
     urls = [link.getAttribute("url") for link in thexep.getElementsByTagName("link")]
     urls += [image.getAttribute("src") for image in thexep.getElementsByTagName("img")]
@@ -90,7 +95,7 @@ def main():
 
     if deadlinks:
         for url in deadlinks:
-            print url
+            print(url)
         sys.exit(1)
 
 if __name__ == "__main__":
