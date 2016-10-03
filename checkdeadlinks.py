@@ -70,28 +70,31 @@ def is_dead(url):
     else:
         return False
 
+def get_deadlinks(xep, is_verbose=False):
+    global xepnum
+    xepnum = '%04d' % xep
+
+    global verbose
+    verbose = is_verbose
+
+    xepfile = 'xep-' + xepnum + '.xml'
+    thexep = parse(xepfile)
+
+    urls = [link.getAttribute("url") for link in thexep.getElementsByTagName("link")]
+    urls += [image.getAttribute("src") for image in thexep.getElementsByTagName("img")]
+
+    if verbose:
+        print('Checking XEP-%s (%d links):' % (xepnum, len(urls)))
+
+    return [url for url in set(urls) if is_dead(url)]
+
 def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument('-v', '--verbose', action='store_true', help='Enables more verbosity')
     parser.add_argument('-x', '--xep', type=int, help='Defines the number of the XEP to check')
     args = parser.parse_args()
 
-    global xepnum
-    xepnum = '%04d' % args.xep
-
-    global verbose
-    verbose = args.verbose
-
-    xepfile = 'xep-' + xepnum + '.xml'
-    thexep = parse(xepfile)
-
-    if verbose:
-        print('Checking XEP-' + xepnum + ':')
-
-    urls = [link.getAttribute("url") for link in thexep.getElementsByTagName("link")]
-    urls += [image.getAttribute("src") for image in thexep.getElementsByTagName("img")]
-
-    deadlinks = [url for url in set(urls) if is_dead(url)]
+    deadlinks = get_deadlinks(args.xep, args.verbose)
 
     if deadlinks:
         for url in deadlinks:
