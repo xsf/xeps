@@ -32,11 +32,15 @@
 #
 ## END LICENSE ##
 
+'''
+A script for checking XEPs for dead links.
+'''
+
 import glob
 import os
 from select import select
 import socket
-import getopt
+from argparse import ArgumentParser
 from string import split,strip,join,find
 import sys
 import time
@@ -46,31 +50,14 @@ import urllib2
 
 from xml.dom.minidom import parse,parseString,Document
 
-def usage():
-    print "checkdeadlinks.py"
-    print ""
-    print "-h, --help           Print this help message"
-    print "-x, --xep [number]   Defines the number of the XEP to check"
-    print "-v, --verbose        Enables more verbosity"
+def main():
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enables more verbosity')
+    parser.add_argument('-x', '--xep', type=int, help='Defines the number of the XEP to check')
+    args = parser.parse_args()
 
-def main(argv):
-    try:
-        opts, args = getopt.gnu_getopt(argv, "hv:x", ["help", "verbose", "xep="])
-    except getopt.GetoptError:
-        usage()
-        sys.exit(2)
-
-    global verbose
-    verbose = 0
-    for opt, arg in opts:
-        if opt in ("-h", "--help"):
-            usage()
-            sys.exit()
-        elif opt in ("-x", "--xep"):
-            global xepnum
-            xepnum = arg
-        elif opt in ("-v", "--verbose"):
-            verbose = 1
+    xepnum = '%04d' % args.xep
+    verbose = args.verbose
 
     xepfile = 'xep-' + xepnum + '.xml'
     thexep = parse(xepfile)
@@ -106,4 +93,4 @@ def main(argv):
         #print "all http/https links are good"
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()
