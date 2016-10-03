@@ -50,13 +50,38 @@ import urllib2
 
 from xml.dom.minidom import parse,parseString,Document
 
+def is_dead(url):
+    if re.match("^(http|https)", url):
+        if verbose:
+            print url + ' :',
+        page = 0
+        try:
+            request = urllib2.Request(url)
+            request.add_header('User-Agent', "Mozilla/5.001 (windows; U; NT4.0; en-US; rv:1.0) Gecko/25250101")
+            opener = urllib2.build_opener()
+            page = opener.open(request).read()
+        except Exception, e:
+            reason = str(e)
+            if verbose:
+                print "XEP-" + xepnum + " - DEAD: " + url + " [" + reason + "]"
+            return True
+        else:
+            if verbose:
+                print 'OK'
+            return False
+    else:
+        return False
+
 def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument('-v', '--verbose', action='store_true', help='Enables more verbosity')
     parser.add_argument('-x', '--xep', type=int, help='Defines the number of the XEP to check')
     args = parser.parse_args()
 
+    global xepnum
     xepnum = '%04d' % args.xep
+
+    global verbose
     verbose = args.verbose
 
     xepfile = 'xep-' + xepnum + '.xml'
@@ -69,23 +94,8 @@ def main():
 
     for link in links:
         url = link.getAttribute("url")
-        if re.match("^(http|https)", url):
-            if verbose:
-                print url + ' :',
-            page = 0
-            try:
-                request = urllib2.Request(url)
-                request.add_header('User-Agent', "Mozilla/5.001 (windows; U; NT4.0; en-US; rv:1.0) Gecko/25250101")
-                opener = urllib2.build_opener()
-                page = opener.open(request).read()
-            except Exception, e:
-                reason = str(e)
-                if verbose:
-                    print "XEP-" + xepnum + " - DEAD: " + url + " [" + reason + "]"
-                deadlinks = deadlinks + 1
-            else:
-                if verbose:
-                    print 'OK'
+        if is_dead(url):
+            deadlinks += 1
 
     if deadlinks > 0:
         sys.exit(1)
