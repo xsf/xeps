@@ -87,13 +87,14 @@ def main():
     xepfile = 'xep-' + xepnum + '.xml'
     thexep = parse(xepfile)
 
-    links = thexep.getElementsByTagName("link")
     deadlinks = 0
     if verbose:
         print 'Checking XEP-' + xepnum + ':'
 
-    for link in links:
-        url = link.getAttribute("url")
+    urls = [link.getAttribute("url") for link in thexep.getElementsByTagName("link")]
+    urls += [image.getAttribute("src") for image in thexep.getElementsByTagName("img")]
+
+    for url in set(urls):
         if is_dead(url):
             deadlinks += 1
 
