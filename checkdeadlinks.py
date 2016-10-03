@@ -81,16 +81,14 @@ def main():
             except Exception, e:
                 reason = str(e)
                 if verbose:
-                    print "DEAD"
-                else:
                     print "XEP-" + xepnum + " - DEAD: " + url + " [" + reason + "]"
                 deadlinks = deadlinks + 1
             else:
                 if verbose:
                     print 'OK'
 
-    #if deadlinks = 0:
-        #print "all http/https links are good"
+    if deadlinks > 0:
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
