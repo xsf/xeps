@@ -40,8 +40,8 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     <html>
       <head>
         <title>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></title>
-        <link rel='stylesheet' type='text/css' href='../xmpp.css' />
-        <link href="../prettify.css" type="text/css" rel="stylesheet" />
+        <link rel='stylesheet' type='text/css' href='xmpp.css' />
+        <link href="prettify.css" type="text/css" rel="stylesheet" />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
         <script type="text/javascript" src="../prettify.js"></script>
         <!-- making things mobile-friendly... -->
