@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE xep SYSTEM 'xep.dtd' [
-  <!ENTITY % ents SYSTEM 'xep.ent'>
+  <!ENTITY % ents SYSTEM "xep.ent">
 %ents;
 ]>
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
@@ -8,13 +8,7 @@
 <header>
   <title>OMEMO Encryption</title>
   <abstract>This specification defines a protocol for end-to-end encryption in one-on-one chats that may have multiple clients per account.</abstract>
-  <legal>
-    <copyright>This XMPP Extension Protocol is copyright (c) 1999 - 2014 by the XMPP Standards Foundation (XSF).</copyright>
-    <permissions>Permission is hereby granted, free of charge, to any person obtaining a copy of this specification (the &quot;Specification&quot;), to make use of the Specification without restriction, including without limitation the rights to implement the Specification in a software program, deploy the Specification in a network service, and copy, modify, merge, publish, translate, distribute, sublicense, or sell copies of the Specification, and to permit persons to whom the Specification is furnished to do so, subject to the condition that the foregoing copyright notice and this permission notice shall be included in all copies or substantial portions of the Specification. Unless separate permission is granted, modified works that are redistributed shall not contain misleading information regarding the authors, title, number, or publisher of the Specification, and shall not claim endorsement of the modified works by the authors, any organization or project to which the authors belong, or the XMPP Standards Foundation.</permissions>
-    <warranty>## NOTE WELL: This Specification is provided on an &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. In no event shall the XMPP Standards Foundation or the authors of this Specification be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the Specification or the implementation, deployment, or other use of the Specification. ##</warranty>
-    <liability>In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall the XMPP Standards Foundation or any author of this Specification be liable for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising out of the use or inability to use the Specification (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if the XMPP Standards Foundation or such author has been advised of the possibility of such damages.</liability>
-    <conformance>This XMPP Extension Protocol has been contributed in full conformance with the XSF's Intellectual Property Rights Policy (a copy of which may be found at &lt;<link url='http://xmpp.org/extensions/ipr-policy.shtml'>http://xmpp.org/extensions/ipr-policy.shtml</link>&gt; or obtained by writing to XSF, P.O. Box 1641, Denver, CO 80201 USA).</conformance>
-  </legal>
+  &LEGALNOTICE;
   <number>xxxx</number>
   <status>ProtoXEP</status>
   <type>Standards Track</type>
@@ -26,13 +20,19 @@
   </dependencies>
   <supersedes/>
   <supersededby/>
-  <shortname>NOT_YET_ASSIGNED</shortname>
+  <shortname>OMEMO</shortname>
   <author>
     <firstname>Andreas</firstname>
     <surname>Straub</surname>
     <email>andy@strb.org</email>
     <jid>andy@strb.org</jid>
   </author>
+  <revision>
+    <version>0.0.2</version>
+    <date>2016-09-22</date>
+    <initials>ssw</initials>
+    <remark><p>Depend on Olm instead of Axolotl.</p></remark>
+  </revision>
   <revision>
     <version>0.0.1</version>
     <date>2015-10-25</date>
@@ -42,13 +42,55 @@
 </header>
 <section1 topic='Introduction' anchor='intro'>
   <section2 topic='Motivation' anchor='intro-motivation'>
-    <p>There are two main end-to-end encryption schemes in common use in the XMPP ecosystem, Off-the-Record (OTR) messaging (&xep0364;) and OpenPGP (&xep0027;). OTR has significant usability drawbacks for inter-client mobility. As OTR sessions exist between exactly two clients, the chat history will not be synchronized across other clients of the involved parties. Furthermore, OTR chats are only possible if both participants are currently online, due to how the rolling key agreement scheme of OTR works. OpenPGP, while not suffering from these mobility issues, does not provide any kind of forward secrecy and is vulnerable to replay attacks. Additionally, PGP over XMPP uses a custom wireformat which is defined by convention rather than standardization, and involves quite a bit of external complexity.</p>
-    <p>This XEP defines a protocol that leverages axolotl encryption to provide multi-end to multi-end encryption, allowing messages to be synchronized securely across multiple clients, even if some of them are offline.</p>
+    <p>
+      There are two main end-to-end encryption schemes in common use in the XMPP
+      ecosystem, Off-the-Record (OTR) messaging (&xep0364;) and OpenPGP
+      (&xep0027;). OTR has significant usability drawbacks for inter-client
+      mobility. As OTR sessions exist between exactly two clients, the chat
+      history will not be synchronized across other clients of the involved
+      parties. Furthermore, OTR chats are only possible if both participants are
+      currently online, due to how the rolling key agreement scheme of OTR
+      works. OpenPGP, while not suffering from these mobility issues, does not
+      provide any kind of forward secrecy and is vulnerable to replay attacks.
+      Additionally, PGP over XMPP uses a custom wireformat which is defined by
+      convention rather than standardization, and involves quite a bit of
+      external complexity.
+    </p>
+    <p>
+      This XEP defines a protocol that leverages &olm; encryption to provide
+      multi-end to multi-end encryption, allowing messages to be synchronized
+      securely across multiple clients, even if some of them are offline. Olm
+      is a cryptographic double ratched protocol based on work by Trevor Perrin
+      and Moxie Marlinspike first published as the Axolotl protocol.
+    </p>
   </section2>
   <section2 topic='Overview' anchor='intro-overview'>
-    <p>The general idea behind this protocol is to maintain separate, long-standing axolotl-encrypted sessions with each device of each contact (as well as with each of our other devices), which are used as secure key transport channels. In this scheme, each message is encrypted with a fresh, randomly generated encryption key. An encrypted header is added to the message for each device that is supposed to receive it. These headers simply contain the key that the payload message is encrypted with, and they are seperately encrypted using the session corresponding to the counterpart device. The encrypted payload is sent together with the headers as a &lt;message&gt; stanza. Individual recipient devices can decrypt the header item intended for them, and use the contained payload key to decrypt the payload message.</p>
-    <p>As the encrypted payload is common to all recipients, it only has to be included once, reducing overhead. Furthermore, axolotl's transparent handling of messages that were lost or received out of order, as well as those sent while the recipient was offline, is maintained by this protocol. As a result, in combination with &xep0280; and &xep0313;, the desired property of inter-client history synchronization is achieved.</p>
-    <p>OMEMO version 0 uses v3 messages of the axolotl protocol. Instead of an axolotl key server, PEP (&xep0163;) is used to publish key data. </p>
+    <p>
+      The general idea behind this protocol is to maintain separate,
+      long-standing Olm-encrypted sessions with each device of each contact
+      (as well as with each of our other devices), which are used as secure key
+      transport channels. In this scheme, each message is encrypted with a
+      fresh, randomly generated encryption key. An encrypted header is added to
+      the message for each device that is supposed to receive it. These headers
+      simply contain the key that the payload message is encrypted with, and
+      they are seperately encrypted using the session corresponding to the
+      counterpart device. The encrypted payload is sent together with the
+      headers as a &lt;message&gt; stanza. Individual recipient devices can
+      decrypt the header item intended for them, and use the contained payload
+      key to decrypt the payload message.
+    </p>
+    <p>
+      As the encrypted payload is common to all recipients, it only has to be
+      included once, reducing overhead. Furthermore, Olm's transparent handling
+      of messages that were lost or received out of order, as well as those sent
+      while the recipient was offline, is maintained by this protocol. As a
+      result, in combination with &xep0280; and &xep0313;, the desired property
+      of inter-client history synchronization is achieved.
+    </p>
+    <p>
+      OMEMO currently uses version 1 Olm protocol. Instead of an Axolotl key
+      server, &xep0163; (PEP) is used to publish key data.
+    </p>
   </section2>
 </section1>
 <section1 topic='Requirements' anchor='reqs'>
@@ -66,13 +108,13 @@
       <di><dt>OMEMO element</dt><dd>An &lt;encrypted&gt; element in the urn:xmpp:omemo:0 namespace. Can be either MessageElement or a KeyTransportElement</dd></di>
       <di><dt>MessageElement</dt><dd>An OMEMO element that contains a chat message. Its &lt;payload&gt;, when decrypted, corresponds to a &lt;message&gt;'s &lt;body&gt;.</dd></di>
       <di><dt>KeyTransportElement</dt><dd>An OMEMO element that does not have a &lt;payload&gt;. It contains a fresh encryption key, which can be used for purposes external to this XEP.</dd></di>
-      <di><dt>Bundle</dt><dd>A collection of publicly accessible data that can be used to build a session with a device, namely its public IdentityKey, a signed PreKey with corresponding signature, and a list of (single use) PreKeys.</dd></di>
+      <di><dt>Bundle</dt><dd>A collection of publicly accessible data that can be used to build a session with a device, namely its public IdentityKey, and a list of (single use) PreKeys.</dd></di>
       <di><dt>rid</dt><dd>The device id of the intended recipient of the containing &lt;key&gt;</dd></di>
       <di><dt>sid</dt><dd>The device id of the sender of the containing OMEMO element</dd></di>
 
     </dl>
   </section2>
-  <section2 topic='Axolotl-specific' anchor='glossary-axolotl'>
+  <section2 topic='Olm-specific' anchor='glossary-olm'>
     <dl>
       <di><dt>IdentityKey</dt><dd>Per-device public/private key pair used to authenticate communications</dd></di>
       <di><dt>PreKey</dt><dd>A Diffie-Hellman public key, published in bulk and ahead of time</dd></di>
@@ -83,7 +125,12 @@
 </section1>
 <section1 topic='Use Cases' anchor='usecases'>
   <section2 topic='Setup' anchor='usecases-setup'>
-    <p>The first thing that needs to happen if a client wants to start using OMEMO is they need to generate an IdentityKey and a Device ID. The IdentityKey is a <a href='http://cr.yp.to/ecdh/curve25519-20060209.pdf'>Curve25519</a> public/private Key pair. The Device ID is a randomly generated integer between 1 and 2^31 - 1. </p>
+    <p>
+      The first thing that needs to happen if a client wants to start using
+      OMEMO is they need to generate an IdentityKey and a Device ID. The
+      IdentityKey is a &curve25519; public/private Key pair. The Device ID is a
+      randomly generated integer between 1 and 2^31 - 1.
+    </p>
   </section2>
   <section2 topic='Discovering peer support' anchor='usecases-discovering'>
     <p>In order to determine whether a given contact has devices that support OMEMO, the devicelist node in PEP is consulted. Devices MUST subscribe to 'urn:xmpp:omemo:0:devicelist' via PEP, so that they are informed whenever their contacts add a new device. They MUST cache the most up-to-date version of the devicelist.</p>
@@ -121,19 +168,13 @@
   </pubsub>
 </iq>]]></example>
     <p>This step presents the risk of introducing a race condition: Two devices might simultaneously try to announce themselves, unaware of the other's existence. The second device would overwrite the first one. To mitigate this, devices MUST check that their own device ID is contained in the list whenever they receive a PEP update from their own account. If they have been removed, they MUST reannounce themselves.</p>
-    <p>Furthermore, a device MUST announce it's IdentityKey, a signed PreKey, and a list of PreKeys in a separate, per-device PEP node. The list SHOULD contain 100 PreKeys, but MUST contain no less than 20.</p>
+    <p>Furthermore, a device MUST announce it's IdentityKey, and a list of PreKeys in a separate, per-device PEP node. The list SHOULD contain 100 PreKeys, but MUST contain no less than 20.</p>
     <example caption='Announcing bundle information'><![CDATA[
 <iq from='juliet@capulet.lit' type='set' id='announce2'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <publish node='urn:xmpp:omemo:0:bundles:31415'>
       <item>
         <bundle xmlns='urn:xmpp:omemo:0'>
-          <signedPreKeyPublic signedPreKeyId='1'>
-            BASE64ENCODED...
-          </signedPreKeyPublic>
-          <signedPreKeySignature>
-            BASE64ENCODED...
-          </signedPreKeySignature>
           <identityKey>
             BASE64ENCODED...
           </identityKey>
@@ -166,10 +207,19 @@
     <items node='urn:xmpp:omemo:0:bundles:31415'/>
   </pubsub>
 </iq>]]></example>
-    <p>A random preKeyPublic entry is selected, and used to build an axolotl session.</p>
+    <p>A random preKeyPublic entry is selected, and used to build an Olm session.</p>
   </section2>
   <section2 topic='Sending a message' anchor='usecases-messagesend'>
-    <p>In order to send a chat message, its &lt;body&gt; first has to be encrypted. The client MUST use fresh, randomly generated key/IV pairs with AES-128 in Galois/Counter Mode (GCM). For each intended recipient device, i.e. both own devices as well as devices associated with the contact, this key is encrypted using the corresponding long-standing axolotl session. Each encrypted payload key is tagged with the recipient device's ID. This is all serialized into a MessageElement, which is transmitted in a &lt;message&gt; as follows:</p>
+    <p>
+      In order to send a chat message, its &lt;body&gt; first has to be
+      encrypted. The client MUST use fresh, randomly generated key/IV pairs with
+      AES-128 in Galois/Counter Mode (GCM). For each intended recipient device,
+      i.e. both own devices as well as devices associated with the contact, this
+      key is encrypted using the corresponding long-standing Olm session. Each
+      encrypted payload key is tagged with the recipient device's ID. This is
+      all serialized into a MessageElement, which is transmitted in a
+      &lt;message&gt; as follows:
+    </p>
     <example caption="Sending a message"><![CDATA[
 <message to='juliet@capulet.lit' from='romeo@montague.lit' id='send1'>
   <encrypted xmlns='urn:xmpp:omemo:0'>
@@ -185,7 +235,15 @@
 </message>]]></example>
   </section2>
   <section2 topic='Sending a key' anchor='usecases-keysend'>
-    <p>The client may wish to transmit keying material to the contact. This first has to be generated. The client MUST generate a fresh, randomly generated key/IV pair. For each intended recipient device, i.e. both own devices as well as devices associated with the contact, this key is encrypted using the corresponding long-standing axolotl session. Each encrypted payload key is tagged with the recipient device's ID. This is all serialized into a KeyTransportElement,  omitting the &lt;payload&gt; as follows:</p>
+    <p>
+      The client may wish to transmit keying material to the contact. This first
+      has to be generated. The client MUST generate a fresh, randomly generated
+      key/IV pair. For each intended recipient device, i.e. both own devices as
+      well as devices associated with the contact, this key is encrypted using
+      the corresponding long-standing Olm session. Each encrypted payload key is
+      tagged with the recipient device's ID. This is all serialized into a
+      KeyTransportElement,  omitting the &lt;payload&gt; as follows:
+    </p>
     <example caption="Sending a key"><![CDATA[
 <encrypted xmlns='urn:xmpp:omemo:0'>
   <header sid='27183'>
@@ -213,14 +271,25 @@
   <p>As the asynchronous nature of OMEMO allows decryption at a later time to currently offline devices client SHOULD include a &xep0334; &lt;store /&gt; hint in their OMEMO messages. Otherwise, server implementations of &xep0313; will generally not retain OMEMO messages, since they do not contain a &lt;body /&gt;</p>
 </section1>
 <section1 topic='Implementation Notes' anchor='impl'>
-  <p>For details on axoltol, see the <a href='https://github.com/trevp/axolotl/wiki'>specification</a> and <a href='https://github.com/WhisperSystems/libaxolotl-java'>reference implementation.</a></p>
-  <p>The axolotl library's reference implementation (and presumably its ports to various other platforms) uses a trust model that doesn't work very well with OMEMO. For this reason it may be desirable to have the library consider all keys trusted, effectively disabling its trust management. This makes it necessary to implement trust handling oneself.</p>
+  <!-- TODO: I think this is still true? -->
+  <p>
+    The Olm library's reference implementation (and presumably its ports to
+    various other platforms) uses a trust model that doesn't work very well with
+    OMEMO. For this reason it may be desirable to have the library consider all
+    keys trusted, effectively disabling its trust management. This makes it
+    necessary to implement trust handling oneself.
+  </p>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
   <p>Clients MUST NOT use a newly built session to transmit data without user intervention. If a client were to opportunistically start using sessions for sending without asking the user whether to trust a device first, an attacker could publish a fake device for this user, which would then receive copies of all messages sent by/to this user. A client MAY use such "not (yet) trusted" sessions for decryption of received messages, but in that case it SHOULD indicate the untrusted nature of such messages to the user.</p>
   <p>When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex string, QR code, or other unique representation, such that it can be compared by the user.</p>
   <p>While it is RECOMMENDED that clients postpone private key deletion until after MAM catch-up and this standards mandates that clients MUST NOT use duplicate-PreKey sessions for sending, clients MAY delete such keys immediately for security reasons. For additional information on potential security impacts of this decision, refer to <note>Menezes, Alfred, and Berkant Ustaoglu. "On reusing ephemeral keys in Diffie-Hellman key agreement protocols." International Journal of Applied Cryptography 2, no. 2 (2010): 154-158.</note>.</p>
-  <p>In order to be able to handle out-of-order messages, the axolotl stack has to cache the keys belonging to "skipped" messages that have not been seen yet. It is up to the implementor to decide how long and how many of such keys to keep around.</p>
+  <p>
+    In order to be able to handle out-of-order messages, the Olm stack has to
+    cache the keys belonging to "skipped" messages that have not been seen yet.
+    It is up to the implementor to decide how long and how many of such keys to
+    keep around.
+  </p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA). </p>
@@ -271,10 +340,6 @@
   <xs:element name="bundle">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="signedPreKeyPublic" type="base64Binary">
-          <xs:attribute name="id" type="integer"/>
-        </xs:element>
-        <xs:element name="signedPreKeySignature" type="base64Binary"/>
         <xs:element name="identityKey" type="base64Binary"/>
         <xs:element name="prekeys">
           <xs:complexType>
@@ -294,6 +359,6 @@
 </section1>
 
 <section1 topic='Acknowledgements' anchor='ack'>
-	<p>Big thanks to Daniel Gultsch for mentoring me during the development of this protocol. Thanks to Thijs Alkemade and Cornelius Aschermann for talking through some of the finer points of the protocol with me. And lastly I would also like to thank Sam Whited, Holger Weiss, and Florian Schmaus for their input on the standard.</p>
+  <p>Big thanks to Daniel Gultsch for mentoring me during the development of this protocol. Thanks to Thijs Alkemade and Cornelius Aschermann for talking through some of the finer points of the protocol with me. And lastly I would also like to thank Sam Whited, Holger Weiss, and Florian Schmaus for their input on the standard.</p>
 </section1>
 </xep>
