@@ -42,6 +42,7 @@ $(OUTDIR)/%.html: %.xml $(XMLDEPS) dependencies
 	# TODO: After existing issues are worked out this and the ratcheting CI build
 	#       should be removed and become an error, not just a warning.
 	xmllint --nonet --noout --noent --loaddtd --valid "$<" || true
+	python checkdeadlinks.py -x "$<"
 	xsltproc --path $(CURDIR) xep.xsl "$<" > "$@" && echo "Finished building $@"
 
 $(OUTDIR)/%.js: %.js
