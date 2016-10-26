@@ -542,7 +542,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     <xsl:variable name='ns.count' select='count(ns)'/>
     <xsl:choose>
       <xsl:when test="$ns.count=1">
-        XML Schema for <xsl:value-of select='ns'/> namespace: &lt;<a href='{$this.url}'><xsl:value-of select='url'/></a>&gt;<br />
+        XML Schema for the '<xsl:value-of select='ns'/>' namespace: &lt;<a href='{$this.url}'><xsl:value-of select='url'/></a>&gt;<br />
       </xsl:when>
       <xsl:otherwise>
         Schema: &lt;<a href='{$this.url}'><xsl:value-of select='url'/></a>&gt;<br />
