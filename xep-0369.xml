@@ -188,6 +188,7 @@
       <li>The MIX Proxy will manage channel registration and de-registration in the user's roster.</li>
       
       <li>Different clients may wish to access different channels (e.g., a mobile client may only access a subset of the channels in which a user is interested).   The MIX Proxy MAY handle sending messages only to the clients that wish for them, perhaps using a profile mechanism.</li>
+      
     </ol>
     <p>
    Messages being sent from MIX channel to MIX Proxy (which will be of type=groupchat)  and presence information are sent to the bare JID.  This means that the MIX Proxy will use a modification of the standard &rfc6121; rules.
@@ -508,7 +509,9 @@
         <tr><td>'Participants Must Provide Presence'</td><td>If selected, all channel participants are required to share presence information with the channel.</td><td>boolean</td><td>-</td><td>false</td></tr>
         
         
-        <tr><td>'Allow Message Retraction</td><td>If this option is selected users will be able to retract messages sent to the MIX channel.</td><td>boolean</td><td>-</td><td>false</td></tr>
+        <tr><td>'Allow User Message Retraction'</td><td>If this option is selected users will be able to retract messages sent to the MIX channel.</td><td>boolean</td><td>-</td><td>false</td></tr>
+        
+        <tr><td>'Administrator Message Retraction Rights'</td><td>This controls which group is able to retract messages sent to the MIX channel.</td><td>list-single</td><td>'nobody'; 'admins'; 'owners'</td><td>'owners'</td></tr>
         
         <tr><td>'Participation Addition by Invitation from Participant'</td><td>This option extends a channel  so that  a channel participant has rights to invite and enable other users as participants.</td><td>boolean</td><td>-</td><td>false</td></tr>
         
@@ -1285,7 +1288,7 @@ the participant is not be subscribed to all nodes associated with the channel (i
         <li>The client may wish to display a fixed number of messages, perhaps finding more messages if the client subsequently requests.</li>
         <li>The client may wish to display messages from a recent time period, perhaps finding more messages if the client subsequently requests.</li>
       </ol>
-      <p>AUTHOR'S NOTE:  Examples to be added</p>
+      <p>To achieve this, the client will query the user's own MAM archive using &xep0313;, with the query filtered by the channel JID.   This gives the client flexibility to retrieve and display message history in a manner appropriate to the client implementation.</p>
     </section3>
 
 
@@ -1357,11 +1360,43 @@ the participant is not be subscribed to all nodes associated with the channel (i
 
     <section3 topic="Retracting a Message" anchor="usecase-retract">
       <p>
-        A MIX channel MAY support message retraction, where the sender of a messages deletes a messages from the message history and optionally replace it with another message.   This retraction mechanism will be based on the &xep0060; retract operation.   A client looking at message history may choose to look at "current state" which will show status after the retraction or "full history" which will include the message that was retracted.
+        A MIX channel MAY support message retraction, where the sender of a messages or an administrator deletes a message.   If this is done the original message MUST be replaced by a tombstone.  The protocol to request retraction does this by a message with a &lt;retract&gt; element as shown in the following example.
+      </p>
+
+      
+      <example caption="User Retracts a Message"><![CDATA[
+<message from='hag66@shakespeare.example/pda'
+         to='coven@mix.shakespeare.example'
+         id='92vax143g'>
+  <retract id='28482-98726-73623' xmlns='urn:xmpp:mix:0'/>
+</message>
+]]></example>     
+      
+      <p>
+        The MIX channel will allow a user to retract a message sent by the user if the 'Allow User Message Retraction' option is configured.    The MIX channel will allow a user to retract any message if the user is in the group specified by the 'Administrator Message Retraction Rights' option.
       </p>
       <p>
-        AUTHOR'S NOTE: Define new protocol to support this and add example. 
+        If the retraction message is accepted, it will be distributed to channel participants.  This will allow retraction to happen in the MAM archive of each channel participant and to reflect the retraction in client GUI.   A client receiving a retraction message SHOULD ensure that the retracted message is no longer displayed to the end user.
       </p>
+      <p>
+        When a message is retracted the original message &lt;body&gt; MUST be removed and MUST be replaced with a tombstone using the &lt;retracted&gt; element that shows the JID of user performing the retraction and the time of the retraction.
+      </p>
+      
+      <example caption="Retracted message tombstone in a MAM result"><![CDATA[
+<message id='aeb213' to='juliet@capulet.lit/chamber'>
+  <result xmlns='urn:xmpp:mam:1' queryid='f27' id='28482-98726-73623'>
+    <forwarded xmlns='urn:xmpp:forward:0'>
+      <delay xmlns='urn:xmpp:delay' stamp='2010-07-10T23:08:25Z'/>
+      <message xmlns='jabber:client' from="hag66@shakespeare.example" to="macbeth@shakespeare.lit">
+        <retracted xmlns='urn:xmpp:mix:0' by='hag66@shakespeare.example' time='2010-07-10T23:08:25Z'/>
+      </message>
+    </forwarded>
+  </result>
+</message>
+]]></example>     
+      
+      
+      
     </section3>
     
     
@@ -1623,21 +1658,32 @@ the participant is not be subscribed to all nodes associated with the channel (i
 </section2>
 
   <section2 topic="Use of MAM" anchor="use-mam">
-    <p>
-      All nodes of each MIX channel are archived using MAM.   Access to history in these nodes uses standard MAM protocol to access the channel nodes and to retrieve information from the nodes.   Information retrieved using MAM will be of the format stored on the node and will include &xep0060; PubSub wrapping.  MAM is the MIX mechanism to get at this information, in preference to direct use of PubSub.
-    </p>
-    <p>
-      AUTHOR'S NOTE:  Add example of message retrieved using MAM, showing XEP-0060 wrapping
-    </p>
-    <p>
-      There are XEPs that extend MAM and in some cases modify core MAM requirements.   Such XEPs may be used in conjunction with MAM, provided that they are supported by the MIX channel.   If such XEPs are used, the requirements specified MUST be followed.
-    </p>
-    <p>
-      PubSub provides the ability to modify the state of the node, and distinguishes between current state and full history.   It is anticipated that MAM will be extended with an option to choose between "current state" and "full history".   This capability will be useful for and used by MIX.
-    </p>
-    <p>
-      AUTHOR'S NOTE: This specification will be updated to reference this MAM extension when it is written.
-    </p>
+   <p>
+     All messages sent to a MIX channel MUST be archived using MAM in association with the MIX channel.   All messages MUST also be archived on the server associated with each channel participant receiving the message, which enables clients to always retrieve messages from the clients MAM archive.  Other channel nodes MAY be archived.
+   </p>
+    
+    <section3 topic="Archive of Messages" anchor="use-mam-messages">
+      <p>
+        Messages sent to participants MUST be archived by both the MIX channel and by the user's server.   This MUST include messages setting subject and MAY include presence messages.   Correct MIX operation relies on messages being archived.
+      </p>
+    </section3>
+    
+    <section3 topic="Retrieving Messages" anchor="use-mam-retrieve">
+      <p>
+        Clients will retrieve MIX messages using standard MAM protocol from the user's archive.  The MAM query will filter based on the channel JID to enable access to messages from a given channel. This gives the user a simple mechanism to access all messages sent to the channel.   MAM can be used to retrieve older messages that have not been cached by the client.
+      </p>
+      <p>
+        Messages may also be retrieved from the channel by addressing MAM queries to the channel JID.   This will behave like a standard MAM archive.  This can be useful for administrators to access archived messages.  It can also be useful for new channel participants to access the historical archives.   
+      </p>
+    </section3>
+    
+
+    
+    <section3 topic="MAM Use with other Channel Nodes" anchor="use-mam-other-nodes">
+      <p>
+        A MIX Channel MAY use MAM to archive nodes other than message nodes.   Clients with rights to access these archives may use MAM to do this, specifying the PubSub node in the MAM query addressed to the channel.   
+      </p>
+    </section3>
 
   </section2>
 
