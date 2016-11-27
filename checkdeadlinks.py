@@ -71,6 +71,15 @@ def is_dead(url):
         return False
 
 def get_deadlinks(xep, is_verbose=False):
+    # Support filenames (xep-0001.html) as well as numbers (1 or 0001).
+    try:
+        if xep.startswith('xep-'):
+            xep = xep[4:]
+        if '.' in xep:
+            xep = xep[0:xep.index('.')]
+    finally:
+        xep = int(xep)
+
     global xepnum
     xepnum = '%04d' % xep
 
@@ -91,7 +100,7 @@ def get_deadlinks(xep, is_verbose=False):
 def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument('-v', '--verbose', action='store_true', help='Enables more verbosity')
-    parser.add_argument('-x', '--xep', type=int, help='Defines the number of the XEP to check')
+    parser.add_argument('-x', '--xep', help='Defines the number of the XEP to check')
     args = parser.parse_args()
 
     deadlinks = get_deadlinks(args.xep, args.verbose)
