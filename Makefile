@@ -42,6 +42,9 @@ $(OUTDIR)/%.html: %.xml $(XMLDEPS) dependencies
 	# TODO: After existing issues are worked out this and the ratcheting CI build
 	#       should be removed and become an error, not just a warning.
 	xmllint --nonet --noout --noent --loaddtd --valid "$<" || true
+	# Check for non-data URIs
+	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
+	# Actually build the HTML
 	xsltproc --path $(CURDIR) xep.xsl "$<" > "$@" && echo "Finished building $@"
 
 $(OUTDIR)/%.js: %.js
