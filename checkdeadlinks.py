@@ -3,7 +3,7 @@
 # File: checkdeadlinks.py
 # Version: 0.1
 # Description: a script for checking XEPs for dead links
-# Last Modified: 2009-04-06
+# Last Modified: 2016-10-03
 # Author: Tobias Markmann (tm@ayena.de)
 # License: public domain
 # HowTo: ./checkdeadlinks.py --xep=xepnum
@@ -32,78 +32,74 @@
 #
 ## END LICENSE ##
 
-import glob
-import os
-from select import select
-import socket
-import getopt
-from string import split,strip,join,find
+'''
+A script for checking XEPs for dead links.
+'''
+
+from __future__ import print_function
+
+from argparse import ArgumentParser
 import sys
-import time
 import re
-import urllib
-import urllib2
 
-from xml.dom.minidom import parse,parseString,Document
+from xml.dom.minidom import parse
 
-def usage():
-	print "checkdeadlinks.py"
-	print ""
-	print "-h, --help			Print this help message"
-	print "-x, --xep [number]	Defines the number of the XEP to check"
-	print "-v, --verbose		Enables more verbosity"
+try:
+    from urllib.request import Request, urlopen
+except ImportError:
+    # We are on python2
+    from urllib2 import Request, urlopen
 
-def main(argv):
-	try:
-		opts, args = getopt.gnu_getopt(argv, "hv:x", ["help", "verbose", "xep="])
-	except getopt.GetoptError:
-		usage()
-		sys.exit(2)
+def is_dead(url):
+    if re.match("^(http|https)", url):
+        if verbose:
+            print(url + ' :', end=' ')
+        try:
+            request = Request(url)
+            request.add_header('User-Agent', "Mozilla/5.001 (windows; U; NT4.0; en-US; rv:1.0) Gecko/25250101")
+            urlopen(request).read()
+        except Exception as e:
+            reason = str(e)
+            if verbose:
+                print("XEP-" + xepnum + " - DEAD: " + url + " [" + reason + "]")
+            return True
+        else:
+            if verbose:
+                print('OK')
+            return False
+    else:
+        return False
 
-	global verbose
-	verbose = 0
-	for opt, arg in opts:
-		if opt in ("-h", "--help"):
-			usage()
-			sys.exit()
-		elif opt in ("-x", "--xep"):
-			global xepnum
-			xepnum = arg
-		elif opt in ("-v", "--verbose"):
-			verbose = 1
-	
-	xepfile = 'xep-' + xepnum + '.xml'
-	thexep = parse(xepfile)
-	
-	links = thexep.getElementsByTagName("link")
-	deadlinks = 0
-	if verbose:
-		print 'Checking XEP-' + xepnum + ':'
-	
-	for link in links:
-		url = link.getAttribute("url")
-		if re.match("^(http|https)", url):
-			if verbose:
-				print url + ' :',
-			page = 0
-			try:
-				request = urllib2.Request(url)
-				request.add_header('User-Agent', "Mozilla/5.001 (windows; U; NT4.0; en-US; rv:1.0) Gecko/25250101")
-				opener = urllib2.build_opener()
-				page = opener.open(request).read()
-			except Exception, e:
-				reason = str(e)
-				if verbose:
-					print "DEAD"
-				else:
-					print "XEP-" + xepnum + " - DEAD: " + url + " [" + reason + "]"
-				deadlinks = deadlinks + 1
-			else:
-				if verbose:
-					print 'OK'
-					
-	#if deadlinks = 0:
-		#print "all http/https links are good"
+def get_deadlinks(xep, is_verbose=False):
+    global xepnum
+    xepnum = '%04d' % xep
+
+    global verbose
+    verbose = is_verbose
+
+    xepfile = 'xep-' + xepnum + '.xml'
+    thexep = parse(xepfile)
+
+    urls = [link.getAttribute("url") for link in thexep.getElementsByTagName("link")]
+    urls += [image.getAttribute("src") for image in thexep.getElementsByTagName("img")]
+
+    if verbose:
+        print('Checking XEP-%s (%d links):' % (xepnum, len(urls)))
+
+    return [url for url in set(urls) if is_dead(url)]
+
+def main():
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enables more verbosity')
+    parser.add_argument('-x', '--xep', type=int, help='Defines the number of the XEP to check')
+    args = parser.parse_args()
+
+    deadlinks = get_deadlinks(args.xep, args.verbose)
+
+    if deadlinks:
+        for url in deadlinks:
+            print(url)
+        sys.exit(1)
 
 if __name__ == "__main__":
-	main(sys.argv[1:])
+    main()

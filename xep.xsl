@@ -43,7 +43,9 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <link rel='stylesheet' type='text/css' href='xmpp.css' />
         <link href="prettify.css" type="text/css" rel="stylesheet" />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
-        <script type="text/javascript" src="../prettify.js"></script>
+        <script type="text/javascript" src="prettify.js">
+          <xsl:comment></xsl:comment>
+        </script>
         <!-- making things mobile-friendly... -->
         <meta>
           <xsl:attribute name='name'><xsl:text>viewport</xsl:text></xsl:attribute>
@@ -131,7 +133,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           </xsl:if>
           <tr valign='top'>
             <td><strong>Copyright:</strong></td>
-            <td>&#169; 1999 - 2015 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</td>
+            <td>&#169; 1999 - 2016 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</td>
           </tr>
           <tr valign='top'>
             <td><strong>Status:</strong></td>
@@ -540,7 +542,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     <xsl:variable name='ns.count' select='count(ns)'/>
     <xsl:choose>
       <xsl:when test="$ns.count=1">
-        XML Schema for <xsl:value-of select='ns'/> namespace: &lt;<a href='{$this.url}'><xsl:value-of select='url'/></a>&gt;<br />
+        XML Schema for the '<xsl:value-of select='ns'/>' namespace: &lt;<a href='{$this.url}'><xsl:value-of select='url'/></a>&gt;<br />
       </xsl:when>
       <xsl:otherwise>
         Schema: &lt;<a href='{$this.url}'><xsl:value-of select='url'/></a>&gt;<br />

@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
 # File: announce.py
-# Version: 0.8
+# Version: 0.9
 # Description: a script for announcing XEPs
-# Last Modified: 2006-10-03
+# Last Modified: 2016-10-03
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
-# HowTo: ./announce.py xepnum diffs
+# HowTo: ./announce.py xepnum
 
 ## LICENSE ##
 #
@@ -57,10 +57,8 @@ now = int(time.time())
 # READ IN ARGS: 
 #
 # 1. XEP number
-# 2. URL for source control diffs
 
 xepnum = sys.argv[1];
-diffs = sys.argv[2];
 
 xepfile = 'xep-' + xepnum + '.xml'
 
@@ -84,7 +82,8 @@ statusNode = (headerNode.getElementsByTagName("status")[0])
 xepstatus = getText(statusNode.childNodes)
 typeNode = (headerNode.getElementsByTagName("type")[0])
 xeptype = getText(typeNode.childNodes)
-revNode = (headerNode.getElementsByTagName("revision")[0])
+revNodes = headerNode.getElementsByTagName("revision")
+revNode = revNodes[0]
 versionNode = (revNode.getElementsByTagName("version")[0])
 version = getText(versionNode.childNodes)
 dateNode = (revNode.getElementsByTagName("date")[0])
@@ -119,6 +118,15 @@ elif (xepstatus == "Obsolete"):
     xepflag = "obsolete"
 elif (xepstatus == "Deferred"):
     xepflag = "defer"
+
+# generate the diffs URL
+if len(revNodes) > 1:
+    prevRevNode = revNodes[1]
+    prevVersionNode = (prevRevNode.getElementsByTagName("version")[0])
+    prevVersion = getText(prevVersionNode.childNodes)
+    diffs = 'http://xmpp.org/extensions/diff/api/xep/' + xepnum + '/diff/' + prevVersion + '/vs/' + version
+else:
+    diffs = 'N/A'
 
 ## SEND MAIL:
 #

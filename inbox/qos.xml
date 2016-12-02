@@ -1,0 +1,427 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+    <!ENTITY % ents SYSTEM 'xep.ent'>
+    %ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<!-- 
+© XMPP Standards Foundation, 2015
+Author: Peter Waher 
+-->
+<xep>
+    <header>
+        <title>Quality of Service</title>
+        <abstract>This specification describes a generic method whereby messages can be sent between clients using a predefined Quality of Service level.</abstract>
+        &LEGALNOTICE;
+        <number>xxxx</number>
+        <status>ProtoXEP</status>
+        <type>Standards Track</type>
+        <sig>Standards</sig>
+        <approver>Council</approver>
+        <dependencies>
+            <spec>XMPP Core</spec>
+            <spec>XEP-0030</spec>
+            <spec>XEP-0337</spec>
+        </dependencies>
+        <supersedes/>
+        <supersededby/>
+        <shortname>qos</shortname>
+        &peterwaher;
+        <revision>
+            <version>0.0.1</version>
+            <date>2015-11-12</date>
+            <initials>pw</initials>
+            <remark>
+                <p>First draft.</p>
+            </remark>
+        </revision>
+    </header>
+    <section1 topic='Introduction' anchor='intro'>
+        <p>
+            Sometimes it is important for the sender of a message to control the Quality of Service level (or QoS level) of the message.
+            In other protocols, such as queueing, such QoS levels are built into the protocol itself. XMPP lacks an intrinsic QoS level management feature,
+            which has left application developers to define proprietary solutions when such have been required. This document however, provides a generic
+            solution and can be combined with any type of message structure defined either proprietarily or in another XEP.
+            The handling of the Quality of Service level is done prior to parsing the contents of the message. It defines three generic
+            Quality of Service levels that can be used regardless of what type of message is being sent:
+        </p>
+        <dl>
+            <di>
+                <dt>Unacknowledged service - At most once</dt>
+                <dd>
+                    <p>
+                        The message is sent at most once to its destination. The delivery of the message is not guaranteed. This QoS level
+                        should only be used of the loss of messages is not critical to the application.
+                    </p>
+                    <p>
+                        Example: A sensor sending a stream of current values. If a value is lost might not matter much since the next message
+                        provides a new current value, overriding any lost value.
+                    </p>
+                </dd>
+            </di>
+            <di>
+                <dt>Acknowledged service - At least once</dt>
+                <dd>
+                    <p>
+                        The message is sent at least once to its destination. Sending of the message is repeated until message has been acknowledged.
+                        It is not guaranteed that the message is delivered only once. Asynchronous conditions may arise where the message is delivered more
+                        than once. If an acknowledgement is not received, at least the sender may become aware that the message was not delivered
+                        properly. The At least once QoS level requires twice as many messages to be transported in the network as compared to
+                        the At most once QoS level.
+                    </p>
+                    <p>
+                        Example: Any idempotent control action such as setting the light to a certain level. It is important that the control action
+                        is received, but not how many of them are received. Any identical control action that follows makes no difference in output or
+                        performance.
+                    </p>
+                </dd>
+            </di>
+            <di>
+                <dt>Assured service - Exactly once</dt>
+                <dd>
+                    <p>
+                        The message is sent and delivered exactly once to its destination. The delivery of the message is divided into two acknowledged
+                        message transfers. First, the message is transferred to the other side, but not parsed. The second operation, the message is requested
+                        to be parsed and delivered. Both these steps are idempotent, making sure that the contents of the message is delivered exactly once.
+                        If not possible to deliver the message, the sender will be made aware of this fact.  The Exactly once QoS level requires
+                        four times as many messages to be transported in the network as compared to the At most once QoS level and twice as many
+                        messages to be transported as compared to the At least once QoS level.
+                    </p>
+                    <p>
+                        Example: Any control action or counting operation that is not idempotent, such as sending a control action when a button is
+                        pressed, whenever an event has occurred or a transaction. If counting events, transactions, or accumulating consumption, it is 
+                        vital that messages are not processed twice, since it will change the end result.
+                    </p>
+                </dd>
+            </di>
+        </dl>
+    </section1>
+    <section1 topic='Use Cases' anchor='usecases'>
+        <section2 topic='Unacknowledged service - At most once' anchor='unack'>
+            <p>
+                To send a message that is received at most once to its destination, a normal message stanza is used, as defined by the XMPP
+                protocol itself. The delivery of the message is not guaranteed. This QoS level should only be used of the loss of messages is not critical
+                to the application.
+            </p>
+            <p>
+                Example: A sensor sending a stream of current values. If a value is lost might not matter much since the next message
+                provides a new current value, overriding any lost value.
+            </p>
+            <example caption='Sensor sending a momentary value'>
+                <![CDATA[
+    <message 
+        from='temperaturesensor@example.org/34892374'
+        to='user@example.org/938089023'>
+      <fields xmlns='urn:xmpp:iot:sensordata' seqnr='1' done='true'>
+         <node nodeId='Temp01'>
+            <timestamp value='2015-11-11T22:01:30'>
+               <numeric name='Temperature' momentary='true' automaticReadout='true' value='23.4' unit='°C'/> 
+            </timestamp>
+         </node>
+      </fields>
+    </message>]]>
+            </example>
+        </section2>
+        <section2 topic='Acknowledged service - At least once' anchor='ack'>
+            <p>
+                To send a message that is received at least once to its destination, an iq stanza of type set is sent containing an 
+                acknowledged element from the "urn:xmpp:qos" namespace. The acknowledged element in turn contains the message to be delivered. 
+                The iq stanza must have an id attribute that is used to identify if the stanza has been received or not. When an acknowledged 
+                message is received, an empty response is returned to acknowledge the receipt. Parsing the message is done after sending the response. 
+                If no response is received by the sending side within a given time frame, an number of retries should be made, using an interval or drop-off 
+                algorithm. These time frames and number of attempts are implementation specific.
+            </p>
+            <p>
+                It is not guaranteed that the message is delivered only once. Asynchronous conditions may arise where the message is delivered more
+                than once. If an acknowledgement is not received, at least the sender may become aware that the message was not delivered. 
+                The At least once QoS level requires twice as many messages to be transported in the network as compared to
+                the At most once QoS level.
+            </p>
+            <p>
+                Example: Any idempotent control action such as setting the light to a certain level. It is important that the control action
+                is received, but not how many of them are received. Any identical control action that follows makes no difference in output or
+                performance.
+            </p>
+            <example caption='Setting light level'>
+                <![CDATA[
+    <iq id='123' type='set' 
+        from='controller@example.org/34892374'
+        to='lightswitch@example.org/938089023'>
+       <qos:acknowledged xmlns:qos='urn:xmpp:qos'>
+          <message>
+             <set xmlns='urn:xmpp:iot:control'>
+                <int name='Light' value='80'/>
+             </set>
+          </message>
+       </qos:acknowledged>
+    </iq>
+    
+    <iq id='123' type='result'
+        from='lightswitch@example.org/938089023'
+        to='controller@example.org/34892374'/>
+    ]]>
+            </example>
+            <p>
+                Note: The to and from attributes in the embedded message stanza are left empty.
+            </p>
+        </section2>
+        <section2 topic='Assured service - Exactly once' anchor='assured'>
+            <p>
+                To send a message that is received exactly once to its destination, an iq stanza of type set is sent containing an
+                assured element from the "urn:xmpp:qos" namespace. The assured element in turn contains the message to be delivered.
+                The iq stanza must have an id attribute that is used to identify if the stanza has been received or not, just as in the
+                acknowledged case. But to keep track of the message begin sent, a msgId attribute has to be provided as well. When an assured
+                message is received, a received response is returned to acknowledge the receipt. This received response echoes the msgId
+                attribute as well. But the message is not parsed and delivered at this point, only temporarily stored on the receiving end.
+                If multiple messages are received using the same msgId from the same sender, they are simply ignored, as one is already held in
+                memory. Still, the received response is returned as normal.
+            </p>
+            <p>
+                When the sender receives the received response, it sends a new iq set stanza, this time with a deliver payload, 
+                to tell the receiving end to parse and deliver the message, if in memory, and remove it from memory. The receiver acknowledges the message
+                by returning an empty iq result stanza. If receiving multiple requests using the same msgId, it will acknowledge each one. But
+                only one message will be parsed and delivered, as it will have been removed from the temporary storage on the receiving end. For both the
+                assured and deliver messages, a retry mechanism similar to the one used for acknowledged service is to be used.
+            </p>
+            <p>
+                The Exactly once QoS level requires twice as many messages to be transported in the network as compared to the At least once 
+                QoS level, and four times the number of messages as compared to the At most once QoS level.
+            </p>
+            <p>
+                Example: Any control action or counting operation that is not idempotent, such as sending a control action when a button is
+                pressed, or whenever an event has occurred. If counting events, or accumulating consumption, it is vital that messages are not
+                processed twice, since it will change the end result.
+            </p>
+            <example caption='Counting cars or individuals in a closed space'>
+                <![CDATA[
+    <iq id='123' type='set' 
+        from='entrance@example.org/34892374'
+        to='counter@example.org/938089023'>
+       <qos:assured xmlns:qos='urn:xmpp:qos' msgId='984232334'>
+          <message>
+             <log xmlns='urn:xmpp:eventlog' timestamp='2015-11-12T09:07:12Z' id='Entered'>
+                <message>Entered.</message>
+             </buy>
+          </message>
+       </qos:assured>
+    </iq>
+    
+    <iq id='123' type='result'
+        from='counter@example.org/938089023'>
+        to='entrance@example.org/34892374'>
+       <received msgId='984232334'/>
+    </iq>
+ 
+    <iq id='124' type='set' 
+        from='entrance@example.org/34892374'
+        to='counter@example.org/938089023'>
+       <qos:deliver xmlns:qos='urn:xmpp:qos' msgId='984232334'/>
+    </iq>
+    
+    <iq id='124' type='result'
+        from='counter@example.org/938089023'>
+        to='entrance@example.org/34892374'/>
+    </iq>
+    
+    ...
+    
+    <iq id='456' type='set' 
+        from='exit@example.org/34892374'
+        to='counter@example.org/938089023'>
+       <qos:assured xmlns:qos='urn:xmpp:qos' msgId='4645623466'>
+          <message>
+             <log xmlns='urn:xmpp:eventlog' timestamp='2015-11-12T11:23:54Z' id='Left'>
+                <message>Left.</message>
+             </buy>
+          </message>
+       </qos:assured>
+    </iq>
+    
+    <iq id='456' type='result'
+        from='counter@example.org/938089023'>
+        to='exit@example.org/34892374'>
+       <received msgId='4645623466'/>
+    </iq>
+ 
+    <iq id='457' type='set' 
+        from='exit@example.org/34892374'
+        to='counter@example.org/938089023'>
+       <qos:deliver xmlns:qos='urn:xmpp:qos' msgId='4645623466'/>
+    </iq>
+    
+    <iq id='457' type='result'
+        from='counter@example.org/938089023'>
+        to='exit@example.org/34892374'/>
+    </iq>]]>
+            </example>
+            <p>
+                Note: The to and from attributes in the embedded message stanza are left empty.
+            </p>
+        </section2>
+    </section1>
+    <section1 topic='Determining Support' anchor='support'>
+        <p>
+            If an entity supports signing forms as specified herein, it MUST advertise that fact by returning a feature of
+            "urn:xmpp:qos" in response to &xep0030; information requests.
+        </p>
+        <example caption="Service discovery information request">
+            <![CDATA[
+    <iq type='get'
+        from='example.org'
+        to='device@example.org'
+        id='disco1'>
+      <query xmlns='http://jabber.org/protocol/disco#info'/>
+    </iq>]]>
+        </example>
+        <example caption="Service discovery information response">
+            <![CDATA[
+    <iq type='result'
+        from='device@example.org'
+        to='example.org'
+        id='disco1'>
+      <query xmlns='http://jabber.org/protocol/disco#info'>
+        ...
+        <feature var='urn:xmpp:qos'/>
+        ...
+      </query>
+    </iq>]]>
+        </example>
+        <p>
+            In order for an application to determine whether an entity supports this protocol, where possible it SHOULD use the dynamic,
+            presence-based profile of service discovery defined in &xep0115;. However, if an application has not received entity capabilities
+            information from an entity, it SHOULD use explicit service discovery instead.
+        </p>
+    </section1>
+    <section1 topic='Implementation Notes' anchor='impl'>
+        <section2 topic='Offline messages' anchor='offline'>
+            <p>
+                When sending messages using unacknowledged service, i.e. using the normal message stanza, it can be subject to offline message
+                storage if the recipient if offline. This might result in delivery of the message at a later time. 
+            </p>
+        </section2>
+        <section2 topic='Resource part' anchor='resource'>
+            <p>
+                Message routing using unacknowledged service might be handled somewhat differently as compared to acknowledged and assured service, 
+                since the first uses the message stanza and the latter two the iq stanza, which require a fill JID in order to reach its destination.
+                For consistency, full JIDs should be used also for unacknowledged messaging service, if possible.
+            </p>
+        </section2>
+        <section2 topic='Generic implementation' anchor='generic'>
+            <p>
+                If implementing support for this XEP, make sure implementation is generic and put on a lower level than other XEP-specific processing
+                of incoming stanzas. Messages received using this server should be fed into the normal message processing and handling after the QoS level
+                has been ascertained. This makes it possible to use QoS levels for any type of message being sent and received.
+            </p>
+        </section2>
+        <section2 topic='Persistence' anchor='persistence'>
+            <p>
+                One decision each implementation of assured QoS has to make, is where to persist incoming messages between reception of message and
+                the delivery to underlying message processing logic. Should they be persisted in internal memory, persistent Flash/EEProm, as local files
+                or in a database? Such implementation specific concerns are left to the implementor, as this XEP only concerns itself with the communication
+                layer between parties. But the choice of solution might affect to what level a message is ascertained to be delivered: Will delivery be
+                guaranteed, even beyond a system reset at the receiving end? Or a system reset at the sending side? If delivery of the message has to be
+                ascertained even if a system reset at the sending side is allowed, persistance of the request must also be made on the sending side. 
+                (To some extent, this latter concern even affects acknowledged service.)
+            </p>
+        </section2>
+        <section2 topic='Message IDs' anchor='msdId'>
+            <p>
+                Outstanding message IDs used in assured delivery, must be unique for the sender (counting the Full JID as the sender). If running
+                short on Message IDs, such can be reclaimed after the receipt of a successful delivery of a previous message. Message IDs can be 
+                sequence numbers, or hash values of the contents of the message.
+            </p>
+        </section2>
+    </section1>
+    <section1 topic='Security Considerations' anchor='security'>
+        <section2 topic='To and from attributes' anchor='tofrom'>
+            <p>
+                The to and from attributes of embedded message elements should be ignored and left out by the sender, except in the case of
+                unacknowledged service, where the message element is the message stanza itself. In the case of acknowledged and assured quality of
+                service levels, the message element MUST have its to and from attributes overwritten by the corresponding attributes of the iq
+                stanza being used. This, to avoid the injection of messages with unauthenticated and unauthorized identities.
+            </p>
+        </section2>
+        <section2 topic='Memory attacks' anchor='memory'>
+            <p>
+                As incoming message using the assured quality of service level is temporarily stored on the receiving end, the receiver might become
+                vulnerable to memory attacks if not implementing some basic counter measures:
+            </p>
+            <ol>
+                <li>
+                    <p>
+                        Do not accept messages using assured service from untrusted sources, for instance from MUC rooms or senders not in the
+                        roster. If deemed untrusted, an iq error of type <strong>not-allowed</strong> should be returned instead of the
+                        <strong>received</strong> element expected in normal flow.
+                    </p>
+                </li>
+                <li>
+                    <p>
+                        Set a limit on the number and size of assured messages that can be simultaneously received from a single source. If a source
+                        sends more than this, the <strong>resource-constraint</strong> error should be returned instead of accepting the message.
+                    </p>
+                </li>
+                <li>
+                    <p>
+                        Set a total limit on the number and size of assured messages that can be simultaneously received from all sources. If anybody
+                        sends a message that will exceed this amount, the <strong>resource-constraint</strong> error should be returned instead of 
+                        accepting the message.
+                    </p>
+                </li>
+            </ol>
+            <p>
+                Whenever invalid use of the assured messaging service is detected, wether it be from untrusted sources or spam, an event should be
+                logged using &xep0337; so that the source of the error can be found and appropriate counter measures taken.
+            </p>
+        </section2>
+    </section1>
+    <section1 topic='IANA Considerations' anchor='iana'>
+        <p>This document requires no interaction with &IANA;.</p>
+    </section1>
+    <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+        <p>
+            The <link url="#schema">protocol schema</link> needs to be added to the list of <link url="http://xmpp.org/resources/schemas/">XMPP protocol schemas</link>.
+        </p>
+    </section1>
+    <section1 topic='XML Schema' anchor='schema'>
+        <code>
+            <![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:qos'
+    xmlns='urn:xmpp:qos'
+    xmlns:jbc='jabber:client'
+    elementFormDefault='qualified'>
+ 
+    <xs:import namespace='jabber:client'/>
+ 
+    <xs:element name='acknowledged' type='EmbeddedMessage'/>
+    <xs:element name='assured' type='Assured'/>
+    <xs:element name='received' type='WithMessageId'/>
+    <xs:element name='deliver' type='WithMessageId'/>
+ 
+    <xs:complexType name='EmbeddedMessage'>
+        <xs:sequence minOccurs='1' maxOccurs='1'>
+            <xs:element ref='jbc:message'/>
+        </xs:sequence>
+    </xs:complexType>
+ 
+    <xs:complexType name='Assured'>
+        <xs:complexContent>
+            <xs:extension base='EmbeddedMessage'>
+                <xs:attribute ref='msgId' use='required'/>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+ 
+    <xs:attribute name='msgId' type='xs:string'/>
+ 
+    <xs:complexType name='WithMessageId'>
+        <xs:attribute ref='msgId' use='required'/>
+    </xs:complexType>
+ 
+</xs:schema>
+]]>
+        </code>
+    </section1>
+</xep>
