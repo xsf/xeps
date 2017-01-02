@@ -46,9 +46,7 @@ xep-%.pdf: $(OUTDIR)/xep-%.pdf ;
 dependencies: $(OUTDIR)/prettify.css $(OUTDIR)/prettify.js $(OUTDIR)/xmpp.css ;
 
 $(OUTDIR)/%.html: %.xml $(XMLDEPS) dependencies
-	# TODO: After existing issues are worked out this and the ratcheting CI build
-	#       should be removed and become an error, not just a warning.
-	xmllint --nonet --noout --noent --loaddtd --valid "$<" || true
+	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
 
@@ -59,9 +57,7 @@ $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf:
 	cp "resources/$(notdir $@)" "$@"
 
 $(OUTDIR)/%.pdf: %.xml $(TEXMLDEPS) $(XMLDEPS) dependencies
-	# TODO: After existing issues are worked out this and the ratcheting CI build
-	#       should be removed and become an error, not just a warning.
-	xmllint --nonet --noout --noent --loaddtd --valid "$<" || true
+	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
 
