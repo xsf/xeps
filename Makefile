@@ -53,7 +53,7 @@ $(OUTDIR)/%.html: %.xml $(XMLDEPS) dependencies
 	# Actually build the HTML
 	xsltproc --path $(CURDIR) xep.xsl "$<" > "$@" && echo "Finished building $@"
 
-$(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf:
+$(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf: $(OUTDIR)
 	cp "resources/$(notdir $@)" "$@"
 
 $(OUTDIR)/%.pdf: %.xml $(TEXMLDEPS) $(XMLDEPS) dependencies
