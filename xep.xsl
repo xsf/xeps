@@ -2,30 +2,30 @@
 
 <!--
 
-Copyright (c) 1999 - 2015 XMPP Standards Foundation
+Copyright (c) 1999–2017 XMPP Standards Foundation
 
-Permission is hereby granted, free of charge, to any 
-person obtaining a copy of this software and 
-associated documentation files (the "Software"), to 
-deal in the Software without restriction, including 
-without limitation the rights to use, copy, modify, 
-merge, publish, distribute, sublicense, and/or sell 
-copies of the Software, and to permit persons to whom 
-the Software is furnished to do so, subject to the 
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and
+associated documentation files (the "Software"), to
+deal in the Software without restriction, including
+without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom
+the Software is furnished to do so, subject to the
 following conditions:
 
-The above copyright notice and this permission notice 
-shall be included in all copies or substantial portions 
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
 of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF 
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED 
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT 
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR 
-ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
+ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 OR OTHER DEALINGS IN THE SOFTWARE.
 
 -->
@@ -218,7 +218,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <!-- END FRONT MATTER -->
         <!-- BEGIN XEP CONTENTS -->
         <hr />
-        <xsl:apply-templates select='/xep/section1'/>
+        <xsl:apply-templates select='/xep/section1 | /xep/glossary'/>
         <!-- END XEP CONTENTS -->
         <!-- BEGIN APPENDICES -->
         <hr />
@@ -429,7 +429,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   <xsl:template name='processTOC'>
     <h2>Table of Contents</h2>
     <div class='indent'>
-    <p><xsl:apply-templates select='//section1' mode='toc'/></p>
+    <p><xsl:apply-templates select='//section1 | //glossary' mode='toc'/></p>
     <p><a href='#appendices'>Appendices</a>
       <br />&#160;&#160;&#160;&#160;<a href="#appendix-docinfo">A: Document Information</a>
       <br />&#160;&#160;&#160;&#160;<a href="#appendix-authorinfo">B: Author Information</a>
@@ -442,7 +442,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     </p>
     </div>
   </xsl:template>
-  
+
   <xsl:template match='councilnote'>
     <hr />
     <div>
@@ -566,7 +566,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
       <xsl:value-of select='@anchor'/>
     </xsl:variable>
     <xsl:variable name='num'>
-      <xsl:number level='multiple' count='section1'/><xsl:text>.</xsl:text>
+      <xsl:number level='multiple' count='section1|glossary'/><xsl:text>.</xsl:text>
     </xsl:variable>
     <xsl:variable name='sect2.count' select='count(section2)'/>
     <br />
@@ -593,6 +593,21 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     </xsl:if>
   </xsl:template>
 
+  <xsl:template match='glossary' mode='toc'>
+    <xsl:variable name='oid'>
+      <xsl:call-template name='object.id'/>
+    </xsl:variable>
+    <xsl:variable name='num'>
+      <xsl:number level='multiple' count='section1|glossary'/><xsl:text>.</xsl:text>
+    </xsl:variable>
+    <br />
+      <xsl:value-of select='$num'/> <xsl:text>  </xsl:text>
+      <a>
+        <xsl:attribute name='href'>#glossary</xsl:attribute>
+        Glossary
+      </a>
+  </xsl:template>
+
   <xsl:template match='section1'>
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
@@ -601,7 +616,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
       <xsl:value-of select='@anchor'/>
     </xsl:variable>
     <h2>
-      <xsl:number level='single' count='section1'/>.
+      <xsl:number level='single' count='section1|glossary'/>.
       <xsl:text> </xsl:text>
       <a>
         <xsl:attribute name='name'>
@@ -615,6 +630,21 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           </xsl:choose>
         </xsl:attribute>
         <xsl:value-of select='@topic' />
+      </a>
+    </h2>
+    <xsl:apply-templates/>
+  </xsl:template>
+
+  <xsl:template match='glossary'>
+    <xsl:variable name='oid'>
+      <xsl:call-template name='object.id'/>
+    </xsl:variable>
+    <h2>
+      <xsl:number level='single' count='section1|glossary'/>.
+      <xsl:text> </xsl:text>
+      <a>
+        <xsl:attribute name='name'>glossary</xsl:attribute>
+        Glossary
       </a>
     </h2>
     <xsl:apply-templates/>

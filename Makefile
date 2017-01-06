@@ -7,6 +7,8 @@ XMLDEPS=xep.xsl xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
 TEXMLDEPS=xep2texml.xsl $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf
 XMPPIMAGESURL=https://xmpp.org/images
 XEPDIRS=. inbox
+DO_MAKEGLOSSARY = grep '<glossary>' "../$(notdir $(basename $@)).xml"  >/dev/null && [ -f "$(notdir $(basename $@)).glo" ] && makeglossaries "$(notdir $(basename $@)).glo" || true
+DO_XELATEX = xelatex -interaction=batchmode -no-shell-escape "$(notdir $(basename $@)).tex" && $(DO_MAKEGLOSSARY)
 
 
 .PHONY: help
@@ -66,7 +68,13 @@ $(OUTDIR)/%.pdf: %.xml $(TEXMLDEPS) $(XMLDEPS) dependencies
 	sed -i -e 's|\([\s"]\)\([^"]http://[^ "]*\)|\1\\path{\2}|g' \
 		-e 's|\\hyperref\[#\([^}]*\)\]|\\hyperref\[\1\]|g' \
 		-e 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' "$(@:.pdf=.tex)"
-	cd $(OUTDIR); xelatex -interaction=batchmode -no-shell-escape "$(notdir $(basename $@)).tex" && echo "Finished building $@"
+	# We recompile at least three times to make the glossaries work.
+	cd $(OUTDIR); $(DO_XELATEX)
+	cd $(OUTDIR); while ($(DO_XELATEX) ; \
+		grep -q "Rerun to get" "$(notdir $(basename $@)).log" ) do true; \
+		done
+	cd $(OUTDIR); $(DO_XELATEX)
+	echo "Finished building $@"
 
 $(OUTDIR)/%.js: %.js
 	cp "$<" "$@"
