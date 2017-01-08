@@ -24,8 +24,8 @@
   * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
   * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
   * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-  
-	Thanks to the XSLT Standard Library http://xsltsl.sourceforge.net/.
+
+  Thanks to the XSLT Standard Library http://xsltsl.sourceforge.net/.
 -->
 
 <!--<xsl:include href="xsltsl/string.xsl"/>-->
@@ -33,7 +33,7 @@
 
 <!-- Create a variable named $maxXEPVersiom containing the MAX version -->
 <xsl:variable name="maxXEPVersion">
-	<xsl:value-of select='/xep/header/revision[position()=1]/version'/>
+  <xsl:value-of select='/xep/header/revision[position()=1]/version'/>
 </xsl:variable>
 
 <!-- Create a variable named $maxXEPDate containing the MAX date -->
@@ -70,14 +70,14 @@
 \KOMAoptions{paper=a4}
 
 \usepackage[
-	pdftitle={XEP-<xsl:value-of select="/xep/header/number"/>: <xsl:value-of select="/xep/header/title"/>},
-	pdfauthor={XMPP Standards Foundation},
-	pdfcreator={XEP2PDF},
-	pdfproducer={XEP2PDF},
-	breaklinks = true, 
-	unicode, 
-	pagebackref, 
-	xetex]{hyperref}
+  pdftitle={XEP-<xsl:value-of select="/xep/header/number"/>: <xsl:value-of select="/xep/header/title"/>},
+  pdfauthor={XMPP Standards Foundation},
+  pdfcreator={XEP2PDF},
+  pdfproducer={XEP2PDF},
+  breaklinks = true,
+  unicode,
+  pagebackref,
+  xetex]{hyperref}
 
 % break URLs at more places
 \renewcommand{\UrlBreaks}{\do\/\do\a\do\b\do\c\do\d\do\e\do\f\do\g\do\h\do\i\do\j\do\k\do\l\do\m\do\n\do\o\do\p\do\q\do\r\do\s\do\t\do\u\do\v\do\w\do\x\do\y\do\z\do\A\do\B\do\C\do\D\do\E\do\F\do\G\do\H\do\I\do\J\do\K\do\L\do\M\do\N\do\O\do\P\do\Q\do\R\do\S\do\T\do\U\do\V\do\W\do\X\do\Y\do\Z\do\0\do\1}
@@ -93,6 +93,7 @@
 \usepackage{titletoc}
 \usepackage{float}
 \usepackage{adjustbox}
+<xsl:if test="glossary">\usepackage[toc,nonumberlist]{glossaries}</xsl:if>
 
 \usepackage{hyphenat}
 
@@ -131,9 +132,10 @@
 \begin{center}\LARGE
 }
 
+<xsl:if test="glossary">\makeglossaries</xsl:if>
 \sloppy
     </TeXML>
-    
+
     <cmd name="title" nl2="1">
       <parm>XEP-<cmd name="XEPNumber" />: <xsl:value-of select="/xep/header/title"/></parm>
     </cmd>
@@ -153,19 +155,18 @@
     <env name="document">
       <TeXML escape="0">
         <cmd name="lstset">
-			<parm>language=XML,
-				breaklines=true,
-				emptylines=5,
-				frame=single,
-				rulecolor=\color{black},
-				basicstyle=\ttfamily\small\color{darkgray},
-				keywordstyle=\color{cyan},
-				stringstyle=\color{blue},
-				tagstyle=\color{purple},
-				markfirstintag=true
-			</parm>
+          <parm>language=XML,
+            breaklines=true,
+            emptylines=5,
+            frame=single,
+            rulecolor=\color{black},
+            basicstyle=\ttfamily\small\color{darkgray},
+            keywordstyle=\color{cyan},
+            stringstyle=\color{blue},
+            tagstyle=\color{purple},
+            markfirstintag=true
+          </parm>
         </cmd>
-        
       </TeXML>
       <cmd name="KOMAoptions"><parm>DIV=24</parm></cmd>
       <cmd name="pagestyle"><parm>empty</parm></cmd>
@@ -177,7 +178,7 @@
       <cmd name="textbf"><parm>Status</parm></cmd> &amp; <cmd name="textbf"><parm>Type</parm></cmd> &amp; <cmd name="textbf"><parm>Short Name</parm></cmd> \\
         <xsl:value-of select="/xep/header/status"/> &amp; <xsl:value-of select="/xep/header/type"/> &amp; <TeXML escape="1"><xsl:value-of select="/xep/header/shortname"/></TeXML>
       </TeXML>
-      </env>  
+      </env>
       </env>
       <env name="abstract">
         <xsl:value-of select="/xep/header/abstract"/>
@@ -196,6 +197,8 @@
       <cmd name="pagestyle" nl2="1"><parm>fancy</parm></cmd>
       <cmd name="setcounter" nl2="1"><parm>page</parm><parm>1</parm></cmd>
       <xsl:apply-templates/>
+      <xsl:if test="glossary"><cmd name="glsaddall"/></xsl:if>
+      <xsl:if test="glossary"><cmd name="printglossaries"/></xsl:if>
     </env>
   </TeXML>
 </xsl:template>
@@ -340,27 +343,27 @@
 <xsl:template match="li">
   <TeXML escape="1" emptylines="1">
   <cmd name="item" /> <xsl:apply-templates/><xsl:text>
-  
+
   </xsl:text>
   </TeXML>
 </xsl:template>
 
 <!-- ul -->
-<xsl:template match="ul">  
+<xsl:template match="ul">
   <env name="itemize">
     <xsl:apply-templates/>
   </env>
-</xsl:template>  
+</xsl:template>
 
 <!-- ol -->
-<xsl:template match="ol">  
+<xsl:template match="ol">
   <env name="enumerate">
     <xsl:apply-templates/>
   </env>
 </xsl:template>
 
 <!-- dl -->
-<xsl:template match="dl">  
+<xsl:template match="dl">
   <env name="description">
     <xsl:apply-templates/>
   </env>
@@ -370,38 +373,38 @@
 <xsl:template match="di">
   <TeXML escape="1" emptylines="1">
   <cmd name="item"><opt><xsl:value-of select="./dt" /></opt></cmd>
-	<xsl:text>
+  <xsl:text>
   </xsl:text>
-	<xsl:value-of select="./dd" /> 
+  <xsl:value-of select="./dd" />
   </TeXML>
 </xsl:template>
-  
-<!-- example -->                               
-<xsl:template match="example">                   
-    <env name="lstlisting">                         
+
+<!-- example -->
+<xsl:template match="example">
+    <env name="lstlisting">
       <opt>caption=<group><TeXML escape="1"><xsl:value-of select="@caption"/></TeXML></group></opt>
       <TeXML escape="0" emptylines="1">
-      <xsl:apply-templates />     
+      <xsl:apply-templates />
       </TeXML>
-    </env>                                                  
-</xsl:template>      
+    </env>
+</xsl:template>
 
 <xsl:template match="br">
   <!--<cmd name="newline" gr="0"/>-->
-  
+
 </xsl:template>
 
-<!-- code -->                               
+<!-- code -->
 <xsl:template match="code">
   <xsl:if test='@class = "inline"'>
     <cmd name='path'><parm><TeXML escape="0"><xsl:value-of select="."/></TeXML></parm></cmd>
   </xsl:if>
   <xsl:if test='not(@class)'>
-    <env name="lstlisting">              
+    <env name="lstlisting">
     <TeXML escape="0" emptylines="1" ligatures="1">
       <xsl:value-of select="."/>
     </TeXML>
-    </env>                          
+    </env>
   </xsl:if>
 </xsl:template>
 
@@ -446,6 +449,25 @@
   <xsl:apply-templates />
 </xsl:template>
 
+<!-- glossary -->
+<xsl:template match="glossary">
+  <xsl:apply-templates select="dl" mode="glossary"/>
+</xsl:template>
 
+<xsl:template match="dl" mode="glossary">
+  <xsl:apply-templates select="di" mode="glossary"/>
+</xsl:template>
+
+<xsl:template match="di" mode="glossary">
+  <TeXML escape="1" emptylines="1">
+    <cmd name="newglossaryentry">
+      <parm><xsl:value-of select="./dt" /></parm>
+      <parm>
+          name=<xsl:value-of select="./dt" />,
+          description=<group><xsl:value-of select="./dd" /></group>
+      </parm>
+    </cmd>
+  </TeXML>
+</xsl:template>
 
 </xsl:stylesheet>
