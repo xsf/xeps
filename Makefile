@@ -19,7 +19,7 @@ help:
 	@echo '                  html  -  build all XEPs'
 	@echo '                 clean  -  recursively unlink the build tree'
 	@echo '               preview  -  builds html whenever an XEP changes (requires inotify-tools)'
-	@echo '              xep-xxxx  -  build xep-xxxx.html'
+	@echo '              xep-xxxx  -  build HTML, PDF, and reference forms of an XEP'
 	@echo '          xep-xxxx.pdf  -  build xep-xxxx.pdf (requires xelatex and texml)'
 	@echo '         xep-xxxx.html  -  build xep-xxxx.html'
 	@echo ' '
@@ -38,7 +38,7 @@ pdf: $(patsubst %.xml, $(OUTDIR)/%.pdf, $(wildcard *.xml))
 refs: $(patsubst xep-%.xml, $(REFSDIR)/reference.XSF.XEP-%.xml, $(wildcard *.xml))
 
 .PHONY: xep-%
-xep-%: $(OUTDIR)/xep-%.html $(REFSDIR)/reference.XSF.XEP-%.xml;
+xep-%: $(OUTDIR)/xep-%.html $(REFSDIR)/reference.XSF.XEP-%.xml $(OUTDIR)/xep-%.pdf;
 
 .PHONY: xep-%.html
 xep-%.html: $(OUTDIR)/xep-%.html ;
