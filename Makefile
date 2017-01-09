@@ -2,6 +2,7 @@
 
 OUTDIR?=build
 REFSDIR?=$(OUTDIR)/refs
+EXAMPLESDIR?=$(OUTDIR)/examples
 XMLDEPS=xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
 TEXMLDEPS=xep2texml.xsl $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf
 XMPPIMAGESURL=https://xmpp.org/images
@@ -19,7 +20,8 @@ help:
 	@echo '                  html  -  build all XEPs'
 	@echo '                 clean  -  recursively unlink the build tree'
 	@echo '               preview  -  builds html whenever an XEP changes (requires inotify-tools)'
-	@echo '              xep-xxxx  -  build HTML, PDF, and reference forms of an XEP'
+	@echo '              examples  -  extract all examples'
+	@echo '              xep-xxxx  -  build HTML, PDF, examples, and reference for the XEP'
 	@echo '          xep-xxxx.pdf  -  build xep-xxxx.pdf (requires xelatex and texml)'
 	@echo '         xep-xxxx.html  -  build xep-xxxx.html'
 	@echo ' '
@@ -37,14 +39,20 @@ pdf: $(patsubst %.xml, $(OUTDIR)/%.pdf, $(wildcard *.xml))
 .PHONY: refs
 refs: $(patsubst xep-%.xml, $(REFSDIR)/reference.XSF.XEP-%.xml, $(wildcard *.xml))
 
+.PHONY: examples
+examples: $(patsubst xep-%.xml, $(EXAMPLESDIR)/%.xml, $(wildcard *.xml))
+
 .PHONY: xep-%
-xep-%: $(OUTDIR)/xep-%.html $(REFSDIR)/reference.XSF.XEP-%.xml $(OUTDIR)/xep-%.pdf;
+xep-%: $(OUTDIR)/xep-%.html $(REFSDIR)/reference.XSF.XEP-%.xml $(OUTDIR)/xep-%.pdf $(EXAMPLESDIR)/%.xml;
 
 .PHONY: xep-%.html
 xep-%.html: $(OUTDIR)/xep-%.html ;
 
 .PHONY: xep-%.pdf
 xep-%.pdf: $(OUTDIR)/xep-%.pdf ;
+
+$(EXAMPLESDIR)/%.xml: xep-%.xml $(XMLDEPS) examples.xsl $(EXAMPLESDIR)
+	xsltproc --path $(CURDIR) examples.xsl "$<" > "$@" && echo "Finished building $@"
 
 $(REFSDIR)/reference.XSF.XEP-%.xml: xep-%.xml $(XMLDEPS) ref.xsl $(REFSDIR)
 	xsltproc --path $(CURDIR) ref.xsl "$<" > "$@" && echo "Finished building $@"
@@ -78,7 +86,7 @@ $(OUTDIR)/%.js: %.js
 $(OUTDIR)/%.css: %.css
 	cp "$<" "$@"
 
-$(REFSDIR) $(OUTDIR):
+$(EXAMPLESDIR) $(REFSDIR) $(OUTDIR):
 	mkdir -p $@
 
 .PHONY: clean
