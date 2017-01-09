@@ -24,7 +24,7 @@
   * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
   * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
   * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-  
+
 	Thanks to the XSLT Standard Library http://xsltsl.sourceforge.net/.
 -->
 
@@ -74,9 +74,9 @@
 	pdfauthor={XMPP Standards Foundation},
 	pdfcreator={XEP2PDF},
 	pdfproducer={XEP2PDF},
-	breaklinks = true, 
-	unicode, 
-	pagebackref, 
+	breaklinks = true,
+	unicode,
+	pagebackref,
 	xetex]{hyperref}
 
 % break URLs at more places
@@ -133,7 +133,7 @@
 
 \sloppy
     </TeXML>
-    
+
     <cmd name="title" nl2="1">
       <parm>XEP-<cmd name="XEPNumber" />: <xsl:value-of select="/xep/header/title"/></parm>
     </cmd>
@@ -165,7 +165,7 @@
 				markfirstintag=true
 			</parm>
         </cmd>
-        
+
       </TeXML>
       <cmd name="KOMAoptions"><parm>DIV=24</parm></cmd>
       <cmd name="pagestyle"><parm>empty</parm></cmd>
@@ -177,7 +177,7 @@
       <cmd name="textbf"><parm>Status</parm></cmd> &amp; <cmd name="textbf"><parm>Type</parm></cmd> &amp; <cmd name="textbf"><parm>Short Name</parm></cmd> \\
         <xsl:value-of select="/xep/header/status"/> &amp; <xsl:value-of select="/xep/header/type"/> &amp; <TeXML escape="1"><xsl:value-of select="/xep/header/shortname"/></TeXML>
       </TeXML>
-      </env>  
+      </env>
       </env>
       <env name="abstract">
         <xsl:value-of select="/xep/header/abstract"/>
@@ -239,7 +239,7 @@
 
 <xsl:template match="header">
 </xsl:template>
-  
+
 
 <!-- table -->
 <xsl:template match='table'>
@@ -259,9 +259,9 @@
   </env>
 </TeXML>
 </xsl:template>
-  
 
-<!-- link -->  
+
+<!-- link -->
 <xsl:template match="span">
   <xsl:apply-templates/>
 </xsl:template>
@@ -302,7 +302,7 @@
     <!--<TeXML escape="0"> { </TeXML><cmd name="footnotesize" /><cmd name="pageref"><parm><TeXML escape="0"><xsl:value-of select='@url'/></TeXML></parm></cmd><TeXML escape="0"> } </TeXML>-->
   </xsl:if>
 </xsl:template>
-  
+
 <!-- note -->
 <xsl:template match="note">
   <cmd name="footnote"><parm><xsl:apply-templates/></parm></cmd>
@@ -330,37 +330,37 @@
 
 
 <!-- p -->
-<xsl:template match="p">  
+<xsl:template match="p">
   <xsl:apply-templates/><TeXML escape="0" emptylines="1"><xsl:text>\\
-  
+
   </xsl:text></TeXML>
-</xsl:template>  
+</xsl:template>
 
 <!-- li -->
 <xsl:template match="li">
   <TeXML escape="1" emptylines="1">
   <cmd name="item" /> <xsl:apply-templates/><xsl:text>
-  
+
   </xsl:text>
   </TeXML>
 </xsl:template>
 
 <!-- ul -->
-<xsl:template match="ul">  
+<xsl:template match="ul">
   <env name="itemize">
     <xsl:apply-templates/>
   </env>
-</xsl:template>  
+</xsl:template>
 
 <!-- ol -->
-<xsl:template match="ol">  
+<xsl:template match="ol">
   <env name="enumerate">
     <xsl:apply-templates/>
   </env>
 </xsl:template>
 
 <!-- dl -->
-<xsl:template match="dl">  
+<xsl:template match="dl">
   <env name="description">
     <xsl:apply-templates/>
   </env>
@@ -372,36 +372,36 @@
   <cmd name="item"><opt><xsl:value-of select="./dt" /></opt></cmd>
 	<xsl:text>
   </xsl:text>
-	<xsl:value-of select="./dd" /> 
+	<xsl:value-of select="./dd" />
   </TeXML>
 </xsl:template>
-  
-<!-- example -->                               
-<xsl:template match="example">                   
-    <env name="lstlisting">                         
+
+<!-- example -->
+<xsl:template match="example">
+    <env name="lstlisting">
       <opt>caption=<group><TeXML escape="1"><xsl:value-of select="@caption"/></TeXML></group></opt>
       <TeXML escape="0" emptylines="1">
-      <xsl:apply-templates />     
+      <xsl:apply-templates />
       </TeXML>
-    </env>                                                  
-</xsl:template>      
+    </env>
+</xsl:template>
 
 <xsl:template match="br">
   <!--<cmd name="newline" gr="0"/>-->
-  
+
 </xsl:template>
 
-<!-- code -->                               
+<!-- code -->
 <xsl:template match="code">
   <xsl:if test='@class = "inline"'>
     <cmd name='path'><parm><TeXML escape="0"><xsl:value-of select="."/></TeXML></parm></cmd>
   </xsl:if>
   <xsl:if test='not(@class)'>
-    <env name="lstlisting">              
+    <env name="lstlisting">
     <TeXML escape="0" emptylines="1" ligatures="1">
       <xsl:value-of select="."/>
     </TeXML>
-    </env>                          
+    </env>
   </xsl:if>
 </xsl:template>
 
