@@ -1,12 +1,12 @@
 .SILENT:
 
 OUTDIR?=build
-RESOURCESDIR=$(OUTDIR)/resources
-TEMPDIR?=$(OUTDIR)/xepbuild
-XMLDEPS=xep.xsl xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
+REFSDIR?=$(OUTDIR)/refs
+XMLDEPS=xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
 TEXMLDEPS=xep2texml.xsl $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf
 XMPPIMAGESURL=https://xmpp.org/images
 XEPDIRS=. inbox
+HTMLDEPS=xep.xsl $(OUTDIR)/prettify.css $(OUTDIR)/prettify.js $(OUTDIR)/xmpp.css
 
 
 .PHONY: help
@@ -15,6 +15,7 @@ help:
 	@echo ' '
 	@echo '                  help  -  (this message)'
 	@echo '                   all  -  build all XEPs (same as make html)'
+	@echo '                  refs  -  build all IETF refs'
 	@echo '                  html  -  build all XEPs'
 	@echo '                 clean  -  recursively unlink the build tree'
 	@echo '               preview  -  builds html whenever an XEP changes (requires inotify-tools)'
@@ -33,8 +34,11 @@ html: $(patsubst %.xml, $(OUTDIR)/%.html, $(wildcard *.xml))
 .PHONY: pdf
 pdf: $(patsubst %.xml, $(OUTDIR)/%.pdf, $(wildcard *.xml))
 
+.PHONY: refs
+refs: $(patsubst xep-%.xml, $(REFSDIR)/reference.XSF.XEP-%.xml, $(wildcard *.xml))
+
 .PHONY: xep-%
-xep-%: $(OUTDIR)/xep-%.html ;
+xep-%: $(OUTDIR)/xep-%.html $(REFSDIR)/reference.XSF.XEP-%.xml;
 
 .PHONY: xep-%.html
 xep-%.html: $(OUTDIR)/xep-%.html ;
@@ -42,10 +46,10 @@ xep-%.html: $(OUTDIR)/xep-%.html ;
 .PHONY: xep-%.pdf
 xep-%.pdf: $(OUTDIR)/xep-%.pdf ;
 
-.PHONY: dependencies
-dependencies: $(OUTDIR)/prettify.css $(OUTDIR)/prettify.js $(OUTDIR)/xmpp.css ;
+$(REFSDIR)/reference.XSF.XEP-%.xml: xep-%.xml $(XMLDEPS) ref.xsl $(REFSDIR)
+	xsltproc --path $(CURDIR) ref.xsl "$<" > "$@" && echo "Finished building $@"
 
-$(OUTDIR)/%.html: %.xml $(XMLDEPS) dependencies
+$(OUTDIR)/%.html: %.xml $(XMLDEPS) $(HTMLDEPS)
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
@@ -56,7 +60,7 @@ $(OUTDIR)/%.html: %.xml $(XMLDEPS) dependencies
 $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf: $(OUTDIR)
 	cp "resources/$(notdir $@)" "$@"
 
-$(OUTDIR)/%.pdf: %.xml $(TEXMLDEPS) $(XMLDEPS) dependencies
+$(OUTDIR)/%.pdf: %.xml $(XMLDEPS) $(TEXMLDEPS)
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
@@ -74,7 +78,7 @@ $(OUTDIR)/%.js: %.js
 $(OUTDIR)/%.css: %.css
 	cp "$<" "$@"
 
-$(TEMPDIR) $(OUTDIR) $(RESOURCESDIR):
+$(REFSDIR) $(OUTDIR):
 	mkdir -p $@
 
 .PHONY: clean
