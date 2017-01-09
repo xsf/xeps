@@ -87,7 +87,7 @@ $(OUTDIR)/%.css: %.css
 	cp "$<" "$@"
 
 $(EXAMPLESDIR) $(REFSDIR) $(OUTDIR):
-	mkdir -p $@
+	mkdir -p "$@"
 
 .PHONY: clean
 clean:
