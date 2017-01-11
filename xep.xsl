@@ -2,7 +2,7 @@
 
 <!--
 
-Copyright (c) 1999 - 2015 XMPP Standards Foundation
+Copyright (c) 1999 - 2017 XMPP Standards Foundation
 
 Permission is hereby granted, free of charge, to any 
 person obtaining a copy of this software and 
@@ -396,9 +396,21 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <!-- NOTES -->
         <a name="appendix-notes"></a>
         <h3>Appendix G: Notes</h3>
-        <div class='indent'>
-          <xsl:apply-templates select='//note' mode='endlist'/>
-        </div>
+          <div class='indent'>
+          <xsl:for-each select="//note">
+            <xsl:variable name='me' select='.' />
+            <xsl:variable name='firstOccurrence' select='(//note[. = $me])[1]' />
+            <xsl:variable name='oid' select='generate-id($firstOccurrence)' /> 
+            <xsl:variable name='notenum' select='count($firstOccurrence/preceding::note[not(.=preceding::note)])+1' />
+            <xsl:if test='generate-id($me) = generate-id($firstOccurrence)'>
+              <p>
+                <a name='nt-{$oid}'><xsl:value-of select='$notenum'/></a>
+                <xsl:text>. </xsl:text>
+                <xsl:apply-templates/>
+              </p>
+            </xsl:if>
+          </xsl:for-each>
+          </div>
         <!-- REVISION HISTORY -->
         <hr />
         <a name="appendix-revs"></a>
@@ -977,28 +989,16 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     </dd>
   </xsl:template>
 
+
   <xsl:template match='note'>
-    <xsl:variable name='notenum'>
-      <xsl:number level='any' count='note'/>
-    </xsl:variable> 
-    <xsl:variable name='oid'>
-      <xsl:call-template name='object.id'/>
-    </xsl:variable>
+    <xsl:variable name='me' select='.' />
+    <xsl:variable name='firstOccurrence' select='(//note[. = $me])[1]' />
+    <xsl:variable name='oid' select='generate-id($firstOccurrence)' /> 
+    <xsl:variable name='notenum' select='count($firstOccurrence/preceding::note[not(.=preceding::note)])+1' />
     <xsl:text> [</xsl:text><a href='#nt-{$oid}'>
     <xsl:value-of select='$notenum'/></a>
     <xsl:text>]</xsl:text>
   </xsl:template>
-
-  <xsl:template match='note' mode='endlist'>
-    <p>
-      <xsl:variable name='oid'>
-        <xsl:call-template name='object.id'/>
-      </xsl:variable> 
-      <a name='nt-{$oid}'><xsl:value-of select='position()'/></a>
-      <xsl:text>. </xsl:text>
-        <xsl:apply-templates/>
-    </p>
-  </xsl:template> 
 
 <!-- PRESENTATIONAL ELEMENTS -->
 
