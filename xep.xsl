@@ -4,28 +4,28 @@
 
 Copyright (c) 1999 - 2015 XMPP Standards Foundation
 
-Permission is hereby granted, free of charge, to any 
-person obtaining a copy of this software and 
-associated documentation files (the "Software"), to 
-deal in the Software without restriction, including 
-without limitation the rights to use, copy, modify, 
-merge, publish, distribute, sublicense, and/or sell 
-copies of the Software, and to permit persons to whom 
-the Software is furnished to do so, subject to the 
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and
+associated documentation files (the "Software"), to
+deal in the Software without restriction, including
+without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom
+the Software is furnished to do so, subject to the
 following conditions:
 
-The above copyright notice and this permission notice 
-shall be included in all copies or substantial portions 
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
 of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF 
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED 
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT 
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR 
-ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
+ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 OR OTHER DEALINGS IN THE SOFTWARE.
 
 -->
@@ -36,6 +36,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 
   <xsl:output doctype-public='-//W3C//DTD XHTML 1.0 Transitional//EN' doctype-system='http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd' method='xml'/>
 
+  <xsl:key name="unique-notes" match="note" use="text()" />
   <xsl:template match='/'>
     <html>
       <head>
@@ -397,7 +398,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <a name="appendix-notes"></a>
         <h3>Appendix G: Notes</h3>
         <div class='indent'>
-          <xsl:apply-templates select='//note' mode='endlist'/>
+          <xsl:apply-templates select="//note[generate-id(.) = generate-id(key('unique-notes', text())[1])]" mode='endlist'/>
         </div>
         <!-- REVISION HISTORY -->
         <hr />
@@ -442,7 +443,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     </p>
     </div>
   </xsl:template>
-  
+
   <xsl:template match='councilnote'>
     <hr />
     <div>
@@ -979,26 +980,20 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 
   <xsl:template match='note'>
     <xsl:variable name='notenum'>
-      <xsl:number level='any' count='note'/>
-    </xsl:variable> 
-    <xsl:variable name='oid'>
-      <xsl:call-template name='object.id'/>
+      <xsl:number level='any' count="note[generate-id(.) = generate-id(key('unique-notes', text())[1])]"/>
     </xsl:variable>
-    <xsl:text> [</xsl:text><a href='#nt-{$oid}'>
+    <xsl:text> [</xsl:text><a href='#nt-{$notenum}'>
     <xsl:value-of select='$notenum'/></a>
     <xsl:text>]</xsl:text>
   </xsl:template>
 
   <xsl:template match='note' mode='endlist'>
     <p>
-      <xsl:variable name='oid'>
-        <xsl:call-template name='object.id'/>
-      </xsl:variable> 
-      <a name='nt-{$oid}'><xsl:value-of select='position()'/></a>
+      <a name='nt-{position()}'><xsl:value-of select='position()'/></a>
       <xsl:text>. </xsl:text>
         <xsl:apply-templates/>
     </p>
-  </xsl:template> 
+  </xsl:template>
 
 <!-- PRESENTATIONAL ELEMENTS -->
 
