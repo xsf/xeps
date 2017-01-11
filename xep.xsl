@@ -4,28 +4,28 @@
 
 Copyright (c) 1999 - 2017 XMPP Standards Foundation
 
-Permission is hereby granted, free of charge, to any 
-person obtaining a copy of this software and 
-associated documentation files (the "Software"), to 
-deal in the Software without restriction, including 
-without limitation the rights to use, copy, modify, 
-merge, publish, distribute, sublicense, and/or sell 
-copies of the Software, and to permit persons to whom 
-the Software is furnished to do so, subject to the 
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and
+associated documentation files (the "Software"), to
+deal in the Software without restriction, including
+without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom
+the Software is furnished to do so, subject to the
 following conditions:
 
-The above copyright notice and this permission notice 
-shall be included in all copies or substantial portions 
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
 of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF 
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED 
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT 
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR 
-ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
+ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 OR OTHER DEALINGS IN THE SOFTWARE.
 
 -->
@@ -133,7 +133,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           </xsl:if>
           <tr valign='top'>
             <td><strong>Copyright:</strong></td>
-            <td>&#169; 1999 - 2016 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</td>
+            <td>&#169; 1999 &#x2013; 2017 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</td>
           </tr>
           <tr valign='top'>
             <td><strong>Status:</strong></td>
@@ -232,7 +232,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
             Series: <a href='http://xmpp.org/extensions/'>XEP</a><br />
             Number: <xsl:value-of select='/xep/header/number'/><br />
             Publisher: <a href='/xsf/'>XMPP Standards Foundation</a><br />
-            Status: 
+            Status:
             <a>
               <xsl:attribute name='href'><xsl:text>http://xmpp.org/extensions/xep-0001.html#states-</xsl:text><xsl:value-of select='/xep/header/status'/></xsl:attribute>
               <xsl:value-of select='/xep/header/status'/>
@@ -305,7 +305,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
             </xsl:if>
             <xsl:variable name='reg.count' select='count(/xep/header/registry)'/>
             <xsl:if test='$reg.count=1'>
-              Registry: 
+              Registry:
               <xsl:variable name='registryURL'>
                 <xsl:text>http://xmpp.org/registrar/</xsl:text>
                 <xsl:value-of select='/xep/header/shortname'/>
@@ -320,7 +320,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
               <xsl:text>.xml</xsl:text>
             </xsl:variable>
             <xsl:if test='$thestatus != "ProtoXEP"'>
-              Source Control: 
+              Source Control:
                 <a class='standardsButton' href='{$sourceHTML}'>HTML</a>
                 <br />
             </xsl:if>
@@ -334,7 +334,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
                 <xsl:value-of select='/xep/header/number'/>
                 <xsl:text>.pdf</xsl:text>
             </xsl:variable>
-            This document in other formats: 
+            This document in other formats:
                 <a class='standardsButton' href='{$formatXML}'>XML</a>&#160;
                 <a class='standardsButton' href='{$formatPDF}'>PDF</a>
           </p>
@@ -400,7 +400,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           <xsl:for-each select="//note">
             <xsl:variable name='me' select='.' />
             <xsl:variable name='firstOccurrence' select='(//note[. = $me])[1]' />
-            <xsl:variable name='oid' select='generate-id($firstOccurrence)' /> 
+            <xsl:variable name='oid' select='generate-id($firstOccurrence)' />
             <xsl:variable name='notenum' select='count($firstOccurrence/preceding::note[not(.=preceding::note)])+1' />
             <xsl:if test='generate-id($me) = generate-id($firstOccurrence)'>
               <p>
@@ -454,7 +454,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     </p>
     </div>
   </xsl:template>
-  
+
   <xsl:template match='councilnote'>
     <hr />
     <div>
@@ -496,7 +496,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <br />
       </xsl:if>
       <xsl:if test='$jid.count=1'>
-        JabberID: 
+        JabberID:
         <a>
           <xsl:attribute name='href'>
             <xsl:text>xmpp:</xsl:text>
@@ -507,7 +507,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <br />
       </xsl:if>
       <xsl:if test='$uri.count=1'>
-        URI: 
+        URI:
         <a>
           <xsl:attribute name='href'>
             <xsl:value-of select='uri' />
@@ -993,7 +993,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   <xsl:template match='note'>
     <xsl:variable name='me' select='.' />
     <xsl:variable name='firstOccurrence' select='(//note[. = $me])[1]' />
-    <xsl:variable name='oid' select='generate-id($firstOccurrence)' /> 
+    <xsl:variable name='oid' select='generate-id($firstOccurrence)' />
     <xsl:variable name='notenum' select='count($firstOccurrence/preceding::note[not(.=preceding::note)])+1' />
     <xsl:text> [</xsl:text><a href='#nt-{$oid}'>
     <xsl:value-of select='$notenum'/></a>

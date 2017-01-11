@@ -1,6 +1,6 @@
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:str="http://xsltsl.org/string">
 <!--
-  * Copyright (c) 2008 - 2010, Tobias Markmann
+  * Copyright (c) 2008 - 2017 Tobias Markmann
   * All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without
