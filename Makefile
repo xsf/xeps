@@ -1,5 +1,4 @@
 .SILENT:
-.SECONDARY:
 
 OUTDIR?=build
 REFSDIR?=$(OUTDIR)/refs
@@ -7,7 +6,9 @@ EXAMPLESDIR?=$(OUTDIR)/examples
 XMLDEPS=xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
 TEXMLDEPS=xep2texml.xsl $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf
 XEPDIRS=. inbox
-HTMLDEPS=xep.xsl $(OUTDIR)/prettify.css $(OUTDIR)/prettify.js $(OUTDIR)/xmpp.css
+HTMLDEPS=xep.xsl $(CSSTARGETS) $(JSTARGETS)
+CSSTARGETS=$(OUTDIR)/xmpp.css $(OUTDIR)/prettify.css
+JSTARGETS=$(OUTDIR)/prettify.js
 
 
 .PHONY: help
@@ -80,11 +81,11 @@ $(OUTDIR)/%.pdf: %.xml $(XMLDEPS) $(TEXMLDEPS)
 		-e 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' "$(@:.pdf=.tex)"
 	cd $(OUTDIR); xelatex -interaction=batchmode -no-shell-escape "$(notdir $(basename $@)).tex" && echo "Finished building $@"
 
-$(OUTDIR)/%.js: %.js $(OUTDIR)
-	cp "$<" "$@"
+$(JSTARGETS): $(OUTDIR)
+	cp "$(notdir $@)" "$@"
 
-$(OUTDIR)/%.css: %.css $(OUTDIR)
-	cp "$<" "$@"
+$(CSSTARGETS): $(OUTDIR)
+	cp "$(notdir $@)" "$@"
 
 $(EXAMPLESDIR) $(REFSDIR) $(OUTDIR):
 	mkdir -p "$@"
