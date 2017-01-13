@@ -6,7 +6,6 @@ REFSDIR?=$(OUTDIR)/refs
 EXAMPLESDIR?=$(OUTDIR)/examples
 XMLDEPS=xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
 TEXMLDEPS=xep2texml.xsl $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf
-XMPPIMAGESURL=https://xmpp.org/images
 XEPDIRS=. inbox
 HTMLDEPS=xep.xsl $(OUTDIR)/prettify.css $(OUTDIR)/prettify.js $(OUTDIR)/xmpp.css
 
