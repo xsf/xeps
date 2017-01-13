@@ -80,9 +80,11 @@ $(OUTDIR)/%.pdf: %.xml $(XMLDEPS) $(TEXMLDEPS)
 		-e 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' "$(@:.pdf=.tex)"
 	cd $(OUTDIR); xelatex -interaction=batchmode -no-shell-escape "$(notdir $(basename $@)).tex" && echo "Finished building $@"
 
+.PRECIOUS: $(OUTDIR)/%.js
 $(OUTDIR)/%.js: %.js
 	cp "$<" "$@"
 
+.PRECIOUS: $(OUTDIR)/%.css
 $(OUTDIR)/%.css: %.css
 	cp "$<" "$@"
 
