@@ -401,7 +401,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
             <xsl:variable name='me' select='.' />
             <xsl:variable name='firstOccurrence' select='(//note[. = $me])[1]' />
             <xsl:variable name='oid' select='generate-id($firstOccurrence)' />
-            <xsl:variable name='notenum' select='count($firstOccurrence/preceding::note[not(.=preceding::note)])+1' />
+            <xsl:variable name='notenum' select='count($firstOccurrence/preceding::note[not(.=preceding::note)]) + count($me/ancestor::note) + 1' />
             <xsl:if test='generate-id($me) = generate-id($firstOccurrence)'>
               <p>
                 <a name='nt-{$oid}'><xsl:value-of select='$notenum'/></a>
@@ -994,7 +994,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     <xsl:variable name='me' select='.' />
     <xsl:variable name='firstOccurrence' select='(//note[. = $me])[1]' />
     <xsl:variable name='oid' select='generate-id($firstOccurrence)' />
-    <xsl:variable name='notenum' select='count($firstOccurrence/preceding::note[not(.=preceding::note)])+1' />
+    <xsl:variable name='notenum' select='count($firstOccurrence/preceding::note[not(.=preceding::note)]) + count($me/ancestor::note) + 1' />
     <xsl:text> [</xsl:text><a href='#nt-{$oid}'>
     <xsl:value-of select='$notenum'/></a>
     <xsl:text>]</xsl:text>
