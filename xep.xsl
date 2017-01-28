@@ -169,7 +169,19 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           <p style='color:red'>WARNING: This document has been automatically Deferred after 12 months of inactivity in its previous Experimental state. Implementation of the protocol described herein is not recommended for production systems. However, exploratory implementations are encouraged to resume the standards process.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Deprecated"'>
-          <p style='color:red'>WARNING: This document has been <strong>Deprecated</strong> by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been <strong>Deprecated</strong> by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one
+            <xsl:variable name='supersededby.count' select='count(/xep/header/supersededby/spec)'/>
+            <xsl:choose>
+              <xsl:when test='$supersededby.count &gt; 0'>
+                <xsl:text>(</xsl:text>
+                <xsl:apply-templates select='/xep/header/supersededby/spec'>
+                  <xsl:with-param name='speccount' select='$supersededby.count'/>
+                </xsl:apply-templates>
+                <xsl:text>).</xsl:text>
+              </xsl:when>
+              <xsl:otherwise>(if any).</xsl:otherwise>
+            </xsl:choose>
+          </p>
         </xsl:if>
         <xsl:if test='$thestatus = "Draft"'>
           <p style='color:green'>NOTICE: The protocol defined herein is a <strong>Draft Standard</strong> of the XMPP Standards Foundation. Implementations are encouraged and the protocol is appropriate for deployment in production systems, but some changes to the protocol are possible before it becomes a Final Standard.</p>
@@ -190,7 +202,19 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           <p style='color:green'>NOTICE: The protocol defined herein is a <strong>Final Standard</strong> of the XMPP Standards Foundation and can be considered a stable technology for implementation and deployment.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Obsolete"'>
-          <p style='color:red'>WARNING: This document has been obsoleted by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been obsoleted by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this on
+            <xsl:variable name='supersededby.count' select='count(/xep/header/supersededby/spec)'/>
+            <xsl:choose>
+              <xsl:when test='$supersededby.count &gt; 0'>
+                <xsl:text>(</xsl:text>
+                <xsl:apply-templates select='/xep/header/supersededby/spec'>
+                  <xsl:with-param name='speccount' select='$supersededby.count'/>
+                </xsl:apply-templates>
+                <xsl:text>).</xsl:text>
+              </xsl:when>
+              <xsl:otherwise>(if any).</xsl:otherwise>
+            </xsl:choose>
+          </p>
         </xsl:if>
         <xsl:if test='$thestatus = "Proposed"'>
           <p style='color:red'>NOTICE: This document is currently within Last Call or under consideration by the XMPP Council for advancement to the next stage in the XSF standards process.
@@ -205,7 +229,19 @@ OR OTHER DEALINGS IN THE SOFTWARE.
           <p style='color:red'>WARNING: This document has been Rejected by the XMPP Council. Implementation of the protocol described herein is not recommended under any circumstances.</p>
         </xsl:if>
         <xsl:if test='$thestatus = "Retracted"'>
-          <p style='color:red'>WARNING: This document has been retracted by the author(s). Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one (if any).</p>
+          <p style='color:red'>WARNING: This document has been retracted by the author(s). Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one
+            <xsl:variable name='supersededby.count' select='count(/xep/header/supersededby/spec)'/>
+            <xsl:choose>
+              <xsl:when test='$supersededby.count &gt; 0'>
+                <xsl:text>(</xsl:text>
+                <xsl:apply-templates select='/xep/header/supersededby/spec'>
+                  <xsl:with-param name='speccount' select='$supersededby.count'/>
+                </xsl:apply-templates>
+                <xsl:text>).</xsl:text>
+              </xsl:when>
+              <xsl:otherwise>(if any).</xsl:otherwise>
+            </xsl:choose>
+          </p>
         </xsl:if>
         <!-- TABLE OF CONTENTS -->
         <hr />
