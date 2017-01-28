@@ -116,16 +116,11 @@ OR OTHER DEALINGS IN THE SOFTWARE.
               <td><strong>Authors:</strong></td>
               <td>
                 <xsl:for-each select='/xep/header/author'>
+                  <xsl:value-of select='firstname'/>
+                  <xsl:text> </xsl:text>
+                  <xsl:value-of select='surname'/>
                   <xsl:if test="position()!=last()">
-                    <xsl:value-of select='firstname'/>
-                    <xsl:text> </xsl:text>
-                    <xsl:value-of select='surname'/>
                     <xsl:text>, </xsl:text>
-                  </xsl:if>
-                  <xsl:if test="position()=last()">
-                    <xsl:value-of select='firstname'/>
-                    <xsl:text> </xsl:text>
-                    <xsl:value-of select='surname'/>
                   </xsl:if>
                 </xsl:for-each>
               </td>
@@ -539,14 +534,10 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   <xsl:template match='spec'>
     <xsl:param name='speccount' select='""'/>
     <xsl:variable name='specpos' select='position()'/>
-    <xsl:choose>
-      <xsl:when test='$specpos &lt; $speccount'>
-        <xsl:value-of select='.'/><xsl:text>, </xsl:text>
-      </xsl:when>
-      <xsl:otherwise>
-        <xsl:value-of select='.'/>
-      </xsl:otherwise>
-     </xsl:choose>
+    <xsl:value-of select='.'/>
+    <xsl:if test='$specpos &lt; $speccount'>
+      <xsl:text>, </xsl:text>
+    </xsl:if>
   </xsl:template>
 
   <xsl:template match='schemaloc'>
