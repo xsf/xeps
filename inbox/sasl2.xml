@@ -1,0 +1,215 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep xmlns="http://www.xmpp.org/extensions">
+<header>
+  <title>Extensible SASL Profile</title>
+  <abstract>This document describes a replacement for the SASL profile documented in RFC 6120 which allows for greater extensibility.</abstract>
+  &LEGALNOTICE;
+  <number>XXXX</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersededby>None</supersededby>
+  <shortname>sasl2</shortname>
+  &dcridland;
+  <revision>
+    <version>0.0.1</version>
+    <date>2017-02-07</date>
+    <initials>dwd</initials>
+    <remark>
+      <ul>
+        <li>Initial Revision</li>
+      </ul>
+    </remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>While SASL provides an excellent framework that has served us well over the past 18 years, a number of shortcomings in the profile - the syntax binding to XMPP - that is in use.</p>
+  <p>This specification addresses a number of shortfalls:</p>
+  <ul>
+    <li>Number of round trips</li>
+    <li>Extensibility</li>
+    <li>Support for second factor</li>
+    <li>Support for mandatory password changes</li>
+  </ul>
+  <p>The new SASL profile documented herein is primarily a syntactic change to allow extensibility, combined with removal of the (largely) redundant stream restart, and additional results beyond total success or abject failure.</p>
+  <section2 topic="Terminology">
+    <p>Although initiating entities, in general, use SASL, and receiving entities offer it, the SASL specification and common parlance both use "Client " and "Server"; this specification uses Client and Server and assumes C2S links. This is not intended to preclude use of this SASL profile on S2S links. The term "SASL2" is used to mean the new SASL profile specified in this document; however the same RFC 4422 definition of SASL (and SASL profiles) applies.</p>
+    <p>Examples often use hypothetical SASL mechanisms and sub-extensions; this specification does not intend to make a position on any particular SASL mechanism, and the Mandatory To Implement mechanisms are unaffected.</p>
+  </section2>
+</section1>
+
+<section1 topic='Overview' anchor="overview">
+  <section2 topic="Discovering Support" anchor="feature">
+    <p>Servers capable of SASL2 offer a stream feature of &lt;mechanisms/>, qualified by the "urn:xmpp:sasl:0" namespace. This in turn contains one or more &lt;mechanism/> elements in the same namespace, and potentially other elements (for example, the &lt;hostname/> element defined within XEP-0233).</p>
+    <p>Note that SASL2 is impossible for clients to initiate without at least one mechanism being available, and therefore MUST NOT be offered.</p>
+    <p>The feature so advertised, and its child content, SHOULD be stable for the given stream to and from attributes and encryption state, and therefore MAY be cached by clients for later connections.</p>
+    <p>The Service Name used by XMPP is unchanged from RFC 6120.</p>
+  </section2>
+  <section2 topic="SASL Data Encoding">
+    <p>In all cases, both Clients and Servers encode SASL exchanges using Base 64 encoding. This SHOULD NOT include any line wrapping or other whitespace. As the form &lt;element/> is equivalent to &lt;element>&lt;/element>, these both indicate an empty string, which is used to indicate no data (ie, the absence of the data). In order to explicitly transmit a zero-length SASL challenge or response, the sending party sends a single equals sign character ("=").</p>
+  </section2>
+  <section2 topic="Initiation">
+    <p>Clients, upon observing this stream feature, initiate the authentication by the use of the &lt;authenticate/> top-level element, within the same namespace. The nature of this element is to inform the server about properties of the final stream state, as well as initiate authentication itself. To achieve the latter, it has a single mandatory attribute of "mechanism", with a string value of a mechanism name offered by the Server in the stream feature, and an optional child element of &lt;initial-response/>, containing a base64-encoded SASL Initial Response.</p>
+    <p>On subsequent connections, if a Client has previously cache the stream feature, the Client MAY choose to send it before seeing the stream features - sending it "pipelined" with the Stream Open tag for example.</p>
+    <example caption="An authentication request"><![CDATA[
+    <authenticate xmlns='urn:xmpp:sasl:0' mechanism="BLURDLYBLOOP">
+      <initial-response>SW1wcm92ZWQgZW5jYXNwdWxhdGlvbiBvZiBvcHRpb25hbCBTQVNMLUlSIGRhdGE=</initial-response>
+    </authenticate>
+    ]]>
+    </example>
+    <p>In order to provide support for other desired stream states beyond authentication, additional child elements are used. For example, a hypothetical XEP-0198 session resumption element might be included, and/or Resource Binding requests.</p>
+    <example caption="An authentication request with a (hypothetical) bind request"><![CDATA[
+<authenticate xmlns='urn:xmpp:sasl:0' mechanism='BLURDYBLOOP'>
+  <initial-response>
+    U0FTTC1JUiBlbmNvZGVkIGFsb25nc2lkZSBiaW5kIHJlcXVlc3Q=
+  </initial-response>
+  <bind xmlns='urn:xmpp:bind:example'/>
+</authenticate>
+]]>
+    </example>
+  </section2>
+  <section2 topic="Challenges and Responses" anchor="challenge">
+    <p>Server Challenges MAY then be sent. Each Challenge MUST be responded to by a Client in a Client Response. These are not extensible, and contain the corresponding base64 encoded SASL data:</p>
+    <example caption="A challenge and response exchange"><![CDATA[
+<!-- A server might send: -->
+<challenge xmlns='urn:xmpp:sasl:0'>
+  QmFzZSA2NCBlbmNvZGVkIFNBU0wgY2hhbGxlbmdlIGRhdGE=
+</challenge>
+
+<!-- A client might respond: -->
+<response xmlns='urn:xmpp:sasl:0'>
+  QmFzZSA2NCBlbmNvZGVkIFNBU0wgcmVzcG9uc2UgZGF0YQ==
+</response>
+    ]]>
+    </example>
+  </section2>
+  <section2 topic="During Authentication">
+    <p>At any time while authentication is in progress, neither Client nor Server sends any element (including stanzas) or other data except the top-level elements defined herein. Clients MUST NOT send whitespace, and MUST send only &lt;response/> elements as appropriate or an &lt;abort/> element to immediately cause an error. Servers MUST disconnect Clients immediately if any other traffic is received. Servers are similarly REQUIRED to send no whitespace, and only the &lt;response/> and completion elements from the section below.</p>
+  </section2>
+  <section2 topic="Completing Authentication">
+    <p>Authentication may complete in one of three ways. It may complete successfully, in which case the client is authenticated. It may also fail, in which case the client is not authenticated and the stream and session state remain entirely unchanged.</p>
+    <p>Finally, it may have completed successfully, but further interaction is required - for example, a password change or second-factor authentication.</p>
+    <section3 topic="Success">
+      <p>If the Client is now authenticated, the Server sends a &lt;success/> element, which contains an OPTIONAL &lt;additional-data/> element containing SASL additional data. It also contains a &lt;authorization-identity/> element containing the negotiated identity - this is a bare JID, unless resource binding has occurred, in which case it is a full JID.</p>
+      <example caption="Successful authentication"><![CDATA[
+<success xmlns='urn:xmpp:sasl:0'>
+  <success-data>
+  T3B0aW9uYWwgQmFzZSA2NCBlbmNvZGVkIFNBU0wgc3VjY2VzcyBkYXRh
+  </success-data>
+  <authorization-identifier>juliet@montague.example/Balcony/a987dsh9a87sdh</authorization-identifier>
+</success>
+      ]]></example>
+      <p>Other extension elements MAY also be contained by the &lt;success/> element.</p>
+      <example caption="Successful re-authentication and resumption"><![CDATA[
+<success xmlns='urn:xmpp:sasl:0'>
+  <additional-data>
+  T3B0aW9uYWwgQmFzZSA2NCBlbmNvZGVkIFNBU0wgc3VjY2VzcyBkYXRh
+  </additional-data>
+  <authorization-identifier>juliet@montague.example/Balcony/a987dsh9a87sdh</authorization-identifier>
+  <sm:resumed xmlns='urn:xmpp:sm:3:example' h='345' previd='124'/>
+</success>
+      ]]></example>
+      <p>Any security layer negotiated SHALL take effect after the ">" octet of the closing tag (ie, immediately after "&lt;/success>").</p>
+    </section3>
+    <section3 topic="Failure">
+      <p>A &lt;failure/> element is used by the server to terminate the authentication attempt. It MAY contain application-specific error codes, and MAY contain a textual error. It MUST contain one of the SASL error codes from RFC 6120 Section 6.5.</p>
+      <example caption="Failure"><![CDATA[
+<failure xmlns='urn:xmpp:sasl:0'>
+  <aborted xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+  <optional-application-specific xmlns='urn:something:else'/>
+  <text>This is a terrible example.</text>
+</failure>
+    ]]></example>
+    </section3>
+    <section3 topic="Continue" anchor="continue">
+      <p>A &lt;continue/> element is used to indicate that while the SASL exchange was successful, it is insufficient to allow authentication at this time.</p>
+      <p>This can be used to indicate that the Client needs to perform a Second Factor Authentication ("2FA"), or is required to change password. These are conducted as additional SASL mechanisms. Such SASL mechanisms MUST NOT change the authorization identifier, or introduce any security layer. The authorization identifer transmitted during the subsequent &lt;success/>, and any security layer which comes into effect after the eventual &lt;success/>, therefore MUST be that of the first mechanism.</p>
+      <p>The element contains a &lt;mechanisms/> element, as defined above as a stream feature, containing suitable mechanisms. It MAY contain an &lt;additional-data/> element, as the &lt;success/> element does.</p>
+      <p>Finally, it MAY contain a &lt;text/> element, which can contain human-readable data explaining the nature of the step required.</p>
+      <example caption="Continue Required"><![CDATA[
+<continue xmlns='urn:xmpp:sasl:0'>
+  <additional-data>
+   T3B0aW9uYWwgQmFzZSA2NCBlbmNvZGVkIFNBU0wgc3VjY2VzcyBkYXRh
+  </additional-data>
+  <mechanisms>
+    <mechanism>HOTP-EXAMPLE</mechanism>
+    <mechanism>TOTP-EXAMPLE</mechanism>
+  <mechanisms>
+  <text>This account requires 2FA</text>
+</continue>
+      ]]></example>
+      <p>Clients respond with a &lt;next-authenticate/> element, which has a single mandatory attribute of "mechanism", containing the selected mechanism name, and contains an OPTIONAL base64 encoded initial response.</p>
+      <example caption="Client Continues"><![CDATA[
+<next-authenticate xmlns='urn:xmpp:sasl' mechanism='TOTP-EXAMPLE'>
+  MkZBIG9yIHBhc3N3b3JkIGNoYW5nZSBvciBzb21ldGhpbmc=
+</next-authenticate>
+      ]]></example>
+    </section3>
+  </section2>
+</section1>
+
+  <section1 topic="SASL Profile Definition">
+    <p>This provides pointers and/or clarifications to the <link url="#overview"/> in the order and manner defined in RFC 4422, section 4.</p>
+    <section2 topic="Service Name">
+      <p>The service name SHALL be "xmpp", as defined by RFC 6120.</p>
+    </section2>
+    <section2 topic="Mechanism negotiation">
+      <p>Servers list mechanisms during stream features (See <link url="#features"/>) and within the &lt;continue/> element (See <link url="#continue"/>).</p>
+      <p>TODO: Neither this specification nor RFC 6120 allow clients access to the mechanism list after SASL negotiation...?</p>
+    </section2>
+    <section2 topic="Message Definitions">
+      <section3 topic="Initiation">
+        <p>Clients initiate using the &lt;authenticate/> top level element (See <link url="#auth"/>, and after any &lt;continue/> with the &lt;next-authenticate/> message (See <link url="#continue"/>).</p>
+      </section3>
+      <section3 topic="Server Challenges and Client Responses">
+        <p>See <link url="#challenge"/>.</p>
+      </section3>
+      <section3 topic="Outcome">
+        <p>See <link url="#outcome"/>.</p>
+      </section3>
+    </section2>
+    <section2 topic="Non-Empty Authorization Strings">
+      <p>If a Client specifies an authorization string which is non-empty, the identifier is normalized by treating it as a JID, and performing normalization as described in RFC 7622.</p>
+    </section2>
+    <section2 topic="Aborting">
+      <p>Clients MAY abort unilaterally by sending &lt;abort/> as specified in <link url="#abort"/>.</p>
+      <p>Servers MAY abort unliterally by sending &lt;failure/> with the &lt;aborted/> error code as defined in <link url="#failure"/>.</p>
+    </section2>
+    <section2 topic="Security Layer Effect">
+      <p>See <link url="#success"/>.</p>
+    </section2>
+    <section2 topic="Security Layer Order">
+      <p>Option (a) is used - any SASL Security Layer is applied first to data being sent, and TLS applied last.</p>
+    </section2>
+    <section2 topic="Multiple Authentication">
+      <p>Although the &lt;continue/> concept does use multiple SASL sequences, only the first SASL mechanism used is considered an authentication, and only the first can negotiate a security layer.</p>
+      <p>In particular, once &lt;success/> has been sent by the server, any further &lt;authenticate/> element MUST result in a stream error.</p>
+    </section2>
+  </section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Relative to the SASL profile documented in RFC 6120, this introduces more data unprotected by any security layer negotiated by SASL itself.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This XEP requires no interaction with &IANA;. </p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+	<p>None.</p>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>The author wishes to share any credit with many members of the community, including Lance Stout, Ralph Meijer, and Florian Schmaus.</p>
+</section1>
+
+</xep>
