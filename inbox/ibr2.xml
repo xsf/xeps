@@ -1,0 +1,400 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+<!ENTITY bcp47 "<span class='ref'><link url='http://tools.ietf.org/html/bcp47'>BCP 47</link></span> <note>BCP 47: Tags for Identifying Languages &lt;<link url='http://tools.ietf.org/html/bcp47'>http://tools.ietf.org/html/bcp47</link>&gt;.</note>" >
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Extensible In-Band Registration</title>
+  <abstract>
+    This specification defines an XMPP protocol extension for in-band
+    registration with instant messaging servers and other services with which an
+    XMPP entity may initiate a stream.
+    It aims to improve upon the state of the art and replace XEP-0077: In-Band
+    Registration by allowing multi-factor registration mechanisms, and account
+    recovery.
+  </abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes>
+    <spec>XEP-0077</spec>
+  </supersedes>
+  <supersededby/>
+  <shortname>ibr2</shortname>
+  &sam;
+  <revision>
+    <version>0.0.1</version>
+    <date>2017-02-08</date>
+    <initials>ssw</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>
+    Historically, registering with an XMPP service has been difficult.  Each
+    server either used customized out-of-band registration mechanisms such as
+    web forms which were difficult to discover, or they used &xep0077; which
+    could easily be abused by spammers to register large numbers of accounts and
+    which allowed for only limited extensibility.
+  </p>
+  <p>
+    To solve these issues this specification provides a new in-band registration
+    protocol that allows servers to present the user with a series of
+    "challenges".
+    This allows for both multi-stage proof-of-posession registration flows and
+    spam prevention mechanisms such as proof-of-work functions.
+  </p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>
+      The server MUST be able to present multiple challenges to the client.
+    </li>
+    <li>
+      The server SHOULD be able reduce account registration spam.
+    </li>
+    <li>
+      The server MAY present a challenge that requires the user to complete a
+      step out-of-band.
+    </li>
+    <li>
+      A client SHOULD be able to register an account without requiring the user
+      to leave the client.
+    </li>
+    <li>
+      A client MUST be able to use the same mechanism to register an account and
+      to recover a forgotten password (subject to server policy).
+    </li>
+  </ul>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di>
+      <dt>Proof-of-work (PoW)</dt>
+      <dd>
+        A proof-of-work protocol requires that a client perform a
+        computationally intense task which is easily verified by the server.
+      </dd>
+    </di>
+    <di>
+      <dt>Proof-of-possession (PoP)</dt>
+      <dd>
+        A proof-of-possession protocol requires that a client prove that they
+        have posession of some resource (eg. a shared secret, or a valid mobile
+        phone number).
+      </dd>
+    </di>
+  </dl>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <ul>
+    <li>
+      As a server operator, I want to prevent individual spammers from
+      registering many accounts so I require registrants to perform a
+      proof-of-work function before registration is completed.
+    </li>
+    <li>
+      As a server operator I want to prevent zombie machines from registering
+      for accounts so I require that registrants submit a form which requires
+      user interaction.
+    </li>
+    <li>
+      As a user I do not want to lose access to my account if I forget my
+      password, so I provide my email and telephone number in response to the
+      servers data form.
+    </li>
+    <li>
+      As a server operator I do not want users to accidentally add an incorrect
+      recovery address so I send an email with a unique link to the indicated
+      account and require that they click the link before registration can
+      continue.
+    </li>
+    <li>
+      As a server operator I want to prevent SPIM using a proof-of-posession
+      protocol so I present the user with a form asking for a mobile phone
+      number and then send a verification code to that number via SMS and show
+      another form requesting the verification code.
+    </li>
+  </ul>
+</section1>
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>
+    If a server supports registering for or recovering an account using
+    Extensible IBR, it MUST inform the connecting client when returning stream
+    features during the stream negotiation process.
+    This is done by including a &lt;register/&gt; element, qualified by the
+    'urn:xmpp:register:0' namespace for account registration, or a
+    &lt;recovery/&gt; element qualified by the same namespace for account
+    recovery.
+    This SHOULD be done when informing a client that authentication is
+    required.
+    These features MUST NOT be advertised before encryption has been
+    negotiated, eg. using direct-TLS or STARTTLS.
+  </p>
+  <p>
+    If the registration challenges contain enough data to consider the
+    connection authenticated after negotiation is successful or authentication
+    is not required by the server (eg. the server only allows temporary
+    registrations using this protocol), the register feature MUST be
+    advertised as mandatory-to-negotiate (indicating that the client may pick
+    between registration and authentication, if advertised).
+    This is accomplished by including an empty &lt;required/&gt; child element
+    in the feature.
+  </p>
+  <p>
+    If SASL authentication should be performed after registration,
+    registration should be voluntary-to-negotiate (no &lt;required/&gt; child
+    element) and thus may be negotiated before SASL authentication (which is
+    always mandatory-to-negotiate).
+  </p>
+  <p>
+    If authentication is not advertised, recovery MUST NOT be advertised.
+  </p>
+  <p>
+    If account recovery would result in the user being authenticated (eg. the
+    recovery process involved proving the users identity, and entering a new
+    password) recovery MUST be advertised as mandatory-to-negotiate indicating
+    that it may be selected instead of authentication.
+    This is accomplished by including an empty &lt;required/&gt; child element
+    in the feature.
+  </p>
+  <p>
+    If account recovery does not provide enough information to authenticate
+    the user (eg. the user was sent an email and opened a link to a web form
+    where they could reset their password, but the password is not entered
+    into the client) then it MUST be advertised as voluntary-to-negotiate (no
+    &lt;required/&gt; child element).
+    This indicates that authentication or another mandatory to negotiate
+    feature MUST be selected after the recovery process is complete.
+  </p>
+  <p>
+    For recovery or registration, the server MUST include a list of all
+    challenges which the client may receive during the course of registering
+    or recovering an account.
+    The purpose of this list is to allow clients to detect if registration
+    requires a challenge type which the client does not support, so servers
+    need only include each type once; the list is merely informative, and
+    should not be relied upon by clients except to ensure that all mechanisms
+    are supported.
+    This list should comprise &lt;challenge/&gt; elements with a 'type'
+    attribute that uniquely identifies the type of challenge being issued.
+  </p>
+  <example caption="Host Advertises Stream Features"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:xmpp:sasl:0'>
+    <mechanism>EXTERNAL</mechanism>
+    <mechanism>SCRAM-SHA-1-PLUS</mechanism>
+    <mechanism>SCRAM-SHA-1</mechanism>
+    <mechanism>PLAIN</mechanism>
+  </mechanisms>
+  <register xmlns='urn:xmpp:register:0'>
+    <required/>
+    <challenge type='jabber:x:data'/>
+    <challenge type='pow-example'/>
+  </register>
+  <recovery xmlns='urn:xmpp:register:0'>
+    <challenge type='jabber:x:oob'/>
+  </recovery>
+</stream:features>]]></example>
+</section1>
+<section1 topic='Challenges' anchor='challenge'>
+  <p>
+    A client selects the registration or recovery feature for negotiation by
+    replying with an empty element of the same name and namespace.
+    For example, to attempt account recovery the client would send a
+    &lt;recovery&gt; element qualified by the 'urn:xmpp:register:0' namespace.
+  </p>
+  <p>
+    The server then replies with a challenge.
+    Challenges take the form of a &lt;challenge/&gt; element qualified by the
+    'urn:xmpp:register:0' namespace with a 'type' attribute containing the
+    challenge type and containing a challenge data payload.
+  </p>
+  <p>
+    Type type of a challenge is a value which identifes what sort of payload a
+    client might expect.
+    This document defines a type of 'jabber:x:data' which MUST always contain a
+    data form (an 'x' element with type 'form') as defined by &xep0004;.
+    Other types may be defined in the future.
+    For example, a challenge containing a data form might look like the
+    following:
+  </p>
+  <example caption='Host Returns Registration Form to Entity'><![CDATA[
+<challenge xmlns='urn:xmpp:register:0'
+           type='jabber:x:data'>
+  <x xmlns='jabber:x:data' type='form'>
+    <title>Chat Registration</title>
+    <instructions>
+      Please provide the following information
+      to sign up to view our chat rooms!
+    </instructions>
+    <field type='hidden' var='FORM_TYPE'>
+      <value>urn:xmpp:register:0</value>
+    </field>
+    <field type='text-single' label='Given Name' var='first'/>
+    <field type='text-single' label='Family Name' var='last'/>
+    <field type='text-single' label='Nickname' var='nick'>
+      <required/>
+    </field>
+    <field type='text-single' label='Recovery Email Address' var='email'>
+      <required/>
+    </field>
+  </x>
+</challenge>
+]]></example>
+  <p>
+    After a challenge is received, the client replies to the challenge by
+    sending a &lt;response/&gt; element qualified by the 'urn:xmpp:register:0'
+    namespace or a cancelation as defined later in this document.
+    If the client sends a response, it MUST also include a payload defined by
+    the specific challenge type.
+    In the case of a jabber:x:data challenge, the payload should be a form
+    submission as defined by &xep0004; (an 'x' element of type 'submit').
+    For instance, to reply to the data form challenge from the previous example
+    a client might send:
+  </p>
+  <example caption='User Submits Registration Form'><![CDATA[
+<response xmlns='urn:xmpp:register:0'>
+  <x xmlns='jabber:x:data' type='submit'>
+    <field type='hidden' var='FORM_TYPE'>
+      <value>urn:xmpp:register:0</value>
+    </field>
+    <field type='text-single' label='Given Name' var='first'>
+      <value>Juliet</value>
+    </field>
+    <field type='text-single' label='Family Name' var='last'>
+      <value>Capulet</value>
+    </field>
+    <field type='text-single' label='Nickname' var='nick'>
+      <value>Jule</value>
+    </field>
+    <field type='text-single' label='Recovery Email Address' var='email'>
+      <value>juliet@capulet.com</value>
+    </field>
+  </x>
+</response>
+]]></example>
+  <p>
+    If after receiving a challenge a client does not wish to continue
+    registration or recovery, it may send an empty &lt;cancel&gt; element
+    qualified by the 'urn:xmpp:register:0' namespace.
+    This informs the server that registration is complete.
+    This is the same as submitting a data form of type 'cancel' in response to a
+    data form challenge.
+  </p>
+  <example caption='User Cancels Registration or Recovery'><![CDATA[
+<cancel xmlns='urn:xmpp:register:0'/>
+]]></example>
+</section1>
+<section1 topic='Completing Registration or Recovery' anchor='completion'>
+  <p>
+    If the client submits invalid data, or the server wishes to cancel for some
+    other reason, it may reply with an empty &lt;cancel/&gt; element qualified
+    by the 'urn:xmpp:register:0' namespace.
+    If the client successfully completes the challenge, the server MAY return an
+    empty &lt;success/&gt; element qualified by the 'urn:xmpp:register:0'
+    namespace, at which point it may continue with the stream negotiation
+    process.
+    If the server needs more information, for example, in the previous challenge
+    the user entered an email and now the server wishes to ask for a code that
+    was sent to that email, the server MAY send another challenge.
+  </p>
+</section1>
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>
+    When providing instructions in a data form the server SHOULD use the
+    language specified in the XML stream's current xml:lang, or the closest
+    language for which the server has a translation (eg. based on mutual
+    intelligibility between scripts and languages).
+  </p>
+  <p>
+    For more information about language tags and matching, see &bcp47;
+  </p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>
+    Servers that allow in-band registration need to take measures to prevent
+    abuse.
+    Common techniques to prevent spam registrations include displaying CAPTCHAs
+    or requiring proof-of-posession of a valid email address or telephone number
+    by sending a unique code (e.g. an HMAC that can later be verified as having
+    originated at the server) to the users email and requiring that they enter
+    the code before continuing.
+    Servers that do not take such measures risk being black listed by other
+    servers in the network.
+  </p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:register:0</li>
+    </ul>
+    <p>
+      Upon advancement of this specification from a status of Experimental to a
+      status of Draft, the &REGISTRAR; shall add the foregoing namespace to the
+      registry located at &STREAMFEATURES;, as described in Section 4 of
+      &xep0053;.
+    </p>
+  </section2>
+  <section2 topic='IBR Challenge Types Registry' anchor='registrar-challenges'>
+    <p>
+      The XMPP Registrar shall maintain a registry of IBR challenge types.
+      Challenge types defined within the XEP series MUST be registered with the
+      XMPP Registrar.
+    </p>
+    &REGPROCESS;
+    <code><![CDATA[
+<challenge>
+  <name>The name of the challenge type.</name>
+  <desc>A natural-language summary of the challenge.</desc>
+  <payloaddoc>
+    The document in which the IBR challenge payload is specified.
+  </payloaddoc>
+  <doc>
+    The doucment in which the IBR challenge itself is specified (may be the same
+    as <payloaddoc/>).
+  </doc>
+</challenge>]]></code>
+  <p>
+    For an example registration, see the next section.
+  </p>
+  </section2>
+  <section2 topic='Challenge Types' anchor='registrar-ibrchallenges'>
+    <p>This specification defines the following IBR challenge types:</p>
+    <ul>
+      <li>jabber:x:data</li>
+    </ul>
+    <p>
+      Upon advancement of this specification from a status of Experimental to a
+      status of Draft, the &REGISTRAR; shall add the following definition to the
+      IBR challenge types registry, as described in this document:
+    </p>
+    <code><![CDATA[
+<challenge>
+  <name>Data Forms Challenge</name>
+  <desc>Requests that the client fill out an XEP-0004 data form.</desc>
+  <payloaddoc>XEP-0004</payloaddoc>
+  <doc>TODO: Insert this document once it is assigned a number</doc>
+</profile>]]></code>
+  </section2>
+  <section2 topic='Namespace Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>TODO before advancing to Draft.</p>
+</section1>
+</xep>
