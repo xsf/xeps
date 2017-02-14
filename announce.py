@@ -54,7 +54,7 @@ def getText(nodelist):
 # get the seconds in the Unix era
 now = int(time.time())
 
-# READ IN ARGS: 
+# READ IN ARGS:
 #
 # 1. XEP number
 
@@ -167,7 +167,7 @@ else:
     thesubject = 'UPDATED: XEP-'
 thesubject = thesubject + xepnum + ' (' + title + ')'
 
-versionline = 'Version ' + version + ' of XEP-' + xepnum + ' (' + title + ') has been released.' 
+versionline = 'Version ' + version + ' of XEP-' + xepnum + ' (' + title + ') has been released.'
 abstractline = 'Abstract: ' + abstract
 changelogline = 'Changelog: ' + remark + ' (' + initials + ')'
 diffsline = 'Diff: ' + diffs

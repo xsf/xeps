@@ -6,7 +6,7 @@
 # Last Modified: 2006-12-07
 # Author: Peter Saint-Andre (stpeter@jabber.org)
 # License: public domain
-# HowTo: ./dbupdate.py dbuser dbpw xepnum 
+# HowTo: ./dbupdate.py dbuser dbpw xepnum
 
 ## LICENSE ##
 #
@@ -54,7 +54,7 @@ def getText(nodelist):
 # get the seconds in the Unix era
 now = int(time.time())
 
-# READ IN ARGS: 
+# READ IN ARGS:
 #
 # 1. XEP number
 # 2. database user
@@ -139,7 +139,7 @@ if xepflag == "new":
     cursor.execute(theStatement)
 else:
     theStatement = "UPDATE jeps SET name='" + title + "', type='" + xeptype + "', status='" + xepstatus + "', notes='" + theNotes + "', version='" + str(version) + "', last_modified='" + str(now) + "', abstract='" + abstract + "', changelog='" + theLog + "' WHERE number='" + str(xepnum) + "';"
-    cursor.execute(theStatement) 
+    cursor.execute(theStatement)
 result = cursor.fetchall()
 
 # END

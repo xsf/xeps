@@ -54,7 +54,7 @@ def getText(nodelist):
 # get the seconds in the Unix era
 now = int(time.time())
 
-# READ IN ARGS: 
+# READ IN ARGS:
 #
 # 1. XEP number
 

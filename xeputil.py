@@ -1,6 +1,6 @@
 # File: xeputil.py
 # Version: 0.2
-# Description: xep utility functions 
+# Description: xep utility functions
 # Last Modified: 2010
 # Author: Tobias Markmann (tm@ayena.de)
 
@@ -54,13 +54,13 @@ class XEP:
 		revs = []
 		for rev in fctx.filelog():
 			revs.append(fctx.filectx(rev).rev())
-		
+
 		return sorted(revs)
 
 	def contentOfRevision(self, revision):
 		repo = hg.repository(ui.ui(), self.BASEDIR)
 		fctx = repo.filectx("xep-" + self.nr + ".xml", revision)
-		
+
 		# load content for that revision
 		file_text = fctx.data()
 		return file_text

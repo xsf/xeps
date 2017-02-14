@@ -54,7 +54,7 @@ def getText(nodelist):
 # get the seconds in the Unix era
 now = int(time.time())
 
-# READ IN ARGS: 
+# READ IN ARGS:
 #
 # 1. XEP number
 # 2. end date
@@ -115,9 +115,9 @@ remark = getText(remarkNode.childNodes)
 #
 #    1. Is this specification needed to fill gaps in the XMPP
 #       protocol stack or to clarify an existing protocol?
-#    2. Does the specification solve the problem stated in the 
+#    2. Does the specification solve the problem stated in the
 #       introduction and requirements?
-#    3. Do you plan to implement this specification in your code? 
+#    3. Do you plan to implement this specification in your code?
 #       If not, why not?
 #    4. Do you have any security concerns related to this specification?
 #    5. Is the specification accurate and clearly written?

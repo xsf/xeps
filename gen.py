@@ -71,10 +71,10 @@ def serializeInlineImage(output_dir, xep_nr, no, attrValue):
 				charset = bit[8:]
 			elif bit == 'base64':
 				b64 = True
-	
+
 		# Do something smart with charset and b64 instead of assuming
 		plaindata = base64.b64decode(data)
-	
+
 		# Do something smart with mime_type
 		if mime_type in ('image/png', 'image/jpeg'):
 			file_ext = mime_type.split('/')[1]
@@ -100,13 +100,13 @@ def getText(nodelist):
 def executeCommand( cmd ):
 	error, desc = commands.getstatusoutput( cmd )
 	return error, desc + "\n" + "executed cmd: " + cmd
- 
+
 ## creates a HTML table (for the human reader) and XML table (for bots)
 class XEPTable:
 	def __init__(self, filename, shortXMLfilename):
 		self.filename = filename
 		self.shortXMLfilename = shortXMLfilename
-		
+
 		try:
 			self.tableFile = parse(filename)
 		except:
@@ -117,7 +117,7 @@ class XEPTable:
 			self.tableFile.getElementsByTagName("table")[0].setAttribute("cellspacing", "0")
 			self.tableFile.getElementsByTagName("table")[0].setAttribute("cellpadding", "3")
 			self.tableFile.getElementsByTagName("table")[0].setAttribute("border", "1")
-			
+
 			header = parseString(
 '''<tr class='xepheader'>
 	<th align='left'>Number</th>
@@ -127,7 +127,7 @@ class XEPTable:
 	<th align='left'>Date</th>
 </tr>''')
 			self.tableFile.getElementsByTagName("table")[0].appendChild(header.getElementsByTagName("tr")[0])
-		
+
 		try:
 			self.botsFile = parse(shortXMLfilename)
 		except:
@@ -139,7 +139,7 @@ class XEPTable:
 		self.tableFile.getElementsByTagName("table")[0].normalize()
 		f.write(self.tableFile.toxml())
 		f.close()
-		
+
 		f = open(self.shortXMLfilename, "wb")
 		self.botsFile.getElementsByTagName("xeps")[0].normalize()
 		f.write(self.botsFile.toxml())
@@ -153,7 +153,7 @@ class XEPTable:
 			if row.getAttribute("id") == "xep" + info.getNr():
 				xeprow = row
 				break
-		
+
 		if xeprow == 0:
 			xeprow = self.tableFile.createElement("tr")
 			self.tableFile.getElementsByTagName("table")[0].appendChild(xeprow)
@@ -165,22 +165,22 @@ class XEPTable:
 			xeprow.setAttribute("class", "tablebody XEP-" + info.getStatus())
 			while(xeprow.hasChildNodes()):
 				xeprow.removeChild(xeprow.firstChild)
-		
+
 		col = parseString('''<td valign='top'><a href='/extensions/xep-''' + info.getNr() + ".html'>XEP-" + info.getNr() + '''</a> <a href='/extensions/xep-''' + info.getNr() + '''.pdf'>(PDF)</a></td>''')
 		xeprow.appendChild(col.getElementsByTagName("td")[0])
-		
+
 		col = parseString("<td valign='top'>" + info.getTitle() + "</td>")
 		xeprow.appendChild(col.getElementsByTagName("td")[0])
-		
+
 		col = parseString("<td valign='top'>" + info.getType() + "</td>")
 		xeprow.appendChild(col.getElementsByTagName("td")[0])
-		
+
 		col = parseString("<td valign='top'>" + info.getStatus() + "</td>")
 		xeprow.appendChild(col.getElementsByTagName("td")[0])
-		
+
 		col = parseString("<td valign='top'>" + info.getDate() + "</td>")
 		xeprow.appendChild(col.getElementsByTagName("td")[0])
-		
+
 		## set for bots file
 		xeps = self.botsFile.getElementsByTagName("xep")
 		xep = 0
@@ -188,7 +188,7 @@ class XEPTable:
 			if xeps_xep.getElementsByTagName("number")[0].firstChild.data == info.getNr():
 				xep = xeps_xep
 				break
-		
+
 		if xep == 0:
 			xep = self.botsFile.createElement("xep")
 			self.botsFile.getElementsByTagName("xeps")[0].appendChild(xep)
@@ -197,25 +197,25 @@ class XEPTable:
 		else:
 			while(xep.hasChildNodes()):
 				xep.removeChild(xep.firstChild)
-		
+
 		child = parseString("<number>" + info.getNr() + "</number>")
 		xep.appendChild(child.getElementsByTagName("number")[0])
-		
+
 		child = parseString("<name>" + info.getTitle() + "</name>")
 		xep.appendChild(child.getElementsByTagName("name")[0])
-		
+
 		child = parseString("<type>" + info.getType() + "</type>")
 		xep.appendChild(child.getElementsByTagName("type")[0])
-		
+
 		child = parseString("<status>" + info.getStatus() + "</status>")
 		xep.appendChild(child.getElementsByTagName("status")[0])
-		
+
 		child = parseString("<updated>" + info.getDate() + "</updated>")
 		xep.appendChild(child.getElementsByTagName("updated")[0])
-		
+
 		child = parseString("<shortname>" + info.getShortname() + "</shortname>")
 		xep.appendChild(child.getElementsByTagName("shortname")[0])
-		
+
 		child = parseString("<abstract>" + info.getAbstract() + "</abstract>")
 		xep.appendChild(child.getElementsByTagName("abstract")[0])
 
@@ -225,7 +225,7 @@ def filebase( filename ):
 
 def checkError( error, desc):
 	global verbose
-	
+
 	if error != 0:
 		if verbose:
 			print "Error: ", desc
@@ -233,11 +233,11 @@ def checkError( error, desc):
 	return True
 
 def fileHash( filename ):
-	f = open(filename, "rb") 
-	import hashlib 
-	h = hashlib.sha1() 
-	h.update(f.read()) 
-	hash = h.hexdigest() 
+	f = open(filename, "rb")
+	import hashlib
+	h = hashlib.sha1()
+	h.update(f.read())
+	hash = h.hexdigest()
 	f.close()
 	return hash
 
@@ -250,7 +250,7 @@ def loadDict( filename ):
 	except:
 		print "failed loading dict."
 		return {}
-	
+
 def saveDict( filename, di ):
 	f = open(filename, "w")
 	pickle.dump(di, f)
@@ -260,15 +260,15 @@ def buildXHTML( file, nr ):
 	error, desc = executeCommand("xsltproc xep.xsl " + file + " > " + XEPPATH + "/xep-" + nr + ".html")
 	if not checkError(error, desc):
 		return False
-		
+
 	error, desc = executeCommand("xsltproc ref.xsl xep-" + nr + ".xml > " + XEPPATH + "/refs/reference.XSF.XEP-" + nr + ".xml")
 	if not checkError(error, desc):
 		return False
-	
+
 	error, desc = executeCommand("xsltproc examples.xsl xep-" + nr + ".xml > " + XEPPATH + "/examples/" + nr + ".xml")
 	if not checkError(error, desc):
 		return False
-	
+
 	error, desc = executeCommand(" cp xep-" + nr + ".xml " + XEPPATH + "/")
 	if not checkError(error, desc):
 		return False
@@ -280,47 +280,47 @@ def buildPDF( file, nr ):
 	error, desc = executeCommand("xsltproc -o /tmp/xepbuilder/xep-" + nr + ".tex.xml xep2texml.xsl " + file)
 	if not checkError(error, desc):
 		return False
-	
+
 	error, desc = executeCommand("texml -e utf8 /tmp/xepbuilder/xep-" + nr + ".tex.xml /tmp/xepbuilder/xep-" + nr + ".tex")
 	if not checkError(error, desc):
 		return False
-	
+
 	#detect http urls and escape them to make them breakable
 	# this should match all urls in free text; not the urls in xml:ns or so..so no " or ' in front.
 	error, desc = executeCommand('''sed -i 's|\([\s"]\)\([^"]http://[^ "]*\)|\1\\path{\2}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
 	if not checkError(error, desc):
 		return False
-	
+
 	#adjust references
 	error, desc = executeCommand('''sed -i 's|\\hyperref\[#\([^}]*\)\]|\\hyperref\[\1\]|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
 	if error != 0:
 		if verbose == 1:
 			print "Error: ", desc
 		return False
-	
+
 	error, desc = executeCommand('''sed -i 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' /tmp/xepbuilder/xep-''' + nr + ".tex")
 	if not checkError(error, desc):
 		return False
-	
+
 	olddir = os.getcwd()
 	os.chdir("/tmp/xepbuilder")
-	
+
 	error, desc = executeCommand("xelatex -interaction=batchmode xep-" + nr + ".tex")
 	#if not checkError(error, desc):
 	#	os.chdir(olddir)
 	#	return False
-		
+
 	#error, desc = executeCommand("xelatex -interaction=batchmode xep-" + nr + ".tex")
 	#if not checkError(error, desc):
 	#	os.chdir(olddir)
 	#	return False
-	
+
 	os.chdir(olddir)
-	
+
 	error, desc = executeCommand("cp /tmp/xepbuilder/xep-" + nr + ".pdf " + XEPPATH + "/")
 	if not checkError(error, desc):
 		return False
-		
+
 	return True
 
 def buildXEP( filename ):
@@ -329,7 +329,7 @@ def buildXEP( filename ):
 	if not xepfilepath:
 		print "getLatestXEPContent (ERROR)"
 		return
-	
+
 	files_to_delete.append(xepfilepath)
 	if not fast:
 		print "Building " + filename + ": ",
@@ -337,14 +337,14 @@ def buildXEP( filename ):
 			print "XHTML(OK) / ",
 		else:
 			print "XHTML(ERROR) / ",
-		
+
 		if buildPDF( xepfilepath, nr ):
 			print "PDF(OK)"
 		else:
 			print "PDF(ERROR)"
 	else:
 		print "Building " + filename + " (FAST MODE)"
-	
+
 	x = XEPTable(CONFIGPATH + "/extensions.xml", XEPPATH + "/xeps.xml")
 	xinfo = XEPInfo(xepfilepath, False)
 	x.setXEP( xinfo )
@@ -355,7 +355,7 @@ def buildAll():
 	files.sort(key=lambda x: x.lower())
 	for file in files:
 		buildXEP( file )
-		
+
 def makeBundle():
 	print "Creating the bundle...",
 	executeCommand("mkdir /tmp/xepbundle")
@@ -382,13 +382,13 @@ def main(argv):
 	global CONFIGPATH
 	global fast
 	buildall = False
-	
+
 	try:
 		options, remainder = getopt.gnu_getopt(argv, "vaf")
 	except getopt.GetoptError:
 		usage()
 		sys.exit(2)
-	
+
 	for opt, arg in options:
 		if opt in ('-v'):
 			verbose = True
@@ -396,37 +396,37 @@ def main(argv):
 			buildall = True
 		elif opt in ('-f'):
 			fast = True
-	
+
 	if len(remainder) > 0:
 		try:
 			xep = int(remainder[0])
 			xep = "xep-%04d.xml" % xep
 		except:
 			xep = remainder[0]
-		
+
 	executeCommand("mkdir /tmp/xepbuilder")
 	executeCommand("cp ../images/xmpp.pdf /tmp/xepbuilder/xmpp.pdf")
 	executeCommand("cp ../images/xmpp-text.pdf /tmp/xepbuilder/xmpp-text.pdf")
 	executeCommand("cp -r deps/* /tmp/xepbuilder/")
-	
+
 	executeCommand("cp xep.ent /tmp/xep.ent")
 	files_to_delete.append("/tmp/xep.ent")
-	
+
 	if buildall:
 		buildAll()
 	else:
 		buildXEP( xep )
-	
+
 	# remove xep temporary files
 	for filename in files_to_delete:
 	    executeCommand("rm " + filename)
-	
+
 	executeCommand("sed -e '1s/<?[^?]*?>//' " + CONFIGPATH + "/extensions.xml > " + XEPPATH + "/../includes/xeplist.txt")
-	
+
 	executeCommand("rm -rfd /tmp/xepbuilder")
-	
+
 	makeBundle()
-	
-	
+
+
 if __name__ == "__main__":
 	main(sys.argv[1:])
