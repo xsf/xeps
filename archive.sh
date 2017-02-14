@@ -1,6 +1,6 @@
 #!/bin/sh
 # archive an old version of a XEP (before publishing new version)
-# usage: ./archive.sh xepnum version 
+# usage: ./archive.sh xepnum version
 
 ## LICENSE ##
 #

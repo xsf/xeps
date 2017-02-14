@@ -55,7 +55,7 @@ THE SOFTWARE.
       </head>
       <body>
         <h1><xsl:value-of select='/xep/header/shortname'/></h1>
-        <p>This page provides information about the XML namespaces defined in 
+        <p>This page provides information about the XML namespaces defined in
         <a>
           <xsl:attribute name='href'>
             <xsl:text>http://xmpp.org/extensions/xep-</xsl:text>
