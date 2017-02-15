@@ -59,6 +59,8 @@ $(REFSDIR)/reference.XSF.XEP-%.xml: xep-%.xml $(XMLDEPS) ref.xsl $(REFSDIR)
 	xsltproc --path $(CURDIR) ref.xsl "$<" > "$@" && echo "Finished building $@"
 
 $(OUTDIR)/%.html: %.xml $(XMLDEPS) $(HTMLDEPS)
+	! grep -nr \\s$$ $@
+
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
@@ -70,6 +72,8 @@ $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf: $(OUTDIR)
 	cp "resources/$(notdir $@)" "$@"
 
 $(OUTDIR)/%.pdf: %.xml $(XMLDEPS) $(TEXMLDEPS)
+	! grep -nr \\s$$ $@
+
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
