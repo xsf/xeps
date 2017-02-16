@@ -124,7 +124,7 @@ if len(revNodes) > 1:
     prevRevNode = revNodes[1]
     prevVersionNode = (prevRevNode.getElementsByTagName("version")[0])
     prevVersion = getText(prevVersionNode.childNodes)
-    diffs = 'http://xmpp.org/extensions/diff/api/xep/' + xepnum + '/diff/' + prevVersion + '/vs/' + version
+    diffs = 'https://xmpp.org/extensions/diff/api/xep/' + xepnum + '/diff/' + prevVersion + '/vs/' + version
 else:
     diffs = 'N/A'
 
@@ -139,7 +139,7 @@ else:
 #    Abstract: $abstract
 #    Changelog: $remark ($initials)
 #    Diff: $diffs   ### no longer in use
-#    URL: http://xmpp.org/extensions/xep-$xepnum.html
+#    URL: https://xmpp.org/extensions/xep-$xepnum.html
 
 fromaddr = "editor@xmpp.org"
 # for testing...
@@ -171,7 +171,7 @@ versionline = 'Version ' + version + ' of XEP-' + xepnum + ' (' + title + ') has
 abstractline = 'Abstract: ' + abstract
 changelogline = 'Changelog: ' + remark + ' (' + initials + ')'
 diffsline = 'Diff: ' + diffs
-urlline = 'URL: http://xmpp.org/extensions/xep-' + xepnum + '.html'
+urlline = 'URL: https://xmpp.org/extensions/xep-' + xepnum + '.html'
 
 msg = "From: XMPP Extensions Editor <%s>\r\n" % fromaddr
 msg = msg + "To: %s\r\n" % toaddrs
