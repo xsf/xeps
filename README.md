@@ -31,7 +31,13 @@ Building XEPs
 
 To build a single XEP as HTML simply run:
 
-    make xep-xxxx
+    make xep-xxxx.html
+
+To build PDFs, you'll need to install [TeXML](http://getfo.org/texml/) (probably
+in a Python 2 virtual environment).
+You can then build PDFs with:
+
+    make xep-xxxx.pdf
 
 To change the output directory, set the variable `OUTDIR`, eg.
 
