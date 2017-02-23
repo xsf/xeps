@@ -102,3 +102,8 @@ preview:
 			xsltproc --path $(CURDIR) xep.xsl "$${dir}/$${file}" > "$(OUTDIR)/$${file%.*}.html" && echo "Built $${file%.*}.html $${event}"; \
 		fi \
 	done
+
+.PHONY: ci
+ci:
+	! grep -Irl --include \*.xml \\s$$ || echo "The previously mentioned files contain trailing whitespace."
+	! grep -Irl --include \*.xml "$$(printf '\r')$$" || echo "The previously mentioned files contain Windows or Mac style line endings."
