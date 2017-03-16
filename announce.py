@@ -102,13 +102,13 @@ else:
 
 # what kind of action are we taking?
 xepflag = ""
-if (version == "0.1"):
+if (version == "0.1" or version == "0.1.0"):
     xepflag = "new"
-elif ((version == "1.0") & (xeptype == "Standards Track")):
+elif ((version == "1.0" or version == "1.0.0") and xeptype == "Standards Track"):
     xepflag = "draft"
-elif ((version == "1.0") & (xeptype != "Standards Track")):
+elif ((version == "1.0" or version == "1.0.0") and xeptype != "Standards Track"):
     xepflag = "active"
-elif (version == "2.0"):
+elif (version == "2.0" or version == "2.0.0"):
     xepflag = "final"
 elif (xepstatus == "Retracted"):
     xepflag = "retract"
