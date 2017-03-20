@@ -10,6 +10,8 @@ HTMLDEPS=xep.xsl $(CSSTARGETS) $(JSTARGETS)
 CSSTARGETS=$(OUTDIR)/xmpp.css $(OUTDIR)/prettify.css
 JSTARGETS=$(OUTDIR)/prettify.js
 
+DO_XELATEX=cd $(OUTDIR); xelatex --interaction=nonstopmode -no-shell-escape "$(notdir $(basename $@)).tex" >/dev/null
+
 
 .PHONY: help
 help:
@@ -79,7 +81,10 @@ $(OUTDIR)/%.pdf: %.xml $(XMLDEPS) $(TEXMLDEPS)
 	sed -i -e 's|\([\s"]\)\([^"]http://[^ "]*\)|\1\\path{\2}|g' \
 		-e 's|\\hyperref\[#\([^}]*\)\]|\\hyperref\[\1\]|g' \
 		-e 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' "$(@:.pdf=.tex)"
-	cd $(OUTDIR); xelatex -interaction=batchmode -no-shell-escape "$(notdir $(basename $@)).tex" && echo "Finished building $@"
+	while ($(DO_XELATEX) ; \
+		grep -q "Rerun to get" $(<:.xml=.log) ) do true; \
+	done
+	echo "Finished building $@"
 
 $(JSTARGETS): $(OUTDIR)
 	cp "$(notdir $@)" "$@"
