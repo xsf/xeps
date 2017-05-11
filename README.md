@@ -44,3 +44,8 @@ To change the output directory, set the variable `OUTDIR`, eg.
     OUTDIR=/tmp/xeps make all
 
 For more information try `make help`.
+
+Using Docker
+------------
+
+A full set of HTML and PDFs can be generated inside a docker container, with no dependencies on the host other than Docker itself, and served by nginx in the container. To build the template `make docker`, to run it `make testdocker` (serves on http://localhost:3080), and to stop/delete it afterwards `make stopdocker`
