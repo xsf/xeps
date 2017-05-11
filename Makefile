@@ -107,3 +107,15 @@ preview:
 			xsltproc --path $(CURDIR) xep.xsl "$${dir}/$${file}" > "$(OUTDIR)/$${file%.*}.html" && echo "Built $${file%.*}.html $${event}"; \
 		fi \
 	done
+
+.PHONY: docker
+docker:
+	docker build -t xmpp-org/extensions .
+
+.PHONY: testdocker
+testdocker:
+	docker run -d --name tmpxeps -p 3080:80 xmpp-org/extensions
+
+.PHONY: stopdocker
+stopdocker:
+	docker stop tmpxeps; docker rm -v tmpxeps
