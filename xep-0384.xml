@@ -28,6 +28,15 @@
     <jid>andy@strb.org</jid>
   </author>
   <revision>
+    <version>0.2</version>
+    <date>2017-06-02</date>
+    <initials>dg</initials>
+    <remark>
+      <p>Depend on SignalProtocol instead of Olm.</p>
+      <p>Changed to eu.siacs.conversations.axolotl Namespace which is currently used in the wild</p>
+    </remark>
+  </revision>
+  <revision>
     <version>0.1</version>
     <date>2016-12-07</date>
     <initials>XEP Editor: ssw</initials>
@@ -63,17 +72,19 @@
       external complexity.
     </p>
     <p>
-      This XEP defines a protocol that leverages &olm; encryption to provide
+      This XEP defines a protocol that leverages the SignalProtocol encryption to provide
       multi-end to multi-end encryption, allowing messages to be synchronized
-      securely across multiple clients, even if some of them are offline. Olm
+      securely across multiple clients, even if some of them are offline. The SignalProtocol
       is a cryptographic double ratched protocol based on work by Trevor Perrin
-      and Moxie Marlinspike first published as the Axolotl protocol.
+      and Moxie Marlinspike first published as the Axolotl protocol. The protocol is not fully
+      documented in public domain and only exists in GPLv3-licensed implementations maintained
+      by OpenWhisperSystems.
     </p>
   </section2>
   <section2 topic='Overview' anchor='intro-overview'>
     <p>
       The general idea behind this protocol is to maintain separate,
-      long-standing Olm-encrypted sessions with each device of each contact
+      long-standing SignalProtocol-encrypted sessions with each device of each contact
       (as well as with each of our other devices), which are used as secure key
       transport channels. In this scheme, each message is encrypted with a
       fresh, randomly generated encryption key. An encrypted header is added to
@@ -87,14 +98,14 @@
     </p>
     <p>
       As the encrypted payload is common to all recipients, it only has to be
-      included once, reducing overhead. Furthermore, Olm's transparent handling
+      included once, reducing overhead. Furthermore, SignalProtocols’s transparent handling
       of messages that were lost or received out of order, as well as those sent
       while the recipient was offline, is maintained by this protocol. As a
       result, in combination with &xep0280; and &xep0313;, the desired property
       of inter-client history synchronization is achieved.
     </p>
     <p>
-      OMEMO currently uses version 1 Olm protocol. Instead of an Axolotl key
+      OMEMO currently uses version 3 SignalProtocol. Instead of an Signal key
       server, &xep0163; (PEP) is used to publish key data.
     </p>
   </section2>
@@ -111,7 +122,7 @@
   <section2 topic='General Terms' anchor='glossary-general'>
     <dl>
       <di><dt>Device</dt><dd>A communication end point, i.e. a specific client instance</dd></di>
-      <di><dt>OMEMO element</dt><dd>An &lt;encrypted&gt; element in the urn:xmpp:omemo:0 namespace. Can be either MessageElement or a KeyTransportElement</dd></di>
+      <di><dt>OMEMO element</dt><dd>An &lt;encrypted&gt; element in the eu.siacs.conversations.axolotl namespace. Can be either MessageElement or a KeyTransportElement</dd></di>
       <di><dt>MessageElement</dt><dd>An OMEMO element that contains a chat message. Its &lt;payload&gt;, when decrypted, corresponds to a &lt;message&gt;'s &lt;body&gt;.</dd></di>
       <di><dt>KeyTransportElement</dt><dd>An OMEMO element that does not have a &lt;payload&gt;. It contains a fresh encryption key, which can be used for purposes external to this XEP.</dd></di>
       <di><dt>Bundle</dt><dd>A collection of publicly accessible data that can be used to build a session with a device, namely its public IdentityKey, a signed PreKey with corresponding signature, and a list of (single use) PreKeys.</dd></di>
@@ -120,12 +131,12 @@
 
     </dl>
   </section2>
-  <section2 topic='Olm-specific' anchor='glossary-olm'>
+  <section2 topic='SignalProtocol-specific' anchor='glossary-signalprotocol'>
     <dl>
       <di><dt>IdentityKey</dt><dd>Per-device public/private key pair used to authenticate communications</dd></di>
       <di><dt>PreKey</dt><dd>A Diffie-Hellman public key, published in bulk and ahead of time</dd></di>
-      <di><dt>PreKeyOlmMessage</dt><dd>An encrypted message that includes the initial key exchange. This is used to transparently build sessions with the first exchanged message.</dd></di>
-      <di><dt>OlmMessage</dt><dd>An encrypted message</dd></di>
+      <di><dt>PreKeySignalMessage</dt><dd>An encrypted message that includes the initial key exchange. This is used to transparently build sessions with the first exchanged message.</dd></di>
+      <di><dt>SignalMessage</dt><dd>An encrypted message</dd></di>
     </dl>
   </section2>
 </section1>
@@ -139,16 +150,16 @@
     </p>
   </section2>
   <section2 topic='Discovering peer support' anchor='usecases-discovering'>
-    <p>In order to determine whether a given contact has devices that support OMEMO, the devicelist node in PEP is consulted. Devices MUST subscribe to 'urn:xmpp:omemo:0:devicelist' via PEP, so that they are informed whenever their contacts add a new device. They MUST cache the most up-to-date version of the devicelist.</p>
+    <p>In order to determine whether a given contact has devices that support OMEMO, the devicelist node in PEP is consulted. Devices MUST subscribe to 'eu.siacs.conversations.axolotl.devicelist' via PEP, so that they are informed whenever their contacts add a new device. They MUST cache the most up-to-date version of the devicelist.</p>
     <example caption='Devicelist update received by subscribed clients'><![CDATA[
 <message from='juliet@capulet.lit'
          to='romeo@montague.lit'
          type='headline'
          id='update_01'>
   <event xmlns='http://jabber.org/protocol/pubsub#event'>
-    <items node='urn:xmpp:omemo:0:devicelist'>
+    <items node='eu.siacs.conversations.axolotl.devicelist'>
       <item>
-        <list xmlns='urn:xmpp:omemo:0'>
+        <list xmlns='eu.siacs.conversations.axolotl'>
           <device id='12345' />
           <device id='4223' />
         </list>
@@ -162,9 +173,9 @@
     <example caption='Adding the own device ID to the list'><![CDATA[
 <iq from='juliet@capulet.lit' type='set' id='announce1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <publish node='urn:xmpp:omemo:0:devicelist'>
+    <publish node='eu.siacs.conversations.axolotl.devicelist'>
       <item>
-        <list xmlns='urn:xmpp:omemo:0'>
+        <list xmlns='eu.siacs.conversations.axolotl'>
           <device id='12345' />
           <device id='4223' />
           <device id='31415' />
@@ -178,9 +189,9 @@
     <example caption='Announcing bundle information'><![CDATA[
 <iq from='juliet@capulet.lit' type='set' id='announce2'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <publish node='urn:xmpp:omemo:0:bundles:31415'>
+    <publish node='eu.siacs.conversations.axolotl.bundles:31415'>
       <item>
-        <bundle xmlns='urn:xmpp:omemo:0'>
+        <bundle xmlns='eu.siacs.conversations.axolotl'>
           <signedPreKeyPublic signedPreKeyId='1'>
             BASE64ENCODED...
           </signedPreKeyPublic>
@@ -216,10 +227,10 @@
     to='juliet@capulet.lit'
     id='fetch1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <items node='urn:xmpp:omemo:0:bundles:31415'/>
+    <items node='eu.siacs.conversations.axolotl.bundles:31415'/>
   </pubsub>
 </iq>]]></example>
-    <p>A random preKeyPublic entry is selected, and used to build an Olm session.</p>
+    <p>A random preKeyPublic entry is selected, and used to build an SignalProtocol session.</p>
   </section2>
   <section2 topic='Sending a message' anchor='usecases-messagesend'>
     <p>
@@ -230,15 +241,15 @@
       128 bit) are concatenated and for each intended recipient device,
       i.e. both own devices as well as devices associated with the contact, the
       result of this concatenation is encrypted using the corresponding
-      long-standing Olm session. Each encrypted payload key/authentication tag
+      long-standing SignalProtocol session. Each encrypted payload key/authentication tag
       tuple is tagged with the recipient device's ID. The key element MUST be
-      tagged with a prekey attribute set to true if a PreKeyOlmMessage is being
+      tagged with a prekey attribute set to true if a PreKeySignalMessage is being
       used. This is all serialized into a MessageElement, which is transmitted
       in a &lt;message&gt; as follows:
     </p>
     <example caption="Sending a message"><![CDATA[
 <message to='juliet@capulet.lit' from='romeo@montague.lit' id='send1'>
-  <encrypted xmlns='urn:xmpp:omemo:0'>
+  <encrypted xmlns='eu.siacs.conversations.axolotl'>
     <header sid='27183'>
       <key rid='31415'>BASE64ENCODED...</key>
       <key prekey="true" rid='12321'>BASE64ENCODED...</key>
@@ -258,14 +269,14 @@
       SHOULD have at least 128 bit) are concatenated and for each intended
       recipient device, i.e. both own devices as well as devices associated
       with the contact, this key is encrypted using the corresponding
-      long-standing Olm session. Each encrypted payload key/authentication tag
+      long-standing SignalProtocol session. Each encrypted payload key/authentication tag
       tuple is tagged with the recipient device's ID. The key element MUST be
-      tagged with a prekey attribute set to true if a PreKeyOlmMessage is being
+      tagged with a prekey attribute set to true if a PreKeySignalMessage is being
       used This is all serialized into a KeyTransportElement, omitting the
       &lt;payload&gt; as follows:
     </p>
     <example caption="Sending a key"><![CDATA[
-<encrypted xmlns='urn:xmpp:omemo:0'>
+<encrypted xmlns='eu.siacs.conversations.axolotl'>
   <header sid='27183'>
     <key rid='31415'>BASE64ENCODED...</key>
     <key prekey="true" rid='12321'>BASE64ENCODED...</key>
@@ -276,25 +287,24 @@
     <p>This KeyTransportElement can then be sent over any applicable transport mechanism.</p>
   </section2>
   <section2 topic='Receiving a message' anchor='usecases-receiving'>
-    <p>When an OMEMO element is received, the client MUST check whether there is a &lt;key&gt; element with an rid attribute matching its own device ID. If this is not the case, the element MUST be silently discarded. If such an element exists, the client checks whether the element's contents are a PreKeyOlmMessage.</p>
+    <p>When an OMEMO element is received, the client MUST check whether there is a &lt;key&gt; element with an rid attribute matching its own device ID. If this is not the case, the element MUST be silently discarded. If such an element exists, the client checks whether the element's contents are a PreKeySignalMessage.</p>
     <p>If this is the case, a new session is built from this received element. The client SHOULD then republish their bundle information, replacing the used PreKey, such that it won't be used again by a different client. If the client already has a session with the sender's device, it MUST replace this session with the newly built session. The client MUST delete the private key belonging to the PreKey after use.</p>
-    <p>If the element's contents are a OlmMessage, and the client has a session with the sender's device, it tries to decrypt the OlmMessage using this session. If the decryption fails or if the element's contents are not a OlmMessage either, the OMEMO element MUST be silently discarded.</p>
+    <p>If the element's contents are a SignalMessage, and the client has a session with the sender's device, it tries to decrypt the SignalMessage using this session. If the decryption fails or if the element's contents are not a SignalMessage either, the OMEMO element MUST be silently discarded.</p>
     <p>If the OMEMO element contains a &lt;payload&gt;, it is an OMEMO message element. The client tries to decrypt the base64 encoded contents using the key and the authentication tag extracted from the &lt;key&gt; element. If the decryption fails, the client MUST silently discard the OMEMO message. If it succeeds, the decrypted contents are treated as the &lt;body&gt; of the received message.</p>
     <p>If the OMEMO element does not contain a &lt;payload&gt;, the client has received a KeyTransportElement. The key extracted from the &lt;key&gt; element can then be used for other purposes (e.g. encrypted file transfer).</p>
   </section2>
 </section1>
 <section1 topic='Business Rules' anchor='rules'>
   <p>Before publishing a freshly generated Device ID for the first time, a device MUST check whether that Device ID already exists, and if so, generate a new one.</p>
-  <p>Clients SHOULD NOT immediately fetch the bundle and build a session as soon as a new device is announced. Before the first message is exchanged, the contact does not know which PreKey has been used (or, in fact, that any PreKey was used at all). As they have not had a chance to remove the used PreKey from their bundle announcement, this could lead to collisions where both Alice and Bob pick the same PreKey to build a session with a specific device. As each PreKey SHOULD only be used once, the party that sends their initial PreKeyOlmMessage later loses this race condition. This means that they think they have a valid session with the contact, when in reality their messages MAY be ignored by the other end. By postponing building sessions, the chance of such issues occurring can be drastically reduced. It is RECOMMENDED to construct sessions only immediately before sending a message. </p>
-  <p>As there are no explicit error messages in this protocol, if a client does receive a PreKeyOlmMessage using an invalid PreKey, they SHOULD respond with a KeyTransportElement, sent in a &lt;message&gt; using a PreKeyOlmMessage. By building a new session with the original sender this way, the invalid session of the original sender will get overwritten with this newly created, valid session.</p>
-  <p>If a PreKeyOlmMessage is received as part of a &xep0313; catch-up and used to establish a new session with the sender, the client SHOULD postpone deletion of the private key corresponding to the used PreKey until after MAM catch-up is completed. If this is done, the client MUST then also send a KeyTransportMessage using a PreKeyOlmMessage before sending any payloads using this session, to trigger re-keying. (as above) This practice can mitigate the previously mentioned race condition by preventing message loss.</p>
+  <p>Clients SHOULD NOT immediately fetch the bundle and build a session as soon as a new device is announced. Before the first message is exchanged, the contact does not know which PreKey has been used (or, in fact, that any PreKey was used at all). As they have not had a chance to remove the used PreKey from their bundle announcement, this could lead to collisions where both Alice and Bob pick the same PreKey to build a session with a specific device. As each PreKey SHOULD only be used once, the party that sends their initial PreKeySignalMessage later loses this race condition. This means that they think they have a valid session with the contact, when in reality their messages MAY be ignored by the other end. By postponing building sessions, the chance of such issues occurring can be drastically reduced. It is RECOMMENDED to construct sessions only immediately before sending a message. </p>
+  <p>As there are no explicit error messages in this protocol, if a client does receive a PreKeySignalMessage using an invalid PreKey, they SHOULD respond with a KeyTransportElement, sent in a &lt;message&gt; using a PreKeySignalMessage. By building a new session with the original sender this way, the invalid session of the original sender will get overwritten with this newly created, valid session.</p>
+  <p>If a PreKeySignalMessage is received as part of a &xep0313; catch-up and used to establish a new session with the sender, the client SHOULD postpone deletion of the private key corresponding to the used PreKey until after MAM catch-up is completed. If this is done, the client MUST then also send a KeyTransportMessage using a PreKeySignalMessage before sending any payloads using this session, to trigger re-keying. (as above) This practice can mitigate the previously mentioned race condition by preventing message loss.</p>
   <p>As the asynchronous nature of OMEMO allows decryption at a later time to currently offline devices client SHOULD include a &xep0334; &lt;store /&gt; hint in their OMEMO messages. Otherwise, server implementations of &xep0313; will generally not retain OMEMO messages, since they do not contain a &lt;body /&gt;</p>
 </section1>
 <section1 topic='Implementation Notes' anchor='impl'>
   <!-- TODO: I think this is still true? -->
   <p>
-    The Olm library's reference implementation (and presumably its ports to
-    various other platforms) uses a trust model that doesn't work very well with
+    The SignalProtocol-library uses a trust model that doesn't work very well with
     OMEMO. For this reason it may be desirable to have the library consider all
     keys trusted, effectively disabling its trust management. This makes it
     necessary to implement trust handling oneself.
@@ -305,7 +315,7 @@
   <p>When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex string, QR code, or other unique representation, such that it can be compared by the user.</p>
   <p>While it is RECOMMENDED that clients postpone private key deletion until after MAM catch-up and this standards mandates that clients MUST NOT use duplicate-PreKey sessions for sending, clients MAY delete such keys immediately for security reasons. For additional information on potential security impacts of this decision, refer to <note>Menezes, Alfred, and Berkant Ustaoglu. "On reusing ephemeral keys in Diffie-Hellman key agreement protocols." International Journal of Applied Cryptography 2, no. 2 (2010): 154-158.</note>.</p>
   <p>
-    In order to be able to handle out-of-order messages, the Olm stack has to
+    In order to be able to handle out-of-order messages, the SignalProtocol stack has to
     cache the keys belonging to "skipped" messages that have not been seen yet.
     It is up to the implementor to decide how long and how many of such keys to
     keep around.
@@ -318,9 +328,8 @@
   <section2 topic='Protocol Namespaces' anchor='namespaces'>
     <p>This specification defines the following XMPP namespaces:</p>
     <ul>
-      <li>urn:xmpp:omemo:0</li>
+      <li>eu.siacs.conversations.axolotl</li>
     </ul>
-    <p>The &REGISTRAR; shall include the foregoing namespace in its registry at &NAMESPACES;, as goverened by &xep0053;.</p>
   </section2>
   <section2 topic='Protocol Versioning' anchor='versioning'>
     &NSVER;
@@ -330,8 +339,8 @@
   <code><![CDATA[
 <xml version="1.0" encoding="utf8">
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    targetNamespace="urn:xmpp:omemo:0"
-    xmlns="urn:xmpp:omemo:0">
+    targetNamespace="eu.siacs.conversations.axolotl"
+    xmlns="eu.siacs.conversations.axolotl">
 
   <xs:element name="encrypted">
     <xs:element name="header">
