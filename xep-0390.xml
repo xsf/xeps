@@ -20,6 +20,7 @@
   <!ENTITY procents "<em>Processing Entities</em>">
   <!ENTITY genent "<em>Generating Entity</em>">
   <!ENTITY genents "<em>Generating Entities</em>">
+  <!ENTITY queryintercept "<em>Query Interception</em>">
   <!ENTITY mlwaqas1 "<note>org.jabber.security Mailing List Archive: '[Security] Trivial preimage attack against the entity capabilities protocol)' from 2009-07-22, &lt;<link url='https://mail.jabber.org/pipermail/security/2009-July/000812.html'>https://mail.jabber.org/pipermail/security/2009-July/000812.html</link>&gt;.</note>">
   <!ENTITY capsdb "<span class='ref'><link url='https://github.com/xnyhps/capsdb/'>capsdb</link></span> <note><link url='https://github.com/xnyhps/capsdb/'>https://github.com/xnyhps/capsdb/</link></note>">
 ]>
@@ -58,6 +59,7 @@
     <remark>
       <ul>
         <li>Clearly specify handling of xml:lang attributes.</li>
+        <li>Add Query Interception.</li>
       </ul>
     </remark>
   </revision>
@@ -95,7 +97,7 @@
     <li>The bandwidth consumption should be as minimal as possible, while reusing existing specifications.</li>
     <li>It must be possible to write &xep0045; and &xep0369; implementations which can forward this protocol with negligible extra work.</li>
     <li>Entities must be able to update their published information arbitrarily often in a single presence session.</li>
-    <li>Server infrastructure beyond <cite>XMPP Core</cite> and <cite>XMPP IM</cite> must not be required for this to work.</li>
+    <li>Server infrastructure beyond <cite>XMPP Core</cite> and <cite>XMPP IM</cite> must not be required for this to work (but may be beneficial).</li>
     <li>Entities must be able to be confident that the information obtained from the broadcast is equivalent to the information which would be obtained from querying the generating entity directly at the time the broadcast was generated.</li>
     <li>The protocol must be able to coexist (but not necessarily exchange information) with &xep0115;.</li>
     <li>No special XML features beyond what is needed to implement <cite>XMPP Core</cite> itself should be required.</li>
@@ -111,6 +113,7 @@
     <di><dt>Capability Hash Set</dt><dd>A set of &hashes; which cover the same <cite>XEP-0030</cite> response, possibly in the form of a &lt;c/&gt; element with &xep0300; &lt;hash/&gt; children.</dd></di>
     <di><dt>Generating Entity</dt><dd>An entity which emits a &hashset; to other entities.</dd></di>
     <di><dt>Processing Entity</dt><dd>An entity which receives and processes a &hashset; from a &genent;.</dd></di>
+    <di><dt>Query Interception</dt><dd>Server-side processing of disco#info queries directed to a resource based on the &hashsets; published by that resource.</dd></di>
   </dl>
 </section1>
 
@@ -766,6 +769,17 @@ cDp0aW1lHxw=</code>
       <li>Servers MAY answer disco#info requests for &hashnodes; on behalf of their and others clients if the disco#info response belonging to that &hash; is known to them.</li>
     </ul>
   </section2>
+
+  <section2 topic='Query Interception' anchor='rules-servers'>
+    <p>Servers MAY implement &queryintercept; to further optimise bandwidth consumption. The idea is that servers intercept &xep0030; disco#info queries sent to clients if they already know the answer from &hashes; published by the client. The rules for &queryintercept; are the following (to be applied in this order):</p>
+    <ul>
+      <li>Servers MUST NOT intercept disco#info queries except those with empty <tt>node</tt> or a <tt>node</tt> which refers to a &hashnode; known to the server.</li>
+      <li>Servers MUST NOT intercept disco#info queries on behalf of the resource unless the query would be forwarded to the resource otherwise.</li>
+      <li>Servers MUST NOT intercept disco#info queries to resources which do not support &caps; (clients not implementing &caps; may legitimately use disco#info nodes matching the format of &hashnodes; for different purposes).</li>
+      <li>Servers SHOULD intercept disco#info queries with empty <tt>node</tt> and answer them with the disco#info of the most recent &hashset; published by the client.</li>
+      <li>Servers SHOULD intercept disco#info queries a valid &hashnode; <tt>node</tt>, if the server knows the disco#info for the &hashnode;. Otherwise, the query MUST be forwarded to the addressed resource. Note that it is valid for a sevrer to reply for &hashnodes; which have not been published by the resource.</li>
+    </ul>
+  </section2>
 </section1>
 
 <section1 topic='Implementation Notes' anchor='impl'>
@@ -793,6 +807,20 @@ cDp0aW1lHxw=</code>
 
   <section2 topic='Directed Presence' anchor='security-directed-presence'>
     <p>Entities MAY choose to not send &hashsets; with directed presence (for example to increase privacy). In that case, entities SHOULD also refuse direct &xep0030; queries.</p>
+  </section2>
+
+  <section2 topic='Query Interception' anchor='security-query-interception'>
+    <p>The server replies to certain disco#info queries on behalf of the client. This means that the client has no choice on to whom they reply. Otherwise, a client could choose to reply with <tt>&lt;service-unavailable/&gt;</tt> to mask its existence. We consider two effects of this:</p>
+    <ul>
+      <li>
+        <p>A remote entity could attempt to detect that an entity exists behind a resource. For this, they send a disco#info query to the resource since nearly everyone implements disco#info. As the client responds with <tt>&lt;service-unavailable/&gt;</tt>, it looks as if no client was present at this resource.</p>
+        <p>With &queryintercept;, the server would reply on behalf of the client. However, the consensus in the community is that by measuring the difference between the reply from the server of the resource and the reply from the actual resource, it would generally be possible to detect the existence of a resource.</p>
+      </li>
+      <li>
+        <p>A remote entity can obtain the disco#info information of any resource which supports &caps; and of which the entity knows the resource.</p>
+        <p>This cannot be mitigated with &queryintercept;. The risk is deemed acceptable considering that resources should generally be chosen randomly.</p>
+      </li>
+    </ul>
   </section2>
 </section1>
 
@@ -887,7 +915,7 @@ cDp0aW1lHxw=</code>
   <p>Thanks to the authors of &xep0115; for coming up with the original idea of using presence broadcast to convey service discovery information, as well as the optimization strategies.</p>
   <p>The note below the example in <link url='#usecases-stream-feature'>Advertisement of Support and Capabilities by Servers</link> has been copied verbatimly from <cite>XEP-0115</cite>.</p>
   <p>Thanks to Waqas Hussain for originally (to my knowledge) pointing out the security flaws in <cite>XEP-0115</cite> (see &mlwaqas1;).</p>
-  <p>Thanks to Georg Lukas, Link Mauve, Sebastian Riese, Florian Schmaus and Sam Whithed for their input, editorial and otherwise.</p>
+  <p>Thanks to Dave Cridland, Georg Lukas, Link Mauve, Sebastian Riese, Florian Schmaus and Sam Whited for their input, editorial and otherwise.</p>
 </section1>
 
 </xep>
