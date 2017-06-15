@@ -1,0 +1,165 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Jingle Encrypted Transfers</title>
+  <abstract>This specification defines a method that allows file transfers via Jingle File Transfer to be end-to-end encrypted using established encryption schemes like OpenPGP or OMEMO.</abstract>
+  &LEGALNOTICE;
+  <number>XXXX</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XEP-0234</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>jet</shortname>
+  <schemaloc>
+    <ns>jingle</ns>
+    <url>http://xmpp.org/schemas/jingle.xsd</url>
+  </schemaloc>
+  <schemaloc>
+    <ns>jingle:errors</ns>
+    <url>http://xmpp.org/schemas/jingle-errors.xsd</url>
+  </schemaloc>
+  <registry/>
+  <discuss>jingle</discuss>
+  <author>
+    <firstname>Paul</firstname>
+    <surname>Schaub</surname>
+    <email>vanitasvitae@riseup.net</email>
+    <jid>vanitasvitae@jabberhead.tk</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2017-06-12</date>
+    <initials>vv</initials>
+    <remark><p>First draft</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>&xep0234; has the disadvantage, that transmitted files are not encrypted (aside from regular TLS transport encryption), which means that intermediate nodes like the XMPP server(s) have access to the transferred data. Considering that end-to-end encryption becomes more and more important for communications, this is a major flaw that needs to be addressed.</p>
+  <p>This document defines a method to enable two communication partners to utilize an already established secure channel (eg. an OMEMO session) to exchange an encryption key which can then be used to encrypt/decrypt the offered/requested file.</p>
+</section1>
+<section1 topic='How it works' anchor='how'>
+  <p>In order to initiate an encrypted file transfer, the initiator includes a key-element in the jingle-request. This key-element contains an encryption key which is used to encrypt/decryt the transferred key. In both file offers and file requests, it is the initiator, which dictates this key. The key is encrypted using the encryption method of the initiators choice. The initiator and responder must establish a session beforehand.</p>
+  
+  <section2 topic='File offer'>
+  <p>In this scenario Romeo wants to send an encrypted text file over to Juliet. He chooses to use their existing OMEMO session to do so. First, he generates a fresh TODO-AES key and IV. This will later be used to encrypt and decrypt the file. In order to be transmitted, key and IV have to be serialized. Key and IV are both Base64 encoded and appended in the following form:</p>
+  <example caption='Key and IV get serialized'><![CDATA[
+KEY:HEREISYOURKEY|IV:HEREYOUFINDIV
+]]></example>
+  <p>This text is encrypted using the established secure encryption method. The resulting OMEMO element is sent as part of the security element along with the rest of the jingle stanza over to Juliet.</p>
+  <example caption="Romeo initiates an encrypted file offer"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='nzu25s8'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-initiate'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
+          sid='851ba2'>
+    <content creator='initiator' name='a-file-offer' senders='initiator'>
+      <description xmlns='urn:xmpp:jingle:apps:file-transfer:5'>
+        <file>
+          <date>1969-07-21T02:56:15Z</date>
+          <desc>This is a test. If this were a real file...</desc>
+          <media-type>text/plain</media-type>
+          <name>test.txt</name>
+          <range/>
+          <size>6144</size>
+          <hash xmlns='urn:xmpp:hashes:2'
+                algo='sha-1'>w0mcJylzCn+AfvuGdqkty2+KP48=</hash>
+        </file>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
+                 mode='tcp'
+                 sid='vj3hs98y'>
+        <candidate cid='hft54dqy'
+                   host='192.168.4.1'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
+                   port='5086'
+                   priority='8257636'
+                   type='direct'/>
+      </transport>
+      <security xmlns='TODO' name='a-file-offer' type='urn:xmpp:omemo:0'>
+        <encrypted xmlns='urn:xmpp:omemo:0'>
+          <header sid='27183'>
+            <key rid='31415'>BASE64ENCODED...</key>
+            <key rid='12321'>BASE64ENCODED...</key>
+            <iv>BASE64ENCODED...</iv>
+          </header>
+          <payload>BASE64-ENCODED-ENCRYPTED-KEY</payload>
+        </encrypted>
+      </security>
+    </content>
+  </jingle>
+</iq>]]></example>
+
+    <p>Juliet decrypts the OMEMO element using her session with Romeo to retrieve the key and IV. Both Juliet and Romeo then carry on with the session negotiation as described in &xep0234;. Before Romeo starts transmitting the file, he encrypts it using the key and IV. He then transmitts the encrypted file over to Juliet.</p>
+    <p>When Juliet received the file, she uses the decrypted key and IV to decrypt the received file.</p>
+  </section2>
+  
+  <section2 topic='File Request'>
+    <p>Juliet might want to request a file transfer from Romeo. This can be the case, when Romeo hosts the file. In order to do so, she sends him a key and IV which Romeo will use to encrypt the file before sending it to Juliet. In this example we assume, that Romeo and Juliet secured their communications using &xep0374;.</p>
+    <example caption="Juliet initiates an encrypted file request"><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    id='wsn361c3'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-initiate'
+          initiator='juliet@capulet.example/yn0cl4bnw0yr3vym'
+          sid='uj3b2'>
+    <content creator='initiator' name='a-file-request' senders='responder'>
+      <description xmlns='urn:xmpp:jingle:apps:file-transfer:5'>
+        <file>
+          <hash xmlns='urn:xmpp:hashes:2'
+                algo='sha-1'>w0mcJylzCn+AfvuGdqkty2+KP48=</hash>
+        </file>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
+                 mode='tcp'
+                 sid='xig361fj'>
+        <candidate cid='ht567dq'
+                   host='192.169.1.10'
+                   jid='juliet@capulet.example/yn0cl4bnw0yr3vym'
+                   port='6539'
+                   priority='8257636'
+                   type='direct'/>
+      </transport>
+      <security xmlns='TODO' name='a-file-request' type='urn:xmpp:openpgp:0'>
+        <signcrypt xmlns='urn:xmpp:openpgp:0'>
+          <to jid='romeo@montague.example'/>
+          <time stamp='2014-07-10T17:06:00+02:00'/>
+          <rpad>f0rm1l4n4-mT8y33j!Y%fRSrcd^ZE4Q7VDt1L%WEgR!kv</rpad>
+          <payload>
+            <body xmlns='jabber:client'>BASE64-ENCODED-ENCRYPTED-KEY</body>
+          </payload>
+        </signcrypt>
+      </security>
+    </content>
+  </jingle>
+</iq>]]></example>
+  </section2>
+</section1>
+
+<section1 topic='Open Questions'>
+  <p>This is only a rough draft and there is still a ton of questions left to be answered. Here is a small non-exhaustive list of things I can think of:</p>
+  <ul>
+    <li>What cipher is used to encrypt the file? Examples would be AES-GCM128/256...</li>
+    <li>Cipher agility? What format is used to serialize key and IV?</li>
+    <li>How exactly are interrupted transfers resumed? How (long) are keys/IVs cached?</li>
+    <li>Is it in the scope of this approach to hide metadata?</li>
+    <li>How are transferred files authenticated? (See OMEMO audit)</li>
+    <li>May it be desirable to split data into chunks?</li>
+    <li>Please add to this list :)</li>
+  </ul>
+</section1>
+</xep>
