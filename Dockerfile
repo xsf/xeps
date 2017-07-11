@@ -17,6 +17,9 @@ RUN apt-get install -y texlive-fonts-recommended texlive-fonts-extra
 RUN mkdir /var/www/html/extensions
 RUN OUTDIR=/var/www/html/extensions/ make html pdf
 
+RUN cat /sys/fs/cgroup/cpuset/cpuset.cpus || true
+RUN cat /proc/cpuinfo || true
+
 EXPOSE 80
 
 CMD /usr/sbin/nginx -g 'daemon off;'
