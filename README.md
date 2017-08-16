@@ -1,8 +1,5 @@
 [![Docker Build Status](https://img.shields.io/docker/build/xmppxsf/xeps.svg)](https://hub.docker.com/r/xmppxsf/xeps/)
 
-# mediawiki-docker
-
-This repository holds the Dockerfile that is used to run the container serveing [wiki.xmpp.org](https://wiki.xmpp.org).
 XMPP Extension Protocols (XEPs)
 =========
 
