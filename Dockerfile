@@ -1,5 +1,5 @@
 # Builds all XEPs by default, HTML & PDF
-# docker build . --build-arg NCORES=X --build-arg TARGETS="target1 target2"
+# docker build . --build-arg NCORES=X --build-arg TARGETS="html pdf"
 # from Dockerfile.base
 FROM xmppxsf/xeps-base:latest
 
