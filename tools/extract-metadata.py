@@ -141,6 +141,15 @@ def make_metadata_element(number, metadata, accepted, *, protoname=None):
     return result
 
 
+def parse_checked_and_print_error(xepfile):
+    try:
+        with xepfile.open("rb") as f:
+            return open_xml(f)
+    except xml.parsers.expat.ExpatError as exc:
+        print("{}: {}".format(xepfile, exc), file=sys.stderr)
+        return None
+
+
 def main():
     import argparse
     import sys
@@ -170,35 +179,31 @@ def main():
         except ValueError:
             continue
 
-        try:
-            with xepfile.open("rb") as f:
-                parsed = open_xml(f)
-
-            tree.append(make_metadata_element(
-                number,
-                extract_xep_metadata(parsed),
-                True,
-            ))
-        except Exception as exc:
+        parsed = parse_checked_and_print_error(xepfile)
+        if parsed is None:
             has_error = True
-            print("{}: {}".format(xepfile, exc), file=sys.stderr)
+            continue
+
+        tree.append(make_metadata_element(
+            number,
+            extract_xep_metadata(parsed),
+            True,
+        ))
 
     for xepfile in (args.xepdir / "inbox").glob("*.xml"):
         protoname = xepfile.name.rsplit(".", 1)[0]
 
-        try:
-            with xepfile.open("rb") as f:
-                parsed = open_xml(f)
-
-            tree.append(make_metadata_element(
-                "xxxx",
-                extract_xep_metadata(parsed),
-                False,
-                protoname=protoname
-            ))
-        except Exception as exc:
+        parsed = parse_checked_and_print_error(xepfile)
+        if parsed is None:
             has_error = True
-            print("{}: {}".format(xepfile, exc), file=sys.stderr)
+            continue
+
+        tree.append(make_metadata_element(
+            "xxxx",
+            extract_xep_metadata(parsed),
+            False,
+            protoname=protoname
+        ))
 
     if has_error:
         sys.exit(2)
