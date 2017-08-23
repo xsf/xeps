@@ -49,10 +49,6 @@ help:
 .PHONY: all
 all: html
 
-$(OUTDIR)/inbox/%: build/inbox
-build/inbox:
-	mkdir -p build/inbox
-
 .PHONY: xeplist
 xeplist: $(OUTDIR)/xeplist.xml
 
@@ -99,7 +95,10 @@ $(REFSDIR)/reference.XSF.XEP-%.xml: xep-%.xml $(XMLDEPS) ref.xsl $(REFSDIR)
 	xsltproc --path $(CURDIR) ref.xsl "$<" > "$@" && echo "Finished building $@"
 
 $(all_xep_htmls): $(OUTDIR)/%.html: %.xml $(XMLDEPS) $(HTMLDEPS)
+	# we don’t put it as a dependency to avoid a rebuild due to a timestamp
+	# change on the directory
 	mkdir -p $(OUTDIR)/inbox
+
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
