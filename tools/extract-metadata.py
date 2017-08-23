@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import pathlib
+import sys
 import xml.dom.minidom
 
 import xml.etree.ElementTree as etree
@@ -160,6 +161,8 @@ def main():
 
     tree = etree.Element("xep-infos")
 
+    has_error = False
+
     for xepfile in args.xepdir.glob("xep-*.xml"):
         number = xepfile.name.split("-", 1)[1].split(".", 1)[0]
         try:
@@ -167,27 +170,38 @@ def main():
         except ValueError:
             continue
 
-        with xepfile.open("rb") as f:
-            parsed = open_xml(f)
+        try:
+            with xepfile.open("rb") as f:
+                parsed = open_xml(f)
 
-        tree.append(make_metadata_element(
-            number,
-            extract_xep_metadata(parsed),
-            True,
-        ))
+            tree.append(make_metadata_element(
+                number,
+                extract_xep_metadata(parsed),
+                True,
+            ))
+        except Exception as exc:
+            has_error = True
+            print("{}: {}".format(xepfile, exc), file=sys.stderr)
 
     for xepfile in (args.xepdir / "inbox").glob("*.xml"):
         protoname = xepfile.name.rsplit(".", 1)[0]
 
-        with xepfile.open("rb") as f:
-            parsed = open_xml(f)
+        try:
+            with xepfile.open("rb") as f:
+                parsed = open_xml(f)
 
-        tree.append(make_metadata_element(
-            "xxxx",
-            extract_xep_metadata(parsed),
-            False,
-            protoname=protoname
-        ))
+            tree.append(make_metadata_element(
+                "xxxx",
+                extract_xep_metadata(parsed),
+                False,
+                protoname=protoname
+            ))
+        except Exception as exc:
+            has_error = True
+            print("{}: {}".format(xepfile, exc), file=sys.stderr)
+
+    if has_error:
+        sys.exit(2)
 
     sys.stdout.buffer.raw.write(etree.tostring(tree))
 
