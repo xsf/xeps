@@ -53,6 +53,9 @@ $(OUTDIR)/inbox/%: build/inbox
 build/inbox:
 	mkdir -p build/inbox
 
+.PHONY: xeplist
+xeplist: $(OUTDIR)/xeplist.xml
+
 .PHONY: html
 html: $(xep_htmls)
 
@@ -85,6 +88,9 @@ xep-%.pdf: $(OUTDIR)/xep-%.pdf ;
 
 $(all_xep_xmls): $(OUTDIR)/%.xml: %.xml
 	cp $< $@
+
+$(OUTDIR)/xeplist.xml: $(wildcard *.xml) $(wildcard inbox/*.xml)
+	./tools/extract-metadata.py > $@
 
 $(EXAMPLESDIR)/%.xml: xep-%.xml $(XMLDEPS) examples.xsl $(EXAMPLESDIR)
 	xsltproc --path $(CURDIR) examples.xsl "$<" > "$@" && echo "Finished building $@"
