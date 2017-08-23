@@ -4,6 +4,13 @@ import xml.dom.minidom
 
 import xml.etree.ElementTree as etree
 
+from xeplib import (
+    minidom_find_child,
+    minidom_find_header,
+    minidom_get_text,
+    minidom_children,
+)
+
 
 DESCRIPTION = """\
 Extract a list of XEPs with metadata from the xeps repository."""
@@ -15,53 +22,29 @@ def open_xml(f):
     return xml.dom.minidom.parse(f)
 
 
-def find_child(elem, child_tag):
-    for child in elem.childNodes:
-        if hasattr(child, "tagName") and child.tagName == child_tag:
-            return child
-    return None
-
-
-def find_header(document):
-    header = find_child(document.documentElement, "header")
-    if header is None:
-        raise ValueError("cannot find <header/>")
-    return header
-
-
-def get_text(elem):
-    return "".join(
-        child.nodeValue
-        for child in elem.childNodes
-        if isinstance(child, (xml.dom.minidom.Text,
-                              xml.dom.minidom.CDATASection))
-    )
-
-
-def children(elem):
-    return [
-        child for child in elem.childNodes
-        if isinstance(child, (xml.dom.minidom.Element))
-    ]
-
-
 def extract_xep_metadata(document):
-    header = find_header(document)
+    header = minidom_find_header(document)
 
-    latest_revision = find_child(header, "revision")
+    latest_revision = minidom_find_child(header, "revision")
     if latest_revision is not None:
-        last_revision_version = get_text(find_child(latest_revision, "version"))
-        last_revision_date = get_text(find_child(latest_revision, "date"))
-        remark_el = find_child(latest_revision, "remark")
+        last_revision_version = minidom_get_text(
+            minidom_find_child(latest_revision, "version")
+        )
+        last_revision_date = minidom_get_text(
+            minidom_find_child(latest_revision, "date")
+        )
+        remark_el = minidom_find_child(latest_revision, "remark")
         last_revision_remark = None
         if remark_el is not None:
-            remark_children = children(remark_el)
+            remark_children = minidom_children(remark_el)
             if len(remark_children) == 1 and remark_children[0].tagName == "p":
-                last_revision_remark = get_text(remark_children[0])
+                last_revision_remark = minidom_get_text(remark_children[0])
 
         if last_revision_remark is not None:
-            initials_el = find_child(latest_revision, "initials")
-            last_revision_initials = initials_el and get_text(initials_el)
+            initials_el = minidom_find_child(latest_revision, "initials")
+            last_revision_initials = initials_el and minidom_get_text(
+                initials_el
+            )
         else:
             last_revision_initials = None
     else:
@@ -70,24 +53,26 @@ def extract_xep_metadata(document):
         last_revision_remark = None
         last_revision_initials = None
 
-    status = get_text(find_child(header, "status"))
-    type_ = get_text(find_child(header, "type"))
-    abstract = " ".join(get_text(find_child(header, "abstract")).split())
-    sig_el = find_child(header, "sig")
+    status = minidom_get_text(minidom_find_child(header, "status"))
+    type_ = minidom_get_text(minidom_find_child(header, "type"))
+    abstract = " ".join(minidom_get_text(
+        minidom_find_child(header, "abstract")
+    ).split())
+    sig_el = minidom_find_child(header, "sig")
     if sig_el is None:
         sig = None
     else:
-        sig = get_text(sig_el)
-    shortname = get_text(find_child(header, "shortname"))
+        sig = minidom_get_text(sig_el)
+    shortname = minidom_get_text(minidom_find_child(header, "shortname"))
     if shortname.replace("-", " ").replace("_", " ").lower() in [
             "not yet assigned", "n/a", "none", "to be assigned",
             "to be issued"]:
         shortname = None
-    title = get_text(find_child(header, "title"))
+    title = minidom_get_text(minidom_find_child(header, "title"))
 
-    approver_el = find_child(header, "approver")
+    approver_el = minidom_find_child(header, "approver")
     if approver_el is not None:
-        approver = get_text(approver_el)
+        approver = minidom_get_text(approver_el)
     else:
         approver = "Board" if type_ == "Procedural" else "Council"
 

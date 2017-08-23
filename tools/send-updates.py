@@ -3,7 +3,6 @@ import configparser
 import getpass
 import itertools
 import email.message
-import enum
 import os
 import smtplib
 import sys
@@ -12,6 +11,8 @@ import textwrap
 from datetime import datetime
 
 import xml.etree.ElementTree as etree
+
+from xeplib import Status, Action, load_xepinfos
 
 
 DESCRIPTION = """\
@@ -33,51 +34,6 @@ If user is omitted, anonymous mail sending is attempted.
 If options are missing from the configuration file and the standard input and \
 standard output are a terminal, the script interactively asks for the option \
 values. If no terminal is connected, the script exits with an error instead."""
-
-
-class Status(enum.Enum):
-    PROTO = 'ProtoXEP'
-    EXPERIMENTAL = 'Experimental'
-    PROPOSED = 'Proposed'
-    DRAFT = 'Draft'
-    ACTIVE = 'Active'
-    FINAL = 'Final'
-    RETRACTED = 'Retracted'
-    OBSOLETE = 'Obsolete'
-    DEFERRED = 'Deferred'
-    REJECTED = 'Rejected'
-    DEPRECATED = 'Deprecated'
-
-    @classmethod
-    def fromstr(cls, s):
-        if s == "Proto" or s.lower() == "protoxep":
-            s = "ProtoXEP"
-        return cls(s)
-
-
-class Action(enum.Enum):
-    PROTO = "Proposed XMPP Extension"
-    NEW = "NEW"
-    DRAFT = "DRAFT"
-    ACTIVE = "ACTIVE"
-    FINAL = "FINAL"
-    RETRACT = "RETRACTED"
-    OBSOLETE = "OBSOLETED"
-    DEFER = "DEFERRED"
-    UPDATE = "UPDATED"
-
-    @classmethod
-    def fromstatus(cls, status):
-        return {
-            Status.EXPERIMENTAL: cls.NEW,
-            Status.DRAFT: cls.DRAFT,
-            Status.ACTIVE: cls.ACTIVE,
-            Status.FINAL: cls.FINAL,
-            Status.RETRACTED: cls.RETRACT,
-            Status.OBSOLETED: cls.OBSOLETE,
-            Status.DEPRECATED: cls.DEPRECATE,
-            Status.DEFERRED: cls.DEFERRED,
-        }
 
 
 XEP_URL_PREFIX = "https://xmpp.org/extensions/"
@@ -114,61 +70,6 @@ URL: {url}"""
 
 SUBJECT_NONPROTO_TEMPLATE = \
     "{action.value}: XEP-{info[number]:04d} ({info[title]})"
-
-
-def load_xepinfo(el):
-    accepted = el.get("accepted").lower() == "true"
-
-    info = {
-        "title": el.find("title").text,
-        "abstract": el.find("abstract").text,
-        "type": el.find("type").text,
-        "status": Status.fromstr(el.find("status").text),
-        "approver": el.find("approver").text,
-        "accepted": accepted,
-    }
-
-    last_revision_el = el.find("last-revision")
-    if last_revision_el is not None:
-        last_revision = {
-            "version": last_revision_el.find("version").text,
-            "date": last_revision_el.find("date").text,
-            "initials": None,
-            "remark": None,
-        }
-
-        initials_el = last_revision_el.find("initials")
-        if initials_el is not None:
-            last_revision["initials"] = initials_el.text
-
-        remark_el = last_revision_el.find("remark")
-        if remark_el is not None:
-            last_revision["remark"] = remark_el.text
-
-        info["last_revision"] = last_revision
-
-    sig = el.find("sig")
-    if sig is not None:
-        info["sig"] = sig.text
-
-    if accepted:
-        info["number"] = int(el.find("number").text)
-    else:
-        info["protoname"] = el.find("proto-name").text
-
-    return info
-
-
-def load_xepinfos(tree):
-    accepted, protos = {}, {}
-    for info_el in tree.getroot():
-        info = load_xepinfo(info_el)
-        if info["accepted"]:
-            accepted[info["number"]] = info
-        else:
-            protos[info["protoname"]] = info
-
-    return accepted, protos
 
 
 def dummy_info(number):
