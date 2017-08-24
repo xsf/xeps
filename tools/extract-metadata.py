@@ -40,6 +40,8 @@ def extract_xep_metadata(document):
             remark_children = minidom_children(remark_el)
             if len(remark_children) == 1 and remark_children[0].tagName == "p":
                 last_revision_remark = minidom_get_text(remark_children[0])
+            elif len(remark_children) == 0:
+                last_revision_remark = minidom_get_text(remark_el) or None
 
         if last_revision_remark is not None:
             initials_el = minidom_find_child(latest_revision, "initials")
