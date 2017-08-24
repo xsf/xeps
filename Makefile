@@ -7,8 +7,15 @@ XMLDEPS=xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
 TEXMLDEPS=xep2texml.xsl $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf
 XEPDIRS=. inbox
 HTMLDEPS=xep.xsl $(CSSTARGETS) $(JSTARGETS)
-CSSTARGETS=$(OUTDIR)/xmpp.css $(OUTDIR)/prettify.css
-JSTARGETS=$(OUTDIR)/prettify.js
+
+base_CSSTARGETS=xmpp.css prettify.css
+CSSTARGETS=$(addprefix $(OUTDIR)/,$(base_CSSTARGETS))
+proto_CSSTARGETS=$(addprefix $(OUTDIR)/inbox/,$(base_CSSTARGETS))
+base_JSTARGETS=prettify.js
+JSTARGETS=$(addprefix $(OUTDIR)/,$(base_JSTARGETS))
+proto_JSTARGETS=$(addprefix $(OUTDIR)/inbox/,$(base_JSTARGETS))
+
+proto_HTMLDEPS=xep.xsl $(proto_CSSTARGETS) $(proto_JSTARGETS)
 
 DO_XELATEX=cd $(OUTDIR); xelatex --interaction=nonstopmode -no-shell-escape "$(notdir $(basename $@)).tex" >/dev/null
 
@@ -94,11 +101,15 @@ $(EXAMPLESDIR)/%.xml: xep-%.xml $(XMLDEPS) examples.xsl $(EXAMPLESDIR)
 $(REFSDIR)/reference.XSF.XEP-%.xml: xep-%.xml $(XMLDEPS) ref.xsl $(REFSDIR)
 	xsltproc --path $(CURDIR) ref.xsl "$<" > "$@" && echo "Finished building $@"
 
-$(all_xep_htmls): $(OUTDIR)/%.html: %.xml $(XMLDEPS) $(HTMLDEPS)
-	# we don’t put it as a dependency to avoid a rebuild due to a timestamp
-	# change on the directory
-	mkdir -p $(OUTDIR)/inbox
+$(xep_htmls): $(OUTDIR)/xep-%.html: xep-%.xml $(XMLDEPS) $(HTMLDEPS)
+	xmllint --nonet --noout --noent --loaddtd --valid "$<"
+	# Check for non-data URIs
+	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
 
+	# Actually build the HTML
+	xsltproc --path $(CURDIR) --param htmlbase "$(if $(findstring inbox,$<),'../','./')" xep.xsl "$<" > "$@" && echo "Finished building $@"
+
+$(proto_xep_htmls): $(OUTDIR)/inbox/%.html: inbox/%.xml $(XMLDEPS) $(proto_HTMLDEPS)
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
@@ -130,7 +141,13 @@ $(JSTARGETS): $(OUTDIR)
 $(CSSTARGETS): $(OUTDIR)
 	cp "$(notdir $@)" "$@"
 
-$(EXAMPLESDIR) $(REFSDIR) $(OUTDIR):
+$(proto_JSTARGETS): $(OUTDIR)/inbox
+	cp "$(notdir $@)" "$@"
+
+$(proto_CSSTARGETS): $(OUTDIR)/inbox
+	cp "$(notdir $@)" "$@"
+
+$(EXAMPLESDIR) $(REFSDIR) $(OUTDIR) $(OUTDIR)/inbox:
 	mkdir -p "$@"
 
 .PHONY: clean

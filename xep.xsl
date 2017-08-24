@@ -40,7 +40,6 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     <html>
       <head>
         <title>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></title>
-        <base><xsl:attribute name='href'><xsl:value-of select='$htmlbase'/></xsl:attribute></base>
         <link rel='stylesheet' type='text/css' href='xmpp.css' />
         <link href="prettify.css" type="text/css" rel="stylesheet" />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
