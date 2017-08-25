@@ -21,6 +21,19 @@
   <shortname>sasl2</shortname>
   &dcridland;
   <revision>
+    <version>0.2.1</version>
+    <date>2017-08-24</date>
+    <initials>dwd</initials>
+    <remark>
+      <ul>
+          <li>That's a lot of XML errors. Sorry.</li>
+          <li>Clarified whose additional-data this is.</li>
+          <li>&lt:next> uses &lt;initial-response>.</li>
+          <li>Added a bunch of example flows.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>0.2.0</version>
     <date>2017-08-14</date>
     <initials>dwd</initials>
@@ -126,12 +139,13 @@
     <p>Authentication may complete in one of three ways. It may complete successfully, in which case the client is authenticated. It may also fail, in which case the client is not authenticated and the stream and session state remain entirely unchanged.</p>
     <p>Finally, it may have completed successfully, but further interaction is required - for example, a password change or second-factor authentication.</p>
     <section3 topic="Success">
-      <p>If the Client is now authenticated, the Server sends a &lt;success/> element, which contains an OPTIONAL &lt;additional-data/> element containing SASL additional data. It also contains a &lt;authorization-identity/> element containing the negotiated identity - this is a bare JID, unless resource binding has occurred, in which case it is a full JID.</p>
+      <p>If the Client is now authenticated, the Server sends a &lt;success/> element, which contains contains an &lt;authorization-identity/> element containing the negotiated identity - this is a bare JID, unless resource binding has occurred, in which case it is a full JID.</p>
+      <p>It MAY contain an &lt;additional-data> element, containing additional data from the exchange (task or SASL mechanism) that has just completed.</p>
       <example caption="Successful authentication"><![CDATA[
 <success xmlns='urn:xmpp:sasl:1'>
-  <success-data>
+  <additional-data>
     ip/AeIOfZXKBV+fW2smE0GUB3I//nnrrLCYkt0Vj
-  </success-data>
+  </additional-data>
   <authorization-identifier>juliet@montague.example/Balcony/a987dsh9a87sdh</authorization-identifier>
 </success>
 ]]></example>
@@ -139,7 +153,7 @@
       <example caption="Successful re-authentication and resumption"><![CDATA[
 <success xmlns='urn:xmpp:sasl:1'>
   <additional-data>
-  SGFkIHlvdSBnb2luZywgdGhlcmUsIGRpZG4ndCBJPw==
+    SGFkIHlvdSBnb2luZywgdGhlcmUsIGRpZG4ndCBJPw==
   </additional-data>
   <authorization-identifier>juliet@montague.example/Balcony/a987dsh9a87sdh</authorization-identifier>
   <sm:resumed xmlns='urn:xmpp:sm:3:example' h='345' previd='124'/>
@@ -173,15 +187,17 @@
   <tasks>
     <task>HOTP-EXAMPLE</task>
     <task>TOTP-EXAMPLE</task>
-  <tasks>
+  </tasks>
   <text>This account requires 2FA</text>
 </continue>
 ]]></example>
       <p>After the final octet of the first &lt;continue> element, any SASL security layer negotiated in the preceding exchange SHALL be immediately in effect.</p>
-      <p>Clients respond with a &lt;next/> element, which has a single mandatory attribute of "task", containing the selected task name, and contains an OPTIONAL base64 encoded initial response.</p>
+      <p>Clients respond with a &lt;next/> element, which has a single mandatory attribute of "task", containing the selected task name, and contains an OPTIONAL base64 encoded initial response contained in an &lt;initial-response> element.</p>
       <example caption="Client Continues"><![CDATA[
 <next xmlns='urn:xmpp:sasl:1' task='TOTP-EXAMPLE'>
-  SSd2ZSBydW4gb3V0IG9mIGlkZWFzIGhlcmUu
+  <initial-response>
+    SSd2ZSBydW4gb3V0IG9mIGlkZWFzIGhlcmUu
+  </initial-response>
 </next-authenticate>
 ]]></example>
     </section3>
@@ -227,10 +243,222 @@
     </section2>
   </section1>
 
+  <section1 topic="Example Flows">
+    <p>This section provides a fictional example. It is important to note that many of the extensions used wihtin this section do not, in fact, exist and therefore are to be avoided.</p>
+    <section2 topic="Syntactic Equivalence">
+      <p>Where no additional features that SASL2 makes available are used, the flow of information is identical to the original SASL profile. This example shows the new syntax and draws the reader's attention to the differences.</p>
+      <example caption="PLAIN Authentication"><![CDATA[
+<!--
+  Server sends stream features.
+  These are identical to SASL1, but within a different namespace.
+-->
+<stream:features>
+  <mechanisms xmlns='urn:xmpp:sasl:1'>
+    <mechanism>PLAIN</mechanism>
+    <mechanism>SCRAM-SHA-1</mechanism>
+  </mechanisms>
+</stream:features>
+
+<!--
+  Client intiates authentication.
+  Beyond the element local name and namespace,
+  the main distinction is that initial-response data is held within an element,
+  so the "=" special case no longer applies.
+-->
+<authenticate xmlns='urn:xmpp:sasl:1' mechanism='PLAIN'>
+  <initial-response>AGFsaWNlQGV4YW1wbGUub3JnCjM0NQ==</initial-response>
+</authenticate>
+
+<!--
+  This completes in one step, so the Server sends a success.
+  A SASL2 success always includes the authorization identifier:
+-->
+<success xmlns='urn:xmpp:sasl:1'>
+  <authorization-identifier>alice@example.org</authorization-identifier>
+</success>
+<!--
+  The server immediately sends a new set of stream features at this point.
+  There is no stream restart.
+-->
+<stream:features>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+    <required/>
+  </bind>
+</stream:features>
+
+<!--
+  The client now continues with resource binding.
+-->
+]]></example>
+      <p>Use of SASL2 in this simple scenario saves one round-trip (due to the lack of stream restart).</p>
+    </section2>
+    <section2 topic="Once More, This Time With CRAM">
+      <p>Again, this is an equivalent flow to a common SASL1 flow, although using the CRAM-MD5 mechanism which is (thankfully) rarely used in practise.</p>
+      <example caption="CRAM-MD5 Authentication"><![CDATA[
+<!--
+  Server sends stream features.
+-->
+<stream:features>
+  <mechanisms xmlns='urn:xmpp:sasl:1'>
+    <mechanism>PLAIN</mechanism>
+    <mechanism>CRAM-MD5</mechanism>
+  </mechanisms>
+</stream:features>
+
+<!--
+  Client intiates authentication.
+  Here, no initial response is needed, so none is sent.
+-->
+<authenticate xmlns='urn:xmpp:sasl:1' mechanism='CRAM-MD5'/>
+
+<!--
+  CRAM-MD5 starts with a server challenge:
+-->
+<challenge xmlns='urn:xmpp:sasl:1'>
+  PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+
+</challenge>
+
+<!--
+  And the client responds:
+-->
+<response xmlns='urn:xmpp:sasl:1>
+  dGltIGI5MTNhNjAyYzdlZGE3YTQ5NWI0ZTZlNzMzNGQzODkw
+</response>
+
+<!--
+  This completes, so the Server sends a success.
+-->
+<success xmlns='urn:xmpp:sasl:1'>
+  <authorization-identifier>tim@example.org</authorization-identifier>
+</success>
+<!--
+  The server immediately sends a new set of stream features at this point.
+  There is no stream restart.
+-->
+<stream:features>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>
+    <required/>
+  </bind>
+</stream:features>
+
+<!--
+  The client now continues with resource binding.
+-->
+]]></example>
+      <p>Use of SASL2 in this simple scenario again simply saves one round-trip.</p>
+    </section2>
+    <section2 topic="Advanced Usage">
+      <p>This moves into the deeply hypothetical. A binding extension is posited, alongside an unrealistic 2FA mechanism which somehow mutually authenticates because why not.</p>
+      <example caption="CRAM-MD5 Authentication"><![CDATA[
+<!--
+  Server sends stream features.
+  Note that whilst megabind is advertised, the unrealistic 2FA mechanism is not.
+-->
+<stream:features>
+  <mechanisms xmlns='urn:xmpp:sasl:1'>
+    <mechanism>BLURDYBLOOP</mechanism>
+  </mechanisms>
+  <megabind xmlns='urn:example:megabind'/>
+</stream:features>
+
+<!--
+  Client intiates authentication.
+-->
+<authenticate xmlns='urn:xmpp:sasl:1' mechanism='BLURDYBLOOP'>
+  <initial-response>
+    SW5pdGlhbCBSZXNwb25zZQ==
+  </initial-response>
+  <megabind xmlns='urn:example:megabind'>
+    <resource>this-one-please</resource>
+  </megabind>
+</authenticate>
+
+<!--
+  Maybe BLURDYBLOOP does this:
+-->
+<challenge xmlns='urn:xmpp:sasl:1'>
+  PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+
+</challenge>
+
+<!--
+  And the client responds:
+-->
+<response xmlns='urn:xmpp:sasl:1>
+  dGltIGI5MTNhNjAyYzdlZGE3YTQ5NWI0ZTZlNzMzNGQzODkw
+</response>
+
+<!--
+  This completes, so the Server sends a continue, with the
+  success data (probably mutual auth) from BLURDYBLOOP.
+  The next task required is the unrealistic 2FA.
+  Note that the session is - probably - bound at this point, but
+  the authorization-identifier is not passed to the client until
+  the full authentication sequence is completed.
+-->
+<continue xmlns='urn:xmpp:sasl:1'>
+  <additional-data>
+    QWRkaXRpb25hbCBEYXRh
+  </additional-data>
+  <tasks>
+    <task>UNREALISTIC-2FA</task>
+  </tasks>
+</continue>
+
+<!--
+  The client supports the unrealistic 2FA, so can move onto the next task:
+-->
+<next xmlns='urn:xmpp:sasl:1' task='UNREALISTIC-2FA'>
+  <initial-response>
+    VW5yZWFsaXN0aWMgMkZBIElS
+  </initial-response>
+  <!--
+    In principle, another option could be negotiated here, but this seems
+    unlikely to be useful in practise.
+  -->
+</next>
+
+<!--
+  This 2FA process is both unrealistic and also uses multiple round-trips.
+-->
+<challenge xmlns='urn:xmpp:sasl:1'>
+  PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+
+</challenge>
+
+<!--
+  The client responds here.
+-->
+<response xmlns='urn:xmpp:sasl:1>
+  dGltIGI5MTNhNjAyYzdlZGE3YTQ5NWI0ZTZlNzMzNGQzODkw
+</response>
+
+<!--
+  Finally, the server sends a success.
+  Here, we have an authzid which is a full jid, since the session is now bound.
+  The additional-data element here contains the mutual authentication data for the
+  unrealistic 2FA, and doesn't refer back to the BLURDYBLOOP exchange.
+-->
+<success xmlns='urn:xmpp:sasl:1'>
+  <additional-data>
+    VW5yZWFsaXN0aWMgMkZBIG11dHVhbCBhdXRoIGRhdGE=
+  </additional-data>
+  <authorization-identifier>
+    alice@example.org/this-one-please
+  </authorization-identifier>
+</success>
+<!--
+  The Server also sends an (empty) features element.
+  The client can simply continue and send stanzas.
+-->
+<stream:features/>
+]]></example>
+      <p>Although the unrealistic 2FA here uses 2 round-trips (real ones will probably use one), the embedding of resource binding as shown here means that a second RTT is saved by SASL2, and there's no net change. A more realistic example would see RTTs saved, and additional negotiations could be added to further reduce RTTs.</p>
+    </section2>
+  </section1>
+
 <section1 topic='Security Considerations' anchor='security'>
   <p>Relative to the SASL profile documented in RFC 6120, this introduces more data unprotected by any security layer negotiated by SASL itself.</p>
   <p>While no actual exchanges are introduced that are unprotected, the nature of this exchange might allow for (for example) a resource binding extension to be introduced.</p>
-  <p>SASL security layers are sparingly used in the field, however., so this is thought to be a theoretical, rather than practical, concern.</p>
+  <p>SASL security layers are sparingly used in the field, however, so this is thought to be a theoretical, rather than practical, concern.</p>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -242,7 +470,7 @@
 </section1>
 
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>The author wishes to share any credit with many members of the community, including Lance Stout, Ralph Meijer, and Florian Schmaus.</p>
+  <p>The author wishes to share any credit with many members of the community, including Lance Stout, Ralph Meijer, Phil Roberts and Florian Schmaus.</p>
 </section1>
 
 </xep>
