@@ -168,6 +168,19 @@ approval process. The following columns are used:
     Note that council voting is veto-based and if someone did not vote, consent
     is assumed. So a PR is rejected *iff* at least one person from council
     explicitly voted against it.
+
+    When moving a PR into this column, make a comment on the PR which contains
+    the following information:
+
+    - The date at which the voting period started.
+    - Link to the respective meeting minutes.
+    - The date at which the voting period has ended or will end at latest.
+    - Possibly additional notes from the minutes, for example:
+
+        - "There will be additional discussion on standards@" (bonus points if
+            you add a link once the thread starts).
+        - "Two people will vote on-list after further consideration."
+
 * Done: The PR went through voting, but has not been merged yet. The
   [Needs Council] label must be removed and the [Ready to merge] label should
   be added. The PR can be removed from [Council Tracking] now.
