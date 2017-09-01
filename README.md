@@ -182,8 +182,16 @@ approval process. The following columns are used:
         - "Two people will vote on-list after further consideration."
 
 * Done: The PR went through voting, but has not been merged yet. The
-  [Needs Council] label must be removed and the [Ready to merge] label should
-  be added. The PR can be removed from [Council Tracking] now.
+    [Needs Council] label must be removed.
+
+    Add a comment with the result of the votes, possibly including links to
+    meeting minutes which contained the votes and on-list votes by the
+    respective council members.
+
+    If the PR was not vetoed, the [Ready to merge] label should be added.
+    Otherwise, the PR should be closed.
+
+    In any case, the PR can be removed from [Council Tracking] now.
 
 If a card awaits triaging, add it to the [Council Trello] in the first column
 *under* the "Find Minutes taker". Put the PR in the "On agenda" column (in the
