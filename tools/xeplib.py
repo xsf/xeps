@@ -35,6 +35,7 @@ class Action(enum.Enum):
     OBSOLETE = "OBSOLETED"
     DEFER = "DEFERRED"
     UPDATE = "UPDATED"
+    DEPRECATE = "DEPRECATED"
 
     @classmethod
     def fromstatus(cls, status):
@@ -44,9 +45,9 @@ class Action(enum.Enum):
             Status.ACTIVE: cls.ACTIVE,
             Status.FINAL: cls.FINAL,
             Status.RETRACTED: cls.RETRACT,
-            Status.OBSOLETED: cls.OBSOLETE,
+            Status.OBSOLETE: cls.OBSOLETE,
             Status.DEPRECATED: cls.DEPRECATE,
-            Status.DEFERRED: cls.DEFERRED,
+            Status.DEFERRED: cls.DEFER,
         }[status]
 
 

@@ -68,6 +68,19 @@ Changelog:
 URL: {url}"""
 
 
+MAIL_DEFER_TEMPLATE = """\
+XEP-{info[number]:04d} ({info[title]}) has been Deferred because of inactivity.
+
+Abstract:
+{info[abstract]}
+
+URL: {url}
+
+If and when a new revision of this XEP is published, its status will be \
+changed back to Experimental.
+"""
+
+
 SUBJECT_NONPROTO_TEMPLATE = \
     "{action.value}: XEP-{info[number]:04d} ({info[title]})"
 
@@ -152,6 +165,10 @@ def make_nonproto_mail(action, info):
         ),
     }
 
+    body_template = MAIL_NONPROTO_TEMPLATE
+    if action == Action.DEFER:
+        body_template = MAIL_DEFER_TEMPLATE
+
     mail = email.message.EmailMessage()
     mail["Subject"] = SUBJECT_NONPROTO_TEMPLATE.format(**kwargs)
     mail["XSF-XEP-Action"] = action.value
@@ -161,7 +178,7 @@ def make_nonproto_mail(action, info):
     mail["XSF-XEP-Number"] = "{:04d}".format(info["number"])
     mail["XSF-XEP-Url"] = kwargs["url"]
     mail.set_content(
-        wraptext(MAIL_NONPROTO_TEMPLATE.format(**kwargs)),
+        wraptext(body_template.format(**kwargs)),
         "plain",
         "utf-8",
     )
