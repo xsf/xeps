@@ -289,7 +289,7 @@ webserver (see also the [Docker Build] to track the build progress):
 
         $ make build/xeplist.xml
 
-    Check that the emails which will be send are correct (the ``--dry-run``
+    Check that the emails which will be sent are correct (the ``--dry-run``
     switch prevents the tool from actually sending emails):
 
         $ ./tools/send-updates.py --dry-run tools/old-xeplist.xml build/xeplist.xml standards@xmpp.org
