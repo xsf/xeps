@@ -28,6 +28,27 @@
     <jid>andy@strb.org</jid>
   </author>
   <revision>
+    <version>0.2</version>
+    <date>2017-05-05</date>
+    <initials>rt</initials>
+    <remark>
+      <ul>
+        <li>Add fingerprint key</li>
+        <li>Sign identity keys</li>
+        <li>Use Olm authenticated encryption for encrypting body payload</li>
+        <li>Made bundle elements kebab-case</li>
+        <li>Removed pre-keys from bundle that are not used by Olm</li>
+        <li>Removed references to the signal protocol and library</li>
+        <li>Removed IV element from header</li>
+        <li>Don't mandate device ID format, suggest GUID</li>
+        <li>Add JID tag to keys ensure uniqueness ID</li>
+        <li>Add recipient and sender JID to encrypted keys to ensure message authenticity</li>
+        <li>Add max_items attribute to bundle query</li>
+        <li>Add use case for cross-signing identity keys</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>0.1</version>
     <date>2016-12-07</date>
     <initials>XEP Editor: ssw</initials>
@@ -66,8 +87,9 @@
       This XEP defines a protocol that leverages &olm; encryption to provide
       multi-end to multi-end encryption, allowing messages to be synchronized
       securely across multiple clients, even if some of them are offline. Olm
-      is a cryptographic double ratched protocol based on work by Trevor Perrin
-      and Moxie Marlinspike first published as the Axolotl protocol.
+      is an implementation of the cryptographic 
+      <span class='ref'><link url='https://whispersystems.org/docs/specifications/doubleratchet/'>Double Ratchet Algorithm</link></span> <note>The Double Ratchet Algorithm &lt;<link url='https://whispersystems.org/docs/specifications/doubleratchet/'>https://whispersystems.org/docs/specifications/doubleratchet/</link>&gt;.</note>.
+      Olm has been publicly reviewed by the NCC Group &olm-review;.
     </p>
   </section2>
   <section2 topic='Overview' anchor='intro-overview'>
@@ -133,9 +155,19 @@
   <section2 topic='Setup' anchor='usecases-setup'>
     <p>
       The first thing that needs to happen if a client wants to start using
-      OMEMO is they need to generate an IdentityKey and a Device ID. The
-      IdentityKey is a &curve25519; public/private Key pair. The Device ID is a
-      randomly generated integer between 1 and 2^31 - 1.
+      OMEMO is they need to generate a <em>Device ID</em>, 
+      a <em>Fingerprint Key Pair</em>, and  an <em>Identity Key Pair</em>.
+    </p>
+    <p>
+      The <em>Device ID</em> is a randomly generated identifier, and MUST be
+      unique for all clients for the user's JID. The identifier SHOULD be
+      a GUID to ensure global uniqueness.
+    </p>
+    <p>
+      The <em>Fingerprint Key Pair</em> is an &ed25519; public/private key pair for signing. The public part of the signing key is used as a fingerprint of the device.
+    </p>
+    <p>
+      The <em>Identity Key Pair</em> consists of a &curve25519; public/private key pair. This key should be refreshed periodically.
     </p>
   </section2>
   <section2 topic='Discovering peer support' anchor='usecases-discovering'>
@@ -149,8 +181,8 @@
     <items node='urn:xmpp:omemo:0:devicelist'>
       <item>
         <list xmlns='urn:xmpp:omemo:0'>
-          <device id='12345' />
-          <device id='4223' />
+          <device id='a74e10af-939d-4d90-b486-9a43ad39119b' />
+          <device id='75d22a2d-4eb4-47c7-b5f9-c454941bd36d' />
         </list>
       </item>
     </items>
@@ -165,43 +197,40 @@
     <publish node='urn:xmpp:omemo:0:devicelist'>
       <item>
         <list xmlns='urn:xmpp:omemo:0'>
-          <device id='12345' />
-          <device id='4223' />
-          <device id='31415' />
+          <device id='a74e10af-939d-4d90-b486-9a43ad39119b' />
+          <device id='75d22a2d-4eb4-47c7-b5f9-c454941bd36d' />
+          <device id='22f242ab-73ad-4071-aa9b-a0f8e8e5b598' />
         </list>
       </item>
     </publish>
   </pubsub>
 </iq>]]></example>
     <p>This step presents the risk of introducing a race condition: Two devices might simultaneously try to announce themselves, unaware of the other's existence. The second device would overwrite the first one. To mitigate this, devices MUST check that their own device ID is contained in the list whenever they receive a PEP update from their own account. If they have been removed, they MUST reannounce themselves.</p>
-    <p>Furthermore, a device MUST announce it's IdentityKey, a signed PreKey, and a list of PreKeys in a separate, per-device PEP node. The list SHOULD contain 100 PreKeys, but MUST contain no less than 20.</p>
+
+    <p>Furthermore, a device MUST announce the public parts of its fingerprint and identity key pair, and a list of PreKeys in a separate, per-device PEP node. The public identity key MUST be signed with the fingerprint key. 
+      The list of PreKeys SHOULD contain 100 PreKeys signed with the fingerprint key. The list of PreKeys MUST contain no less than 20 PreKeys.
+      The client SHOULD generate a new signed identity key periodically (e.g. once a month).
+    </p>
+
     <example caption='Announcing bundle information'><![CDATA[
 <iq from='juliet@capulet.lit' type='set' id='announce2'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <publish node='urn:xmpp:omemo:0:bundles:31415'>
+    <publish node='urn:xmpp:omemo:0:bundles:22f242ab-73ad-4071-aa9b-a0f8e8e5b598'>
       <item>
         <bundle xmlns='urn:xmpp:omemo:0'>
-          <signedPreKeyPublic signedPreKeyId='1'>
-            BASE64ENCODED...
-          </signedPreKeyPublic>
-          <signedPreKeySignature>
-            BASE64ENCODED...
-          </signedPreKeySignature>
-          <identityKey>
-            BASE64ENCODED...
-          </identityKey>
-          <prekeys>
-            <preKeyPublic preKeyId='1'>
-              BASE64ENCODED...
-            </preKeyPublic>
-            <preKeyPublic preKeyId='2'>
-              BASE64ENCODED...
-            </preKeyPublic>
-            <preKeyPublic preKeyId='3'>
-              BASE64ENCODED...
-            </preKeyPublic>
-            <!-- ... -->
-          </prekeys>
+          <fingerprint-key key="9EA1q2XYopPW9SyzKCkLYJ6XVT3MaF8sk75C4efi+e0=" />
+          <identity-key key="S8NwiEt6yh8KKHzLYPxUhol1yN8RdfynqH2CsvO4fmk=">
+            <signature>XhZtkP0STMZ1fXEVYz1aUkdt04zIVsihFkawLE+aHZWFCn
+XeGn2ZThTU5TQm0pJo3oFWd7JED0aCEge0ry3hCg==</signature>
+          </identity-key>
+          <pre-key key="6xY6aSIG+AvW+jfQGgf+bUD0nPKY8NNUqIm4e2oWQ0E=">
+            <signature>7uBP6mIXBdKzkxKOQcIpDNOQe+SX8dWl74h1KexH6bQ3UIQN7TN37I+SgxeEChXecjoBsPa62p5W4I2S9GXKJQ==</signature>
+</signature>
+          </pre-key>
+          <pre-key key="KRMGUwvmL4ci5ySfPSXO4B3ZQQgtdxU6YoAzYXBsqAk=">
+            <signature>s702IcFuxdiQwfiUn+x8b2iu/OaZDYFeIAlUdtmcmo7plwLm
+p/1QwaO7sta8LHocbtoU/b0VEJDkaapUZ65eDw==</signature>
+          </pre-key>
         </bundle>
       </item>
     </publish>
@@ -216,34 +245,64 @@
     to='juliet@capulet.lit'
     id='fetch1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <items node='urn:xmpp:omemo:0:bundles:31415'/>
+    <items max_items="1" node='urn:xmpp:omemo:0:bundles:22f242ab-73ad-4071-aa9b-a0f8e8e5b598'/>
   </pubsub>
 </iq>]]></example>
-    <p>A random preKeyPublic entry is selected, and used to build an Olm session.</p>
+    <p>The signature of the identity key is verified, a random public pre-key is selected, and its signature verified if it is signed. The selected pre-key and encryption identity key is used to build an Olm session.</p>
   </section2>
   <section2 topic='Sending a message' anchor='usecases-messagesend'>
     <p>
       In order to send a chat message, its &lt;body&gt; first has to be
-      encrypted. The client MUST use fresh, randomly generated key/IV pairs with
-      AES-128 in Galois/Counter Mode (GCM).
-      The 16 bytes key and the GCM authentication tag (The tag SHOULD have at least
-      128 bit) are concatenated and for each intended recipient device,
-      i.e. both own devices as well as devices associated with the contact, the
-      result of this concatenation is encrypted using the corresponding
-      long-standing Olm session. Each encrypted payload key/authentication tag
-      tuple is tagged with the recipient device's ID. The key element MUST be
-      tagged with a prekey attribute set to true if a PreKeyOlmMessage is being
-      used. This is all serialized into a MessageElement, which is transmitted
+      encrypted. The following steps are taken to achieve this:
+    </p>
+    <ol>
+      <li>A random, fresh 32-byte secret <em>MK</em> is generated</li>
+      <li>
+        The randomly generated <em>MK</em> is used to generate a 32-byte
+        encryption key <em>EK</em>, 32-byte authentication key <em>AK</em>, and
+        16-byte <em>IV</em>, by applying the <em>Olm Authenticated Encryption</em>
+        mechanism described in &olm;, using <tt>OMEMO_ENVELOPE_KEYS</tt> as the info.
+      </li>
+      <li>
+        The message &lt;body&gt; is encrypted using the key <em>EK</em>,
+        and the resulting ciphertext is put in a &lt;payload&gt; element.
+      </li>
+      <li>
+        An authentication tag <em>MAC</em> is constructed by 
+        applying HMAC-SHA-256 to the &lt;body&gt; payload, using <em>AK</em>
+        as the authentication key, and truncating the result to 64 bits.
+      </li>
+      <li>
+        For each of the intended recipient devices (i.e. both own devices and
+        devices associated with the contact), an envelope <em>E</em> 
+        is constructed
+        by concatenating the 32-byte <em>MK</em>, the 8-byte <em>MAC</em>,
+        the sender JID, a <tt>NUL</tt> character, and the recipient <tt>JID</tt>.
+        This envelope is encrypted using the long-standing Olm session with
+        the recipient device, using the Olm message format. 
+        The resulting ciphertext put in a
+        &lt;envelope&gt; element. The &lt;envelope&gt; element 
+        MUST be tagged with the <tt>jid</tt> of the recipient, and MUST be
+        tagged with a <tt>pre-key</tt> attribute set to <tt>true</tt> if a 
+        PreKeyOlmMessage is being used.
+      </li>
+    </ol>
+
+    <p>
+      The result is serialized into a MessageElement, which is transmitted
       in a &lt;message&gt; as follows:
     </p>
     <example caption="Sending a message"><![CDATA[
 <message to='juliet@capulet.lit' from='romeo@montague.lit' id='send1'>
   <encrypted xmlns='urn:xmpp:omemo:0'>
-    <header sid='27183'>
-      <key rid='31415'>BASE64ENCODED...</key>
-      <key prekey="true" rid='12321'>BASE64ENCODED...</key>
+    <header sid='3a8bcf91-2886-474d-8b60-7bcc6cde2641'>
+      <envelope jid='juliet@capulet.lit' rid='22f242ab-73ad-4071-aa9b-a0f8e8e5b598'>
+        BASE64ENCODED...
+      </envelope>
+      <envelope jid='romeo@montague.lit' pre-envelope="true" rid='c4f9633c-b64d-4034-890d-aaa0f6878cd5'>
+        BASE64ENCODED...
+      </envelope>
       <!-- ... -->
-      <iv>BASE64ENCODED...</iv>
     </header>
     <payload>BASE64ENCODED</payload>
   </encrypted>
@@ -252,35 +311,79 @@
   </section2>
   <section2 topic='Sending a key' anchor='usecases-keysend'>
     <p>
-      The client may wish to transmit keying material to the contact. This first
-      has to be generated. The client MUST generate a fresh, randomly generated
-      key/IV pair. The 16 bytes key and the GCM authentication tag (The tag
-      SHOULD have at least 128 bit) are concatenated and for each intended
-      recipient device, i.e. both own devices as well as devices associated
-      with the contact, this key is encrypted using the corresponding
-      long-standing Olm session. Each encrypted payload key/authentication tag
-      tuple is tagged with the recipient device's ID. The key element MUST be
-      tagged with a prekey attribute set to true if a PreKeyOlmMessage is being
-      used This is all serialized into a KeyTransportElement, omitting the
-      &lt;payload&gt; as follows:
+      The client may wish to transmit keying material to the contact. 
+      The same method is applied as sending a regular message, except
+      the payload and authentication tag are omitted.
     </p>
+    
     <example caption="Sending a key"><![CDATA[
 <encrypted xmlns='urn:xmpp:omemo:0'>
-  <header sid='27183'>
-    <key rid='31415'>BASE64ENCODED...</key>
-    <key prekey="true" rid='12321'>BASE64ENCODED...</key>
+  <header sid='3a8bcf91-2886-474d-8b60-7bcc6cde2641'>
+    <envelope jid='juliet@capulet.lit' rid='22f242ab-73ad-4071-aa9b-a0f8e8e5b598'>
+      BASE64ENCODED...
+    </envelope>
+    <envelope jid='romeo@montague.lit' pre-envelope="true" rid='c4f9633c-b64d-4034-890d-aaa0f6878cd5'>
+      BASE64ENCODED...
+    </envelope>
     <!-- ... -->
-    <iv>BASE64ENCODED...</iv>
   </header>
 </encrypted>]]></example>
     <p>This KeyTransportElement can then be sent over any applicable transport mechanism.</p>
   </section2>
   <section2 topic='Receiving a message' anchor='usecases-receiving'>
-    <p>When an OMEMO element is received, the client MUST check whether there is a &lt;key&gt; element with an rid attribute matching its own device ID. If this is not the case, the element MUST be silently discarded. If such an element exists, the client checks whether the element's contents are a PreKeyOlmMessage.</p>
-    <p>If this is the case, a new session is built from this received element. The client SHOULD then republish their bundle information, replacing the used PreKey, such that it won't be used again by a different client. If the client already has a session with the sender's device, it MUST replace this session with the newly built session. The client MUST delete the private key belonging to the PreKey after use.</p>
-    <p>If the element's contents are a OlmMessage, and the client has a session with the sender's device, it tries to decrypt the OlmMessage using this session. If the decryption fails or if the element's contents are not a OlmMessage either, the OMEMO element MUST be silently discarded.</p>
-    <p>If the OMEMO element contains a &lt;payload&gt;, it is an OMEMO message element. The client tries to decrypt the base64 encoded contents using the key and the authentication tag extracted from the &lt;key&gt; element. If the decryption fails, the client MUST silently discard the OMEMO message. If it succeeds, the decrypted contents are treated as the &lt;body&gt; of the received message.</p>
+    <p>When an OMEMO element is received, the client MUST check whether there is a &lt;key&gt; element with an rid attribute matching its own device ID and matching its own JID. If this is not the case, the element MUST be silently discarded. If such an element exists, the client checks whether the element's contents are a PreKeyOlmMessage.</p>
+    <p>If this is the case, a new session is built from this received element. The client SHOULD then republish their bundle information, replacing the used PreKey, such that it won't be used again by a different client. If the client already has a session with the sender's device, it MUST replace this session with the newly built session. The client MUST delete the private key belonging to the PreKey after use. The client then MUST validate the recipient JID encoded in the payload corresponds to its own JID, and that the sender JID corresponds to the sender of the message. If this is not the case, the message MUST be silently discarded.</p>
+    <p>If the element's contents are a OlmMessage, and the client has a session with the sender's device, it tries to decrypt the OlmMessage using this session. If the decryption fails or if the element's contents are not a OlmMessage either, the OMEMO element MUST be silently discarded. The client then MUST validate the recipient JID encoded in the payload corresponds to its own JID, and that the sender JID corresponds to the sender of the message. If this is not the case, the message MUST be silently discarded.</p>
+    <p>If the OMEMO element contains a &lt;payload&gt;, it is an OMEMO message element. The client tries to decrypt the base64 encoded contents using the key decrypted from the &lt;key&gt; element using the long-standing Olm session. If the decryption fails, the client MUST silently discard the OMEMO message. If it succeeds, the decrypted contents are treated as the &lt;body&gt; of the received message.</p>
     <p>If the OMEMO element does not contain a &lt;payload&gt;, the client has received a KeyTransportElement. The key extracted from the &lt;key&gt; element can then be used for other purposes (e.g. encrypted file transfer).</p>
+  </section2>
+
+  <section2 topic='Cross-signing fingerprint keys' anchor='usecases-cross-signing'>
+    <p>
+      A client MAY wish to cross-sign fingerprint keys from other devices. 
+      For example,
+      when the user signs on with a new device, they may want to use another
+      device to confirm this new device by letting the existing device 
+      sign the newly generated fingerprint key. Recipients that trust already 
+      the first key MAY then choose to also trust messages from the new key.
+    </p>
+    <p>
+      Signatures from other devices can be added to the bundle by adding
+      an extra &lt;signature&gt; element to the fingerprint key, tagged 
+      with the signing Device ID:
+    </p>
+
+    <example caption='Cross-signing a fingerprint key from a different device'><![CDATA[
+<iq from='juliet@capulet.lit' type='set' id='announce2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:omemo:0:bundles:22f242ab-73ad-4071-aa9b-a0f8e8e5b598'>
+      <item>
+        <bundle xmlns='urn:xmpp:omemo:0'>
+          <fingerprint-key key="9EA1q2XYopPW9SyzKCkLYJ6XVT3MaF8sk75C4efi+e0=">
+            <signature 
+              device="75d22a2d-4eb4-47c7-b5f9-c454941bd36d" 
+              key="f/CcaS13vKbZksaZ9jbymI8rQYMMqH1xgI30pT2w7i4=">
+              2+CTXIB4104BiBTTSrYD3wQs/njvDX+BLPO09REzQ04ihps0sSsEjOI
+dfmkraAtTtv1Fk1qur5l45rHbThj3SQ==
+            </signature>
+          </fingerprint-key>
+          <identity-key key="S8NwiEt6yh8KKHzLYPxUhol1yN8RdfynqH2CsvO4fmk=">
+            <signature>XhZtkP0STMZ1fXEVYz1aUkdt04zIVsihFkawLE+aHZWFCn
+XeGn2ZThTU5TQm0pJo3oFWd7JED0aCEge0ry3hCg==</signature>
+          </identity-key>
+          <pre-key key="6xY6aSIG+AvW+jfQGgf+bUD0nPKY8NNUqIm4e2oWQ0E=">
+            <signature>7uBP6mIXBdKzkxKOQcIpDNOQe+SX8dWl74h1KexH6bQ3UIQN7TN37I+SgxeEChXecjoBsPa62p5W4I2S9GXKJQ==</signature>
+</signature>
+          </pre-key>
+          <pre-key key="KRMGUwvmL4ci5ySfPSXO4B3ZQQgtdxU6YoAzYXBsqAk=">
+            <signature>s702IcFuxdiQwfiUn+x8b2iu/OaZDYFeIAlUdtmcmo7plwLm
+p/1QwaO7sta8LHocbtoU/b0VEJDkaapUZ65eDw==</signature>
+          </pre-key>
+        </bundle>
+      </item>
+    </publish>
+  </pubsub>
+</iq>]]></example>
   </section2>
 </section1>
 <section1 topic='Business Rules' anchor='rules'>
@@ -338,11 +441,10 @@
       <xs:attribute name="sid" type="xs:integer"/>
       <xs:complexType>
         <xs:sequence>
-          <xs:element name="key" type="xs:base64Binary" maxOccurs="unbounded">
+          <xs:element name="envelope" type="xs:base64Binary" maxOccurs="unbounded">
             <xs:attribute name="rid" type="xs:integer" use="required"/>
-            <xs:attribute name="prekey" type="xs:boolean"/>
+            <xs:attribute name="pre-key" type="xs:boolean"/>
           </xs:element>
-          <xs:element name="iv" type="xs:base64Binary"/>
       </xs:complexType>
     </xs:element>
     <xs:element name="payload" type="xs:base64Binary" minOccurs="0"/>
@@ -361,24 +463,28 @@
   <xs:element name="bundle">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="signedPreKeyPublic" type="base64Binary">
-          <xs:attribute name="id" type="integer"/>
-        </xs:element>
-        <xs:element name="signedPreKeySignature" type="base64Binary"/>
-        <xs:element name="identityKey" type="base64Binary"/>
-        <xs:element name="prekeys">
-          <xs:complexType>
-            <xs:sequence>
-              <xs:element name="preKeyPublic" type="base64Binary" maxOccurs="unbounded">
-                <xs:attribute name="id" type="integer" use="required"/>
-              </xs:element>
-            </xs:sequence>
-          </xs:complexType>
-        </xs:element>
+        <xs:element name="fingerprint-key" type="maybePeerSignedKey" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="identity-key" type="signedKey" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="pre-key" type="signedKey" maxOccurs="unbounded"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>
 
+  <xs:complexType name='signedKey'>
+    <xs:attribute name="key" type="xs:base64Binary" use='required'/>
+    <xs:sequence>
+      <xs:element name="signature" type="xs:base64Binary" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name='maybePeerSignedKey'>
+    <xs:attribute name="key" type="xs:base64Binary" use='required'/>
+    <xs:sequence>
+      <xs:element name="signature" type="xs:base64Binary">
+        <xs:attribute name="device" type="xs:string" use='required'/>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
 </xs:schema>
 ]]></code>
 </section1>
