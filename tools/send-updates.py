@@ -99,6 +99,9 @@ def diff_infos(old, new):
             return Action.PROTO
         elif old["status"] is None:
             return Action.NEW
+        elif (old["status"] == Status.DEFERRED and
+              new["status"] == Status.EXPERIMENTAL):
+            return Action.UPDATE
         else:
             return Action.fromstatus(new["status"])
 
