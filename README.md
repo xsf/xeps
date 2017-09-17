@@ -1,4 +1,5 @@
 [![Docker Build Status](https://img.shields.io/docker/build/xmppxsf/xeps.svg)](https://hub.docker.com/r/xmppxsf/xeps/)
+[![Build Status](https://img.shields.io/travis/xsf/xeps.svg)](https://travis-ci.org/xsf/xeps)
 
 XMPP Extension Protocols (XEPs)
 =========
