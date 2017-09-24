@@ -385,6 +385,39 @@ whether or not they are required.
 For a helpful graph of how XEP promotion works, see [XEP-0001].
 
 
+Deferring XEPs
+--------------
+
+Before Deferring XEPs, read the "General notes on making changes" section.
+
+XEPs get deferred after 12 months of inactivity. There is a tool which handles
+that process automatically, if it is invoked regularly.
+
+First of all, you need an up-to-date ``xeplist.xml``:
+
+    make build/xeplist.xml
+
+To get a list of XEPs which need to be deferred (without changing anything),
+run:
+
+    ./tools/deferrals.py -v
+
+To apply the deferrals, make a new feature branch and execute:
+
+    ./tools/deferrals.py -m 'initials'
+
+where you replace ``initials`` with your editor initials so that it is obvious
+who made the change (those initials will be used in the revision block).
+
+This will modify the XEPs in-place. It uses heuristics for incrementing the
+version number, finding and inserting the revision block as well as changing
+the status. Yes, it involves regular expressions (because we don’t want to
+fully re-write the XML to keep the diffs minimal). It is thus vital that you
+**use `git diff` to ensure that the changes are sane**. If the changes
+are sane, make a commit and merge to master as described in "Merging a PR",
+in accordance with the "General notes on making changes".
+
+
 Merging a PR
 ------------
 
