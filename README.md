@@ -133,10 +133,8 @@ applies.
     defined in the XEP file itself.)
 
     1. Add the [Needs Council]/[Needs Board] label.
-    2. Put the PR in the [Council Tracking] project.
-    3. (Optionally, continue here with submitting the PR to Council via Trello
-        and move it right to the "On the agenda" column.)
-    4. Stop.
+    2. Put the PR in the [Council Trello] project.
+    3. Stop.
 
 2. Is the XEP in Experimental state and the PR opener is not an author of the
    XEP?
@@ -147,72 +145,10 @@ applies.
         1. Make sure the standards@ discussion (if it exists) is linked in the
            PR.
         2. Add the [Needs Author] label.
-        3. Put the PR in the [Author Tracking] project in the
-           "Not explicitly pinged" bin.
+        3. Put the PR in the [Editor Trello] project.
         4. Stop.
 
 3. Mark the PR as [Ready to Merge].
-
-
-Council Tracking
-----------------
-
-The [Council Tracking] project is used to track a PR through the Council
-approval process. The following columns are used:
-
-* On agenda: The PR has been added to the council trello and is awaiting
-  handling by Council.
-* Voting in progress: The PR has been discussed by council, but not everyone
-    has voted yet. Aside from exceptional circumstances, a PR can only reside
-    for at most two weeks in this column.
-
-    Note that council voting is veto-based and if someone did not vote, consent
-    is assumed. So a PR is rejected *iff* at least one person from council
-    explicitly voted against it.
-
-    When moving a PR into this column, make a comment on the PR which contains
-    the following information:
-
-    - The date at which the voting period started.
-    - Link to the respective meeting minutes.
-    - The date at which the voting period has ended or will end at latest.
-    - Possibly additional notes from the minutes, for example:
-
-        - "There will be additional discussion on standards@" (bonus points if
-            you add a link once the thread starts).
-        - "Two people will vote on-list after further consideration."
-
-* Done: The PR went through voting, but has not been merged yet. The
-    [Needs Council] label must be removed.
-
-    Add a comment with the result of the votes, possibly including links to
-    meeting minutes which contained the votes and on-list votes by the
-    respective council members.
-
-    If the PR was not vetoed, the [Ready to merge] label should be added.
-    Otherwise, the PR should be closed.
-
-    In any case, the PR can be removed from [Council Tracking] now.
-
-If a card awaits triaging, add it to the [Council Trello] in the first column
-*under* the "Find Minutes taker". Put the PR in the "On agenda" column (in the
-[Council Tracking], not the [Council Trello]).
-
-
-Author Tracking
----------------
-
-This is less formal and more a tool for the editors to keep track of at which
-stage of escalation we are when getting in contact with the Authors. The
-columns should be self-explaining.
-
-Use your gut feeling on how long you wait for an authors reaction, but giving
-them at least a week on each stage seems reasonable.
-
-When an author replies and a discussion starts, move the PR to "Discussion in
-progress" and remember to check back once in a while if the discussion
-resolved.
-
 
 Discussions
 -----------
@@ -339,7 +275,7 @@ New ProtoXEPs
 - Merge the PR as described in "Merging a PR". Once the email has been sent,
     continue here.
 - Create a card for the protoxep on the [Council Trello] under "Proposed
-  Agendums" and add the PR to the [Council Tracking].
+  Agendums".
 - Attach the PR to the card and link the generated HTML.
 - Comment on the PR with a link to the card, thanking the author for their
     submission and letting them know that their XEP will be voted on within the
@@ -468,8 +404,6 @@ When you get to the point that the PR is [Ready to Merge], do the following:
 [`is:open is:pr no:assignee`]: https://github.com/xsf/xeps/pulls?utf8=%E2%9C%93&q=is%3Aopen%20is%3Apr%20no%3Aassignee%20
 [Needs Author]: https://github.com/xsf/xeps/labels/Needs%20Author
 [Ready to Merge]: https://github.com/xsf/xeps/labels/Ready%20to%20Merge
-[Council Tracking]: https://github.com/xsf/xeps/projects/1
-[Author Tracking]: https://github.com/xsf/xeps/projects/2
 [Needs List Discussion]: https://github.com/xsf/xeps/labels/Needs%20List%20Discussion
 [Editorial Change]: https://github.com/xsf/xeps/labels/Editorial%20Change
 [xep-attic]: https://github.com/xsf/xep-attic
