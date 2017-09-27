@@ -387,7 +387,7 @@ def main():
 
     for added_xep in added_xeps:
         old_info = dummy_info(added_xep)
-        new_info = new_accepted[common_xep]
+        new_info = new_accepted[added_xep]
 
         action = diff_infos(old_info, new_info)
         if action is not None:
