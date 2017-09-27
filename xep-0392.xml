@@ -1,0 +1,288 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+  <!ENTITY rgblind "<em>Red/Green-Blindness</em>">
+  <!ENTITY bblind "<em>Blue-Blindness</em>">
+  <!ENTITY cvd "Color Vision Deficiency">
+  <!ENTITY cvds "Color Vision Deficiencies">
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Consistent Color Generation</title>
+  <abstract>This specification provides a set of algorithms to consistently generate colors given a string. The string can be a nickname, a JID or any other piece of information. All entities adhering to this specification generate the same color for the same string, which provides a consistent user experience across platforms.</abstract>
+  &LEGALNOTICE;
+  <number>0392</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies></dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>colors</shortname>
+  <author>
+    <firstname>Jonas</firstname>
+    <surname>Wielicki</surname>
+    <email>jonas@wielicki.name</email>
+    <jid>jonas@wielicki.name</jid>
+  </author>
+  <revision>
+    <version>0.1</version>
+    <date>2017-09-27</date>
+    <initials>XEP Editor: jwi</initials>
+    <remark><p>Accepted as Experimental by Council.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2017-09-14</date>
+    <initials>jwi</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Colors provide a valuable visual cue to recognize text. Recognition of colors works much faster than recognition of text. Together with the length and overall shape of a piece of text (such as a nickname),  a color provides a decent amount of entropy to distinguish a reasonable amount of entities.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The color generation mechanism should provide the following features:</p>
+  <ul>
+    <li>Consistent generation of color across all platforms depending solely on the identifier used as input for the algorithm.</li>
+    <li>The system should be reasonably fast; it must be possible to, for example, apply it to all roster entries even of very large rosters in reasonable amount of time.</li>
+    <li>It must be able to provide decent contrast on any background.</li>
+    <li>The implementation should be stateless and not be complex.</li>
+    <li>A fallback path for users with common types of &cvds; must be provided.</li>
+    <li>A fallback path for systems which can only use colors from a restricted palette must be provided.</li>
+  </ul>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Generating a color' anchor='usecase-textcolor'>
+    <p>To generate a color from a string of text, the follownig algorithms are applied in order:</p>
+    <ol>
+      <li><link url='#algorithm-angle'>Generate an angle in the CbCr plane from the text</link>.</li>
+      <li>If enabled, <link url='#algorithm-cvd'>apply configured corrections for &cvds;</link>.</li>
+      <li><link url='#algorithm-cbcr'>Convert the angle to a CbCr pair</link>.</li>
+      <li>If the output device only supports a small palette of colors, <link url='#algorithm-mappalette'>map the CbCr value to the closest palette color</link>.</li>
+      <li>If the output device supports RGB output, <link url='#algorithm-rgb'>convert the CbCr pair to an RGB triple</link>.</li>
+    </ol>
+  </section2>
+  <section2 topic='Adding colors to participants of a conversation' anchor='usecase-nickcolor'>
+    <p>Implementations may colorize the participants of a conversation with an individual color to make them easier to distinguish.</p>
+    <p>In such cases, the color SHOULD be generated as described in the <link url='#usecase-textcolor'>Generating a color</link> section. The input used SHOULD be, in descending order of preference, (a) the name assigned in the roster, (b) the nickname from the conversation, (c) the bare JID.</p>
+  </section2>
+  <section2 topic='Auto-Generating Avatars' anchor='usecase-avatar'>
+    <p>Implementations may want to show a picture in connection with a contact even if the contact does not have an avatar defined (e.g. via &xep0084;).</p>
+    <p>In such cases, auto-generating an avatar SHOULD happen as follows:</p>
+    <ol>
+      <li>Obtain a name for the contact, in descending order of preference, (a) from the roster, (b) by using the nickname from the conversation, (c) by using the bare JID.</li>
+      <li>Generate a color as described in the <link url='#usecase-textcolor'>Generating a color</link> section.</li>
+      <li>Fill an implementation-defined background shape with that color.</li>
+      <li>Render the first character of the name in white or black centered on the square.</li>
+    </ol>
+  </section2>
+</section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>Implementations MUST allow the user to turn off any colorization completely.</li>
+    <li>Implementations MUST implement the &cvd; profiles and MUST allow the user to choose any of these profiles or to disable the correction.</li>
+    <li>Implementations MUST NOT share the &cvd; correction settings with other entities.</li>
+  </ul>
+</section1>
+<section1 topic='Algorithms' anchor='algorithm'>
+  <section2 topic='Angle generation' anchor='algorithm-angle'>
+    <p>Input: An identifier, encoded as octets of UTF-8 (&rfc3269;).</p>
+    <p>Output: Angle in the CbCr plane.</p>
+    <p>Note: The goal of this algorithm is to convert arbitrary text into a scalar value which can then be used to calculate a color. As it happens, the CbCr plane of the YCbCr space determines the color (while Y merely defines the lightness); thus, an angle in the CbCr plane serves as a good scalar value to select a color.</p>
+    <ol>
+      <li>Run the input through CRC32 as defined by zlib (TODO: add citation).</li>
+      <li>Take the lower 16 bits and XOR them with the upper 16 bits.</li>
+      <li>Divide the value by 65535 (use float division) and multiply it by 2&#960; (two Pi).</li>
+    </ol>
+  </section2>
+  <section2 topic='Corrections for &cvds;' anchor='algorithm-cvd'>
+    <p>Input: Angle in the CbCr plane.</p>
+    <p>Output: Angle in the CbCr plane.</p>
+    <p>Note: This algorithm will re-map the angle to map it away from ranges which can not be distinguished by people with the respective &cvds;.</p>
+    <section3 topic='Red/Green-blindness' anchor='algorithm-cvd-rg'>
+      <p>Divide the angle by two.</p>
+    </section3>
+    <section3 topic='Blue-blindness' anchor='algorithm-cvd-b'>
+      <p>Divide the angle by two and add &#960;/2 (half Pi).</p>
+    </section3>
+  </section2>
+  <section2 topic='CbCr generation' anchor='algorithm-cbcr'>
+    <p>Input: Angle in the CbCr plane, from the previous algorithm.</p>
+    <p>Output: Values for Cb and Cr in the YCbCr BT.601 color space in the range from -0.5 to 0.5.</p>
+    <p>Form a vector from the angle and project it to edges of a quad in 2D space with edge length 1 around (0, 0). The resulting coordinates are Cb and Cr:</p>
+    <code><![CDATA[float cr = sin(angle);
+float cb = cos(angle);
+float factor;
+if (abs(cr) > abs(cb)) {
+  factor = 0.5 / abs(cr);
+} else {
+  factor = 0.5 / abs(cb);
+}
+cb = cb * factor;
+cr = cr * factor;
+]]></code>
+  </section2>
+  <section2 topic='CbCr to RGB' anchor='algorithm-rgb'>
+    <p>Input: Values for Cb and Cr in the YCbCr BT.601 color space in the range from -0.5 to 0.5; Value for Y.</p>
+    <p>Output: Values for Red (R), Green (G) and Blue (B) in the RGB color space in the range from 0 to 1.</p>
+    <p>Note: The recommended value for Y is 0.732. See <link url='#impl-gamma'>Gamma Correction</link> for a discussion on the choice of Y.</p>
+    <ol>
+      <li>Calculate r, g and b according to BT.601:<code><![CDATA[float r = 2*(1 - KR)*cr + y;
+float b = 2*(1 - KB)*cb + y;
+float g = (y - KR*r - KB*b)/KG;
+]]></code></li>
+      <li>Clip the values of r, g and b to the range from 0 to 1.</li>
+    </ol>
+  </section2>
+  <section2 topic='Adapting the Color for specific Background Colors' anchor='algorithm-bg'>
+    <p>Input: RGB values for the color to adapt (Ri, Gi, Bi) and for the background color to adapt to (Rb, Gb, Bb), in the range from 0 to 1 each.</p>
+    <p>Output: Values for Red (Rc), Green (Gc) and Blue (Bc) in the RGB color space in the range from 0 to 1.</p>
+    <ol>
+      <li>Invert the background color by subtracting the individual channels from 1 each:
+        <code><![CDATA[
+rb = 1-rb;
+gb = 1-gb;
+bb = 1-bb;]]></code></li>
+      <li>Mix the inverted background with the color to adapt, using a mixing factor of 0.2:
+        <code><![CDATA[
+rc = 0.2*rb + 0.8*ri;
+gc = 0.2*gb + 0.8*gi;
+bc = 0.2*bb + 0.8*bi;]]></code></li>
+    </ol>
+  </section2>
+  <section2 topic='RGB to YCbCr' anchor='algorithm-rgb2cbcr'>
+    <p>Input: Values for Red (R), Green (G) and Blue (B) in the RGB color space in the range from 0 to 1.</p>
+    <p>Output: Values for Cb and Cr in the YCbCr BT.601 color space in the range from -0.5 to 0.5; Value for Y.</p>
+    <p>Calculate Y, Cb and Cr according to BT.601:</p>
+    <code><![CDATA[
+y = KR*r + (1 - KR - KB)*g + KB*b;
+cb = (b - y) / (1 - KB) / 2
+cr = (r - y) / (1 - KR) / 2
+]]></code>
+  </section2>
+  <section2 topic='Conversion of an RGB color palette to a CbCr color palette' anchor='algorithm-genpalette'>
+    <p>Input: A set of RGB colors (each component from 0 to 1).</p>
+    <p>Output: A mapping from CbCr pairs (each component from -0.5 to 0.5) to RGB colors.</p>
+    <p>Note: when the algorithm finishes, the mapping maps CbCr values (rounded to two decimal places) to the R, G, B triples which come closest to the desired color and lightness.</p>
+    <ol>
+      <li>Create an empty mapping M which maps from pairs of CbCr values to quadruples of Y, R, G and B.</li>
+      <li>For each color R, G, B from the input palette:
+        <ol>
+          <li>Calculate Y, Cb and Cr from R, G, B as described in <link url='#algorithm-rgb2cbcr'>RGB to YCbCr</link>.</li>
+          <li>Round Cb and Cr to two decimal places as Cb' and Cr'.</li>
+          <li>If the (Cb', Cr') pair is not in the mapping M yet, or if the Y value of the existing entry is farther away from 0.732 than the new Y value, put the Y, R, G, and B values as value for the (Cb', Cr') pair into the mapping.</li>
+        </ol>
+      </li>
+      <li>Strip the Y values from the values of mapping M.</li>
+      <li>Return M as the result of the algorithm.</li>
+    </ol>
+  </section2>
+  <section2 topic='Mapping of a CbCr color to closest palette color' anchor='algorithm-mappalette'>
+    <p>Input: A set of colors (the palette) as tuples of Cbp and Crp and a color to map to the closest palette color as Cb and Cr value.</p>
+    <p>Output: A palette color as Cbr and Crr values.</p>
+    <ol>
+      <li>For each color as pair Cbp, Crp in the palette, calculate the distance metric: <code>D = sqrt((Cbp-Cb)*(Cbp-Cb) + (Crp-Cr)*(Crp-Cr))</code>.</li>
+      <li>Pick the palette color Cbp, Crp with the smallest distance metric D as result color Cbr, Crr.</li>
+    </ol>
+    <p>Note: the distance metric is simply the euclidian distance in the CbCr plane.</p>
+  </section2>
+  <section2 topic='Test Vectors' anchor='algorithm-testvector'>
+    <p>This section holds test vectors for the different configurations. The test vectors are provided as Comma Separated Values. Strings are enclosed by single quotes (&apos;). The first line contains a header. Each row contains, in that order, the original text, the text encoded as UTF-8 as hexadecimal octets, and the Cb, Cr, Red, Green, and Blue values.</p>
+    <section3 topic='No &cvd; correction' anchor='algorithm-testvector-no-cvd'>
+      <code><![CDATA[
+text,hextext,angle,cb,cr,r,g,b
+'Romeo','526f6d656f',2.099189,-0.291880,0.500000,1.000,0.475,0.215
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',5.830846,0.500000,-0.242972,0.391,0.733,1.000
+'😺','f09f98ba',4.312757,-0.211180,-0.500000,0.031,1.000,0.358]]></code>
+    </section3>
+    <section3 topic='With Red/Green-blindess correction' anchor='algorithm-testvector-cvd-redgreen'>
+      <code><![CDATA[text,hextext,angle,cb,cr,r,g,b
+'Romeo','526f6d656f',1.049594,0.287079,0.500000,1.000,0.276,1.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',2.915423,-0.500000,0.115053,0.893,0.822,0.000
+'😺','f09f98ba',2.156378,-0.331588,0.500000,1.000,0.489,0.144]]></code>
+    </section3>
+    <section3 topic='With Blue-blindess correction' anchor='algorithm-testvector-cvd-blue'>
+      <code><![CDATA[
+text,hextext,angle,cb,cr,r,g,b
+'Romeo','526f6d656f',2.620391,-0.500000,0.287079,1.000,0.699,0.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',4.486219,-0.115053,-0.500000,0.031,1.000,0.528
+'😺','f09f98ba',3.727175,-0.500000,-0.331588,0.267,1.000,0.000]]></code>
+    </section3>
+    <section3 topic='Mapping to 216 color palette' anchor='algorithm-testvector-palette'>
+      <p>The used palette can be generated by sampling the RGB cube evenly with six samples on each axis (resulting in 216 colors). The resulting palette is commonly known as the palette of so-called "Web Safe" colors.</p>
+      <section4 topic='No &cvd; correction' anchor='algorithm-testvector-palette-no-cvd'>
+        <code><![CDATA[
+text,hextext,angle,cb,cr,r,g,b
+'Romeo','526f6d656f',2.099189,-0.291880,0.500000,1.000,0.200,0.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',5.830846,0.500000,-0.242972,0.000,0.200,1.000
+'😺','f09f98ba',4.312757,-0.211180,-0.500000,0.000,1.000,0.200]]></code>
+      </section4>
+      <section4 topic='With Red/Green-blindess correction' anchor='algorithm-testvector-palette-cvd-redgreen'>
+        <code><![CDATA[
+text,hextext,angle,cb,cr,r,g,b
+'Romeo','526f6d656f',1.049594,0.287079,0.500000,1.000,0.000,0.800
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',2.915423,-0.500000,0.115053,1.000,1.000,0.000
+'😺','f09f98ba',2.156378,-0.331588,0.500000,1.000,0.200,0.000]]></code>
+      </section4>
+      <section4 topic='With Blue-blindess correction' anchor='algorithm-testvector-palette-cvd-blue'>
+        <code><![CDATA[
+text,hextext,angle,cb,cr,r,g,b
+'Romeo','526f6d656f',2.620391,-0.500000,0.287079,1.000,0.600,0.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',4.486219,-0.115053,-0.500000,0.000,1.000,0.400
+'😺','f09f98ba',3.727175,-0.500000,-0.331588,0.200,1.000,0.000]]></code>
+      </section4>
+    </section3>
+  </section2>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <section2 topic='Gamma Correction' anchor='impl-gamma'>
+    <p>An implementation may choose a different value for Y depending on whether the sink for the R, G and B values expects Gamma Encoded or Gamma Decoded values. The recommended default of 0.732 is 0.5 to the power of 0.45, that is, a Gamma Encoded 0.5.</p>
+    <p>Modifications to Y SHOULD NOT be used to correct for bright/dark backgrounds. Implementations SHOULD instead use the algorithm described in <link url='#algorithm-bg'>Adapting the Color for specific Background Colors</link> for that.</p>
+  </section2>
+</section1>
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>As outlined above, implementations MUST offer the &rgblind; and &bblind; corrections as defined in the <link url='#algorithm-cvd'>Corrections for &cvds;</link> section. Users MUST be allowed to choose between:</p>
+  <ul>
+    <li>disabling all corrections (skip the Corrections for &cvds; step entirely),</li>
+    <li>applying one of the &cvd; correction profiles and</li>
+    <li>disabling colorization altogether.</li>
+  </ul>
+  <p>The last option is important for users with monochromatic view.</p>
+  <p>Some sources on the internet indicate that people with &cvds; may profit from having larger areas of color to be able to recognize them. This should be taken into consideration when selecting font weights and line widths for colored parts.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>This specification extracts a bit more information from an entity and shows it alongside the existing information to the user. As the algorithm is likely to produce different colors for look-alikes (see &xep0165; for examples) in JIDs, it may add additional protection against attacks based on those.</p>
+  <p>Due to the limited set of distinguishable colors, possible &cvds; and/or use of palettes, entities MUST NOT rely on colors being unique in any context.</p>
+</section1>
+<section1 topic='Design Considerations' anchor='design'>
+  <p>This section provides an overview of design considerations made while writing this specification. It shows alternatives which have been considered, and eventually rejected.</p>
+  <section2 topic='Other variants of the YCbCr color space' anchor='design-other-ycbcr'>
+    <p>The other common YCbCr variants, BT.709 and BT.2020, do not achieve a brightness across the color space as uniform as BT.601 does. Adapting the Y value for uniform luminosity across the range for CbCr would have complicated the algorithm with little or no gain.</p>
+  </section2>
+  <section2 topic='Hue-Saturation-Value/Lightness color space' anchor='design-hsv'>
+    <p>The HSV and HSL color spaces fail to provide uniform luminosity with fixed value/lightness and saturation parameters. Adapting those parameters for uniform luminosity across the hue range would have complicated the algorithm with litte to no gain.</p>
+  </section2>
+  <section2 topic='Palette-based and context-aware coloring' anchor='design-context'>
+    <p>Given a fixed-size and finite palette of colors, it would be possible to ensure that, until the number of entities to color exceeds the number of colors, no color collisions happen.</p>
+    <p>There are issues with this approach when the set of entities is dynamic. In such cases, it is possible that an entity changes its associated color (for example by re-joining a colored group chat), which defeats the original purpose.</p>
+    <p>In addition, more state needs to be taken into account, increasing the complexity of choosing a color.</p>
+  </section2>
+  <section2 topic='Choice of mixing function in angle generation' anchor='design-mixing'>
+    <p>This specification needs to collapse an arbitrarily long string into just a few bits (the angle in the CbCr plane). To do so, a CRC32 sum is used.</p>
+    <p>An alternative, which may yield better distribution of colors, would have been to use a cryptographic hash function. However, the performance and implementation cost for a cryptographic hash function is considerable compared with a simple CRC32, especially on small (less than 1 kiB) inputs.</p>
+  </section2>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+    <p>This document requires no interaction with &IANA;. </p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <p>This document requires no interaction with the &REGISTRAR;. </p>
+</section1>
+<section1 topic='Acknowledgements' anchor='acknowledgements'>
+  <p>Thanks to Daniel Gultsch, Georg Lukas, and Tobias Markmann.</p>
+</section1>
+</xep>
