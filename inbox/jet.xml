@@ -1,0 +1,302 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY secret "&lt;secret/&gt;">
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Jingle Encrypted Transports</title>
+  <abstract>This specification defines a method that allows to use established encryption schemes for end-to-end encryption of Jingle transports.</abstract>
+  &LEGALNOTICE;
+  <number>XXXX</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XEP-0234</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>jet</shortname>
+  <schemaloc>
+    <ns>jingle</ns>
+    <url>http://xmpp.org/schemas/jingle.xsd</url>
+  </schemaloc>
+  <schemaloc>
+    <ns>jingle:errors</ns>
+    <url>http://xmpp.org/schemas/jingle-errors.xsd</url>
+  </schemaloc>
+  <registry/>
+  <discuss>jingle</discuss>
+  <author>
+    <firstname>Paul</firstname>
+    <surname>Schaub</surname>
+    <email>vanitasvitae@riseup.net</email>
+    <jid>vanitasvitae@jabberhead.tk</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2017-06-12</date>
+    <initials>vv</initials>
+    <remark><p>First draft</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Jingle Encrypted Transports (JET) strives to provide a modular and easily extensible way to wrap Jingle Transports in an additional end-to-end encryption layer. The focus of this specification lays on being modular. It should be possible to extend existing Jingle use scenarios with end-to-end encryption by simply adding a JET element to the negotiation.</p>
+</section1>
+<section1 topic='Terminology' anchor='terminology'>
+  <p>JET uses multiple encryption layers, so it is necessary to declare a distinct denomination for the different keys involved.</p>
+  <table caption='Denomination of keys used in the protocol'>
+    <tr>
+      <th>Designation</th>
+      <th>Abbrevation</th>
+      <th>Usage</th>
+    </tr>
+    <tr>
+      <td>Transport Key</td>
+      <td>TK</td>
+      <td>(Symmetric) key that is used to encrypt/decrypt the bytestreams sent/received through Jingle transports. This key encrypts the data two entities want to exchange. Examples for TK can be found under <link url='#ciphers'>"Ciphers"</link>.</td>
+    </tr>
+    <tr>
+      <td>Initialization Vector</td>
+      <td>IV</td>
+      <td>Initialization vector that is used together with TK.</td> 
+    </tr>
+    <tr>
+      <td>Transport Secret</td>
+      <td>TS</td>
+      <td>Serialization of TK and TI.</td> 
+    </tr>
+    <tr>
+      <td>Envelope Element</td>
+      <td>EE</td>
+      <td>Output element of an established end-to-end encryption method when encrypting TS.</td> 
+    </tr>
+  </table>
+</section1>
+<section1 topic='Principle' anchor='principle'>
+  <p>Lets assume Romeo wants to initiate an encrypted Jingle session with Juliet. Prior to the Jingle session initiation, an already existing, established and (ideally) authenticated end-to-end encryption session between Romeo and Juliet MUST exist. This session is needed to transfer the Transport Secret from Romeo to Juliet.</p>
+  <p>When this precondition is met, Romeo initially generates a transport key (TK) and associated initialization vector (IV). These will later be used by the sender to encrypt, and respectively by the recipient to decrypt data that is exchanged. This protocol defines a set of usable <link url='#ciphers'>ciphers</link> from which Romeo might choose. TK and IV are serialized to create the transport secret (TS).</p>
+  <p>Next Romeo uses her established encryption session with Juliet to encrypt TS. The resulting envelope element (EE) will be part of the Jingle session initiation as child of the JET &secret; element.</p>
+  <p>When Juliet receives Romeos session request, she decrypts EE to retrieve TS, from which she can deserialize TK and IV. Now she and Romeo can go on with the session negotiation. Once the session is established, data can be encrypted and exchanged. Both parties MUST keep a copy of TS in cache until the Jingle session is ended.</p>
+</section1>
+<section1 topic='Encrypted Jingle File Transfer using JET' anchor='jft'>
+  <p>&xep0234; has the disadvantage, that transmitted files are not encrypted (aside from regular TLS transport encryption), which means that intermediate nodes like XMPP/proxy server(s) have access to the transferred data. Considering that end-to-end encryption becomes more and more important to protect free speech and personal expression, this is a major flaw that needs to be addressed.</p>
+  <p>In order to initiate an encrypted file transfer, the initiator includes a JET &secret; in the Jingle file transfer request.</p>
+  
+  <section2 topic='File Offer'>
+    <p>In this scenario Romeo wants to send an encrypted text file over to Juliet. First, he generates a fresh AES-256 transport key and IV. TK and IV are serialized into TS which is then encrypted using Romeos end-to-end-encryption session with Juliet.</p>
+    <p>The resulting envelope element (EE) is sent as part of the security element along with the rest of the jingle stanza over to Juliet.</p>
+    <example caption="Romeo initiates an encrypted file offer"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='nzu25s8'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-initiate'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
+          sid='851ba2'>
+    <content creator='initiator' name='a-file-offer' senders='initiator'>
+      <description xmlns='urn:xmpp:jingle:apps:file-transfer:5'>
+        <file>
+          <date>1969-07-21T02:56:15Z</date>
+          <desc>This is a test. If this were a real file...</desc>
+          <media-type>text/plain</media-type>
+          <name>test.txt</name>
+          <range/>
+          <size>6144</size>
+          <hash xmlns='urn:xmpp:hashes:2'
+                algo='sha-1'>w0mcJylzCn+AfvuGdqkty2+KP48=</hash>
+        </file>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
+                 mode='tcp'
+                 sid='vj3hs98y'>
+        <candidate cid='hft54dqy'
+                   host='192.168.4.1'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
+                   port='5086'
+                   priority='8257636'
+                   type='direct'/>
+      </transport>
+      <security xmlns='urn:xmpp:jingle:jet:0'
+                name='a-file-offer'
+                cipher='urn:xmpp:ciphers:aes-256-gcm-nopadding'
+                type='urn:xmpp:encryption:stub:0'>
+        <encrypted xmlns='urn:xmpp:encryption:stub:0'>
+          <payload>BASE64-ENCODED-ENCRYPTED-SECRET</payload>
+        </encrypted>
+      </security>
+    </content>
+  </jingle>
+</iq>]]></example>
+
+    <p>Juliet decrypts the envelope element (EE) using her session with Romeo to retrieve TS from which she deserializes TK and IV. Both Juliet and Romeo then carry on with the session negotiation as described in &xep0234;. Before Romeo starts transmitting the file, he encrypts it using TK and IV. He then transmitts the encrypted file over to Juliet.</p>
+    <p>When Juliet received the file, she uses the TK and IV to decrypt the received file.</p>
+  </section2>
+  
+  <section2 topic='File Request'>
+    <p>Juliet might want to request a file transfer from Romeo. This can be the case, when Romeo hosts the file. In order to do so, she sends generates TK and IV, creates TS from those and encrypts TS with an encryption method of her choice to get EE. TK and IV will be used by Romeo to encrypt the requested file before sending it to Juliet.</p>
+    <example caption="Juliet initiates an encrypted file request"><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    id='wsn361c3'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-initiate'
+          initiator='juliet@capulet.example/yn0cl4bnw0yr3vym'
+          sid='uj3b2'>
+    <content creator='initiator' name='a-file-request' senders='responder'>
+      <description xmlns='urn:xmpp:jingle:apps:file-transfer:5'>
+        <file>
+          <hash xmlns='urn:xmpp:hashes:2'
+                algo='sha-1'>w0mcJylzCn+AfvuGdqkty2+KP48=</hash>
+        </file>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
+                 mode='tcp'
+                 sid='xig361fj'>
+        <candidate cid='ht567dq'
+                   host='192.169.1.10'
+                   jid='juliet@capulet.example/yn0cl4bnw0yr3vym'
+                   port='6539'
+                   priority='8257636'
+                   type='direct'/>
+      </transport>
+      <security xmlns='urn:xmpp:jingle:jet:0'
+                name='a-file-request'
+                cipher='urn:xmpp:ciphers:aes-256-gcm-nopadding'
+                type='urn:xmpp:encryption:stub:0'>
+        <encrypted xmlns='urn:xmpp:encryption:stub:0'>
+          <payload>BASE64-ENCODED-ENCRYPTED-SECRET</payload>
+        </encrypted>
+      </security>
+    </content>
+  </jingle>
+</iq>]]></example>
+  </section2>
+
+  <section2 topic='Encrypted Ranged Transfers'>
+    <p>&xep0234; defines a way for parties to request ranged transfers. This can be used to resume interrupted transfers etc. In case of an interrupted transfer, the receiving party might be able to decrypt parts of the received file. When requesting a resumption of the transfer, the recipient therefore can use the index of the last successfully decrypted byte of the file as offset in the ranged transfer. Since a resumed transfer takes place in a new session, the old transport secret might no longer be available to either party. For that reason the receiver creates a new TS for the session-initiation. The sending party then encrypts and sends only the requested parts of the file.</p>
+    <example caption="Romeo requests the resumption of an interrupted transfer using a fresh transport secret"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='wsn361c3'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-initiate'
+          initiator='romeo@montague.example/dr4hcr0st3lup4c'
+          sid='uj3b2'>
+    <content creator='initiator' name='restart' senders='responder'>
+      <description xmlns='urn:xmpp:jingle:apps:file-transfer:5'>
+        <file>
+          <range offset='270336'/>
+          <hash xmlns='urn:xmpp:hashes:2'
+                algo='sha-1'>w0mcJylzCn+AfvuGdqkty2+KP48=</hash>
+        </file>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:s5b:1'
+             mode='tcp'
+                 sid='vj3hs98y'>
+        <candidate cid='hft54dqy'
+                   host='192.168.4.1'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
+                   port='5086'
+                   priority='8257636'
+                   type='direct'/>
+        <candidate cid='hutr46fe'
+                   host='24.24.24.1'
+                   jid='romeo@montague.example/dr4hcr0st3lup4c'
+                   port='5087'
+                   priority='8258636'
+                   type='direct'/>
+      </transport>
+      <security xmlns='urn:xmpp:jingle:jet:0'
+                name='restart'
+                cipher='urn:xmpp:ciphers:aes-256-gcm-nopadding'
+                type='urn:xmpp:encryption:stub:0'>
+        <encrypted xmlns='urn:xmpp:encryption:stub:0'>
+          <payload>BASE64-ENCODED-ENCRYPTED-SECRET</payload>
+        </encrypted>
+      </security>
+    </content>
+  </jingle>
+</iq>]]></example>
+  </section2>
+
+</section1>
+
+<section1 topic='Ciphers' anchor='ciphers'>
+  <p>In order to encrypt the transported bytestream, the initiator must transmit a cipher key to the responder. There are multiple options available:</p>
+  <table caption='Available ciphers, configurations and their namespaces'>
+    <tr>
+      <th>Namespace</th>
+      <th>Type</th>
+      <th>Length (bits)</th>
+      <th>Parameters</th>
+      <th>Serialization</th>
+    </tr>
+    <tr>
+      <td>urn:xmpp:ciphers:aes-128-gcm-nopadding:0</td>
+      <td>AES</td>
+      <td>128</td>
+      <td>GCM/NoPadding</td>
+      <td>128BitKey::96BitIV</td>
+    </tr>
+    <tr>
+      <td>urn:xmpp:ciphers:aes-256-gcm-nopadding:0</td>
+      <td>AES</td>
+      <td>256</td>
+      <td>GCM/NoPadding</td>
+      <td>256BitKey::96BitIV</td>
+    </tr>
+  </table>
+  <p>The column 'serialization' describes, how the key and iv are serialized. "::" means plain concatenation of byte arrays.</p>
+</section1>
+
+<section1 topic='Determining Support' anchor='support'>
+  <p>To advertise its support for the Jingle Encrypted Transports, when replying to service discovery information ("disco#info") requests an entity MUST return URNs for any version, or extension of this protocol that the entity supports -- e.g., "urn:xmpp:jingle:jet:0" for this version, or "urn:xmpp:jingle:jet-stub:0" for a stub encryption method &VNOTE;.</p>
+  <example caption="Service discovery information request"><![CDATA[
+<iq from='romeo@montague.example/dr4hcr0st3lup4c'
+    id='uw72g176'
+    to='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption="Service discovery information response"><![CDATA[
+<iq from='juliet@capulet.example/yn0cl4bnw0yr3vym'
+    id='uw72g176'
+    to='romeo@montague.example/dr4hcr0st3lup4c'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <feature var='urn:xmpp:jingle:jet:0'/>
+    <feature var='urn:xmpp:jingle:jet-stub:0'/>
+  </query>
+</iq>]]></example>
+  <p>In order for an application to determine whether an entity supports this protocol, where possible it SHOULD use the dynamic, presence-based profile of service discovery defined in &xep0115;. However, if an application has not received entity capabilities information from an entity, it SHOULD use explicit service discovery instead.</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>The initiator SHOULD NOT use the generated key TK as IV, but instead generate a seperate random IV.</p>
+  <p>Instead of falling back to unencrypted transfer in case something goes wrong, implementations MUST instead abort the Jingle session, informing the user.</p>
+  <p>IMPORTANT: This approach does not deal with metadata. In case of &xep0234;, an attacker with access to the sent stanzas can for example still see the name of the file and other information included in the &lt;file/&gt; element.</p>
+  <p>The responder MUST check, whether the envelope element belongs to the initiator to prevent MitM attacks</p>
+</section1>
+
+<section1 topic='Open Questions'>
+  <p>This is only a rough draft and there is still a ton of questions left to be answered. Here is a small non-exhaustive list of things I can think of:</p>
+  <ul>
+    <li>How exactly are interrupted transfers resumed? How (long) are keys/IVs cached?</li>
+    <li>May it be desirable to split data into chunks?</li>
+    <li>Please add to this list :)</li>
+  </ul>
+</section1>
+<section1 topic='TODO'>
+  <ul>
+    <li>Split up the protocol into encryption method specific sub protocols (jet-omemo, jet-ox...)</li>
+  </ul>
+</section1>
+</xep>

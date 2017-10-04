@@ -29,7 +29,7 @@
 -->
 
 <!--<xsl:include href="xsltsl/string.xsl"/>-->
-<xsl:import href="http://xsltsl.sourceforge.net/modules/stdlib.xsl"/>
+<xsl:import href="texml-xsl/stdlib.xsl"/>
 
 <!-- Create a variable named $maxXEPVersiom containing the MAX version -->
 <xsl:variable name="maxXEPVersion">

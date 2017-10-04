@@ -7,10 +7,33 @@ XMLDEPS=xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
 TEXMLDEPS=xep2texml.xsl $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf
 XEPDIRS=. inbox
 HTMLDEPS=xep.xsl $(CSSTARGETS) $(JSTARGETS)
-CSSTARGETS=$(OUTDIR)/xmpp.css $(OUTDIR)/prettify.css
-JSTARGETS=$(OUTDIR)/prettify.js
+
+base_CSSTARGETS=xmpp.css prettify.css
+CSSTARGETS=$(addprefix $(OUTDIR)/,$(base_CSSTARGETS))
+proto_CSSTARGETS=$(addprefix $(OUTDIR)/inbox/,$(base_CSSTARGETS))
+base_JSTARGETS=prettify.js
+JSTARGETS=$(addprefix $(OUTDIR)/,$(base_JSTARGETS))
+proto_JSTARGETS=$(addprefix $(OUTDIR)/inbox/,$(base_JSTARGETS))
+
+proto_HTMLDEPS=xep.xsl $(proto_CSSTARGETS) $(proto_JSTARGETS)
 
 DO_XELATEX=cd $(OUTDIR); xelatex --interaction=nonstopmode -no-shell-escape "$(notdir $(basename $@)).tex" >/dev/null
+
+xeps=$(wildcard *.xml)
+proto_xeps=$(wildcard inbox/*.xml)
+all_xeps=$(xeps) $(proto_xeps)
+
+xep_xmls=$(patsubst %.xml,$(OUTDIR)/%.xml,$(xeps))
+proto_xep_xmls=$(patsubst %.xml,$(OUTDIR)/%.xml,$(proto_xeps))
+all_xep_xmls=$(xep_xmls) $(proto_xep_xmls)
+
+xep_htmls=$(patsubst %.xml,$(OUTDIR)/%.html,$(xeps))
+proto_xep_htmls=$(patsubst %.xml,$(OUTDIR)/%.html,$(proto_xeps))
+all_xep_htmls=$(xep_htmls) $(proto_xep_htmls)
+
+xep_pdfs=$(patsubst %.xml,$(OUTDIR)/%.pdf,$(xeps))
+xep_refs=$(patsubst xep-%.xml, $(REFSDIR)/reference.XSF.XEP-%.xml, $(xeps))
+xep_examples=$(patsubst xep-%.xml, $(EXAMPLESDIR)/%.xml, $(xeps))
 
 
 .PHONY: help
@@ -33,17 +56,29 @@ help:
 .PHONY: all
 all: html
 
+.PHONY: xeplist
+xeplist: $(OUTDIR)/xeplist.xml
+
 .PHONY: html
-html: $(patsubst %.xml, $(OUTDIR)/%.html, $(wildcard *.xml))
+html: $(xep_htmls)
+
+.PHONY: xml
+xml: $(xep_xmls)
+
+.PHONY: inbox-html
+inbox-html: $(proto_xep_htmls)
+
+.PHONY: inbox-xml
+inbox-xml: $(proto_xep_xmls)
 
 .PHONY: pdf
-pdf: $(patsubst %.xml, $(OUTDIR)/%.pdf, $(wildcard *.xml))
+pdf: $(xep_pdfs)
 
 .PHONY: refs
-refs: $(patsubst xep-%.xml, $(REFSDIR)/reference.XSF.XEP-%.xml, $(wildcard *.xml))
+refs: $(xep_refs)
 
 .PHONY: examples
-examples: $(patsubst xep-%.xml, $(EXAMPLESDIR)/%.xml, $(wildcard *.xml))
+examples: $(xep_examples)
 
 .PHONY: xep-%
 xep-%: $(OUTDIR)/xep-%.html $(REFSDIR)/reference.XSF.XEP-%.xml $(OUTDIR)/xep-%.pdf $(EXAMPLESDIR)/%.xml;
@@ -54,19 +89,33 @@ xep-%.html: $(OUTDIR)/xep-%.html ;
 .PHONY: xep-%.pdf
 xep-%.pdf: $(OUTDIR)/xep-%.pdf ;
 
+$(all_xep_xmls): $(OUTDIR)/%.xml: %.xml
+	cp $< $@
+
+$(OUTDIR)/xeplist.xml: $(wildcard *.xml) $(wildcard inbox/*.xml)
+	./tools/extract-metadata.py > $@
+
 $(EXAMPLESDIR)/%.xml: xep-%.xml $(XMLDEPS) examples.xsl $(EXAMPLESDIR)
 	xsltproc --path $(CURDIR) examples.xsl "$<" > "$@" && echo "Finished building $@"
 
 $(REFSDIR)/reference.XSF.XEP-%.xml: xep-%.xml $(XMLDEPS) ref.xsl $(REFSDIR)
 	xsltproc --path $(CURDIR) ref.xsl "$<" > "$@" && echo "Finished building $@"
 
-$(OUTDIR)/%.html: %.xml $(XMLDEPS) $(HTMLDEPS)
+$(xep_htmls): $(OUTDIR)/xep-%.html: xep-%.xml $(XMLDEPS) $(HTMLDEPS)
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
 
 	# Actually build the HTML
-	xsltproc --path $(CURDIR) xep.xsl "$<" > "$@" && echo "Finished building $@"
+	xsltproc --path $(CURDIR) --param htmlbase "$(if $(findstring inbox,$<),'../','./')" xep.xsl "$<" > "$@" && echo "Finished building $@"
+
+$(proto_xep_htmls): $(OUTDIR)/inbox/%.html: inbox/%.xml $(XMLDEPS) $(proto_HTMLDEPS)
+	xmllint --nonet --noout --noent --loaddtd --valid "$<"
+	# Check for non-data URIs
+	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
+
+	# Actually build the HTML
+	xsltproc --path $(CURDIR) --param htmlbase "$(if $(findstring inbox,$<),'../','./')" xep.xsl "$<" > "$@" && echo "Finished building $@"
 
 $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf: $(OUTDIR)
 	cp "resources/$(notdir $@)" "$@"
@@ -92,7 +141,13 @@ $(JSTARGETS): $(OUTDIR)
 $(CSSTARGETS): $(OUTDIR)
 	cp "$(notdir $@)" "$@"
 
-$(EXAMPLESDIR) $(REFSDIR) $(OUTDIR):
+$(proto_JSTARGETS): $(OUTDIR)/inbox
+	cp "$(notdir $@)" "$@"
+
+$(proto_CSSTARGETS): $(OUTDIR)/inbox
+	cp "$(notdir $@)" "$@"
+
+$(EXAMPLESDIR) $(REFSDIR) $(OUTDIR) $(OUTDIR)/inbox:
 	mkdir -p "$@"
 
 .PHONY: clean

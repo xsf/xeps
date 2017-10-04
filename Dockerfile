@@ -4,10 +4,13 @@
 FROM xmppxsf/xeps-base:latest
 
 ARG NCORES=1
-ARG TARGETS="html pdf"
+ARG TARGETS="html inbox-html inbox-xml pdf xeplist"
 
 COPY *.xml xep.* *.css *.xsl *.js *.xsl Makefile /src/
 COPY resources/*.pdf /src/resources/
+COPY tools/*.py /src/tools/
+COPY inbox/*.xml inbox/*.ent inbox/*.dtd /src/inbox/
+COPY texml-xsl/*.xsl /src/texml-xsl/
 
 WORKDIR /src
 RUN OUTDIR=/var/www/html/extensions/ make -j$NCORES $TARGETS
