@@ -23,6 +23,18 @@
   <shortname>cap</shortname>
   &flow;
   <revision>
+    <version>0.0.3</version>
+    <date>2017-10-06</date>
+    <initials>fs</initials>
+    <remark><p>Use a custom item value (CAP-V).</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2017-08-25</date>
+    <initials>fs</initials>
+    <remark><p>Use PubSub publish-options preconditions.</p></remark>
+  </revision>
+  <revision>
     <version>0.0.1</version>
     <date>2017-04-20</date>
     <initials>fs</initials>
@@ -50,28 +62,91 @@
 
 <section1 topic='Compare-And-Publish PubSub Items' anchor='cap'>
 
-  <p>In order to atomically compare-and-publish an item, a client
-  sends an &IQ; with a 'pubsub' element qualified by the
-  'urn:xmpp:pubsub:cap:0' namespace. The element MUST contain the same
-  attributes and elements as the &lt;publish/&gt; element defined in
-  &xep0060; <em>and</em> it MUST contain a previd attribute containing
-  an item ID.</p>
+  <section2 topic='PubSub Item Compare-And-Publish Value (CAP-V)' anchor='cap-v'>
 
-  <p>The PubSub service MUST only publish the item if the node's
-  latest item ID is equal to the ID found in the 'previd'
-  attribute.</p>
+    <p>PubSub services supporting the Compare-And-Publish PubSub extension MUST include a Comapre-and-Publish value
+    (CAP-V) for every item in every response. The CAP-V value MUST change if the content of the item changed and
+    different item content under the same node MUST NOT yield the same CAP-V. A simple computation of the CAP-ID would
+    be to hash the String representation of the item's content.</p>
 
-  <example caption='Publisher publishes an item using Compare-And-Publish'><![CDATA[
+	<p>CAP-Vs are assoicated with PubSub node's items via the item ID. The maping information is placed by the PubSub
+	service in a &lt;cap-v-map/&gt; extension element, qualified by the 'urn:xmpp:pubsub:cap:0' namespace, as child
+	element of the &lt;items/&gt; element. The &lt;cap-v-map/&gt; element contains one or more &lt;cap-v-map-entry/&gt;
+	elements, of which each MUST have a 'item-id' and a 'cap-value' attribute. The former contains the PubSub item ID
+	value and the later contains the according CAP-V of the item.</p>
+
+    <example caption='Service returns some items and their according CAP-Vs'><![CDATA[
+<iq type='result'
+    from='pubsub.shakespeare.lit'
+    to='francisco@denmark.lit/barracks'
+    id='items1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='princely_musings'>
+      <item id='368866411b877c30064a5f62b917cffe'>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <title>The Uses of This World</title>
+          <summary>
+O, that this too too solid flesh would melt
+Thaw and resolve itself into a dew!
+          </summary>
+        </entry>
+      </item>
+      <item id='3300659945416e274474e469a1f0154c'>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <title>Ghostly Encounters</title>
+          <summary>
+O all you host of heaven! O earth! what else?
+And shall I couple hell? O, fie! Hold, hold, my heart;
+And you, my sinews, grow not instant old,
+But bear me stiffly up. Remember thee!
+          </summary>
+        </entry>
+      </item>
+      <item id='4e30f35051b7b8b42abe083742187228'>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <title>Alone</title>
+          <summary>
+Now I am alone.
+O, what a rogue and peasant slave am I!
+          </summary>
+        </entry>
+      </item>
+      <cap-v-map xmlns='urn:xmpp:pubsub:cap:0'>
+        <cap-value-map-entry
+          item-id='368866411b877c30064a5f62b917cffe'
+          cap-value='35a204c2-5d6c-43a2-8e0d-a235a627b04a'/>
+        <cap-value-map-entry
+          item-id='3300659945416e274474e469a1f0154c'
+          cap-value='166b7c04-ed4d-4872-aa56-a58268da84e2'/>
+        <cap-value-map-entry
+          item-id='4e30f35051b7b8b42abe083742187228'
+          cap-value='67f7f792-f2ee-4918-8894-36a3c4a6dd5f'/>
+      </cap-v-map>
+    </items>
+  </pubsub>
+</iq>
+]]></example>
+
+  </section2>
+
+  <section2 topic='PubSub publishing using Compare-And-Publish'>
+
+    <p>In order to atomically compare-and-publish an item, a client sends a <cite>XEP-0060</cite> &lt;publish/&gt; IQ
+    with a 'pubsub#prev_item_cap_value' precondition publishing option, set to the value of the currently assumed CAP-V
+    of the latest item of the node.</p>
+
+    <p>The PubSub service MUST only publish the item if the node's latest item CAP-V is equal to the
+    CAP-V found in the 'pubsub#prev_item_cap_value' field.</p>
+
+    <example caption='Atomically publishing with Compare-And-Publish'><![CDATA[
 <iq type='set'
     from='hamlet@denmark.lit/blogbot'
     to='pubsub.shakespeare.lit'
-    id='compare-and-publish1'>
-  <pubsub xmlns='urn:xmpp:pubsub:cap:0'>
-    <compare-and-publish
-        node='princely_musings'
-        previd='1'>
-      <item>
-        <entry xmlns='http://www.w3.org/2005/Atom'>
+    id='pub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='princely_musings'>
+      <item id='2'>
+        <entry xmlns='https://example.org'>
           <title>Soliloquy</title>
           <summary>
 To be, or not to be: that is the question:
@@ -80,63 +155,73 @@ The slings and arrows of outrageous fortune,
 Or to take arms against a sea of troubles,
 And by opposing end them?
           </summary>
-          <link rel='alternate' type='text/html'
-                href='http://denmark.lit/2003/12/13/atom03'/>
-          <id>tag:denmark.lit,2003:entry-32397</id>
-          <published>2003-12-13T18:30:02Z</published>
-          <updated>2003-12-13T18:30:02Z</updated>
         </entry>
       </item>
     </publish>
+    <publish-options>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#publish-options</value>
+        </field>
+        <field var='pubsub#prev_item_cap_value'>
+          <value>1</value>
+        </field>
+      </x>
+    </publish-options>
   </pubsub>
 </iq>
 ]]></example>
-
-  <section2 topic='Successfully published an item using Compare-And-Publish'>
-
-	<p>If the 'previd' matched the latest item's ID and if the service
-	was able to successfully process the request then the protocol
-	continues as defined in <cite>XEP-0060 7.1.2</cite>.</p>
 
   </section2>
 
   <section2 topic='Could not publish because newest item ID did not match'>
 
-    <p>In case the Compare-And-Publish operation failed because the
-    latest node id is not the same as given in the 'previd' attribute
-    in the request, the server returns an &IQ; result with 'pubsub'
-    element qualified by the 'urn:xmpp:pubsub:cap:0' namespace which
-    contains a &lt;compare-and-publish-failed/&gt; element. The
-    element MUST have a 'id' attribute with the ID of the lastest
-    item.</p>
+    <p>In case the Compare-And-Publish operation failed because the latest node id is not the same
+    as given in the 'previd' attribute in the request, the server returns an &lt;conflict/&gt; error
+    of type 'modify' which a pubsub-specific condition of &lt;precondition-not-met/&gt; and a
+    &lt;compare-and-publish-failed/&gt; element qualifed by the 'urn:xmpp:pubsub:cap:0'
+    namespace. The element MUST have a 'cap-id' attribute with the CAP-V of the lastest item.</p>
 
-   <example caption='Service returns IQ response notifying of failed Compare-And-Publish operation'><![CDATA[
-<iq type='result'
+    <example caption='Service returns IQ response notifying of failed Compare-And-Publish operation'><![CDATA[
+<iq type='error'
     from='pubsub.shakespeare.lit'
-    to='hamlet@denmark.lit/blogbot'
-    id='compare-and-ublish1'>
-  <pubsub xmlns='urn:xmpp:pubsub:cap:0'>
-    <compare-and-publish-failed id='2'/>
-  </pubsub>
+    to='hamlet@denmark.lit/elsinore'
+    id='retract1'>
+  <error type='modify'>
+    <conflict xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <precondition-not-met xmlns='http://jabber.org/protocol/pubsub#errors'/>
+    <compare-and-publish-failed xmlns='urn:xmpp:pubsub:cap:0' cap-id='2'/>
+  </error>
 </iq>
 ]]></example>
 
   </section2>
 
-  <section2 topic='Error cases'>
+</section1>
 
-    <p>All other error cases are handled as specified in
-    <cite>XEP-0060 § 7.1.3</cite></p>
+<section1 topic='Rationale' anchor='rationale'>
 
-  </section2>
+  <p>Unfortunately it was not possible to re-use the PubSub item ID for the "Atomically
+  Compare-And-Publish" purpose. This is mostly due <cite>XEP-0060 § 12.8</cite> stating that:</p>
+  <p class='box'>
+  "If a publisher publishes an item and the ItemID
+  matches that of an existing item, the pubsub service MUST overwrite the existing item and generate a new event
+  notification."
+  </p>
+  <p> Which means that the content of an item could change without its ID, rendering the item ID
+  unusable for CAP. </p>
+
+  <p>Injecting a "cap"-namespaced attribute carrying the item's CAP-V into PubSub's &lt;item/&gt;
+  would be a very elegant approach to assign CAP-Vs to PubSub items (and the favored one of the
+  XEP's author). But the usage of namespaces attributes within XMPP is controversial. Therefore this
+  XEP resorts to using the &lt;cap-v-map/&gt; approach for now.</p>
 
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
 
-  <p>This extension protocol does not add any further security
-  considerations to the ones mentioned in <cite>XEP-0060 §
-  14.</cite>.</p>
+  <p>This extension protocol does not add any further security considerations to the ones mentioned
+  in <cite>XEP-0060 § 14.</cite>.</p>
 
 </section1>
 
@@ -153,17 +238,39 @@ And by opposing end them?
   <ul>
     <li>urn:xmpp:pubsub:cap:0</li>
   </ul>
-  	<code caption='Registry Submission'><![CDATA[
+    <code caption='Registry Submission'><![CDATA[
 <var>
-	<name>urn:xmpp:pubsub:cap:0</name>
-	<desc>Indicates support for Compare-And-Publish</desc>
-	<doc>XEP-XXXX</doc>
+    <name>urn:xmpp:pubsub:cap:0</name>
+    <desc>Indicates support for Compare-And-Publish</desc>
+    <doc>XEP-XXXX</doc>
 </var>]]></code>
 
+    <p>This specification defines the following &lt;publish-options/&gt; fields:</p>
+    <ul>
+      <li>pubsub#prev_item_cap_value</li>
+    </ul>
+    <code caption='Registry Submission'><![CDATA[
+<field var='pubsub#prev_item_cap_value'
+         type='text-single'
+         label='Precondition: The assumed value of the latest item&apos; CAP-V of the node'/>]]></code>
+
 </section1>
+
 <section1 topic='XML Schema' anchor='schema'>
 
   <p>TODO: Add after the XEP leaves the 'experimental' state.</p>
 
 </section1>
+
+<section1 topic='Acknowledgements' anchor='acknowledgements'>
+
+  <p>Thanks to Kim Alvefur and Dave Cridland for their feedback.</p>
+
+</section1>
+
 </xep>
+
+<!-- Local Variables: -->
+<!-- fill-column: 100 -->
+<!-- indent-tabs-mode: nil -->
+<!-- End: -->
