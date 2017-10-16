@@ -134,6 +134,9 @@ def diff_infos(old, new):
         elif (old["status"] == Status.DEFERRED and
               new["status"] == Status.EXPERIMENTAL):
             return Action.UPDATE
+        elif (old["status"] == Status.PROPOSED and
+              new["status"] == Status.EXPERIMENTAL):
+            return None
         else:
             return Action.fromstatus(new["status"])
 
