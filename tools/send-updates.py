@@ -55,6 +55,35 @@ proposal as an official XEP."""
 SUBJECT_PROTO_TEMPLATE = "Proposed XMPP Extension: {info[title]}"
 
 
+MAIL_LAST_CALL_TEMPLATE = """\
+This message constitutes notice of a Last Call for comments on \
+XEP-{info[number]:04d}.
+
+Abstract:
+{info[abstract]}
+
+This Last Call begins today and shall end at the close of business on \
+{info[last_call]}.
+
+Please consider the following questions during this Last Call and send your \
+feedback to the standards@xmpp.org discussion list:
+
+1. Is this specification needed to fill gaps in the XMPP protocol stack or to \
+clarify an existing protocol?
+
+2. Does the specification solve the problem stated in the introduction and \
+requirements?
+
+3. Do you plan to implement this specification in your code? If not, why not?
+
+4. Do you have any security concerns related to this specification?
+
+5. Is the specification accurate and clearly written?
+
+Your feedback is appreciated!
+"""
+
+
 MAIL_NONPROTO_TEMPLATE = """\
 Version {info[last_revision][version]} of XEP-{info[number]:04d} \
 ({info[title]}) has been released.
@@ -171,6 +200,8 @@ def make_nonproto_mail(action, info):
     body_template = MAIL_NONPROTO_TEMPLATE
     if action == Action.DEFER:
         body_template = MAIL_DEFER_TEMPLATE
+    elif action == Action.LAST_CALL:
+        body_template = MAIL_LAST_CALL_TEMPLATE
 
     mail = email.message.EmailMessage()
     mail["Subject"] = SUBJECT_NONPROTO_TEMPLATE.format(**kwargs)

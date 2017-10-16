@@ -79,6 +79,12 @@ def extract_xep_metadata(document):
     else:
         approver = "Board" if type_ == "Procedural" else "Council"
 
+    last_call_el = minidom_find_child(header, "lastcall")
+    if last_call_el is not None:
+        last_call = minidom_get_text(last_call_el)
+    else:
+        last_call = None
+
     return {
         "last_revision": {
             "version": last_revision_version,
@@ -93,6 +99,7 @@ def extract_xep_metadata(document):
         "shortname": shortname,
         "title": title,
         "approver": approver,
+        "last_call": last_call,
     }
 
 
@@ -130,6 +137,11 @@ def make_metadata_element(number, metadata, accepted, *, protoname=None):
     if metadata["sig"] is not None:
         result.append(
             text_element("sig", metadata["sig"])
+        )
+
+    if metadata["last_call"] is not None:
+        result.append(
+            text_element("lastcall", metadata["last_call"])
         )
 
     if accepted:

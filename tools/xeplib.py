@@ -36,6 +36,7 @@ class Action(enum.Enum):
     DEFER = "DEFERRED"
     UPDATE = "UPDATED"
     DEPRECATE = "DEPRECATED"
+    LAST_CALL = "LAST CALL"
 
     @classmethod
     def fromstatus(cls, status):
@@ -48,6 +49,7 @@ class Action(enum.Enum):
             Status.OBSOLETE: cls.OBSOLETE,
             Status.DEPRECATED: cls.DEPRECATE,
             Status.DEFERRED: cls.DEFER,
+            Status.PROPOSED: cls.LAST_CALL,
         }[status]
 
 
@@ -84,6 +86,10 @@ def load_xepinfo(el):
             last_revision["remark"] = remark_el.text
 
         info["last_revision"] = last_revision
+
+    last_call_el = el.find("lastcall")
+    if last_call_el is not None:
+        info["last_call"] = last_call_el.text
 
     sig = el.find("sig")
     if sig is not None:
