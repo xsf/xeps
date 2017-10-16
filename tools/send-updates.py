@@ -59,8 +59,11 @@ MAIL_LAST_CALL_TEMPLATE = """\
 This message constitutes notice of a Last Call for comments on \
 XEP-{info[number]:04d}.
 
+Title: {info[title]}
 Abstract:
 {info[abstract]}
+
+URL: {url}
 
 This Last Call begins today and shall end at the close of business on \
 {info[last_call]}.
