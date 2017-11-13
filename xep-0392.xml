@@ -29,6 +29,15 @@
     <jid>jonas@wielicki.name</jid>
   </author>
   <revision>
+    <version>0.3</version>
+    <date>2017-11-13</date>
+    <initials>jwi</initials>
+    <remark><p>
+      Fix wording in angle generation section which did still use CRC32.
+      Rework palette mapping after with implementation experience.
+    </p></remark>
+  </revision>
+  <revision>
     <version>0.2</version>
     <date>2017-10-04</date>
     <initials>jwi</initials>
@@ -53,7 +62,7 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>Colors provide a valuable visual cue to recognize text. Recognition of colors works much faster than recognition of text. Together with the length and overall shape of a piece of text (such as a nickname),  a color provides a decent amount of entropy to distinguish a reasonable amount of entities.</p>
+  <p>Colors provide a valuable visual cue to recognize shapes. Recognition of colors works much faster than recognition of text. Together with the length and overall shape of a piece of text (such as a nickname),  a color provides a decent amount of entropy to distinguish a reasonable amount of entities, without having to actually read the text.</p>
   <p>Clients have been using randomly or deterministically chosen colors for users in multi-user situations for a long time already. However, since there has been no standard for how this is implemented, the experience differs across platforms. The goal of this XEP is to provide a uniform, platform-independent, stateless and easy-to-implement way to map arbitrary bytestrings to colors, as well as give recommendations how this is applied to color names of participants in conversations, roster entries and other pieces of text.</p>
   <p>To allow cross-client use, it is important that the color scheme can be adapted to different environments. This specification provides means to adapt colors to different background colors as well as &cvds;.</p>
   <p>In no way is the system presented in this specification a replacement for names. It only serves as an additional visual aid.</p>
@@ -75,9 +84,8 @@
     <ol>
       <li><link url='#algorithm-angle'>Generate an angle in the CbCr plane from the text</link>.</li>
       <li>If enabled, <link url='#algorithm-cvd'>apply configured corrections for &cvds;</link>.</li>
-      <li><link url='#algorithm-cbcr'>Convert the angle to a CbCr pair</link>.</li>
-      <li>If the output device only supports a small palette of colors, <link url='#algorithm-mappalette'>map the CbCr value to the closest palette color</link>.</li>
-      <li>If the output device supports RGB output, <link url='#algorithm-rgb'>convert the CbCr pair to an RGB triple</link>.</li>
+      <li>If the output device only supports a small palette of colors, <link url='#algorithm-mappalette'>map the angle  to the closest palette color</link>.</li>
+      <li>If the output device supports RGB output, <link url='#algorithm-cbcr'>Convert the angle to a CbCr pair</link> and <link url='#algorithm-rgb'>convert the CbCr pair to an RGB triple</link>.</li>
     </ol>
   </section2>
   <section2 topic='Adding colors to participants of a conversation' anchor='usecase-nickcolor'>
@@ -108,8 +116,8 @@
     <p>Output: Angle in the CbCr plane.</p>
     <p>Note: The goal of this algorithm is to convert arbitrary text into a scalar value which can then be used to calculate a color. As it happens, the CbCr plane of the YCbCr space determines the color (while Y merely defines the lightness); thus, an angle in the CbCr plane serves as a good scalar value to select a color.</p>
     <ol>
-      <li>Run the input through CRC32 as defined by zlib (TODO: add citation).</li>
-      <li>Take the lower 16 bits and XOR them with the upper 16 bits.</li>
+      <li>Run the input through SHA-1 (&rfc3174;) as defined by zlib (TODO: add citation).</li>
+      <li>Extract the first 16 bits.</li>
       <li>Divide the value by 65535 (use float division) and multiply it by 2&#960; (two Pi).</li>
     </ol>
   </section2>
@@ -182,29 +190,42 @@ cr = (r - y) / (1 - KR) / 2
   </section2>
   <section2 topic='Conversion of an RGB color palette to a CbCr color palette' anchor='algorithm-genpalette'>
     <p>Input: A set of RGB colors (each component from 0 to 1).</p>
-    <p>Output: A mapping from CbCr pairs (each component from -0.5 to 0.5) to RGB colors.</p>
-    <p>Note: when the algorithm finishes, the mapping maps CbCr values (rounded to two decimal places) to the R, G, B triples which come closest to the desired color and lightness.</p>
+    <p>Output: A mapping from angles (from 0 to 2&#960;) to RGB colors.</p>
+    <p>Note: when the algorithm finishes, the mapping maps angles (rounded to two decimal places) to the R, G, B triples which come closest to the desired color and lightness.</p>
     <ol>
       <li>Create an empty mapping M which maps from pairs of CbCr values to quadruples of Y, R, G and B.</li>
       <li>For each color R, G, B from the input palette:
         <ol>
           <li>Calculate Y, Cb and Cr from R, G, B as described in <link url='#algorithm-rgb2cbcr'>RGB to YCbCr</link>.</li>
-          <li>Round Cb and Cr to two decimal places as Cb' and Cr'.</li>
-          <li>If the (Cb', Cr') pair is not in the mapping M yet, or if the Y value of the existing entry is farther away from 0.732 than the new Y value, put the Y, R, G, and B values as value for the (Cb', Cr') pair into the mapping.</li>
+          <li><p>Convert Cb and Cr to an angle:</p>
+            <code><![CDATA[
+magn = sqrt(Cb**2 + Cr**2)
+if magn > 0:
+    cr /= magn
+    cb /= magn
+angle = atan2(cr, cb) % (2*pi)
+]]></code>
+            <p>Here, % is the floating point modulo operator. Since atan2 may return negative values, it is used to put the values into the range from 0 to 2&#960;. ** is the exponentiation operator (cb**2 is thus cb squared).</p>
+          </li>
+          <li>Round the angle to two digits behind the decimal point.</li>
+          <li>If the angle is not in the mapping M yet, or if the Y value of the existing entry is farther away from 0.732 than the new Y value, put the Y, R, G, and B values as value for the angle into the mapping.</li>
         </ol>
       </li>
       <li>Strip the Y values from the values of mapping M.</li>
       <li>Return M as the result of the algorithm.</li>
     </ol>
+    <p>Implementations are free to choose a representation for palette colors different from R, G, B triplets. The exact representation does not matter, as long as it can be converted to an angle in the CbCr plane accordingly.</p>
   </section2>
   <section2 topic='Mapping of a CbCr color to closest palette color' anchor='algorithm-mappalette'>
-    <p>Input: A set of colors (the palette) as tuples of Cbp and Crp and a color to map to the closest palette color as Cb and Cr value.</p>
-    <p>Output: A palette color as Cbr and Crr values.</p>
+    <p>Input: (a) A mapping which maps angles to R, G, B triplets and (b) a color to map to the closest palette color as angle alpha.</p>
+    <p>Output: A palette color as R, G, B triplet.</p>
+    <p>Note: See <link url='#algorithm-genpalette'>Conversion of an RGB color palette to a CbCr color palette</link> on how to convert an R, G, B triplet or a CbCr pair to an angle.</p>
     <ol>
-      <li>For each color as pair Cbp, Crp in the palette, calculate the distance metric: <code>D = sqrt((Cbp-Cb)*(Cbp-Cb) + (Crp-Cr)*(Crp-Cr))</code>.</li>
-      <li>Pick the palette color Cbp, Crp with the smallest distance metric D as result color Cbr, Crr.</li>
+      <li>First, check if alpha rounded to two places behind the decimal point has an exact match in the mapping. If so, return that match immediately.</li>
+      <li>For each angle beta in the palette, calculate the distance metric: <code>D = min((alpha - beta) % (2*pi), (beta - alpha) % (2*pi))</code>.</li>
+      <li>Return the R, G, B triplet associated with the angle with the smallest distance metric D.</li>
     </ol>
-    <p>Note: the distance metric is simply the euclidian distance in the CbCr plane.</p>
+    <p>Implementations are free to choose a representation for palette colors different from R, G, B triplets. The exact representation does not matter, as long as it can be converted to an angle in the CbCr plane accordingly.</p>
   </section2>
 </section1>
 <section1 topic='Implementation Notes' anchor='impl'>
