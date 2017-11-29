@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import pathlib
 import shutil
+import subprocess
 import sys
 
 import xml.etree.ElementTree as etree
@@ -70,6 +71,8 @@ def main():
         attic_file = args.attic / "xep-{:04d}-{}.html".format(xep, new_version)
 
         print("XEP-{:04d}:".format(xep), old_version, "->", new_version)
+
+        subprocess.check_call(["make", "build/xep-{:04d}.html".format(xep)])
 
         shutil.copy(str(curr_file), str(attic_file))
         changed = True
