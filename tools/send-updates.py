@@ -86,6 +86,12 @@ requirements?
 Your feedback is appreciated!
 """
 
+STALENOTE = """
+
+Note: The information in the XEP list at https://xmpp.org/extensions/ is \
+updated by a separate automated process and may be stale at the time this \
+email is sent. The XEP documents linked herein are up-to-date."""
+
 
 MAIL_NONPROTO_TEMPLATE = """\
 Version {info[last_revision][version]} of XEP-{info[number]:04d} \
@@ -97,7 +103,7 @@ Abstract:
 Changelog:
 {changelog}
 
-URL: {url}"""
+URL: {url}"""+STALENOTE
 
 
 MAIL_DEFER_TEMPLATE = """\
@@ -109,8 +115,7 @@ Abstract:
 URL: {url}
 
 If and when a new revision of this XEP is published, its status will be \
-changed back to Experimental.
-"""
+changed back to Experimental."""+STALENOTE
 
 
 SUBJECT_NONPROTO_TEMPLATE = \
