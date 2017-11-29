@@ -29,6 +29,18 @@
     <jid>jonas@wielicki.name</jid>
   </author>
   <revision>
+    <version>0.4</version>
+    <date>2017-11-29</date>
+    <initials>jwi</initials>
+    <remark>
+      <p>Use different formulas for Color Vision Deficiency correction, as suggested by Marcus Waldvogel.</p>
+      <p>Update test vectors.</p>
+      <p>Clarify generation of the angle.</p>
+      <p>Prioritize nicknames over bare JIDs.</p>
+      <p>Add rationale for new palette mapping algorithm introduced in 0.3.</p>
+    </remark>
+  </revision>
+  <revision>
     <version>0.3</version>
     <date>2017-11-13</date>
     <initials>jwi</initials>
@@ -96,7 +108,7 @@
     <p>Implementations may want to show a picture in connection with a contact even if the contact does not have an avatar defined (e.g. via &xep0084;).</p>
     <p>In such cases, auto-generating an avatar SHOULD happen as follows:</p>
     <ol>
-      <li>Obtain a name for the contact, in descending order of preference, (a) by using the actual bare JID of the contact (<em>not</em> the bare JID of the conference in case of a XEP-0045 MUC), (b) by using the nickname from the conversation.</li>
+      <li>Obtain a name for the contact, in descending order of preference, (a) the nickname from the conversation, (b) the bare JID of the contact (<em>not</em> the bare JID of the conference in case of a &xep0045; room).</li>
       <li>Generate a color as described in the <link url='#usecase-textcolor'>Generating a color</link> section.</li>
       <li>Fill an implementation-defined background shape with that color.</li>
       <li>Render the first character of the name in white or black centered on the shape.</li>
@@ -116,9 +128,9 @@
     <p>Output: Angle in the CbCr plane.</p>
     <p>Note: The goal of this algorithm is to convert arbitrary text into a scalar value which can then be used to calculate a color. As it happens, the CbCr plane of the YCbCr space determines the color (while Y merely defines the lightness); thus, an angle in the CbCr plane serves as a good scalar value to select a color.</p>
     <ol>
-      <li>Run the input through SHA-1 (&rfc3174;) as defined by zlib (TODO: add citation).</li>
-      <li>Extract the first 16 bits.</li>
-      <li>Divide the value by 65535 (use float division) and multiply it by 2&#960; (two Pi).</li>
+      <li>Run the input through SHA-1 (&rfc3174;).</li>
+      <li>Treat the output as little endian and extract the last-significant 16 bits. (These are the first two bytes of the output, with the second byte being the most significant one.)</li>
+      <li>Divide the value by 65536 (use float division) and multiply it by 2&#960; (two Pi).</li>
     </ol>
   </section2>
   <section2 topic='Corrections for &cvds;' anchor='algorithm-cvd'>
@@ -126,10 +138,12 @@
     <p>Output: Angle in the CbCr plane.</p>
     <p>Note: This algorithm will re-map the angle to map it away from ranges which can not be distinguished by people with the respective &cvds;.</p>
     <section3 topic='Red/Green-blindness' anchor='algorithm-cvd-rg'>
-      <p>Divide the angle by two.</p>
+      <p>Take the angle modulo &#960;.</p>
+      <p>Note: the same effect can be achieved by forcing the most-significant bit of the angle to zero before converting to a float in <link url="#algorithm-angle">Angle generation</link>. This avoids having to perform a floating-point modulo operation.</p>
     </section3>
     <section3 topic='Blue-blindness' anchor='algorithm-cvd-b'>
-      <p>Divide the angle by two and add &#960;/2 (half Pi).</p>
+      <p>Subtract &#960;/2 from the angle, take the result modulo &#960; and add &#960;/2.</p>
+      <p>Note: the same effect can be achieved by setting the most-significant bit of the angle to the inverse of the second-most-significant bit before conversion to floating point in <link url="#algorithm-angle">Angle generation</link>. This avoids having to perform a floating-point modulo operation.</p>
     </section3>
   </section2>
   <section2 topic='CbCr generation' anchor='algorithm-cbcr'>
@@ -196,6 +210,7 @@ cr = (r - y) / (1 - KR) / 2
       <li>Create an empty mapping M which maps from pairs of CbCr values to quadruples of Y, R, G and B.</li>
       <li>For each color R, G, B from the input palette:
         <ol>
+          <li>If the R, G and B values are equal, skip the color and continue with the next.</li>
           <li>Calculate Y, Cb and Cr from R, G, B as described in <link url='#algorithm-rgb2cbcr'>RGB to YCbCr</link>.</li>
           <li><p>Convert Cb and Cr to an angle:</p>
             <code><![CDATA[
@@ -233,6 +248,11 @@ angle = atan2(cr, cb) % (2*pi)
     <p>An implementation may choose a different value for Y depending on whether the sink for the R, G and B values expects Gamma Encoded or Gamma Decoded values. The recommended default of 0.732 is 0.5 to the power of 0.45, that is, a Gamma Encoded 0.5.</p>
     <p>Modifications to Y SHOULD NOT be used to correct for bright/dark backgrounds. Implementations SHOULD instead use the algorithm described in <link url='#algorithm-bg'>Adapting the Color for specific Background Colors</link> for that.</p>
   </section2>
+  <section2 topic='Background Color Correction' anchor='impl-bgcolor'>
+    <p>An implementation which shows the generated colors on a colored background SHOULD apply <link url='#algorithm-bg'>Adapting the Color for specific Background Colors</link>. If the background is not uniformly colored, it is up to the implementation to determine an appropriate surrogate background color to correct against.</p>
+    <p>If an implementation shows the generated colors on a grayscale (including white and black) background, it MAY apply the background color correction algorithm. It is RECOMMENDED to always apply the algorithm if the background color is changed dynamically, to avoid discontinuities between grayscale and colored backgrounds.</p>
+    <p>Implementations SHOULD use the same background color for all generated colors. If this is not feasible, implementations SHOULD use the same background color for all generated colors within the same GUI control (for example, within a conversation and within the roster).</p>
+  </section2>
 </section1>
 <section1 topic='Accessibility Considerations' anchor='access'>
   <p>As outlined above, implementations SHOULD offer the &rgblind; and &bblind; corrections as defined in the <link url='#algorithm-cvd'>Corrections for &cvds;</link> section. Users SHOULD be allowed to choose between:</p>
@@ -241,7 +261,7 @@ angle = atan2(cr, cb) % (2*pi)
     <li>applying one of the &cvd; correction profiles and</li>
     <li>disabling colorization altogether.</li>
   </ul>
-  <p>The last option is important for users with monochromatic view.</p>
+  <p>The last option is useful for users with monochromatic view or who find colors distracting.</p>
   <p>Some sources on the internet indicate that people with &cvds; may profit from having larger areas of color to be able to recognize them. This should be taken into consideration when selecting font weights and line widths for colored parts.</p>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
@@ -271,6 +291,15 @@ angle = atan2(cr, cb) % (2*pi)
     </ul>
     <p>SHA-1 is widely available. From a security point of view, the exact choice of hash function does not matter here, since it is truncated to 16 bits. At this length, any cryptographic hash function is weak.</p>
   </section2>
+  <section2 topic='Palette-mapping function' anchor='design-palette-mapping'>
+    <p>The palette-mapping algorithm operates on angles only and disregards the Y value except if the angles match. This has the downside that the brightness is not equal over the range of the palette mapped colors.</p>
+    <p>The alternative would be to require Y to be close to the target Y. This has several issues:</p>
+    <ul>
+      <li>We cannot know if a palette can satisfy the given Y at all.</li>
+      <li>Many colors from e.g. the "Web Safe" palette (used in 256 color terminals and the test vectors) will not satisfy any given Y, reducing the size of the effective palette drastically.</li>
+    </ul>
+    <p>For the sake of having more colors available, the given algorithm was chosen which prefers many colors with hue conformance over fewer colors with hue and lightness conformance.</p>
+  </section2>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with &IANA;. </p>
@@ -279,7 +308,7 @@ angle = atan2(cr, cb) % (2*pi)
   <p>This document requires no interaction with the &REGISTRAR;. </p>
 </section1>
 <section1 topic='Acknowledgements' anchor='acknowledgements'>
-  <p>Thanks to Daniel Gultsch, Georg Lukas, and Tobias Markmann.</p>
+  <p>Thanks to Klaus Herberth, Daniel Gultsch, Georg Lukas, Tobias Markmann, Christian Schudt, and Marcus Waldvogel for their input and feedback on this document.</p>
 </section1>
 <section1 topic='Test Vectors and Constants' anchor='vectors-and-constants'>
   <section2 topic='Constants for YCbCr (BT.601)' anchor='constants-ycbcr'>
@@ -294,43 +323,49 @@ KB = 0.114
     <p>This section holds test vectors for the different configurations. The test vectors are provided as Comma Separated Values. Strings are enclosed by single quotes (&apos;). The first line contains a header. Each row contains, in that order, the original text, the text encoded as UTF-8 as hexadecimal octets, the angle in radians, and the Cb, Cr, Red, Green, and Blue values.</p>
     <section3 topic='No &cvd; correction' anchor='testvectors-fullrange-no-cvd'>
       <code><![CDATA[text,hextext,angle,cb,cr,r,g,b
-'Romeo','526f6d656f',5.711769,0.500000,-0.321484,0.281,0.790,1.000
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.654957,-0.500000,-0.281892,0.337,1.000,0.000
-'😺','f09f98ba',5.780607,0.500000,-0.274827,0.347,0.756,1.000]]></code>
+'Romeo','526f6d656f',5.711682,0.500000,-0.321546,0.281,0.790,1.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.654901,-0.500000,-0.281855,0.337,1.000,0.000
+'😺','f09f98ba',5.780519,0.500000,-0.274885,0.347,0.756,1.000
+'council','636f756e63696c',6.283089,0.500000,-0.000048,0.732,0.560,1.000]]></code>
     </section3>
-    <section3 topic='With Red/Green-blindess correction' anchor='testvectors-fullrange-cvd-redgreen'>
+    <section3 topic='With Red/Green-blindness correction' anchor='testvectors-fullrange-cvd-redgreen'>
       <code><![CDATA[text,hextext,angle,cb,cr,r,g,b
-'Romeo','526f6d656f',2.855884,-0.500000,0.146872,0.938,0.799,0.000
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',1.827478,-0.131236,0.500000,1.000,0.420,0.499
-'😺','f09f98ba',2.890304,-0.500000,0.128358,0.912,0.812,0.000]]></code>
+'Romeo','526f6d656f',2.570089,-0.500000,0.321546,1.000,0.674,0.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',0.513308,0.500000,0.281855,1.000,0.359,1.000
+'😺','f09f98ba',2.638926,-0.500000,0.274885,1.000,0.708,0.000
+'council','636f756e63696c',3.141497,-0.500000,0.000048,0.732,0.904,0.000]]></code>
     </section3>
-    <section3 topic='With Blue-blindess correction' anchor='testvectors-fullrange-cvd-blue'>
+    <section3 topic='With Blue-blindness correction' anchor='testvectors-fullrange-cvd-blue'>
       <code><![CDATA[text,hextext,angle,cb,cr,r,g,b
-'Romeo','526f6d656f',4.426681,-0.146872,-0.500000,0.031,1.000,0.472
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.398275,-0.500000,-0.131236,0.548,0.998,0.000
-'😺','f09f98ba',4.461100,-0.128358,-0.500000,0.031,1.000,0.505]]></code>
+'Romeo','526f6d656f',2.570089,-0.500000,0.321546,1.000,0.674,0.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.654901,-0.500000,-0.281855,0.337,1.000,0.000
+'😺','f09f98ba',2.638926,-0.500000,0.274885,1.000,0.708,0.000
+'council','636f756e63696c',3.141497,-0.500000,0.000048,0.732,0.904,0.000]]></code>
     </section3>
   </section2>
   <section2 topic='Test Vectors for mapping to 216 color palette' anchor='testvectors-palette'>
-    <p>The used palette can be generated by sampling the RGB cube evenly with six samples on each axis (resulting in 216 colors). The resulting palette is commonly known as the palette of so-called "Web Safe" colors.</p>
-    <p>The format of the test vectors is the same as in the full range case above.</p>
+    <p>The used palette can be generated by sampling the RGB cube evenly with six samples on each axis (resulting in 210 colors (grayscales are excluded)). The resulting palette is commonly known as the palette of so-called "Web Safe" colors.</p>
+    <p>Instead of the cb and cr values, the test vectors contain the best_angle as found in the palette.</p>
     <section3 topic='No &cvd; correction' anchor='testvectors-palette-no-cvd'>
-      <code><![CDATA[text,hextext,angle,cb,cr,r,g,b
-'Romeo','526f6d656f',5.711769,0.500000,-0.321484,0.000,0.400,1.000
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.654957,-0.500000,-0.281892,0.400,1.000,0.000
-'😺','f09f98ba',5.780607,0.500000,-0.274827,0.000,0.200,1.000]]></code>
+      <code><![CDATA[text,hextext,angle,best_angle,cb,cr,r,g,b
+'Romeo','526f6d656f',5.711682,5.690000,0.000,0.400,1.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.654901,3.640000,0.400,1.000,0.000
+'😺','f09f98ba',5.780519,5.770000,0.400,0.600,1.000
+'council','636f756e63696c',6.283089,0.040000,0.200,0.000,1.000]]></code>
     </section3>
-    <section3 topic='With Red/Green-blindess correction' anchor='testvectors-palette-cvd-redgreen'>
-      <code><![CDATA[text,hextext,angle,cb,cr,r,g,b
-'Romeo','526f6d656f',2.855884,-0.500000,0.146872,1.000,1.000,0.000
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',1.827478,-0.131236,0.500000,1.000,0.000,0.000
-'😺','f09f98ba',2.890304,-0.500000,0.128358,1.000,1.000,0.000]]></code>
+    <section3 topic='With Red/Green-blindness correction' anchor='testvectors-palette-cvd-redgreen'>
+      <code><![CDATA[text,hextext,angle,best_angle,cb,cr,r,g,b
+'Romeo','526f6d656f',2.570089,2.550000,1.000,0.600,0.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',0.513308,0.500000,0.600,0.000,1.000
+'😺','f09f98ba',2.638926,2.630000,1.000,0.800,0.400
+'council','636f756e63696c',3.141497,3.180000,0.800,1.000,0.000]]></code>
     </section3>
-    <section3 topic='With Blue-blindess correction' anchor='testvectors-palette-cvd-blue'>
-      <code><![CDATA[text,hextext,angle,cb,cr,r,g,b
-'Romeo','526f6d656f',4.426681,-0.146872,-0.500000,0.000,1.000,0.400
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.398275,-0.500000,-0.131236,0.600,1.000,0.000
-'😺','f09f98ba',4.461100,-0.128358,-0.500000,0.000,1.000,0.400]]></code>
+    <section3 topic='With Blue-blindness correction' anchor='testvectors-palette-cvd-blue'>
+      <code><![CDATA[text,hextext,angle,best_angle,cb,cr,r,g,b
+'Romeo','526f6d656f',2.570089,2.550000,1.000,0.600,0.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.654901,3.640000,0.400,1.000,0.000
+'😺','f09f98ba',2.638926,2.630000,1.000,0.800,0.400
+'council','636f756e63696c',3.141497,3.180000,0.800,1.000,0.000]]></code>
     </section3>
   </section2>
 </section1>
