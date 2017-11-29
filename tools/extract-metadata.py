@@ -23,6 +23,22 @@ def open_xml(f):
     return xml.dom.minidom.parse(f)
 
 
+def extract_revision_text(remark_el):
+    remark_children = minidom_children(remark_el)
+    if len(remark_children) == 1 and remark_children[0].tagName == "p":
+        return minidom_get_text(remark_children[0])
+    if len(remark_children) == 0:
+        return minidom_get_text(remark_el) or None
+    if minidom_get_text(remark_el).strip():
+        return None
+    lines = []
+    for child in remark_children:
+        if child.tagName == "p":
+            lines.append(minidom_get_text(child))
+
+    return "\n".join(lines)
+
+
 def extract_xep_metadata(document):
     header = minidom_find_header(document)
 
@@ -37,11 +53,7 @@ def extract_xep_metadata(document):
         remark_el = minidom_find_child(latest_revision, "remark")
         last_revision_remark = None
         if remark_el is not None:
-            remark_children = minidom_children(remark_el)
-            if len(remark_children) == 1 and remark_children[0].tagName == "p":
-                last_revision_remark = minidom_get_text(remark_children[0])
-            elif len(remark_children) == 0:
-                last_revision_remark = minidom_get_text(remark_el) or None
+            last_revision_remark = extract_revision_text(remark_el)
 
         if last_revision_remark is not None:
             initials_el = minidom_find_child(latest_revision, "initials")
