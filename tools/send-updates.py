@@ -144,6 +144,9 @@ def diff_infos(old, new):
             return None
         else:
             return Action.fromstatus(new["status"])
+    elif (old["status"] == Status.PROPOSED and
+            old["last_call"] != new["last_call"]):
+        return Action.LAST_CALL
 
     old_version = old.get("last_revision", {}).get("version")
     new_version = new.get("last_revision", {}).get("version")
