@@ -1,0 +1,169 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY namespace "urn:xmpp:mfa:0">
+  <!ENTITY draft "draft-cridland-kitten-clientkey-00.txt">
+        <!ENTITY rfc6238 "<span class='ref'><link url='http://tools.ietf.org/html/rfc6238'>RFC 6238</link></span> <note>RFC 6238: TOTP: Time-Based One-Time Password Algorithm &lt;<link url='http://tools.ietf.org/html/rfc6238'>http://tools.ietf.org/html/rfc6238</link>&gt;.</note>" >
+        <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Multi-Factor Authentication with TOTP</title>
+  <abstract>This specification defines support for multi-factor authentication in terms of SASL2 Tasks based around the Time-based One Time Password mechanism.</abstract>
+  &LEGALNOTICE;
+  <number>XXXX</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies/>
+  <supersedes/>
+  <supersededby/>
+  <shortname>mfa</shortname>
+  <registry/>
+  <discuss>standards</discuss>
+  <author>
+    <firstname>Dave</firstname>
+    <surname>Cridland</surname>
+    <email>dave.cridland@surevine.com</email>
+    <jid>dave.cridland@surevine.com</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2018-01-08</date>
+    <initials>dwd</initials>
+    <remark><p>First draft</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>It is generally agreed that the security of passwords can be improved
+    when combining with another factor, such as possession of a hardware token
+    or control of another account, etc. This specification provides a suite of SASL2
+    tasks (see &xep0388;) and supporting protocol to allow users or administrators
+    to perform such secondary authentication.</p>
+  <p>This specification currently only discusses use of TOTP with SASL2; it should
+    be noted that if client support is needed, it is far superior
+    to simply support SASL2.</p>
+  <p>Therefore this specification takes the view that support for entry of TOTP
+    codes where the client has no support should be of an ad-hoc nature, or
+    potentially unsupported by the server.</p>
+</section1>
+
+  <section1 topic="Outline of use">
+    <p>We start by describing the user's device capable of generating TOTP Codes
+      as the TOTP Device. In order to support TOTP, both the TOTP Device and the
+      server are required to have a shared TOTP Secret which can be used to generate
+      the codes according to &rfc6238;. The process by which a TOTP Secret is generated
+      by the server and passed to the TOTP Device is known as enrollment.</p>
+    <p>In XMPP, enrollment can be initiated either by the server (due to an
+      administrative fiat that the account requires TOTP) or by the user. If it is
+      initiated by the user, the flow is a simple &IQ; based protocol; on the other
+    hand enforced enrollment by the server is performed as a SASL2 Task.</p>
+    <p>Once enrolled, codes are sent by the client during a second SASL2 Task.
+      Servers might offer this as the only Multifactor option, or as one of many.</p>
+    <p>Typically, servers supporting MFA also support CLIENT-KEY and/or
+      CLIENT-KEY-PLUS, and will suppress MFA when these are used. This vastly
+    improves user experience for many cases.</p>
+  </section1>
+
+  <section1 topic="Interoperability Notes">
+    <section2 topic="Use with naïve clients">
+      <p>Clients which do not have support for TOTP will no longer work on accounts
+      which have been enrolled. This is problematic, and a number of options have
+        been considered, such as sending a plain &lt;message/> stanza during client
+      connection.</p>
+      <p>However, use of plain messages from the server has been known to train
+      users into bad behaviour and is easily spoofable. Therefore this specification leaves
+      how to support legacy clients open, and proposes that users do not enroll TOTP
+      until all their clients support it.</p>
+    </section2>
+  <section2 topic="TOTP Parameters">
+    <p>Although TOTP is hash-agile and supports a range of parameters, in
+      practise deployment has been geared heavily toward a single implementation,
+      and therefore practical constraints on the algorithm defined in &rfc6238; are
+      significant.
+    </p>
+    <p>In particular, the hash algorithm MUST be SHA-1, and the period MUST be 30
+      seconds. 6 SHALL be the number of digits, and the number of digits SHALL be 6.</p>
+    <p>A single implementation restricting the use of modern hash algorithms is,
+    of course, bad, but lack of interoperability would be similarly bad.</p>
+  </section2>
+  </section1>
+
+  <section1 topic="TOTP URIs">
+    <p>A commonly implemented technique for passing TOTP Secrets is to encode them as a URI within which the various parameters, including the TOTP secret, are specified. Unfortunately this URI scheme appears to only be specified on a Wiki page.</p>
+    <p>However, this URI scheme is so widely supported that interoperability demands that it is used, so this document therefore specifies a cut-down variant of the URI which is to be used within XMPP. Treatment of this URI as anything but an especially formatted string is not within the scope of this document.</p>
+    <p>A TOTP URI is specified with the following ABNF:</p>
+    <code>
+totp-uri = "otpauth://totp/" label "?secret=" secret "&issuer=" issuer
+label = issuer (":" / "%3A") jid
+jid = 1*CHAR ; URI-encoded jid
+secret = 40 * HEXCHAR ; Base32 (hex) encoded secret with no padding.
+issuer = 1*CHAR ; Issuer name.
+    </code>
+    <p>Yes, issuer is in there twice. No, I don't either.</p>
+    <p>TOTP URIs are normally presented to the user as a QR Code</p>
+  </section1>
+
+  <section1 topic="TOTP Support Operations">
+    <section2 topic="Voluntary Account Enrollment">
+      <p>In order to voluntarily enroll, a client sends an &IQ; of type set containing an empty element &lt;setup/>, qualified by the namespace &namespace;.</p>
+      <example><![CDATA[
+<iq type='set' id='123456'>
+  <setup xmlns=']]>&namespace;<![CDATA['/>
+</iq>
+]]></example>
+      <p>The server then generates a suitable TOTP secret and returns it as a URI, transmitted as the child of the &lt;setup/> element. Note that TOTP MUST NOT be enabled at this point, since it has yet to be tested.</p>
+      <example><![CDATA[
+<iq type='result' id='123456'>
+  <setup xmlns=']]>&namespace;<![CDATA['>otpauth://totp/XMPP:portia@venice.shakespeare.example?secret=58d888c08aa561f370e38cee976121532a883d71&issuer=XMPP</setup>
+</iq>
+]]></example>
+      <p>Next, the user configures the TOTP Device and generates a code. On the same session, it then completes setup by passing a code:</p>
+      <example><![CDATA[
+<iq type='set' id='654321'>
+  <setup xmlns=']]>&namespace;<![CDATA['>123456</setup>
+</iq>
+]]></example>
+    <p>If the code matches, the server responds with success and TOTP is mandatory for the account from this point.</p>
+      <example><![CDATA[
+<iq type='result' id='654321'/>
+]]></example>
+    </section2>
+  </section1>
+
+  <section1 topic="TOTP SASL2 Tasks">
+    <section2 topic="TOTP-INIT">
+      <p>This task is used to provide (or, more typically, enforce) TOTP enrollment.</p>
+      <p>This is typically done on first authentication.</p>
+      <p>There is no initial-response for this task; the server speaks first.</p>
+      <p>The server sends a challenge containing a TOTP URI. The user should configure their TOTP Device, generate a code, and the client then sends this code to the server as an ASCII string.</p>
+      <p>If this matches, the Task succeeds, and TOTP is mandatory for the account from this point onward; servers SHOULD NOT require a TOTP task for this SASL2 process however.</p>
+      <p>There is no additional-data on success or continue with this task.</p>
+    </section2>
+    <section2 topic="TOTP">
+      <p>This task is used to require a TOTP code from the user. In general, this
+      can be one of a group of MFA tasks available to the user, depending on which
+      the user has enrolled for. It MUST NOT be offered to accounts which have not
+      enrolled.</p>
+      <p>The Task SHOULD NOT be requested if the client has authenticated using
+        CLIENT-KEY, however security concerns might suggest that a Client Key which
+      has not been used for a lengthy period might benefit from a TOTP challenge.</p>
+      <p>The client MAY send first using an initial-response.</p>
+      <p>The server will otherwise send an empty challenge.</p>
+      <p>The response (or initial-reponse) SHALL be a TOTP code.</p>
+      <p>If this matches, the Task succeeds.</p>
+      <p>There is no additional-data on success or continue with this task.</p>
+    </section2>
+  </section1>
+
+  <section1 topic='Determining Support' anchor='support'>
+  <p>Support for the voluntary enrollment protocol by servers is advertised as the Disco feature '&namespace;'.</p>
+    <p>Support for TOTP itself in client can be determined similarly.</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>The TOTP secret is a plaintext equivalent shared secret. Both clients and servers MUST protect this. It is RECOMMENDED that it be stored encrypted, with the encryption key held in a distinct location to the per-user TOTP secret. TOTP secrets MUST be hard for an attacker to guess - see &rfc6238; for more detail.</p>
+</section1>
+</xep>
