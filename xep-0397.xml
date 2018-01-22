@@ -1,0 +1,473 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+  <!ENTITY tls13 "<span class='ref'><link url='https://tools.ietf.org/html/draft-ietf-tls-tls13-21'>draft-ietf-tls-tls13-21</link></span> <note>The Transport Layer Security (TLS) Protocol Version 1.3 &lt;<link url='https://tools.ietf.org/html/draft-ietf-tls-tls13-21'>https://tools.ietf.org/html/draft-ietf-tls-tls13-21</link>&gt;.</note>" >
+  <!ENTITY sasl-ht "<span class='ref'><link url='https://tools.ietf.org/html/draft-schmaus-kitten-sasl-ht-03'>draft-schmaus-sasl-ht-03</link></span><note>draft-schmaus-sasl-ht-03: The Hashed Token SASL Mechanism &lt;<link url='https://tools.ietf.org/html/draft-schmaus-kitten-sasl-ht-03'>https://tools.ietf.org/html/draft-schmaus-kitten-sasl-ht-03</link>&gt;.</note>" >
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Instant Stream Resumption</title>
+
+  <abstract>This specification introduces a mechanism for instant
+  stream resumption, based on Stream Management (XEP-0198), allowing
+  XMPP entities to instantaneously resume an XMPP stream.</abstract>
+  &LEGALNOTICE;
+  <number>0397</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0198</spec>
+    <spec>XEP-0388</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>isr</shortname>
+  <author>
+    <firstname>Florian</firstname>
+    <surname>Schmaus</surname>
+    <email>flo@geekplace.eu</email>
+    <jid>flo@geekplace.eu</jid>
+  </author>
+  <revision>
+    <version>0.1.0</version>
+    <date>2018-01-22</date>
+    <initials>XEP Editor (jwi)</initials>
+    <remark><p>Accepted by council vote from 2017-12-13.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.5</version>
+    <date>2017-11-30</date>
+    <initials>fs</initials>
+    <remark><p>Minor changes</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.4</version>
+    <date>2017-10-15</date>
+    <initials>fs</initials>
+    <remark>
+      <ul>
+        <li>Bump SASL2 namespace to urn:xmpp:sasl:1, and as result:</li>
+        <li>Rename 'key' to 'token'</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.3</version>
+    <date>2017-03-17</date>
+    <initials>fs</initials>
+    <remark><p>Based ISR on SASL2.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2016-03-11</date>
+    <initials>fs</initials>
+    <remark><p>Second draft.</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2016-02-12</date>
+    <initials>fs</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+
+  <p>This XEP specifies an instant stream resumption mechanism based
+  on &xep0198;, allowing XMPP entities to instantaneously resume an
+  XMPP stream. This can be seen as the complementary part to &xep0305;
+  allowing for fast XMPP session (re-)establishment.</p>
+
+  <p>Compared to the existing stream resumption mechanism of <link
+  url='http://xmpp.org/extensions/xep-0198.html#resumption'><cite>XEP-0198</cite>
+  § 5</link>, the approach defined herein reduces the round trips
+  required to resume a stream to exactly <em>one</em>. This is
+  achieved by using just a secure short-lived token to resume the
+  stream.</p>
+
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+
+  <dl>
+  <di>
+    <dt>ISR</dt>
+    <dd>Instant Stream Resumption.</dd>
+  </di>
+  <di>
+    <dt>Instant Stream Resumption Token (ISR Token)</dt>
+    <dd>A shared secret that is exclusively ephemeral and represented as string.</dd>
+  </di>
+  <di>
+    <dt>TLS</dt>
+    <dd>Transport Layer Security (&rfc5246;).</dd>
+  </di>
+  </dl>
+
+</section1>
+
+<!--
+<section1 topic='Use Cases' anchor='usecases'>
+  <p>STRONGLY RECOMMENDED.</p>
+</section1>
+-->
+
+<section1 topic='Stream Feature'>
+
+  <p>XMPP entities providing Instant Stream Resumption MUST announce
+  that functionality as stream feature, but only if an instant stream
+  resumption is possible at this stage. The ISR stream future consists
+  of an &lt;isr/&gt; element qualified by the 'htpps://xmpp.org/extensions/isr/0'
+  namespace. And since ISR requires TLS, this means that the
+  &lt;isr/&gt; stream feature only appears on TLS secured
+  connections.</p>
+
+  <p>The ISR stream feature element MUST contain a &lt;mechanisms/&gt;
+  element as defined in &rfc6120;. This element contains the SASL
+  mechanism which are available to be used for instant stream
+  resumption.</p>
+
+  <example caption='Server announces the Instant Stream Resumption Stream Feature'><![CDATA[
+<stream:stream
+  from='example.com'
+  xmlns='jabber:client'
+  xmlns:stream='http://etherx.jabber.org/stream'
+  version='1.0'>
+
+<stream:features>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/>
+  <sm xmlns='urn:xmpp:sm:3'/>
+  <isr xmlns='https://xmpp.org/extensions/isr/0'>
+    <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+      <mechanism>HT-SHA-256-ENDP</mechanism>
+    </mechaisms>
+  </isr>
+</stream:features>
+]]></example>
+
+  <p>Every ISR enabled entity SHOULD support the HT-SHA-256-ENDP
+  mechanism, support for HT-SHA-256-UNIQ is RECOMMENDED. The family
+  of <cite>HT SASL</cite> mechanisms is specified in &sasl-ht;.</p>
+
+</section1>
+
+<section1 topic='Obtaining a Instant Stream Resumption Token' anchor='obtain'>
+
+  <p>In order to obtain an ISR token, the requesting entity must add an
+  'isr-enable' element qualified by the 'htpps://xmpp.org/extensions/isr/0' namespace to the
+  &lt;enable/&gt; element as defined in &xep0198; when attempting to
+  enable Stream Management. This &lt;isr-enable/&gt; element MUST contain a
+  'mechanism' attribute containing the name of the SASL mechanism the
+  requesting entity will use when performing ISR with the returned
+  token. The entities involved in ISR MUST only use or allow this
+  mechanism when performing ISR with the according token. This
+  effectively pins the SASL mechanism <note>Pinning the SASL mechanism
+  is believed to increase the security</note>.</p>
+
+  <example caption='An &lt;enable/&gt; Nonza with the ISR &apos;mechanism&apos; element'><![CDATA[
+<enable xmlns='urn:xmpp:sm:3'>
+  <isr-enable xmlns='https://xmpp.org/extensions/isr/0' mechanism='HT-SHA-256-ENDP'/>
+</enable>
+]]></example>
+
+  <p>Next, the &lt;enabled/&gt; Nonza (see &xep0360;) which is send as
+  positive reply upon a request to enable Stream Management, MUST
+  contain an 'isr-enabled' element qualified by the 'htpps://xmpp.org/extensions/isr/0'
+  namespace containing a ISR token as value of its 'token' attribute. The
+  token MUST be newly generated by a cryptographically secure random
+  number generator and MUST contain at least 128 bit of entropy. The
+  &lt;isr-enabled/&gt; element can optionally also contain a
+  'location' attribute
+  which specifies the preferred IP address or hostname, and a TCP port
+  number of the host which should be used for instant stream
+  resumption.</p>
+
+  <example caption='An &lt;enabled/&gt; Nonza with a ISR token'><![CDATA[
+<enabled xmlns='urn:xmpp:sm:3'>
+  <isr-enabled xmlns='https://xmpp.org/extensions/isr/0' token='a0b9162d-0981-4c7d-9174-1f55aedd1f52'/>
+</enabled>]]></example>
+
+  <example caption='An &lt;enabled/&gt; Nonza with a ISR token and location'><![CDATA[
+<enabled xmlns='urn:xmpp:sm:3'>
+  <isr-enabled xmlns='https://xmpp.org/extensions/isr/0'
+               token='a0b9162d-0981-4c7d-9174-1f55aedd1f52'
+               location='isr.example.org:5222'/>
+</enabled>]]></example>
+
+  <p>The &lt;enabled/&gt; Nonza containing an ISR token MUST only be
+  sent over TLS secured connections.</p>
+
+</section1>
+
+<section1 topic='Instant Stream Resumption' anchor='isr'>
+
+  <p>In order to instantaneously resume an XMPP stream the initiating
+  entity, which is either an XMPP client or server, must posses a
+  valid ISR token. After it has obtained the ISR token, using the process
+  described in the previous section, it first determines the host for
+  resumption, and after that, tries to perform the instant stream
+  resumption.</p>
+
+  <section2 topic='Determing the Host for Resumption' anchor='host'>
+
+  <p>The lookup mechanism order to determine host candidates for ISR
+  resumption is as follows:</p>
+
+  <ol>
+    <li>The host provided in the optional 'location' attribute
+    qualified by the 'htpps://xmpp.org/extensions/isr/0' namespace found in the
+    &lt;enabled/&gt; element of <cite>XEP-0198</cite> (the
+    "isr:location").
+    </li>
+    <li>The hosts determined by means of &xep0368;.</li>
+    <li>The host announced in the 'location' attribute of the
+    &lt;enabled/&gt; Nonza defined in <cite>XEP-0198</cite>.</li>
+    <li>Standard host lookup mechanisms.</li>
+  </ol>
+
+  <p>The host candidates retrieved by those mechanisms SHOULD be
+  tried by the initiating entity in this order.</p>
+
+  <p>Note that the hosts announced by the 'location' attribute
+  qualified by the 'htpps://xmpp.org/extensions/isr/0' namespace MUST be connected to
+  using TLS from the beginning, i.e. &lt;starttls/&gt; MUST NOT be
+  used, instead the TLS handshake is performed right after
+  establishing the connection.</p>
+
+  <p>This order prefers hosts which allow connections where TLS is
+  enabled from the beginning. This is desirable to reduce the
+  required round trips by skipping the &lt;starttls/&gt; step.</p>
+
+  </section2>
+
+  <section2 topic='Performing Instant Stream Resumption' anchor='resume'>
+
+  <p>After the remote host on which the instant stream resumption
+  should be performed was determined, the initiating entity connects
+  to the host, and establishes TLS by either</p>
+
+  <ol>
+    <li>establishing a TLS session right away, or</li>
+    <li>performing STARTTLS (&rfc6120; § 5).</li>
+  </ol>
+
+  <p>Now the initiating entity sends an XMPP &lt;stream&gt; open
+  element followed by a &lt;authenticate/&gt; Nonza as specified in
+  the &xep0388;. The initiating entity must also provide a
+  &lt;inst-resume/&gt; element qualified by the 'htpps://xmpp.org/extensions/isr/0'
+  namespace, which must contain a &lt;resume/&gt; element as defined
+  in &xep0198;.</p>
+
+  <p>If the with-isr-token' attribute is set to 'false', then the
+  SASL mechanism is performed as when traditionally authenticating
+  the XMPP session. If the value of the attribute is 'true', which is
+  the default value for this attribute, then the "password" given to
+  the SASL mechanism is the ISR token. Note that this implies that only
+  SASL mechanisms which take a password/token can be used this
+  way.</p>
+
+  <example caption='Initiating entity requests instant stream resumption via the Extensible SASL Profile (XEP-0388)'><![CDATA[
+<?xml version='1.0'?>
+<stream:stream
+    from='juliet@im.example.com'
+    to='im.example.com'
+    version='1.0'
+    xml:lang='en'
+    xmlns='jabber:client'
+    xmlns:stream='http://etherx.jabber.org/streams'>
+
+<authenticate xmlns='urn:xmpp:sasl:1' mechanism='HT-SHA-256-ENDP'>
+  <initial-response>[base64 encoded SASL data]</initial-response>
+  <inst-resume xmlns='https://xmpp.org/extensions/isr/0' with-isr-token='true'/>
+    <resume xmlns='urn:xmpp:sm:3'
+            h='some-sequence-number'
+            previd='some-long-sm-id'/>
+  </inst-resume>
+</authenticate>
+]]></example>
+
+    <p>Note that the initiating entity SHOULD pipeline the instant
+  stream resumption request together with then initial
+  &lt;stream&gt; open element. The initiating entity is able to do
+  so since it already knows that the service supports ISR because it
+  announced an ISR token.</p>
+
+  <p>Servers MUST destroy the ISR token of a stream after an instant
+  stream resumption was attempted for that stream with an invalid ISR
+  token. Server implementations MUST implement the ISR token comparision in
+  linear runtime.</p>
+
+  <section3 topic='Successful Stream Resumption' anchor='isr-success'>
+
+  <example caption='Successful Instant Stream Resumption'><![CDATA[
+<success xmlns='urn:xmpp:sasl:1'>z
+  <additional-data></additional-data>
+  <inst-resumed xmlns='https://xmpp.org/extensions/isr/0'
+                token='006b1a29-c549-41c7-a12c-2a931822f8c0'>
+    <resumed xmlns='urn:xmpp:sm:3' h='354' previd='123'/>
+  </inst-resumed>
+</success>
+]]></example>
+
+  <p>On success the server replies with a &lt;success/&gt; nonza as
+  specified in the &xep0388;, which must include a
+  &lt;inst-resumed/&gt; element qualified by the 'htpps://xmpp.org/extensions/isr/0'
+  namespace. This element MUST contain a <em>new</em> ISR Token found in
+  the 'token' attribute. It also MUST include a &lt;resumed/&gt; as
+  specified in &xep0198; containing the sequence number of the last by
+  Stream Management handled stanza in the 'h' attribute and the
+  'previd' attribute.</p>
+
+  <p>In case of an successful Instant Stream Resumption authenticated
+  by an ISR token, the server MUST immediately destroy the ISR token after
+  authentication, i.e., it MUST no longer be possible to perform an
+  ISR using that ISR token and Stream Management ID (SM-ID, see
+  &xep0198;) tuple.</p>
+
+  <p>After the &lt;inst-resumed/&gt; was received and has been
+  verified both entities MUST consider the resumed stream to be
+  re-established. This includes all previously negotiated stream
+  features like &xep0138;. It does however not include the specific
+  state of the features: For example in case of Stream Compression,
+  the dictionary used by the compression mechanism of the resumed
+  stream MUST NOT be considered to be restored after instant stream
+  resumption.</p>
+
+  <p class='box'>Note that this behavior is different from &xep0198;
+  stream resumption, where "outer stream" features like compression
+  are not restored. Since such a behavior would be counterproductive
+  towards the goal of this XEP, it specifies that the negotiation
+  state of such "outer stream" features is also restored (besides the
+  features which where already negotiated at ISR-time, i.e. TLS).</p>
+
+  </section3>
+
+    <section3 topic='Successful Authentication but failed Stream Resumption' anchor='isr-auth-success-resumption-failed'>
+
+    <p>If the server was able to authenticate the initiating entity
+    but is unable to resume the stream instantly it MUST reply with a
+    &lt;success/&gt; Nonza as defined in the &xep0388; containing
+    a &lt;inst-resume-failed/&gt; element qualified by the
+    'htpps://xmpp.org/extensions/isr/0' namespace. This
+    &lt;inst-resume-failed/&gt; MUST contain a &lt;failed/&gt;
+    element as defined in &xep0198;.</p>
+
+    <example caption='Server indicates instant stream resumption failure'><![CDATA[
+<success xmlns='urn:xmpp:sasl:1'>
+  <inst-resume-failed xmlns='https://xmpp.org/extensions/isr/0'>
+    <failed xmlns='urn:xmpp:sm:3'
+            h='another-sequence-number'>
+      <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    </failed>
+  </inst-resume-failed>
+</sucess>
+]]></example>
+
+    <p>Instant stream resumption errors SHOULD be considered
+    recoverable, the initiating entity MAY continue with normal
+    session establishment; however, misuse of stream management MAY
+    result in termination of the stream. Since the initiating entity is
+    authenticated, it could continue with resource binding by using
+    &rfc6120; § 7. or &xep0386;.</p>
+
+  </section3>
+
+  <section3 topic='Multi step authentication ISR' anchor='multi-step-auth-isr'>
+
+    <p>As specified in the &xep0388; § 2.6.3, sole SASL authentication
+    may not be sufficient for authentication. In this case, the remote
+    entity sends a &lt;continue/&gt; element as defined in &xep0388;
+    to request the local entity to perform another
+    task.</p>
+
+    <example caption='Server requires Multi SASL Mechanism ISR'><![CDATA[
+<continue xmlns='urn:xmpp:sasl:1'>
+  <additional-data>
+   T3B0aW9uYWwgQmFzZSA2NCBlbmNvZGVkIFNBU0wgc3VjY2VzcyBkYXRh
+  </additional-data>
+  <tasks>
+    <task>HOTP-EXAMPLE</task>
+    <task>TOTP-EXAMPLE</task>
+  <tasks>
+</continue>
+]]></example>
+
+  </section3>
+
+    <section3 topic='Failed ISR Authentication' anchor='isr-auth-failed'>
+
+    <p>If the server is unable to authenticate the initiating entity
+    it replies with a &lt;failure/&gt; Nonza as defined in
+    &xep0388;. The server MUST delete any state of the stream which
+    was attempted to resume in case the SM-ID was correct but the
+    authentication failed.<note>This is to prevent brute force
+    attacks.</note></p>
+
+    <example caption='Server indicates instant stream resumption failure'><![CDATA[
+<failure xmlns='urn:xmpp:sasl:1'>
+    <not-authorized xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
+</failure>
+]]></example>
+
+    <p>After the ISR authentication has failed, the initiating entity
+    could continue with normal authentication (&xep0388;,
+    …).</p>
+
+  </section3>
+
+  </section2>
+
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+
+  <p>Any ISR data SHALL NOT be part of <cite>TLS 1.3</cite> 0-RTT
+  early data. (TODO: Shall we weaken this requirement to allow early
+  data?. It would be technically possible if the sender does not add
+  additional data, for example Stanzas, after the ISR/XEP-0388 data at
+  the end of the early data. And if the receiver does ensure that the
+  existence of such additional data is causing an ISR failure.)</p>
+
+  <p>It is of vital importance that the Instant Stream Resumption
+  Token is generated by a cryptographically secure random
+  generator. See &rfc4086; for more information about Randomness
+  Requirements for Security.</p>
+
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+
+  <p>This document requires no interaction with &IANA;.</p>
+
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+
+  <p>The &REGISTRAR; includes 'htpps://xmpp.org/extensions/isr/0' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+
+  <p>TODO: Add after the XEP leaves the 'experimental' state.</p>
+
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acknowledgements'>
+
+  <p>Thanks to Jonas Wielicki, Thijs Alkemade, Dave Cridland, Maxime
+  Buquet, Alexander Würstlein and Sam Whited for their feedback.</p>
+
+</section1>
+
+</xep>
+
+<!-- Local Variables: -->
+<!-- fill-column: 100 -->
+<!-- indent-tabs-mode: nil -->
+<!-- End: -->
