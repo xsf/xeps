@@ -1,0 +1,129 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY namespace "urn:xmpp:client-key:0">
+  <!ENTITY draft "draft-cridland-kitten-clientkey-00.txt">
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Client Key Support</title>
+  <abstract>This specification defines an XMPP binding of the supporting functions for the CLIENT-KEY SASL mechanism.</abstract>
+  &LEGALNOTICE;
+  <number>0399</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies/>
+  <supersedes/>
+  <supersededby/>
+  <shortname>client-key</shortname>
+  <registry/>
+  <discuss>standards</discuss>
+  <author>
+    <firstname>Dave</firstname>
+    <surname>Cridland</surname>
+    <email>dave.cridland@surevine.com</email>
+    <jid>dave.cridland@surevine.com</jid>
+  </author>
+  <revision>
+    <version>0.1.0</version>
+    <date>2018-01-25</date>
+    <initials>XEP Editor (jwi)</initials>
+    <remark>Accepted by vote of Council on 2018-01-10.</remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2018-01-08</date>
+    <initials>dwd</initials>
+    <remark><p>First draft</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>The CLIENT-KEY SASL mechanism defined in &draft; suggests supporting protocol messages to be present in the application protocol. This specification defines these for XMPP.</p>
+</section1>
+
+  <section1 topic="Typical Flow">
+    <p>A typical client might use this protocol alongside that of TOTP, &xep0388;, and &draft; as follows.</p>
+    <p>On first use, a client will use a traditional SASL mechanism using SASL2, such as SCRAM. The server will then prompt using &lt;next-authenticate/> to initiate, or perform, TOTP.</p>
+    <p>The client will then request a Client Key to reauthenticate later. This may be one or both of a short-term Client Key intended for in-memory storage, perhaps for use with ISR, and a longer-term Client Key used for a "remember this client" to suppress 2FA for a period.</p>
+    <p>Later authentications will use CLIENT-KEY or CLIENT-KEY-PLUS, and the server SHOULD suppress TOTP in such cases.</p>
+  </section1>
+
+  <section1 topic="Client Key Support Operations">
+    <section2 topic="Client Registration">
+      <p>Client registration requests a Client Key from the server. It is typically used to speed reauthentication during a session, and to elide a full reauthentication at the start of a subsequent session.</p>
+      <p>In order to register and obtain a Client Key, a client sends an &IQ; of type "set" containing an XML representation of the data required, within a &lt;register/&gt; element qualified by the '&namespace;' namespace, containing four elements in any order. Descriptions of values are here informative; the canonical definition is in &draft;.</p>
+      <p>&lt;id/> has a text value of the ClientID, a suitable identifier for the client instance, unique within the scope of the authenticated &BAREJID;.</p>
+      <p>&lt;name/> has a text value of the Client Name, a human-readable name for the client instance.</p>
+      <p>&lt;key/> has a text value of the ValidationKey, encoded using Base 64. Implementors are strongly advised to take careful note of the requirements of the ValidationKey as discussed in &draft;.</p>
+      <p>&lt;ttl/> has a text value containing a integer string representation of the number of seconds the Client Key is requested to last for.</p>
+      <p>In the following example, the ValidationKey is H("Random"), and the TTL is for 30 days - a reasonable "Remember this client" option.</p>
+      <example><![CDATA[
+<iq type='set' id='123456'>
+  <register xmlns=']]>&namespace;<![CDATA['>
+    <id>213456-987123-123987</iq>
+    <name>SuperChatBiscuit on Honest Pete's Mobile OS</name>
+    <key>WNiIwIqlYfNw44zul2EhUyqIPXE=</key>
+    <ttl>2592000</ttl>
+  </register>
+</iq>
+      ]]></example>
+      <p>The server responds with two items of information in a &lt;registered/> element qualified by the '&namespace;' namespace. The EncryptedSecret is contained within a &lt;encrypted-secret/> element as a base64-encoded value, and the &lt;expiry/> element contains a timestamp for expiry.</p>
+      <example><![CDATA[
+<iq type='result' id='123456'>
+  <registered xmlns=']]>&namespace;<![CDATA['>
+    <encrypted-secret>WNiIwIqlYfNw44zul2EhUyqIPXE=</encrypted-secret>
+    <expiry>2017-10-15T12:00:00Z</expiry>
+  </registered>
+</iq>
+]]></example>
+      <p>Note that the expiry time might not be 30 days simply because the client has requested it - the server is free to shorten expiry times.</p>
+    </section2>
+    <section2 topic="Key Revocation">
+      <p>Any authenticated client may revoke a key belonging to the same user by sending an &IQ; of type "set" containing a &lt;revoke/> element qualified by the '&namespace;' namespace, containing a &lt;key/> element whose text value is the ClientID corresponding to the key to be revoked.</p>
+      <example><![CDATA[
+<iq type='set' id='123456'>
+  <revoke xmlns=']]>&namespace;<![CDATA['>
+    <id>213456-987123-123987</iq>
+  </revoke>
+</iq>
+      ]]></example>
+    </section2>
+    <section2 topic="Key Enumeration">
+      <p>Any authenticated client may enumerate keys belonging to the same user by sending an &IQ; of type "get" containing a &lt;list/> element qualified by the '&namespace;' namespace.</p>
+      <example><![CDATA[
+<iq type='get' id='123456'>
+  <list xmlns=']]>&namespace;<![CDATA['/>
+</iq>
+      ]]></example>
+      <p>The server responds with an &IQ; of type 'result', containing the &lt;list/> element qualified by the '&namespace;' namespace. This element contains a sequence of &lt;key/> elements each containing (in any order) the &lt;id/>, &lt;name/> and &lt;expiry/> elements as in registration.</p>
+      <example><![CDATA[
+<iq type='result' id='123456'>
+  <list xmlns=']]>&namespace;<![CDATA['>
+    <key>
+      <id>213456-987123-123987</iq>
+      <name>SuperChatBiscuit on Honest Pete's Mobile OS</name>
+      <expiry>2017-10-15T12:00:00Z</expiry>
+    </key>
+    <key>
+      <id>313456-987123-123987</iq>
+      <name>SuperChatChocolate on Honest Bob's Mobile OS</name>
+      <expiry>2018-01-08T12:00:00Z</expiry>
+    </key>
+  </list>
+</iq>
+      ]]></example>
+    </section2>
+  </section1>
+
+  <section1 topic='Determining Support' anchor='support'>
+  <p>Support for this protocol is advertised as the Disco feature '&namespace;'; however clients MAY infer support if the CLIENT-KEY or CLIENT-KEY-PLUS SASL mechanism is supported.</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Security considerations for this specification are covered within the Internet-Draft &draft; - this specification introduces no further considerations by design, but relies heavily on the guidance given there.</p>
+</section1>
+</xep>
