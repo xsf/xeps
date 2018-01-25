@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import contextlib
 import re
+import subprocess
 
 import xml.etree.ElementTree as etree
 
@@ -29,6 +31,29 @@ REVISION_TEMPLATE = """
     <initials>XEP Editor ({initials})</initials>
     <remark>Defer due to lack of activity.</remark>
   </revision>"""
+
+
+@contextlib.contextmanager
+def stash_guard():
+    try:
+        subprocess.check_call([
+            "git", "diff-index", "--quiet", "HEAD", "--"
+        ])
+    except subprocess.CalledProcessError:
+        # there are changes
+        pass
+    else:
+        yield
+        return
+
+    subprocess.check_call([
+        "git", "stash",
+    ])
+
+    try:
+        yield
+    finally:
+        subprocess.check_call(["git", "stash", "pop"])
 
 
 def defer_xep(number, last_version, initials):
@@ -94,6 +119,13 @@ def main():
         "INITIALS in the remarks."
     )
 
+    parser.add_argument(
+        "-c", "--commit",
+        default=False,
+        action="store_true",
+        help="Create a git commit for each deferral (only reasonable with -m)"
+    )
+
     args = parser.parse_args()
 
     if args.xeplist is None:
@@ -105,21 +137,37 @@ def main():
     accepted, _ = load_xepinfos(tree)
     deferred = list(get_deferred(accepted))
 
-    for deferred_info in deferred:
-        if args.modify:
-            defer_xep(deferred_info["number"],
-                      deferred_info["last_revision"]["version"],
-                      args.modify)
+    with contextlib.ExitStack() as stack:
+        if args.commit:
+            stack.enter_context(stash_guard())
 
-        if args.verbose:
-            print(
-                "XEP-{info[number]:04d}: {info[title]} "
-                "(last update {info[last_revision][date]:%Y-%m-%d})".format(
-                    info=deferred_info
+        for deferred_info in deferred:
+            if args.modify:
+                defer_xep(deferred_info["number"],
+                          deferred_info["last_revision"]["version"],
+                          args.modify)
+                if args.commit:
+                    subprocess.check_call([
+                        "git", "add", "xep-{:04d}.xml".format(
+                            deferred_info["number"],
+                        ),
+                    ])
+                    subprocess.check_call([
+                        "git", "commit", "-vem",
+                        "XEP-{:04d}: deferred due to lack of activity".format(
+                            deferred_info["number"],
+                        ),
+                    ])
+
+            if args.verbose:
+                print(
+                    "XEP-{info[number]:04d}: {info[title]} "
+                    "(last update {info[last_revision][date]:%Y-%m-%d})".format(
+                        info=deferred_info
+                    )
                 )
-            )
-        else:
-            print(deferred_info["number"])
+            else:
+                print(deferred_info["number"])
 
 
 if __name__ == "__main__":
