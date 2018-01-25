@@ -37,6 +37,7 @@ class Action(enum.Enum):
     UPDATE = "UPDATED"
     DEPRECATE = "DEPRECATED"
     LAST_CALL = "LAST CALL"
+    REJECT = "REJECT"
 
     @classmethod
     def fromstatus(cls, status):
@@ -50,6 +51,7 @@ class Action(enum.Enum):
             Status.DEPRECATED: cls.DEPRECATE,
             Status.DEFERRED: cls.DEFER,
             Status.PROPOSED: cls.LAST_CALL,
+            Status.REJECTED: cls.REJECT,
         }[status]
 
 
@@ -143,3 +145,27 @@ def minidom_children(elem):
         child for child in elem.childNodes
         if isinstance(child, (xml.dom.minidom.Element))
     ]
+
+
+def choose(prompt, options, *,
+           eof=EOFError,
+           keyboard_interrupt=KeyboardInterrupt):
+    while True:
+        try:
+            choice = input(prompt).strip()
+        except EOFError:
+            if eof is EOFError:
+                raise
+            return eof
+        except KeyboardInterrupt:
+            if keyboard_interrupt is KeyboardInterrupt:
+                raise
+            return keyboard_interrupt
+
+        if choice not in options:
+            print("invalid choice. please enter one of: {}".format(
+                ", ".join(map(str, options))
+            ))
+            continue
+
+        return choice

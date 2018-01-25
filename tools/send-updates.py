@@ -12,7 +12,7 @@ from datetime import datetime
 
 import xml.etree.ElementTree as etree
 
-from xeplib import Status, Action, load_xepinfos
+from xeplib import Status, Action, load_xepinfos, choose
 
 
 DESCRIPTION = """\
@@ -277,30 +277,6 @@ def interactively_extend_smtp_config(config):
             password = getpass.getpass()
         config.set("smtp", "password", password)
     config.set("smtp", "from", from_)
-
-
-def choose(prompt, options, *,
-           eof=EOFError,
-           keyboard_interrupt=KeyboardInterrupt):
-    while True:
-        try:
-            choice = input(prompt).strip()
-        except EOFError:
-            if eof is EOFError:
-                raise
-            return eof
-        except KeyboardInterrupt:
-            if keyboard_interrupt is KeyboardInterrupt:
-                raise
-            return keyboard_interrupt
-
-        if choice not in options:
-            print("invalid choice. please enter one of: {}".format(
-                ", ".join(map(str, options))
-            ))
-            continue
-
-        return choice
 
 
 def make_smtpconn(config):
