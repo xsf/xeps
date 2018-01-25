@@ -14,19 +14,6 @@ from xeplib import load_xepinfos, Status, choose
 
 DEFAULT_XEPLIST_PATH = "./build/xeplist.xml"
 XEP_FILENAME_RE = re.compile(r"xep-(\d+)\.xml")
-
-
-def get_deferred(accepted):
-    now = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    threshold = now.replace(year=now.year - 1)
-
-    for number, info in sorted(accepted.items()):
-        if info["status"] == Status.EXPERIMENTAL and "last_revision" in info:
-            last_update = info["last_revision"]["date"]
-            if last_update <= threshold:
-                yield info
-
-
 BLANK_NUMBER = re.compile("<number>[xX]{4}</number>")
 PROTOXEP_STATUS = "<status>ProtoXEP</status>"
 EXPERIMENTAL_STATUS = "<status>Experimental</status>"
