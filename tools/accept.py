@@ -2,6 +2,7 @@
 import pathlib
 import re
 import shutil
+import subprocess
 import sys
 
 import xml.etree.ElementTree as etree
@@ -122,6 +123,13 @@ def main():
     )
 
     parser.add_argument(
+        "-c", "--commit",
+        default=False,
+        action="store_true",
+        help="Make a git commit",
+    )
+
+    parser.add_argument(
         "item",
         help="Inbox name"
     )
@@ -198,6 +206,26 @@ def main():
                args.initials,
                xepinfo["approver"],
                args.votedate.date())
+
+    if args.commit:
+        subprocess.check_call([
+            "git", "reset", "HEAD", ".",
+        ])
+        subprocess.check_call([
+            "git", "add", new_filename.parts[-1],
+        ])
+        if args.ask:
+            flags = ["-ve"]
+        else:
+            flags = []
+        subprocess.check_call(
+            [
+                "git", "commit", "-m", "Accept {} as XEP-{:04}".format(
+                    inbox_path,
+                    new_number,
+                )
+            ] + flags
+        )
 
 
 if __name__ == "__main__":
