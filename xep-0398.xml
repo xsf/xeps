@@ -1,0 +1,125 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>User Avatar to vCard-Based Avatars Conversion</title>
+  <abstract>This specification describes a method for using PEP based avatars and vCard based avatars in parallel by having the user’s server do a conversion between the two.</abstract>
+  &LEGALNOTICE;
+  <number>0398</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0084</spec>
+    <spec>XEP-0153</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>pep-vcard-conversion</shortname>
+  <author>
+    <firstname>Daniel</firstname>
+    <surname>Gultsch</surname>
+    <email>daniel@gultsch.de</email>
+    <jid>daniel@gultsch.de</jid>
+  </author>
+  <revision>
+    <version>0.2.0</version>
+    <date>2018-01-25</date>
+    <initials>XEP Editor (jwi)</initials>
+    <remark>Accepted by vote of Council on 2018-01-10.</remark>
+  </revision>
+  <revision>
+    <version>0.1.0</version>
+    <date>2017-12-18</date>
+    <initials>dg</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>&xep0084; and &xep0153; are usually considered to stand in competition with each other. <strong>XEP-0084</strong> even talks about superseeding <strong>XEP-0153</strong> in the future. While <strong>XEP-0084</strong> provides a more efficient interface to upload avatars by seperating meta data and data (thus saving the client from having to download its own avatar on every connect) it has the significant downside of not working with &xep0045;.</p>
+  <p>Server implementations can aid to resolve this conflict by automatically putting avatars uploaded with <strong>XEP-0084</strong> into <strong>XEP-0153</strong> storage and vice versa. This allows clients to use the more efficient <strong>XEP-0084</strong> for uploading avatars and <strong>XEP-0153</strong> to retrieve avatars in Multi-User Chats.</p>
+</section1>
+<section1 topic='Discovery' anchor='disco'>
+  <p>The conversion is transparent to the uploading entity. However an entity might want to discover if a service will be performing the conversion from <strong>XEP-0084</strong> to <strong>XEP-0153</strong> since using vCard-Based Avatars will make the uploaded avatar publicly available. (See the »Security Considerations« section of this XEP.)</p>
+  <p>The service MUST include a &xep0030; feature of "urn:xmpp:pep-vcard-conversion:0" on the account.</p>
+  <example caption='Client sends service discovery request to own account'><![CDATA[
+<iq from='romeo@montague.tld/garden'
+    id='01'
+    type='get'
+    to='remeo@montague.tld'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption='Server includes feature namespace in response'><![CDATA[
+<iq from='romeo@montague.tld'
+    id='01'
+    type='result'
+    to='romeo@montague.tld/garden'>
+  <query  xmlns='http://jabber.org/protocol/disco#info'>
+    <feature var='urn:xmpp:pep-vcard-conversion:0'/>
+  </query>
+</iq>]]></example>  
+  </section1>
+<section1 topic='Conversion' anchor='conversion'>
+  <p>Modern clients are expected to use PEP (<strong>XEP-0084</strong>) as interface to upload their avatar and use vCard (<strong>XEP-0153</strong>) only as a read only fallback. Thus a service MUST support conversion from PEP to vCard. A service MAY support conversion from vCard to PEP in order to display avatars in clients that only support <strong>XEP-0084</strong>.</p>
+  <section2 topic='From PEP to vCard' anchor='pep2vcard'>
+    <p>Upon receiving a publication request to the 'urn:xmpp:avatar:metadata' node the service MUST look up the corresponding item published in the 'urn:xmpp:avatar:data' node and store the content of the data element as a photo in the vcard. Services MUST consider the fact that the metadata node might contain multiple info elements and MUST pick the info element that does not point to an exernal URL. Services SHOULD verify that the SHA-1 hash of the image matches the id.</p>
+  </section2>
+  <section2 topic='From vCard to PEP' anchor='vcard2pep'>
+    <p>Upon receiving a vCard publication request with a valid photo attached to it a service MUST first publish an item to the 'urn:xmpp:avatar:data' node on behalf of the requesting entity. The id of that item MUST be the SHA-1 hash of the image as described in <strong>XEP-0084</strong>. Afterwards the service MUST publish a new item to the 'urn:xmpp:avatar:metadata' node with one info element that represents the newly published image using the type value from the vCard as a type attribute in the info element.</p>
+    <p>After publication the service SHOULD send out notification messages to all subscribers of the metadata node.</p>
+  </section2>
+</section1>
+<section1 topic='Presence Broadcast' anchor='presence'>
+  <p>The »Business Rules« section of <strong>XEP-0153</strong> tells entities to include a hash of the vCard avatar in their presence. However this requires clients to retrieve the avatar on every connect to calculate the hash. To avoid this, services MUST include the hash on behalf of their users in every available presence that does not contain an empty photo element wrapped in an x element qualified by the 'vcard-temp:x:update' namespace. Empty x elements qualified by the 'vcard-temp:x:update' namespace (those without a photo element as child) MUST be overwritten. Presences where the content of the photo element is not empty and not equal to the hash calculated by the service MAY be overwritten.</p>
+  <example caption='Client sends presence to server'><![CDATA[
+<presence/>]]></example>
+  <example caption='Server forwards presence to other entities that have presence subscription'><![CDATA[
+<presence to='juliet@capulet.tld' from='romeo@montague.tld/garden'>
+  <x xmlns='vcard-temp:x:update'>
+    <photo>sha1-hash-of-image</photo>
+  </x>
+</presence>]]></example>
+  <example caption='Client sends a presence containing an empty photo element'><![CDATA[
+<presence>
+  <x xmlns='vcard-temp:x:update'>
+    <photo/>
+  </x>
+</presence>]]></example>
+  <example caption='The server redirects the presence but doesn’t touch the photo element'><![CDATA[
+<presence to='juliet@capulet.tld' from='romeo@montague.tld/garden'>
+  <x xmlns='vcard-temp:x:update'>
+    <photo/>
+  </x>
+</presence>]]></example>
+  <p>The hash MUST also be injected into directed presences such as MUC joins</p>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>Implementing clients SHOULD use the more efficient <strong>XEP-0084</strong> to access their own avatar storage and implement <strong>XEP-0153</strong> only to download avatars from other entities if they do not have mutual presence subscription with said entity. (For example participants in a Multi-User Chat.)</p>
+  <p>Services will inject the hash in directed presences automatically but will not resend the presence if the avatar gets updated. Thus clients MAY resend directed available presence to all Multi-User Chats after receiving a 'urn:xmpp:avatar:metadata' update notification. The service will then inject an updated version of the hash. To avoid sending unnecassary presence updates, resending should only occur if the service annouces the 'urn:xmpp:pep-vcard-conversion:0' feature.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p><strong>XEP-0084</strong> has a default access model that only allows entities with mutual presence subscription to access the published avatar. <strong>XEP-0153</strong> has no access control at all. Clients that discover the disco feature 'urn:xmpp:pep-vcard-conversion:0' on the account MAY warn users that uploading an avatar will make that avatar accessible to anyone who knows the Jabber ID.</p>
+  <p>In the future services MAY decide to perform PEP to vCard conversion only if the access model of the 'urn:xmpp:avatar:data' node has been set to 'open' as described in &xep0060;. However the ability to change the access model of nodes isn’t widely implemented yet and thus this paragraph exists only to act as a reminder that the privacy implications described in the previous paragraph can be avoided</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA).</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This specification defines the following XML namespace:</p>
+  <ul>
+    <li>urn:xmpp:pep-vcard-conversion:0</li>
+  </ul>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>tbd</p>
+</section1>
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>Special thanks to Evgeny Khramtsov who implemented what is now written down as a XEP in ejabberd and created the inspiration for this XEP.</p>
+</section1>
+</xep>
