@@ -65,6 +65,7 @@ def accept_xep(number, last_version,
     else:
         version[1] = str(int(version[1]) + 1)
         del version[2:]
+    version.append("0")
 
     xep_text = (
         xep_text[:revision_match.start()] +
