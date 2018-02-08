@@ -167,6 +167,10 @@ preview:
 docker:
 	docker build -t xmpp-org/extensions .
 
+.PHONY: dockerhtml
+dockerhtml:
+	docker build -t xmpp-org/extensions . --build-arg NCORES=9 --build-arg TARGETS="html inbox-html"
+
 .PHONY: testdocker
 testdocker:
 	docker run -d --name tmpxeps -p 3080:80 xmpp-org/extensions
