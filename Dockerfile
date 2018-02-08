@@ -4,7 +4,7 @@
 FROM xmppxsf/xeps-base:latest
 
 ARG NCORES=1
-ARG TARGETS="html inbox-html inbox-xml pdf xeplist"
+ARG TARGETS="html inbox-html inbox-xml pdf xeplist refs"
 
 COPY *.xml xep.* *.css *.xsl *.js *.xsl Makefile /src/
 COPY resources/*.pdf /src/resources/
