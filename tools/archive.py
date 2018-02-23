@@ -11,6 +11,17 @@ from datetime import datetime, timedelta
 from xeplib import load_xepinfos, Status
 
 
+def do_archive(xeps_dir, attic, xep, old_version, new_version):
+    curr_file = xeps_dir / "xep-{:04d}.html".format(xep)
+    attic_file = attic / "xep-{:04d}-{}.html".format(xep, new_version)
+
+    print("XEP-{:04d}:".format(xep), old_version, "->", new_version)
+
+    subprocess.check_call(["make", "build/xep-{:04d}.html".format(xep)])
+
+    shutil.copy(str(curr_file), str(attic_file))
+
+
 def main():
     import argparse
 
@@ -44,6 +55,14 @@ def main():
         help="Path to the attic (defaults to ../xep-attic/content/)"
     )
 
+    parser.add_argument(
+        "xeps",
+        nargs="*",
+        type=int,
+        help="Additional XEPs (by their number) to archive. Useful for "
+        "purely editorial changes."
+    )
+
     args = parser.parse_args()
 
     with args.old as f:
@@ -58,6 +77,8 @@ def main():
 
     changed = False
 
+    force_archive = set(args.xeps)
+
     for xep, new_info in new_accepted.items():
         old_version = old_accepted.get(xep, {}).get("last_revision", {}).get(
             "version"
@@ -67,14 +88,17 @@ def main():
         if old_version == new_version:
             continue
 
-        curr_file = args.xeps_dir / "xep-{:04d}.html".format(xep)
-        attic_file = args.attic / "xep-{:04d}-{}.html".format(xep, new_version)
+        force_archive.discard(xep)
+        do_archive(args.xeps_dir, args.attic, xep, old_version, new_version)
+        changed = True
 
-        print("XEP-{:04d}:".format(xep), old_version, "->", new_version)
+    for xep in force_archive:
+        old_version = old_accepted.get(xep, {}).get("last_revision", {}).get(
+            "version"
+        )
+        new_version = new_accepted[xep]["last_revision"]["version"]
 
-        subprocess.check_call(["make", "build/xep-{:04d}.html".format(xep)])
-
-        shutil.copy(str(curr_file), str(attic_file))
+        do_archive(args.xeps_dir, args.attic, xep, old_version, new_version)
         changed = True
 
     if changed:
