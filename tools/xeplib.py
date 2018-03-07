@@ -1,4 +1,9 @@
+import configparser
 import enum
+import getpass
+import itertools
+import smtplib
+import textwrap
 
 import xml.dom.minidom
 
@@ -169,3 +174,83 @@ def choose(prompt, options, *,
             continue
 
         return choice
+
+
+def get_or_ask(config, section, name, prompt):
+    try:
+        return config.get(section, name)
+    except (configparser.NoSectionError,
+            configparser.NoOptionError):
+        return input(prompt)
+
+
+def interactively_extend_smtp_config(config):
+    try:
+        host = config.get("smtp", "host")
+    except (configparser.NoSectionError,
+            configparser.NoOptionError):
+        host = input("SMTP server: ").strip()
+        port = int(input("SMTP port (blank for 587): ").strip() or "587")
+        user = input(
+            "SMTP user (leave blank for anon): "
+        ).strip() or None
+        if user:
+            password = getpass.getpass()
+        else:
+            password = None
+    else:
+        port = config.getint("smtp", "port", fallback=587)
+        user = config.get("smtp", "user", fallback=None)
+        password = config.get("smtp", "password", fallback=None)
+
+    try:
+        from_ = config.get("smtp", "from")
+    except (configparser.NoSectionError,
+            configparser.NoOptionError):
+        from_ = input("From address: ").strip()
+
+    if not config.has_section("smtp"):
+        config.add_section("smtp")
+    config.set("smtp", "host", host)
+    config.set("smtp", "port", str(port))
+    if user:
+        config.set("smtp", "user", user)
+        if password is None:
+            password = getpass.getpass()
+        config.set("smtp", "password", password)
+    config.set("smtp", "from", from_)
+
+
+def make_smtpconn(config):
+    host = config.get("smtp", "host")
+    port = config.getint("smtp", "port")
+    user = config.get("smtp", "user", fallback=None)
+    password = config.get("smtp", "password", fallback=None)
+
+    conn = smtplib.SMTP(host, port)
+    conn.starttls()
+    if user is not None:
+        conn.login(user, password)
+
+    return conn
+
+
+def make_fake_smtpconn():
+    class Fake:
+        def send_message(self, mail):
+            print("---8<---")
+            print(mail.as_string())
+            print("--->8---")
+
+        def close(self):
+            pass
+
+    return Fake()
+
+
+def wraptext(text):
+    return "\n".join(
+        itertools.chain(
+            *[textwrap.wrap(line) if line else [line] for line in text.split("\n")]
+        )
+    )
