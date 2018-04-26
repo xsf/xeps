@@ -47,6 +47,14 @@
     <jid>valodim@stratum0.org</jid>
   </author>
   <revision>
+    <version>0.3.0</version>
+    <date>2018-04-16</date>
+    <initials>fs</initials>
+    <remark>
+      Split public keys into metadata and data nodes.
+    </remark>
+  </revision>
+  <revision>
     <version>0.2.1</version>
     <date>2017-11-13</date>
     <initials>fs</initials>
@@ -125,9 +133,11 @@
   <dl>
     <di><dt>OpenPGP element</dt><dd>An XMPP extension element: &openpgp; qualified by the 'urn:xmpp:openpgp:0' namespace</dd></di>
     <di><dt>OpenPGP content element</dt><dd>An element embedded via OpenPGP in a &openpgp; element. Either one of &signcrypt;, &sign; or &crypt;, qualified by the 'urn:xmpp:openpgp:0' namespace.</dd></di>
-    <di><dt>PEP</dt><dd>Personal Eventing Protocol (<cite>XEP-0163</cite>)</dd></di>
-    <di><dt>Public key PEP node</dt><dd>A PEP node containing an entity's public OpenPGP key.</dd></di>
-    <di><dt>Secret key PEP node</dt><dd>A PEP node containing an entity's encrypted secret OpenPGP key.</dd></di>
+    <di><dt>PEP</dt><dd>&xep0163;</dd></di>
+    <di><dt>Public-Key metadata node ("metadata node")</dt><dd>A PEP node containing metadata of the entity's public OpenPGP key.</dd></di>
+    <di><dt>Public-Key data node ("data node")</dt><dd>A PEP node containing an entity's public OpenPGP key.</dd></di>
+    <di><dt>Secret-Key node</dt><dd>A PEP node containing an entity's encrypted secret OpenPGP key.</dd></di>
+    <di><dt>OpenPGP v4 Fingerprint String</dt><dd>A String representing the OpenPGP v4 fingerprint of a key.</dd></di>
   </dl>
 
 </section1>
@@ -261,48 +271,90 @@
 
 </section1>
 
-<section1 topic='Announcing and Discovering the Public Key via PEP' anchor='announcing-discover-pubkey'>
+<section1 topic='Announcing and Discovering Public Keys via PEP' anchor='announcing-discover-pubkey'>
 
   <p>Parties interested in exchanging encrypted data between each
   other via OpenPGP need to know the public key(s) of the
   recipients. The following section specifies a mechanism to announce
   and discover public keys.</p>
 
-  <section2 topic='Announcing the Public Key via PEP' anchor='annoucning-pubkey'>
+  <p>Two PEP node types are invovled: A "medatata node" is used to store meta information about
+  OpenPGP keys used by an entity while the actual public keys are stored in "data nodes".</p>
 
-    <p>In order to announce the public key, the client needs to store
-    it in a PEP node. The public key data, as specified in <cite>RFC
-    4880</cite>, is stored within a &lt;pubkey/&gt; element which is a
-    child element of the &lt;pubkeys/&gt; element qualified by the
-    'urn:xmpp:openpgp:0' namespace. Note that OpenPGP's ASCII Armor is
-    not used, instead the XMPP client MUST encode the public key using
-    Base64. Clients MAY only try to store the public key if the
-    Personal Eventing Protocol service supports persistent-items, thus
-    they possibly check if the service reports the
-    'http://jabber.org/protocol/pubsub#persistent-items' feature.</p>
+  <section2 topic='The OpenPGP Public-Key Data Node' anchor='annoucning-pubkey'>
 
-    <example caption='Saving the public key in the PEP node.'><![CDATA[
-<iq from='juliet@example.org/balcony' type='set' id='1'>
+    <p>The public key data, as specified in <cite>RFC 4880</cite>, is stored in a PEP data
+    node. Note that OpenPGP's ASCII Armor is not used, instead the XMPP client MUST encode the
+    public key using Base64. The id of the node MUST be "urn:xmpp:openpgp:0:public-keys:" followed
+    by the fingerprint string of the OpenPGP public-key contained in the data node.</p>
+
+    <p>The <em>OpenPGP v4 fingerprint string</em> is obtained as follows: First the raw bytes of the
+    fingerprint are computed as specified in <cite>RFC 4880 § 12.2.</cite>. Then the bytes are
+    encoded as a hexadecimal string using upper case characters<note>This matches the representation
+    used by GnuPG minus the SPACE separation.</note>.</p>
+
+    <p>The data node MUST contain an &lt;pubkey/&gt; element qualified by the 'urn:xmpp:openpgp:0'
+    namespace. An optional 'date' attribute holds the information about the last modification of the
+    key as DateTime format of <cite>XEP-0082</cite>. The element MUST include a &lt;data/&gt;
+    element which contains the data of the key Base64 encoded.</p>
+
+    <example caption='Saving the public key in the data node.'><![CDATA[
+<iq type='set' from='juliet@example.org/balcony' id='publish1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-     <publish node='urn:xmpp:openpgp:0'>
-        <item>
-          <pubkeys xmlns='urn:xmpp:openpgp:0'>
-            <pubkey>
-              BASE64_OPENPGP_PUBLIC_KEY
-            </pubkey>
-          </pubkeys>
-         </item>
-      </publish>
-    </pubsub>
+    <publish node='urn:xmpp:openpgp:0:public-keys:1357B01865B2503C18453D208CAC2A9678548E35'>
+      <item>
+        <pubkey xmlns='urn:xmpp:openpgp:0' date='2018-01-21T10:46:21Z'>
+           <data>
+             BASE64_OPENPGP_PUBLIC_KEY
+           </data>
+        </pubkey>
+      </item>
+    </publish>
+  </pubsub>
 </iq>]]></example>
 
   </section2>
 
-  <section2 topic='Discovering the Public Key via PEP' anchor='discover-pubkey'>
+  <section2 topic='The OpenPGP Public Key Metadata Node' anchor='announcing-pubkey-list'>
 
-    <p>In order to discover the public key of an XMPP entity, clients
-    send a PubSub &IQ; request to the entity's bare JID of which it
-    wants to know the public key.</p>
+    <p>To update the public keys used by an entity, the metadata node is updated. Before adding a
+    OpenPGP key ID to the metadata node, the publisher MUST ensure that the public key is available
+    at the corresponding data node.</p>
+
+    <p> The ID of the metadata node is 'urn:xmpp:openpgp:0:public-keys'. It contains a
+    &lt;public-keys-list/&gt; element qualified by the 'urn:xmpp:openpgp:0' namespace containing one
+    or more &lt;pubkey-metadata/&gt; elements. Every pubkey-metadata element MUST have a
+    'v4-fingerprint' attribute, containing the OpenPGP v4 fingerprint string, and a 'date'
+    attribute, containing the time the key was published or updated in DateTime format of
+    <cite>XEP-0082</cite>. An OpenPGP V4 fingerprint MUST NOT occur in the list more than once.</p>
+
+    <example caption='Publishing a public key to the metadata node.'><![CDATA[
+<iq type='set' from='juliet@example.org/balcony' id='publish1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:openpgp:0:public-keys'>
+      <item>
+        <public-keys-list xmlns='urn:xmpp:openpgp:0'>
+          <pubkey-metadata
+            v4-fingerprint='1357B01865B2503C18453D208CAC2A9678548E35'
+            date='2018-03-01T15:26:12Z'
+            />
+          <pubkey-metadata
+            v4-fingerprint='67819B343B2AB70DED9320872C6464AF2A8E4C02'
+            date='1953-05-16T12:00:00Z'
+            />
+        </public-keys-list>
+      </item>
+    </publish>
+  </pubsub>
+</iq>]]></example>
+
+  </section2>
+
+  <section2 topic='Discovering Public Keys' anchor='discover-pubkey'>
+
+    <p>In order to discover the OpenPGP public keys, the interested entity first queries a remote
+    entities metadata note to learn about its currently annouced OpenPGP keys. Then the public
+    OpenPGP key(s) can be retrieved by querying the data node for a specific fingerprint.</p>
 
     <example caption='Requesting an OpenPGP public key from an XMPP entity.'><![CDATA[
 <iq from='romeo@example.org/orchard'
@@ -310,27 +362,28 @@
     type='get'
     id='getpub'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <items node='urn:xmpp:openpgp:0'
+    <items node='urn:xmpp:openpgp:0:public-keys:1357B01865B2503C18453D208CAC2A9678548E35'
            max_items='1'/>
   </pubsub>
 </iq>]]></example>
+
     <example caption='Personal Eventing Protocol result containing the requested public key.'><![CDATA[
 <iq from='juliet@example.org'
     to='romeo@example.org/orchard'
     type='result'
     id='getpub'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <items node='urn:xmpp:openpgp:0'>
+    <items node='urn:xmpp:openpgp:0:public-keys:1357B01865B2503C18453D208CAC2A9678548E35'>
       <item>
-        <pubkeys xmlns='urn:xmpp:openpgp:0'>
-          <pubkey>
+        <pubkey xmlns='urn:xmpp:openpgp:0'>
+          <data>
             BASE64_OPENPGP_PUBLIC_KEY
-          </pubkey>
-        </pubkeys>
+          </data>
+        </pubkey>
       </item>
     </items>
   </pubsub>
-  </iq>]]></example>
+</iq>]]></example>
 
     <p>Note that the result may contain multiple pubkey elements. Only
     the public keys found in the most recent item MUST be used. Requesters
@@ -347,9 +400,23 @@
 
   </section2>
 
+  <section2 topic='Receiving notifications about key changes' anchor='pubsub-notifications'>
+
+    <p>Entities which are subscribed to the metadata node or advertise the
+    "urn:xmpp:openpgp:0:public-keys+notify" feature via &xep0115; (see <cite>XEP-0060 § 9.2</cite>)
+    receive a notification upon a node update.</p>
+
+  </section2>
+
 </section1>
 
 <section1 topic='Synchronizing the Secret Key with a Private PEP Node' anchor='synchro-pep'>
+
+  <!--
+  TODO: Also split in metadata and data node? Probably not, because it could cause stale secret
+  keys on the service (since it is not possible to list all PEP nodes starting with
+  e.g. urn:xmpp:openpgp:0:secret-keys and delete old ones. We could split later anyways.
+  -->
 
     <p>A private PEP node is used to allow XMPP clients to synchronize
     the user's secret OpenPGP key. Where private PEP node is defined: A
@@ -572,11 +639,19 @@
 
   <section2 topic='PubSub Node Configuration' anchor='pubsub-node-configuration'>
 
-    <p>The PubSub nodes specified by herein SHOULD be configured to either never send the latest
-    item, or to send the latest item only when a new entity subscribed. Thus the nodes
-    'send_last_published_item' configuration option SHOULD be set to either 'never' or 'on_sub' (see
-    <cite>XEP-0060</cite> <link
+    <p>The Public-Key <em>metadata</em> node and the Secret-Key node SHOULD be configured to either
+    never send the latest item, or to send the latest item only when a new entity subscribed. Thus
+    the nodes 'send_last_published_item' configuration option SHOULD be set to either 'never' or
+    'on_sub' (see <cite>XEP-0060</cite> <link
     url='https://xmpp.org/extensions/xep-0060.html#registrar-formtypes-config'>§ 16.4.4</link>).</p>
+
+  </section2>
+
+  <section2 topic='Key Enforcement' anchor='key-enforcement'>
+
+    <p>Whenever an entity becomes aware that the metadata node has changed (e.g., by receiving a PEP
+    update from their own account), it SHOULD check that the list contains the key they use. If the
+    key has been removed, the entity SHOULD reannounce it.</p>
 
   </section2>
 
@@ -793,7 +868,7 @@
 <section1 topic='Acknowledgements' anchor='acknowledgements'>
 
   <p>Thanks to Emmanuel Gil Peyrot, Sergei Golovan, Marc Laporte, Georg
-  Lukas, Adithya Abraham Philip and Brian Cully for their feedback.</p>
+  Lukas, Adithya Abraham Philip, Brian Cully and fiaxh for their feedback.</p>
 
   <p>The first draft of this specification was worked out and written
   on the wall of the 'Kymera' room in one of Google's buildings by the
