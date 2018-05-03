@@ -1,0 +1,129 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>XMPP Connections across HTTPS (HACX)</title>
+  <abstract>This specification defines a procedure to look up various connection methods for an XMPP server over HTTPS, with a focus on censorship resistance.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XEP-0368</spec>
+    <spec>RFC 5785</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <author>
+    <firstname>Travis</firstname>
+    <surname>Burtrum</surname>
+    <email>travis@burtrum.org</email>
+    <jid>travis@burtrum.org</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2018-05-01</date>
+    <initials>tjb</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Various methods exist to connect to XMPP servers over direct TLS, &xep0368; defines SRV records, &rfc7395; defines websocket, &xep0206; defines BOSH. HACX defines a method to retrieve all of those along with optional extra information such as SNI/ALPN requirements and pinned public keys from a &rfc5785; well-known URI over HTTPS.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+    <p>HACX servers MUST use HTTPS.  This means that
+   the HACX client MUST verify the certificate of the HTTPS service at
+   the source domain in order to securely "bootstrap" into the use of
+   HACX; specifically, the rules of &rfc2818; apply to this
+   "bootstrapping" step to provide a secure basis for all subsequent
+   HACX operations.  HACX clients and servers MUST support and use
+   methods to increase the security of this HTTPS request using all available
+   means such as HPKP (&rfc7469;), HSTS (&rfc6797;), DANE (&rfc6698;), etc.
+    </p>
+    <p>A HACX document is retrieved over secure HTTP in the
+   following way:</p>
+    <ol>
+      <li>The HACX client performs an HTTPS GET request at the source
+       domain to the path "/.well-known/xmpp-{client/server}.xml".  The
+       value of "{client/server}" is either "client" or "server" depending on if you want to connect to a server providing the jabber:client or jabber:server namespace.
+       For example, if a client is trying to connect a user with the jid romeo@montague.tld using HACX,
+       then the HTTPS GET request would be as
+       follows:
+
+       GET /.well-known/xmpp-client.xml HTTP/1.1
+       Host: montague.tld.</li>
+      <li>If the server has a HACX document, it responds with the document like so:
+<example caption='Example HACX document'><![CDATA[
+<hacx ttl="604800">
+    <tls ip="fd00:feed:dad:beef::1" port="443" priority="5"/>
+    <tls ip="10.1.1.1" port="443" priority="10" sni="fronting.tld" alpn="aDI="/>
+    <tls ip="10.1.1.2" port="443" priority="15" sni="montague.tld" alpn="eG1wcC1jbGllbnQ=">
+        <public-key-pin sha-256="4/mggdlVx8A3pvHAWW5sD+qJyMtUHgiRuPjVC48N0XQ=" sha-512="25N+1hB2Vo42l9lSGqw+n3BKFhDHsyork8ou+D9B43TXeJ1J81mdQEDqm39oR/EHkPBDDG1y5+AG94Kec0xVqA=="/>
+    </tls>
+    <websocket url="wss://montague.tld/ws" ip="10.1.1.3" port="443" priority="20" weight="50" sni="anotherfront.tld">
+    <bosh url="https://example.tld/bosh" ip="fd00:feed:dad:beef::2" port="443" priority="20" weight="50">
+</hacx>]]></example>
+      The document is defined as such: 
+      <ol>
+          <li>ttl attribute: If missing, assume a value of 30, MUST be non-negative integer representing number of seconds to cache this document.  If connectivity is blocked, you SHOULD still use this document past TTL expiration.</li>
+          <li>tls element: This connection type is &xep0368; style Direct TLS connection</li>
+          <li>websocket element: This connection type is &rfc7395; websocket connection</li>
+          <li>bosh element: This connection type is &xep0206; bosh connection</li>
+          <li>public-key-pin element: This can be on any connection type, and is a base64 hash of the DER encoding of certificate's public key, not the certificate itself, HPKP (&rfc7469;) style.  Multiple of these may be provided, only one must match, and all different hash types for a single element MUST match the same key so only one hash type need be checked.  If these are provided and none match, the connection MUST be considered untrusted and MUST be aborted.  Attributes can be any valid registered <link url="https://www.iana.org/assignments/hash-function-text-names/hash-function-text-names.xhtml">hash name</link>. If missing, TLS certificates MUST be validated the same way as for STARTTLS. (i.e., as specified in &xmppcore;), or another equivalent such as DANE (&rfc6698;) or POSH (&posh;)</li>
+          <li>ip attribute: MUST be provided as either an IPv4 or IPv6 address, implementors SHOULD provide both IPv4 and IPv6 options.</li>
+          <li>port attribute: MUST be provided, for maximum censorship resistance implementors are encouraged to use 443 to blend with HTTPS.</li>
+          <li>url attribute: MUST be provided for websocket/bosh elements, MUST NOT be provided for tls elements, protocol MUST be wss:// for websocket, https:// for bosh (mandatory TLS), ip and port MUST be overriden with ip/port attributes, hostname in URL MUST be sent in HTTP Host: header</li>
+          <li>sni attribute: If missing, HACX client MUST NOT use/set the SNI TLS extension at all, if set, HACX client MUST set the SNI TLS extension to this value exactly.</li>
+          <li>alpn attribute: If missing, HACX client MUST NOT use/set the ALPN (&rfc7301;) TLS extension at all, if set, HACX client MUST base64 decode this field and set the ALPN TLS extension to that value exactly.  MUST NOT be provided for websocket/bosh elements so proper http protocol can be negotiated.</li>
+          <li>priority attribute: MUST be provided, same as definition in &rfc2782; SRV records</li>
+          <li>weight attribute: If missing, default to 0, same as definition in &rfc2782; SRV records</li>
+          <li>HACX clients MUST discard any connection method they don't have support for, or do not wish to try due to privacy reasons (ALPN set to xmpp-client), then SHOULD try them in proper priority/weight order until a successful connection is achieved.  Any type of connection error MUST trigger a fallback to the next record.  Common errors include invalid protocol (HTTP when you expect XMPP), TLS certificate validation errors, and more.</li>
+      </ol>
+      </li>
+      <li>If the server knows where a HACX document can be found, it MUST respond with a HTTP status code 302 (Found) and a redirect to the correct location. The location provided in the redirect response MUST specify an HTTPS URI. To protect against circular references, it is RECOMMENDED that HACX clients follow no more than 10 redirects, although applications or
+   implementations can require that fewer redirects be followed.</li>
+      <li>If the server does not have or know about a HACX document, it MUST respond with HTTP status code 404 (Not Found).</li>
+    </ol>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <p>HACX provides a simple way to look up exactly how to connect to any given XMPP server in a simple, censorship resistant, distributed way.  An attacker would have to block all A and AAAA record lookups and/or HTTPS to completely block this lookup, and even then it's easily done over something like Tor which otherwise does not support things like DNS SRV or TXT lookups.  Additionally, DNS SRV records can not provide values for SNI or ALPN extensions, or a relative priority for other connections methods like BOSH and Websockets.</p>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>This should be trivial to implement for any program that already implements &xep0368; and &posh;, much of the same code can be reused.</p>
+  <p>Server operators might want to prioritize connection methods that maximize privacy, like no ALPN, domain fronting (different SNI value), or no SNI.  Consider looking at everything available at an HTTP level to potentially lie to attackers, while providing correct info to users.  Consider providing different sets of servers to different IP blocks or regions.  Consider using any of the multitude of free or cheap HTTP hosts or CDNs to forward traffic to your real server.  The possibilities are endless.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+    <p>POSH (&posh;) already provides the ability of anyone with control of an HTTPS server to override trust of TLS certificates for the XMPP server matching that domain, HACX is slightly different in that it pins public keys like HPKP (&rfc7469;) and not certificates like POSH, but the delegation is the same.</p>
+    <p>HACX additionally delegates what were previously DNS lookups to the HTTPS server, since this is protected by TLS certificate validation, this should be even more secure than plain DNS, equivalent to something like DNS-over-HTTPS or DNS-over-TLS, but without trusting a 3rd party DNS server.  DNSSEC delegation is preserved as well since it protects the A/AAAA record for the HTTPS host, and can also validate it with DANE (&rfc6698;).</p>
+    <p>This does allow anyone with write access to the /.well-known/ directory on an HTTPS host to host a XMPP server for that domain even if they don't have access to create DNS records or listen on port 5222, but this was already true due to &xep0156; (HTTP Lookup Method) and &rfc7395;</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+    <p>Well-known URIs (&rfc5785;) requires registration of new URI suffixes.  This document specifies two URI suffixes:</p>
+
+<p>
+URI Suffix: xmpp-client.xml<br/>
+Change Controller: XSF<br/>
+Reference: [TODO: HACX LINK HERE]<br/>
+Related Information: XMPP jabber:client namespace<br/>
+</p>
+
+<p>
+URI Suffix: xmpp-server.xml<br/>
+Change Controller: XSF<br/>
+Reference: [TODO: HACX LINK HERE]<br/>
+Related Information: XMPP jabber:server namespace<br/>
+</p>
+
+<p>The Well-known URI registry is currently located <link url='https://www.iana.org/assignments/well-known-uris/well-known-uris.xml'>here</link>.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This document requires no interaction with the &REGISTRAR;.</p>
+</section1>
+</xep>
