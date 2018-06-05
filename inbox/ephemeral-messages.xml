@@ -1,0 +1,209 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY ephemeral "urn:xmpp:ephemeral:0">
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Ephemeral Messages</title>
+  <abstract>This specification defines a protocol to send ephemeral messages over XMPP and synchronize timer value setting across devices.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0334</spec>
+    <spec>XEP-0384</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <author>
+    <firstname>Alexander</firstname>
+    <surname>Krotov</surname>
+    <email>ilabdsf@gmail.com</email>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2018-04-10</date>
+    <initials>psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Existing protocols deployed in XMPP networks offer forward secrecy both on the transport (TLS) and message (&xep0027; and &xep0384;) levels. Forward secrecy prevents recorded communications from being decrypted even if long term encryption keys are compromised by generating ephemeral keys and securely deleting them when they are no longer needed.</p>
+
+  <p>However, even though keys are deleted, message contents is retained both in server and client archives. While servers can be instructed with message hints (&xep0334;) not to store some messages in the archives (&xep0313;) or prevented from saving them in plain text by the use of end-to-end encryption, most XMPP clients still retain message content almost indefinitely. A device with an installed XMPP client that can be lost or stolen becomes the weakest link.</p>
+
+  <p>Unlike ephemeral keys, which have specified lifetimes, message contents cannot be removed immediately after being read. Users have to decide for how long they want to retain conversation contents. Verbally agreeing on the time interval and manually removing messages from all devices is cumbersome and error-prone.</p>
+
+  <p>This XEP defines a way to attach a timer value to messages which in order to specify for how long XMPP clients should store message contents. Besides that, it defines a way to synchronize common timer setting across all users of the conversation.</p>
+
+  <p>The specification does not depend on any encryption scheme and does not require encryption at all. It can be used with plaintext messages as long as users trust their servers to respect &xep0334;.</p>
+
+  <p>Other IM systems, such as <link url="https://signal.org/">Signal</link>, <link url="https://wickr.com/">Wickr</link>, <link url="https://wire.com/">Wire</link> and <link url="https://telegram.org/">Telegram</link>, already offer ephemeral messages. Signal offers timer synchronization feature for user groups and Telegram offers it for secret chats, which are limited to two users.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Provide a way to specify a timer value after which message contents must be deleted from user devices.</li>
+    <li>Clearly define semantics of timer value for XMPP clients.</li>
+    <li>Provide a way for a group of users to choose common value for ephemeral message timers and synchronize it across all devices.</li>
+    <li>Ensure that legacy XMPP clients that do not respect timer values specified in a message do not display such messages (and, hopefully, do not store their contents).</li>
+    <li>Ensure that for end-to-end encryption schemes where each client has its own session key (e.g., OTR and OMEMO), ephemeral messages are encrypted only for devices that explicitly indicate support for the feature.</li>
+  </ul>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di><dt>Explicit timer update</dt><dd>A message with an empty ephemeral tag, sent to update timer setting on all devices participating in a chat.</dd></di>
+    <di><dt>Implicit timer update</dt><dd>A message with a non-empty ephemeral tag, treated as a timer update for the puprose of timer setting synchronization.</dd></di>
+  </dl>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Determining Support' anchor='support'>
+    <p>If an entity supports ephemeral messages, it MUST advertise that fact in its responses to &xep0030; information (<tt>disco#info</tt> requests by returning a feature of <tt>&ephemeral;</tt>.</p>
+    <example caption='A disco#info Query'><![CDATA[
+<iq from='romeo@shakespeare.lit/orchard'
+    id='disco1'
+    to='juliet@capulet.com/balcony'
+    type='get'>
+    <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+    <example caption='A disco#info Response'><![CDATA[
+<iq from='juliet@capulet.com/balcony'
+    id='disco1'
+    to='romeo@shakespeare.lit/orchard'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <feature var=']]>&ephemeral;<![CDATA['/>
+  </query>
+</iq>
+]]></example>
+    <p>An XMPP client SHOULD warn the user if not all recipients support ephemeral messages.</p>
+    <p>To avoid downgrade attack, an XMPP client MUST allow the user to force sending of ephemeral message even if no recipient has indicated support for them.</p>
+  </section2>
+  <section2 topic='Sending a Plaintext Ephemeral Message' anchor='plain'>
+    <p>To send an ephemeral message, an XMPP client places message contents into <tt>&lt;ephemeral&gt;</tt> tag with a <tt>&lt;timer&gt;</tt> attribute set to the number of seconds after which the message contents is to be securely deleted from the recipient device. XMPP client MUST include a <tt>&lt;no-permanent-store/&gt;</tt> hint (see &xep0334;), as any permanent storage of ephemeral message defeats its purpose.</p>
+    <p>Here is an example of sending a plaintext ephemeral message with a 24 hours (86400 seconds) timer value.</p>
+    <example caption='A Plaintext Ephemeral Message'><![CDATA[
+<message from='romeo@montague.net/orchard'
+    to='juliet@capulet.com'>
+  <ephemeral xmlns=']]>&ephemeral;<![CDATA[' timer='86400'>
+    <body>
+      TODO insert some message text
+    </body>
+  </ephemeral>
+  <body>
+    This is an ephemeral message.
+  </body>
+  <no-permanent-store xmlns="urn:xmpp:hints"/>
+</message>
+]]></example>
+  </section2>
+  <section2 topic='Sending a Timer Setting Update' anchor='update'>
+    <p>When user manually changes ephemeral message timer setting in an XMPP client, XMPP client SHOULD send an ephemeral message timer update.</p>
+    <p>Timer update message SHOULD be sent immediately. An XMPP client MAY choose to postpone sending a timer update, remember the current value and ignore implicit timer updates until either the user sends a message or an explicit timer update is received. It may be useful, for example, to avoid waking up wireless connection when user device has low battery.</p>
+    <p>A timer update is simply an ephemeral message without a body. However, for timer setting updates XMPP client SHOULD use <tt>&lt;store&gt;</tt> hint, to ensure that timer setting is updated properly on offline clients when they go online.</p>
+    <example caption='An Ephemeral Message Timer Update'><![CDATA[
+<message from='romeo@montague.net/orchard'
+    to='juliet@capulet.com'>
+  <ephemeral xmlns=']]>&ephemeral;<![CDATA[' timer='86400'/>
+  <store xmlns="urn:xmpp:hints"/>
+</message>
+]]></example>
+  </section2>
+  <section2 topic='Receiving Ephemeral Messages' anchor='receiving'>
+    <p>An XMPP client receiving an message with an <tt>&lt;ephemeral&gt;</tt> tag SHOULD update the timer setting to the value of <tt>timer</tt> attribute. It MAY ignore implicit timer updates if it has postponed sending a timer update message, as described in <link url='#update'>Sending a Timer Setting Update</link> section.</p>
+    <p>The rationale for updating the timer value upon receiving ephemeral messages with contents, in contrast to explicit ephemeral timer updates, is to make sure devices get synchronized eventually even if timer updates are lost. It may happen, for example, if some device stays offline longer than the lifetime of offline message storage (see &xep0160;).</p>
+    <p>After that, client moves the contents of <tt>&lt;ephemeral&gt;</tt> into the <tt>&lt;message&gt;</tt> and ignores any elements outside the <tt>&lt;ephemeral&gt;</tt>, such as <tt>&lt;body&gt;</tt> element intended for legacy clients.</p>
+    <p>The resulting message is processed as usual.</p>
+  </section2>
+  <section2 topic='Exchanging Ephemeral OMEMO Messages' anchor='omemo'>
+    <p>OMEMO requires that messages are delivered in a sequence. If a message is missing, all the following messages cannot be decrypted and a new session has to be established. To prevent this kind of situation, additional steps are required to make sure ephemeral messages are not sent to clients that will ignore them because they do not support them.</p>
+    <section3 topic='Announcing Support for Ephemeral Messages'>
+      <p>An OMEMO-capable device implementing ephemeral messages MUST indicate support for ephemeral messages in its Bundle (see &xep0384;).</p>
+      <example caption='Announcing Ephemeral Message Support'><![CDATA[
+<iq from='juliet@capulet.lit' type='set' id='announce'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='eu.siacs.conversations.axolotl.bundles:12345'>
+      <item>
+        <bundle xmlns='eu.siacs.conversations.axolotl'>
+          <!-- XEP-0384 elements here ... -->
+          <ephemeral xmlns=']]>&ephemeral;<![CDATA['/>
+        </bundle>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+]]></example>
+    </section3>
+    <section3 topic='Sending an Ephemeral Message' anchor='omemo-send'>
+      <p>When sending an ephemeral OMEMO message, XMPP client MUST NOT encrypt it for clients that did not indicate support for ephemeral messages explicitly.</p>
+    </section3>
+  </section2>
+  <section2 topic='Exchanging Encrypted Ephemeral Messages' anchor='encrypted'>
+      <p>While OMEMO in its current revision allows only the body to be encrypted, some other encryption schemes, such as &xep0374; allow to encrypt the <tt>&lt;ephemeral&gt;</tt> tag itself.</p>
+      <p>If such a scheme is used, an XMPP client SHOULD encrypt <tt>&lt;ephemeral&gt;</tt> tag instead of placing encrypted message into it.</p>
+  </section2>
+</section1>
+<section1 topic='Timer Management' anchor='timer'>
+  <p>Sender device MUST start the timer immediately after sending it, if Stream Management is not used (&xep0198;) or after receiving acknowledgement for &lt;message&gt; stanza, if Stream Management is available. This rule prevents the message from being deleted before it is successfully delivered to the server.</p>
+
+  <p>Device receiving a &xep0280; carbon copy MUST start the timer immediately.</p>
+
+  <p>Messages received from other JID MUST be stored in the database along with their timer value and timer SHOULD NOT start until the user reads a message. When the message is read by the user, for example by opening a chat window, an XMPP client starts a timer and MUST securely delete message contents from the device when the timer expires. An XMPP client SHOULD NOT display message contents outside the chat window, for example in system notifications. However, if it is displayed outside the chat window, for example when the last message for the contact is displayed in the roster window, an XMPP client MAY not start a timer until user explicitly opens the chat window.</p>
+
+  <section2 topic='Encrypted Ephemeral Messages' anchor='encrypted-timer'>
+      <p>If <link url='#encrypted'>encrypted ephemeral messages</link> are used, timer setting may become unsynchronized for devices that can not decrypt ephemeral messages. For this reason, whenever user changes an encryption scheme, an XMPP client SHOULD send an <link url='#update'>send an explicit timer update</link>.</p>
+  </section2>
+</section1>
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>XMPP client MAY translate the message "This is an ephemeral message." to other languages and include multiple <tt>&lt;body&gt;</tt> elements with different <tt>xml:lang</tt> attributes for legacy clients.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Devices implementing this specification MUST securely delete messages. For example, if SQLite is used as a database, <tt>secure_delete</tt> pragma MUST be set to 1 explicitly.</p>
+  <p>An XMPP client MUST NOT let the message contents outside the application, even to display it in a system notification. It has <link url='https://objective-see.com/blog/blog_0x2E.html'>led to privacy issues in existing IM software before</link>.</p>
+  <p>Plaintext ephemeral messages should not be relied upon for privacy. Legacy clients may store messages as raw XML contents, including the <tt>&lt;ephemeral&gt;</tt> tag, in their databases. Messages may be sent to third parties accidentally, for example if one of the servers is configured to deliver message contents in push notifications (&xep0357;).</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA).</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This specification defines the following XML namespaces:</p>
+  <ul>
+    <li>&ephemeral;</li>
+  </ul>
+  <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespace to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace=']]>&ephemeral;<![CDATA['
+    xmlns=']]>&ephemeral;<![CDATA['
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      XEP-xxxx: http://www.xmpp.org/extensions/xep-xxxx.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name='ephemeral' type='ephemeral'/>
+
+  <!-- TOOD: finish XML schema after the XEP leaves the 'experimental' state. -->
+</xs:schema>
+]]></code>
+</section1>
+<section1 topic='Acknowledgements' anchor='acknowledgements'>
+  <p>Thanks to Paul Schaub for <link url='https://mail.jabber.org/pipermail/standards/2018-May/034930.html'>the feedback</link> incorporated into this specification.</p>
+</section1>
+</xep>
