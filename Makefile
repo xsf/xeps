@@ -44,6 +44,7 @@ help:
 	@echo '                   all  -  build all XEPs (same as make html)'
 	@echo '                  refs  -  build all IETF refs'
 	@echo '                  html  -  build all XEPs'
+	@echo '            inbox-html  -  build all ProtoXEPs'
 	@echo '                 clean  -  recursively unlink the build tree'
 	@echo '               preview  -  builds html whenever an XEP changes (requires inotify-tools)'
 	@echo '              examples  -  extract all examples'
