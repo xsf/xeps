@@ -1,0 +1,203 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>MUC Self-Ping (Schrödinger's Chat)</title>
+  <abstract>This protocol extension for XEP-0045 Multi User Chat allows clients to check whether they are still joined to a chatroom.</abstract>
+  &LEGALNOTICE;
+  <number>0410</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>Etc.</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>muc-selfping</shortname>
+  <author>
+    <firstname>Georg</firstname>
+    <surname>Lukas</surname>
+    <email>georg@op-co.de</email>
+    <jid>georg@yax.im</jid>
+  </author>
+  <revision>
+    <version>0.1.0</version>
+    <date>2018-08-31</date>
+    <initials>XEP Editor (jcb)</initials>
+    <remark>Accepted by vote of Council on 2018-08-01.</remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2018-08-06</date>
+    <initials>gl</initials>
+    <remark><p>Add handling for another corner case, change title to Council’s liking</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2018-07-31</date>
+    <initials>gl</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>The &xep0045; protocol was
+    not designed to handle s2s interruptions or message loss well.  Rather
+    often, the restart of a server or a component causes a client to believe
+    that it is still joined to a given chatroom, while the chatroom service
+    does not know of this participant.</p>
+  <p>Existing approaches for re-synchronization are either inefficient
+    (presence updates and "silent" messages are reflected to all participants,
+    totalling to O(N²) stanzas per time unit), or mask message /
+    presence losses (the implicit join performed via the deprecated GC1.0
+    protocol).</p>
+  <p>This specification aims to provide the most efficient, albeit not the
+    most elegant, way for clients to periodically check whether they are still
+    joined to a chatroom.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>This specification only makes sense in the context of &xep0045;
+    chatrooms. It makes use of &xep0199; to perform periodic self-pings.</p>
+  <p>Server support for this extension is optional, but will significantly
+    improve the reliability with Multi-Session Nicks and mobile clients.</p>
+</section1>
+<section1 topic='Client Self-Presence Check' anchor='selfpresencecheck'>
+  <p>A typical connection between a client and a Multi-User-Chatroom (MUC)
+    goes through the client-to-server link, possibly a server-to-server link
+    and a typically local server-to-component link. If one of the involved
+    servers or the MUC component is restarted, or one of the links is
+    disturbed for some time, this can lead to the removal of some or all
+    participants from the affected MUCs, without the clients being informed.</p>
+  <p>To a participant, this looks like the MUC is silent (there is no chat
+    activity and no presence changes), making it hard to realize that the
+    connection was interrupted.</p>
+  <p>To prevent the bad usability effect (message loss, lack of reaction from
+    people in a chatroom), a client needs to actively check whether it is
+    still joined to a MUC.</p>
+  <section2 topic='Possible Protocol Approaches' anchor='possibleprotocols'>
+    <p>There are multiple alternative approaches for a client to test whether
+      it is still joined to a MUC:</p>
+    <ol>
+      <li><strong>Silent message</strong> (e.g. &xep0085;): this message will be reflected to
+	all MUC participants, causing unwanted traffic and potentially waking
+        up mobile devices without reason. If implemented by all clients, this
+	will result in O(N²) messages to the MUC.</li>
+      <li><strong>Presence update</strong>: if the MUC service implements the legacy GC1.0 protocol,
+	this will be treated as a join attempt, and the MUC will return the
+	full list of participants and full room history. The user's client
+	will however miss partial history (other participants leaving,
+	potentially also messages), and this has the same drawbacks as the
+	first solution.</li>
+      <li><strong>Private message to self</strong>: the client can send a MUC
+	private message to itself. However, not all MUCs support / allow
+	private messages, and there is no way to differentiate that from the
+	error responses.</li>
+      <li><strong>Private IQ to self</strong>: the client can send an IQ to
+	its own participant JID. MUCs typically do not forbid those, and
+	reflect the IQ request to the client (or another client of the same
+	user). Once that client responds to the reflected IQ, the response is
+	delivered to the initiating client as a sign of still being joined.
+      </li>
+      <li><strong>Dedicated MUC IQ</strong>: a new type of IQ can be deployed
+	to let the client explicitly check whether it is still joined to a
+	MUC. However, this needs to be supported by the server, and the client
+	needs to implement a fallback solution.</li>
+    </ol>
+    <p>The private IQ is the most robust and traffic-efficient solution, and
+      it does not rely on server support. The &xep0199; protocol is
+      appropriate to use for this use case.</p>
+  </section2>
+  <section2 topic='Performing a Self-Ping' anchor='performingselfping'>
+    <p>After an adequate amount of silence from a given MUC (e.g. 15 minutes),
+      or from all MUCs from a given service domain, a client should initiate a
+      self-ping. If Juliet is joined as JuliC in the
+      characters@chat.shakespeare.lit MUC, her client will send the following
+    ping IQ:</p>
+    <example caption="Self-Ping by Juliet's Client"><![CDATA[
+<iq from='juliet@capulet.lit/client' id='s2c1' type='get'
+      to='characters@chat.shakespeare.lit/JuliC'>
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+]]></example>
+    <p>If Juliet's client is not joined, the MUC service will respond with a
+      &lt;not-acceptable&gt; error. Thus, her client can automatically attempt
+      a rejoin.</p>
+    <example caption="Server Response to a Non-Participant"><![CDATA[
+<iq from='characters@chat.shakespeare.lit/JuliC' id='s2c1' type='error'
+      to='juliet@capulet.lit/client' >
+  <error type="cancel">
+    <not-acceptable xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" />
+  </error>
+</iq>
+]]></example>
+    <p>If her client is joined, the IQ request will be forwarded to any one of
+      Juliet's joined clients.</p>
+    <example caption="Server Reflection of Ping"><![CDATA[
+<iq from='characters@chat.shakespeare.lit/JuliC' id='c0ffee-s2c1' type='get'
+      to='juliet@capulet.lit/somerandomclient' >
+  <ping xmlns='urn:xmpp:ping'/>
+</iq>
+]]></example>
+    <p>Depending on the other client implementation and its connection status,
+      the IQ will be responded to eventually, in one of these ways, as
+      delivered to the "<tt>client</tt>" resource:</p>
+    <ul>
+      <li><strong>Successful IQ response</strong>: the client is still joined.</li>
+      <li><strong>Error (&lt;service-unavailable&gt; or
+	  &lt;feature-not-implemented&gt;)</strong>: the client is joined, but
+	the pinged client does not implement &xep0199;.</li>
+      <li><strong>Error (&lt;item-not-found&gt;)</strong>: the client is
+	joined, but the participant just changed their name (e.g. initiated by
+	a different client).</li>
+      <li><strong>Any other error</strong>: the client is probably not
+	joined.</li>
+      <li><strong>Timeout (no response)</strong>: the MUC service (or another
+	client) is unreachable. The client may indicate the status to the user
+	and re-attempt the self-ping after some timeout, until it receives
+	either an error or a success response.</li>
+    </ul>
+  </section2>
+  <section2 topic='Server Optimization' anchor='serveroptimization'>
+    <p>The normal routing rules of the self-ping impose two round-trips: first
+      the initial ping from the client to the MUC, then the reflection of the
+      ping and its response (possibly to another client), and finally the
+      response to the initial IQ. If the other client is experiencing network
+      connectivity issues, which is often the case with mobile devices, the
+      ping request might never be responded to.</p>
+    <p>Therefore, a MUC service supporting this protocol may directly respond
+      to a participant's Ping request to the participant's own nickname, as
+      opposed to routing it to any of the participant's clients.</p>
+  </section2>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>In Multi-Session-Nick scenarios, where multiple clients of the same user
+    are joined as the same participant, it is possible that another client
+    initiates a nickname change while a ping request is pending. In that case,
+    the ping might be responded to with &lt;item-not-found&gt;.</p>
+  <p>A client should not perform a self-ping after initiating a nickname
+    change, and before receiving the response to the nickname change from the
+    service, as it is not yet clear whether the new nickname will be accepted.
+  </p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>A MUC service implementation should not allow a non-participant to obtain
+    information about participants. This is however true irregardless of
+    implementing this specification.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>REQUIRED.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>REQUIRED.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>REQUIRED for protocol specifications.</p>
+</section1>
+</xep>
