@@ -24,6 +24,16 @@
   <shortname>colors</shortname>
   &jonaswielicki;
   <revision>
+    <version>0.5</version>
+    <date>2018-10-01</date>
+    <initials>jsc</initials>
+    <remark>
+      <p>Switch from custom YCbCr-based algorithm to HSLuv.</p>
+      <p>Prioritize bare JIDs over nicknames.</p>
+      <p>Write down normalization rules.</p>
+    </remark>
+  </revision>
+  <revision>
     <version>0.4.1</version>
     <date>2018-07-28</date>
     <initials>egp</initials>
@@ -97,15 +107,15 @@
   <section2 topic='Generating a color' anchor='usecase-textcolor'>
     <p>To generate a color from a string of text, the follownig algorithms are applied in order:</p>
     <ol>
-      <li><link url='#algorithm-angle'>Generate an angle in the CbCr plane from the text</link>.</li>
+      <li><link url='#algorithm-angle'>Generate a Hue value from the text</link>.</li>
       <li>If enabled, <link url='#algorithm-cvd'>apply configured corrections for &cvds;</link>.</li>
-      <li>If the output device only supports a small palette of colors, <link url='#algorithm-mappalette'>map the angle  to the closest palette color</link>.</li>
-      <li>If the output device supports RGB output, <link url='#algorithm-cbcr'>Convert the angle to a CbCr pair</link> and <link url='#algorithm-rgb'>convert the CbCr pair to an RGB triple</link>.</li>
+      <li>If the output device only supports a small palette of colors, <link url='#algorithm-mappalette'>map the angle to the closest palette color</link>.</li>
+      <li>If the output device supports RGB output, <link url='#algorithm-rgb'>Convert the angle to a RGB</link>.</li>
     </ol>
   </section2>
   <section2 topic='Adding colors to participants of a conversation' anchor='usecase-nickcolor'>
     <p>Implementations may colorize the participants of a conversation with an individual color to make them easier to distinguish.</p>
-    <p>In such cases, the color SHOULD be generated as described in the <link url='#usecase-textcolor'>Generating a color</link> section. The input used SHOULD be, in descending order of preference, (a) the nickname from the conversation, (b) the bare JID.</p>
+    <p>In such cases, the color SHOULD be generated as described in the <link url='#usecase-textcolor'>Generating a color</link> section. The input used SHOULD be, in descending order of preference, (a) the bare JID of the user (not the room), (b) the nickname as chosen by the user in the room.</p>
   </section2>
   <section2 topic='Auto-Generating Avatars' anchor='usecase-avatar'>
     <p>Implementations may want to show a picture in connection with a contact even if the contact does not have an avatar defined (e.g. via &xep0084;).</p>
@@ -126,57 +136,29 @@
   </ul>
 </section1>
 <section1 topic='Algorithms' anchor='algorithm'>
+  <p>The algorithms in this document use the &hsluv;⎄ color space. It provides consistent brightness (for a given luminosity) across its entire definition space. There is also widespread library support.</p>
   <section2 topic='Angle generation' anchor='algorithm-angle'>
     <p>Input: An identifier, encoded as octets of UTF-8 (&rfc3269;).</p>
-    <p>Output: Angle in the CbCr plane.</p>
-    <p>Note: The goal of this algorithm is to convert arbitrary text into a scalar value which can then be used to calculate a color. As it happens, the CbCr plane of the YCbCr space determines the color (while Y merely defines the lightness); thus, an angle in the CbCr plane serves as a good scalar value to select a color.</p>
+    <p>Output: Hue angle.</p>
+    <p>Note: The goal of this algorithm is to convert arbitrary text into a scalar value which can then be used to calculate a color.</p>
     <ol>
       <li>Run the input through SHA-1 (&rfc3174;).</li>
       <li>Treat the output as little endian and extract the least-significant 16 bits. (These are the first two bytes of the output, with the second byte being the most significant one.)</li>
-      <li>Divide the value by 65536 (use float division) and multiply it by 2&#960; (two Pi).</li>
+      <li>Divide the value by 65536 (use float division) and multiply it by 360 (to map it to degrees in a full circle).</li>
     </ol>
   </section2>
   <section2 topic='Corrections for &cvds;' anchor='algorithm-cvd'>
-    <p>Input: Angle in the CbCr plane.</p>
-    <p>Output: Angle in the CbCr plane.</p>
+    <p>Input: Hue angle.</p>
+    <p>Output: Hue angle.</p>
     <p>Note: This algorithm will re-map the angle to map it away from ranges which can not be distinguished by people with the respective &cvds;.</p>
     <section3 topic='Red/Green-blindness' anchor='algorithm-cvd-rg'>
-      <p>Take the angle modulo &#960;.</p>
-      <p>Note: the same effect can be achieved by forcing the most-significant bit of the angle to zero before converting to a float in <link url="#algorithm-angle">Angle generation</link>. This avoids having to perform a floating-point modulo operation.</p>
+      <p>Take the angle modulo 180 and subtract 90.</p>
+      <p>Note: the same effect can be achieved by forcing the two most-significant bits of the angle to be equal to the second-most-significant bit before converting to a float in <link url="#algorithm-angle">Angle generation</link>. This avoids having to perform a floating-point modulo operation.</p>
     </section3>
     <section3 topic='Blue-blindness' anchor='algorithm-cvd-b'>
-      <p>Subtract &#960;/2 from the angle, take the result modulo &#960; and add &#960;/2.</p>
-      <p>Note: the same effect can be achieved by setting the most-significant bit of the angle to the inverse of the second-most-significant bit before conversion to floating point in <link url="#algorithm-angle">Angle generation</link>. This avoids having to perform a floating-point modulo operation.</p>
+      <p>Subtract 90 from the angle, take the result modulo 180.</p>
+      <p>Note: the same effect can be achieved by setting the second-most-significant bit of the angle to the inverse of the most-significant bit and then setting the most-significant bit to zero before conversion to floating point in <link url="#algorithm-angle">Angle generation</link>. This avoids having to perform a floating-point modulo operation.</p>
     </section3>
-  </section2>
-  <section2 topic='CbCr generation' anchor='algorithm-cbcr'>
-    <p>Input: Angle in the CbCr plane, from the previous algorithm.</p>
-    <p>Output: Values for Cb and Cr in the YCbCr &BT.601; color space in the range from -0.5 to 0.5.</p>
-    <p>Form a vector from the angle and project it to edges of a quad in 2D space with edge length 1 around (0, 0). The resulting coordinates are Cb and Cr:</p>
-    <code><![CDATA[float cr = sin(angle);
-float cb = cos(angle);
-float factor;
-if (abs(cr) > abs(cb)) {
-  factor = 0.5 / abs(cr);
-} else {
-  factor = 0.5 / abs(cb);
-}
-cb = cb * factor;
-cr = cr * factor;
-]]></code>
-  </section2>
-  <section2 topic='CbCr to RGB' anchor='algorithm-rgb'>
-    <p>Input: Values for Cb and Cr in the YCbCr &BT.601; color space in the range from -0.5 to 0.5; Value for Y.</p>
-    <p>Output: Values for Red (R), Green (G) and Blue (B) in the RGB color space in the range from 0 to 1.</p>
-    <p>Note: The recommended value for Y is 0.732. See <link url='#impl-gamma'>Gamma Correction</link> for a discussion on the choice of Y.</p>
-    <ol>
-      <li>Calculate r, g and b according to BT.601:<code><![CDATA[float r = 2*(1 - KR)*cr + y;
-float b = 2*(1 - KB)*cb + y;
-float g = (y - KR*r - KB*b)/KG;
-]]></code></li>
-      <li>Clip the values of r, g and b to the range from 0 to 1.</li>
-    </ol>
-    <p>See <link url='#constants-ycbcr'>Constants for YCbCr (BT.601)</link> for the values of KR, KG and KB.</p>
   </section2>
   <section2 topic='Adapting the Color for specific Background Colors' anchor='algorithm-bg'>
     <p>Input: RGB values for the color to adapt (Ri, Gi, Bi) and for the background color to adapt to (Rb, Gb, Bb), in the range from 0 to 1 each.</p>
@@ -194,67 +176,51 @@ gc = 0.2*gb_inv + 0.8*gi;
 bc = 0.2*bb_inv + 0.8*bi;]]></code></li>
     </ol>
   </section2>
-  <section2 topic='RGB to YCbCr' anchor='algorithm-rgb2cbcr'>
-    <p>Input: Values for Red (R), Green (G) and Blue (B) in the RGB color space in the range from 0 to 1.</p>
-    <p>Output: Values for Cb and Cr in the YCbCr &BT.601; color space in the range from -0.5 to 0.5; Value for Y.</p>
-    <p>Calculate Y, Cb and Cr according to BT.601:</p>
-    <code><![CDATA[
-y = KR*r + (1 - KR - KB)*g + KB*b;
-cb = (b - y) / (1 - KB) / 2
-cr = (r - y) / (1 - KR) / 2
-]]></code>
-    <p>See <link url='#constants-ycbcr'>Constants for YCbCr (BT.601)</link> for the values of KR, KG and KB.</p>
+  <section2 topic='RGB generation' anchor='algorithm-rgb'>
+    <p>Use the HSLuv operation <tt>hsluvToRgb</tt> to convert the Hue angle to a color. For this, saturation SHOULD be set to 100 and lightness SHOULD be set to 50.</p>
   </section2>
-  <section2 topic='Conversion of an RGB color palette to a CbCr color palette' anchor='algorithm-genpalette'>
+  <section2 topic='Conversion of an RGB color palette to a Hue palette' anchor='algorithm-genpalette'>
     <p>Input: A set of RGB colors (each component from 0 to 1).</p>
-    <p>Output: A mapping from angles (from 0 to 2&#960;) to RGB colors.</p>
+    <p>Output: A mapping from angles (integer, from 0 to 360) to RGB colors.</p>
     <p>Note: when the algorithm finishes, the mapping maps angles (rounded to two decimal places) to the R, G, B triples which come closest to the desired color and lightness.</p>
     <ol>
-      <li>Create an empty mapping M which maps from pairs of CbCr values to quadruples of Y, R, G and B.</li>
+      <li>Create an empty mapping M which maps from Hue angles to quadruples of L, R, G and B.</li>
       <li>For each color R, G, B from the input palette:
         <ol>
-          <li>If the R, G and B values are equal, skip the color and continue with the next.</li>
-          <li>Calculate Y, Cb and Cr from R, G, B as described in <link url='#algorithm-rgb2cbcr'>RGB to YCbCr</link>.</li>
-          <li><p>Convert Cb and Cr to an angle:</p>
-            <code><![CDATA[
-magn = sqrt(Cb**2 + Cr**2)
-if magn > 0:
-    cr /= magn
-    cb /= magn
-angle = atan2(cr, cb) % (2*pi)
-]]></code>
-            <p>Here, % is the floating point modulo operator. Since atan2 may return negative values, it is used to put the values into the range from 0 to 2&#960;. ** is the exponentiation operator (cb**2 is thus cb squared).</p>
-          </li>
-          <li>Round the angle to two digits behind the decimal point.</li>
-          <li>If the angle is not in the mapping M yet, or if the Y value of the existing entry is farther away from 0.732 than the new Y value, put the Y, R, G, and B values as value for the angle into the mapping.</li>
+          <li>If the R, G and B values are equal, skip the color and continue with the next. (Grayscale does not work well, since its saturation and hue are undefined.)</li>
+          <li>Calculate H, S and L from R, G, B using HSLuv.</li>
+          <li>Round the angle to the next integer value.</li>
+          <li>If the angle is not in the mapping M yet, or if the L value of the existing entry is farther away from 73.2 than the new L value, put the L, R, G, and B values as value for the angle into the mapping.</li>
         </ol>
       </li>
-      <li>Strip the Y values from the values of mapping M.</li>
+      <li>Strip the L values from the values of mapping M.</li>
       <li>Return M as the result of the algorithm.</li>
     </ol>
-    <p>Implementations are free to choose a representation for palette colors different from R, G, B triplets. The exact representation does not matter, as long as it can be converted to an angle in the CbCr plane accordingly.</p>
+    <p>Implementations are free to choose a representation for palette colors different from R, G, B triplets. The exact representation does not matter, as long as it can be converted to a Hue angle accordingly.</p>
   </section2>
-  <section2 topic='Mapping of a CbCr color to closest palette color' anchor='algorithm-mappalette'>
+  <section2 topic='Mapping of a Hue angle to closest palette color' anchor='algorithm-mappalette'>
     <p>Input: (a) A mapping which maps angles to R, G, B triplets and (b) a color to map to the closest palette color as angle alpha.</p>
     <p>Output: A palette color as R, G, B triplet.</p>
-    <p>Note: See <link url='#algorithm-genpalette'>Conversion of an RGB color palette to a CbCr color palette</link> on how to convert an R, G, B triplet or a CbCr pair to an angle.</p>
+    <p>Note: See <link url='#algorithm-genpalette'>Conversion of an RGB color palette to a Hue palette</link> on how to convert an R, G, B triplet to an angle.</p>
     <ol>
-      <li>First, check if alpha rounded to two places behind the decimal point has an exact match in the mapping. If so, return that match immediately.</li>
-      <li>For each angle beta in the palette, calculate the distance metric: <code>D = min((alpha - beta) % (2*pi), (beta - alpha) % (2*pi))</code>.</li>
+      <li>First, check if alpha rounded to an integer. If so, return that match immediately.</li>
+      <li>For each angle beta in the palette, calculate the distance metric: <code>D = min((alpha - beta) % 360, (beta - alpha) % 360)</code>.</li>
       <li>Return the R, G, B triplet associated with the angle with the smallest distance metric D.</li>
     </ol>
-    <p>Implementations are free to choose a representation for palette colors different from R, G, B triplets. The exact representation does not matter, as long as it can be converted to an angle in the CbCr plane accordingly.</p>
+    <p>Implementations are free to choose a representation for palette colors different from R, G, B triplets. The exact representation does not matter, as long as it can be converted to a Hue angle accordingly.</p>
   </section2>
 </section1>
 <section1 topic='Implementation Notes' anchor='impl'>
   <section2 topic='Gamma Correction' anchor='impl-gamma'>
-    <p>An implementation may choose a different value for Y depending on whether the sink for the R, G and B values expects Gamma Encoded or Gamma Decoded values. The recommended default of 0.732 is 0.5 to the power of 0.45, that is, a Gamma Encoded 0.5.</p>
-    <p>Modifications to Y SHOULD NOT be used to correct for bright/dark backgrounds. Implementations SHOULD instead use the algorithm described in <link url='#algorithm-bg'>Adapting the Color for specific Background Colors</link> for that.</p>
+    <p>Implementations should be aware of Gamma correction and apply it as needed.</p>
   </section2>
   <section2 topic='Background Color Correction' anchor='impl-bgcolor'>
     <p>An implementation which shows the generated colors on a colored background SHOULD apply <link url='#algorithm-bg'>Adapting the Color for specific Background Colors</link>. If the background is not uniformly colored, it is up to the implementation to determine an appropriate surrogate background color to correct against.</p>
     <p>If an implementation shows the generated colors on a grayscale (including white and black) background, it MAY apply the background color correction algorithm. It is RECOMMENDED to always apply the algorithm if the background color is changed dynamically, to avoid discontinuities between grayscale and colored backgrounds.</p>
     <p>Implementations SHOULD use the same background color for all generated colors. If this is not feasible, implementations SHOULD use the same background color for all generated colors within the same GUI control (for example, within a conversation and within the roster).</p>
+  </section2>
+  <section2 topic='Normalization' anchor='impl-norm'>
+    <p>When processing JIDs as text input, implementations MUST prepare the JID as it would for comparing it to another JID with a case-sensitive comparison function.</p>
   </section2>
 </section1>
 <section1 topic='Accessibility Considerations' anchor='access'>
@@ -273,8 +239,8 @@ angle = atan2(cr, cb) % (2*pi)
 </section1>
 <section1 topic='Design Considerations' anchor='design'>
   <p>This section provides an overview of design considerations made while writing this specification. It shows alternatives which have been considered, and eventually rejected.</p>
-  <section2 topic='Other variants of the YCbCr color space' anchor='design-other-ycbcr'>
-    <p>The other common YCbCr variants, BT.709 and BT.2020, do not achieve a brightness across the color space as uniform as &BT.601; does. Adapting the Y value for uniform luminosity across the range for CbCr would have complicated the algorithm with little or no gain.</p>
+  <section2 topic='The YCbCr color space' anchor='design-ycbcr'>
+    <p>The versions up to 0.5 of this document used a variant of the YCbCr color space (namely &BT.601;) along with a custom algorithm to convert from angles to CbCr and from there to RGB. The HSLuv color space provides extremely consistent apparent brightness of the colors which cannot be achieved with simple application of YCbCr. In addition, HSLuv has widespread library support.</p>
   </section2>
   <section2 topic='Hue-Saturation-Value/Lightness color space' anchor='design-hsv'>
     <p>The HSV and HSL color spaces fail to provide uniform luminosity with fixed value/lightness and saturation parameters. Adapting those parameters for uniform luminosity across the hue range would have complicated the algorithm with litte to no gain.</p>
@@ -303,6 +269,20 @@ angle = atan2(cr, cb) % (2*pi)
     </ul>
     <p>For the sake of having more colors available, the given algorithm was chosen which prefers many colors with hue conformance over fewer colors with hue and lightness conformance.</p>
   </section2>
+  <section2 topic='Input for color generation in a Multi-User Chat (XEP-0045) context' anchor='design-muc-input'>
+    <p>In &xep0045; conversations (MUCs), there are two viable choices for the hash function input when generating a color for a participant: the nickname as chosen by the participant (or their full JID) and the participants real bare JID. Both options have advantages and disadvantages. The advantages of using the nickname are:</p>
+    <ul>
+      <li>Yields the same output even in anonymous MUCs if the same nickname is used.</li>
+      <li>Is guaranteed to work for transports implementing &xep0045;.</li>
+    </ul>
+    <p>The advantages of using the bare JID are:</p>
+    <ul>
+      <li>Allows to use the same color in 1:1 communications with that entity as in group chats, helping with recognizability.</li>
+      <li>Stays constant even across changes of ephemeral information like nicknames.</li>
+    </ul>
+    <p>There is no obvious correct choice to make here; both choices break in different use-cases. Specifically, the "nickname" choice breaks when the same entity has different nicknames in different rooms, as well as when two different entities have the same nickname in different rooms. The "bare JID" choice breaks when (semi-)anonymous MUCs are involved.</p>
+    <p>The choice "bare JID" has the conceptual advantage that it ties as closely as possible to the identity of the entity. It is also forward-compatible with future protocols where nicknames might not be available or work differently.</p>
+  </section2>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with &IANA;. </p>
@@ -313,62 +293,59 @@ angle = atan2(cr, cb) % (2*pi)
 <section1 topic='Acknowledgements' anchor='acknowledgements'>
   <p>Thanks to Klaus Herberth, Daniel Gultsch, Georg Lukas, Tobias Markmann, Christian Schudt, and Marcus Waldvogel for their input and feedback on this document.</p>
 </section1>
-<section1 topic='Test Vectors and Constants' anchor='vectors-and-constants'>
-  <section2 topic='Constants for YCbCr (BT.601)' anchor='constants-ycbcr'>
-    <p>Throughout the document, the constants KR, KG and KB are used. They are defined in &BT.601; as:</p>
-    <code><![CDATA[
-KR = 0.299
-KG = 0.587
-KB = 0.114
-]]></code>
-  </section2>
+<section1 topic='Test Vectors' anchor='vectors'>
   <section2 topic='Test Vectors' anchor='testvectors-fullrange'>
-    <p>This section holds test vectors for the different configurations. The test vectors are provided as Comma Separated Values. Strings are enclosed by single quotes (&apos;). The first line contains a header. Each row contains, in that order, the original text, the text encoded as UTF-8 as hexadecimal octets, the angle in radians, and the Cb, Cr, Red, Green, and Blue values.</p>
+    <p>This section holds test vectors for the different configurations. The test vectors are provided as Comma Separated Values. Strings are enclosed by single quotes (&apos;). The first line contains a header. Each row contains, in that order, the original text, the text encoded as UTF-8 as hexadecimal octets, the angle in degrees, the calculated hue in degrees (differs from angle only for CVD-corrected rows), and the Red, Green, and Blue values.</p>
     <section3 topic='No &cvd; correction' anchor='testvectors-fullrange-no-cvd'>
-      <code><![CDATA[text,hextext,angle,cb,cr,r,g,b
-'Romeo','526f6d656f',5.711682,0.500000,-0.321546,0.281,0.790,1.000
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.654901,-0.500000,-0.281855,0.337,1.000,0.000
-'😺','f09f98ba',5.780519,0.500000,-0.274885,0.347,0.756,1.000
-'council','636f756e63696c',6.283089,0.500000,-0.000048,0.732,0.560,1.000]]></code>
+      <code><![CDATA[text,hextext,angle,hue,r,g,b
+'Romeo','526f6d656f',237.255249,237.255249,0.000,0.498,0.698
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',119.410400,119.410400,0.254,0.529,0.000
+'😺','f09f98ba',241.199341,241.199341,0.000,0.494,0.727
+'council','636f756e63696c',269.994507,269.994507,0.473,0.350,1.000
+'Board','426f617264',81.430664,81.430664,0.501,0.477,0.000]]></code>
     </section3>
     <section3 topic='With Red/Green-blindness correction' anchor='testvectors-fullrange-cvd-redgreen'>
-      <code><![CDATA[text,hextext,angle,cb,cr,r,g,b
-'Romeo','526f6d656f',2.570089,-0.500000,0.321546,1.000,0.674,0.000
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',0.513308,0.500000,0.281855,1.000,0.359,1.000
-'😺','f09f98ba',2.638926,-0.500000,0.274885,1.000,0.708,0.000
-'council','636f756e63696c',3.141497,-0.500000,0.000048,0.732,0.904,0.000]]></code>
+      <code><![CDATA[text,hextext,angle,hue,r,g,b
+'Romeo','526f6d656f',237.255249,57.255249,0.596,0.442,0.000
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',119.410400,119.410400,0.254,0.529,0.000
+'😺','f09f98ba',241.199341,61.199341,0.580,0.449,0.000
+'council','636f756e63696c',269.994507,89.994507,0.465,0.488,0.000
+'Board','426f617264',81.430664,81.430664,0.501,0.477,0.000]]></code>
     </section3>
     <section3 topic='With Blue-blindness correction' anchor='testvectors-fullrange-cvd-blue'>
-      <code><![CDATA[text,hextext,angle,cb,cr,r,g,b
-'Romeo','526f6d656f',2.570089,-0.500000,0.321546,1.000,0.674,0.000
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.654901,-0.500000,-0.281855,0.337,1.000,0.000
-'😺','f09f98ba',2.638926,-0.500000,0.274885,1.000,0.708,0.000
-'council','636f756e63696c',3.141497,-0.500000,0.000048,0.732,0.904,0.000]]></code>
+      <code><![CDATA[text,hextext,angle,hue,r,g,b
+'Romeo','526f6d656f',237.255249,237.255249,0.000,0.498,0.698
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',119.410400,119.410400,0.254,0.529,0.000
+'😺','f09f98ba',241.199341,241.199341,0.000,0.494,0.727
+'council','636f756e63696c',269.994507,269.994507,0.473,0.350,1.000
+'Board','426f617264',81.430664,261.430664,0.239,0.414,1.000]]></code>
     </section3>
   </section2>
   <section2 topic='Test Vectors for mapping to 216 color palette' anchor='testvectors-palette'>
     <p>The used palette can be generated by sampling the RGB cube evenly with six samples on each axis (resulting in 210 colors (grayscales are excluded)). The resulting palette is commonly known as the palette of so-called "Web Safe" colors.</p>
-    <p>Instead of the cb and cr values, the test vectors contain the best_angle as found in the palette.</p>
     <section3 topic='No &cvd; correction' anchor='testvectors-palette-no-cvd'>
-      <code><![CDATA[text,hextext,angle,best_angle,cb,cr,r,g,b
-'Romeo','526f6d656f',5.711682,5.690000,0.000,0.400,1.000
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.654901,3.640000,0.400,1.000,0.000
-'😺','f09f98ba',5.780519,5.770000,0.400,0.600,1.000
-'council','636f756e63696c',6.283089,0.040000,0.200,0.000,1.000]]></code>
+      <code><![CDATA[text,hextext,hue,best_hue,r,g,b
+'Romeo','526f6d656f',204.510498,192,0.000,0.800,0.800
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',328.820801,328,1.000,0.200,0.800
+'😺','f09f98ba',212.398682,226,0.000,0.800,1.000
+'council','636f756e63696c',269.989014,270,0.400,0.200,1.000
+'Board','426f617264',252.861328,253,0.000,0.200,0.400]]></code>
     </section3>
     <section3 topic='With Red/Green-blindness correction' anchor='testvectors-palette-cvd-redgreen'>
-      <code><![CDATA[text,hextext,angle,best_angle,cb,cr,r,g,b
-'Romeo','526f6d656f',2.570089,2.550000,1.000,0.600,0.000
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',0.513308,0.500000,0.600,0.000,1.000
-'😺','f09f98ba',2.638926,2.630000,1.000,0.800,0.400
-'council','636f756e63696c',3.141497,3.180000,0.800,1.000,0.000]]></code>
+      <code><![CDATA[text,hextext,hue,best_hue,r,g,b
+'Romeo','526f6d656f',24.510498,26,0.800,0.400,0.200
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',148.820801,148,0.000,0.600,0.400
+'😺','f09f98ba',32.398682,33,0.400,0.200,0.000
+'council','636f756e63696c',89.989014,86,0.800,0.800,0.000
+'Board','426f617264',72.861328,64,1.000,0.800,0.000]]></code>
     </section3>
     <section3 topic='With Blue-blindness correction' anchor='testvectors-palette-cvd-blue'>
-      <code><![CDATA[text,hextext,angle,best_angle,cb,cr,r,g,b
-'Romeo','526f6d656f',2.570089,2.550000,1.000,0.600,0.000
-'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',3.654901,3.640000,0.400,1.000,0.000
-'😺','f09f98ba',2.638926,2.630000,1.000,0.800,0.400
-'council','636f756e63696c',3.141497,3.180000,0.800,1.000,0.000]]></code>
+      <code><![CDATA[text,hextext,hue,best_hue,r,g,b
+'Romeo','526f6d656f',204.510498,192,0.000,0.800,0.800
+'juliet@capulet.lit','6a756c69657440636170756c65742e6c6974',148.820801,148,0.000,0.600,0.400
+'😺','f09f98ba',212.398682,226,0.000,0.800,1.000
+'council','636f756e63696c',269.989014,270,0.400,0.200,1.000
+'Board','426f617264',252.861328,253,0.000,0.200,0.400]]></code>
     </section3>
   </section2>
 </section1>
