@@ -31,6 +31,18 @@
     <jid>daniel@gultsch.de</jid>
   </author>
   <revision>
+    <version>0.9.0</version>
+    <date>2018-12-18</date>
+    <initials>dg</initials>
+    <remark>
+      <ul>
+        <li>Divided Security Considerations into multiple sub sections and added information about properly isolating the HTTP Upload service</li>
+        <li>Added schema</li>
+        <li>Added example for CORS header</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>0.8.0</version>
     <date>2018-12-10</date>
     <initials>dg</initials>
@@ -306,14 +318,35 @@
 <section1 topic='Implementation Notes' anchor='impl'>
   <p>The upload service SHOULD choose an appropriate timeout for the validity of the PUT URL. Since there is no reason for a client to wait between requesting the slot and starting the upload, relatively low timeout values of around 300s are RECOMMENDED.</p>
   <p>To make HTTP Upload work in web clients (including those hosted on a different domain) the upload service SHOULD set appropriate <link url="https://www.w3.org/TR/cors/">CORS</link>-Headers. The exact headers and values are out of scope of this document but may include: <em>Access-Control-Allow-Origin</em>, <em>Access-Control-Allow-Methods</em> and <em>Access-Control-Allow-Headers</em>. For HTTP upload services that use custom <em>Authorization</em> or <em>Cookie</em> request header the CORS-Header <em>Access-Control-Allow-Credentials</em> might also be of importance.</p>
+<code caption="Example for loose CORS Header"><![CDATA[
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: OPTIONS, HEAD, GET, PUT
+Access-Control-Allow-Headers: Authorization, Content-Type
+Access-Control-Allow-Credentials: true
+]]></code>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
-  <ul>
-  <li>Implementors should keep in mind, that without additional end-to-end-encryption, files uploaded to a service described in this document may be stored in plain text. Client implementors are advised to either use this only for semi public files (for example files shared in a public MUC or a PEP Avatar) or implement appropriate end-to-end encryption.</li>
-  <li>Requesting entities MUST strip any newline characters from the HTTP header names and values before making the PUT request.</li>
-  <li>Requesting entities MUST ensure that only the headers that are explicitly allowed by this XEP (Authorization, Cookie, Expires) are copied from the slot response to the HTTP request.</li>
-  <li>Service implementors SHOULD use long randomized parts in their URLs making it impossible to guess the location of arbitrary files</li>
+  <section2 topic="Server side" anchor="server">
+  <p><strong>Note: This section is not normative; it may be updated when general web security recommendations change in the future.</strong></p>
+  <p>It is recommended to run the HTTP upload domain used for GET requests in appropriate isolation from other HTTP based services to avoid user-generated, malicious scripts to be executed in the context of said services. Isolation techniques can include, but are not limited to, setting the <em>Content-Security-Policy</em>.</p>
+  <code caption="HTTP Upload Server Headers for better Content Security Policy"><![CDATA[
+Content-Security-Policy: default-src 'none'; frame-ancestors 'none';
+]]></code>
+  <p>The provided policy will prohibit a browser from executing all active content from the HTTP upload domain (<em>default-src 'none'</em>) and forbid embedding it from other pages (<em>frame-ancestors 'none'</em>). More information on Content-Security-Policy can be found on <link url="https://infosec.mozilla.org/guidelines/web_security#content-security-policy">infosec.mozilla.org</link>.</p>
+  <p>Further isolation can be achieved by hosting those files on an entirely different domain instead of using subdomains.</p>
+  </section2>
+  <section2 topic="Uploader" anchor="uploader">
+    <ul>
+      <li>Requesting entities MUST strip any newline characters from the HTTP header names and values before making the PUT request.</li>
+      <li>Requesting entities MUST ensure that only the headers that are explicitly allowed by this XEP (Authorization, Cookie, Expires) are copied from the slot response to the HTTP request.</li>
+    </ul>
+  </section2>
+  <section2 topic="General" anchor="general">
+    <ul>
+      <li>Service implementors SHOULD use long randomized parts in their URLs making it impossible to guess the location of arbitrary files.</li>
+      <li>Implementors should keep in mind, that without additional end-to-end-encryption, files uploaded to a service described in this document may be stored in plain text. Client implementors are advised to either use this only for semi public files (for example files shared in a public MUC or a PEP Avatar) or implement appropriate end-to-end encryption.</li>
   </ul>
+  </section2>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA).</p>
@@ -328,6 +361,62 @@
   </section2>
 </section1>
 <section1 topic='XML Schema' anchor='schema'>
-  <p>tbd</p>
+  <code><![CDATA[
+<xml version="1.0" encoding="utf8">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:xmpp:http:upload:0"
+    xmlns="urn:xmpp:http:upload:0">
+  <xs:element name="request">
+    <xs:complexType>
+      <xs:attribute name="filename" type="xs:string" use="required"/>
+      <xs:attribute name="size" type="xs:positiveInteger" use="required"/>
+      <xs:attribute name="content-type" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="slot">
+    <xs:complexType>
+     <xs:sequence>
+       <xs:element name="put" minOccurs="1" maxOccurs="1">
+         <xs:complexType>
+           <xs:attribute name="url" type="xs:string" use="required"/>
+           <xs:sequence>
+             <xs:element name="header" minOccurs="0" maxOccurs="unbounded" type="xs:string">
+               <xs:complexType>
+                 <xs:attribute name="name" use="required">
+                   <xs:simpleType>
+                     <xs:restriction base="xs:string">
+                       <xs:enumeration value="Authorization"/>
+                       <xs:enumeration value="Cookie"/>
+                       <xs:enumeration value="Expires"/>
+                     </xs:restriction>
+                   </xs:simpleType>
+                 </xs:attribute>
+               </xs:complexType>
+             </xs:element>
+           </xs:sequence>
+         </xs:complexType>
+       </xs:element>
+       <xs:element name="get" minOccurs="1" maxOccurs="1">
+         <xs:complexType>
+           <xs:attribute name="url" type="xs:string" use="required"/>
+         </xs:complexType>
+       </xs:element>
+     </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="file-too-large">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="max-file-size" type="xs:positiveInteger" minOccurs="0" maxOccurs="1"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="retry">
+    <xs:complexType>
+      <xs:attribute name="stamp" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+]]></code>
 </section1>
 </xep>
