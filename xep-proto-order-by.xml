@@ -1,0 +1,251 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Order-By</title>
+  <abstract>This specification allows to change order of items retrieval in a Pubsub or MAM query</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0313</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2019-01-05</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>&xep0060; §6.5.7 allows to retrieve the "most recent items" and &xep0313; state in §3.1 that archives are ordered in "chrnological order". While this order is straighforward in general use cases, it is sometimes desirable to use a different order, for instance while using &xep0277;: a spell mistake correction should not bring an old blog post to the top of retrieved items.</p>
+  <p>This specification allows to explicitly change business logic to retrieve the items in a different order, in a similar way as the "ORDER BY" clause in SQL.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+      <li>an entity should be able to retrieve items by date of creation or by date of last modification (see below for definitions)</li>
+      <li>the specification should be extensible to allow new ordering</li>
+      <li>in case of conflict, a 2nd, 3rd, etc. level of ordering should be possible</li>
+  </ul>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <p>In XEP-0060, there is no such thing as "updated item". This XEP changes the business logic as follow:</p>
+  <ul>
+    <li><strong>Date of creation</strong> — date when the item has been published <strong>ONLY if the item has a new id</strong> (i.e. an id which was not already present in the node at the time of publication). If an item re-use an existing id, it overwrites the original item <strong>and the date of creation stay the date of creation of the original item</strong></li>
+    <li><strong>Date of modification</strong> — date when the item has been overwritten by a new item of the same id. If the item has never been overwritten, it is equal to the date of creation defined above.</li>
+  </ul>
+</section1>
+
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Retrieve Items By Date of Creation' anchor='creation'>
+    <p>Juliet wants to retrieve plays of his favorite writer, William Shakespeare. She wants to retrieve the 3 most recent ones by date of creation.</p>
+    <p>To do so, her client do a regular Pubsub request, but add the &lt;order&gt; element as a children of the &lt;pubsub&gt; element with a namespace of <em>"urn:xmpp:order-by:0"</em> and with a 'by' attribute equal to "creation".</p>
+    <example caption='Retrieving items ordered by date of creation'><![CDATA[
+<iq type='get'
+    from='juliet@capulet.lit/balcony'
+    to='pubsub.shakespeare.lit'
+    id=''>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='plays' max_items='3'/>
+    <order xmlns='urn:xmpp:order-by:0' by='creation'/>
+  </pubsub>
+</iq>
+  ]]></example>
+    <p>Pubsub service then returns the 3 plays created the most recently, first one being the most recent</p>
+    <example caption='Service returns all items'><![CDATA[
+<iq type='result'
+    from='pubsub.shakespeare.lit'
+    to='juliet@capulet.lit/balcony'
+    id=''>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='plays'>
+      <item id='153214214'>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <title>Henry VIII</title>
+        </entry>
+      </item>
+      <item id='623423544'>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <title>Tempest</title>
+        </entry>
+      </item>
+      <item id='452432423'>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <title>Wintter's Tale</title>
+        </entry>
+      </item>
+    </items>
+  </pubsub>
+</iq>
+]]></example>
+  </section2>
+  <section2 topic='Retrieve Items By Date of Modification' anchor='modification'>
+    <p>Juliet realize that there is a spelling mistake, it's "Winter's Tale" and not "Wintter's Tale". She fixes it by overwritting the item:</p>
+      <example caption='Juliet Overwritte the Item to Fix It'><![CDATA[
+<iq type='set'
+    from='juliet@capulet.lit/balcony'
+    to='pubsub.shakespeare.lit'
+    id='orderby2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='plays'>
+      <item id='452432423'>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <title>Winter's Tale</title>
+        </entry>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+]]></example>
+    <p>To check that everything is alright, she request again the last 3 items, but this time by date of modification. To do so, he client proceed the same way as for date of creation, except that it uses the value "modification" for the 'by' attribute</p>
+    <example caption='Retrieving items ordered by date of modification'><![CDATA[
+<iq type='get'
+    from='juliet@capulet.lit/balcony'
+    to='pubsub.shakespeare.lit'
+    id='orderby3'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='plays' max_items='3'/>
+    <order xmlns='urn:xmpp:order-by:0' by='modification'/>
+  </pubsub>
+</iq>
+  ]]></example>
+    <p>Pubsub service returns again the 3 plays but the "Winter Tales" item has been overwritten recently, while the 2 others have never been overwritten, so it returns the items in the following order, with most recently modified item on top:</p>
+    <example caption='Service returns all items'><![CDATA[
+<iq type='result'
+    from='pubsub.shakespeare.lit'
+    to='juliet@capulet.lit/balcony'
+    id='orderby3'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='plays'>
+      <item id='452432423'>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <title>Winter's Tale</title>
+        </entry>
+      </item>
+      <item id='153214214'>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <title>Henry VIII</title>
+        </entry>
+      </item>
+      <item id='623423544'>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <title>Tempest</title>
+        </entry>
+      </item>
+    </items>
+  </pubsub>
+</iq>
+]]></example>
+  </section2>
+  <section2 topic='Use with MAM' anchor='MAM'>
+    <p>With &xep0313; the logic is the same, but the &lt;order&gt; element is added as a child of the &lt;query&gt; element:</p>
+      <example caption="MAM Pubsub Query with Ordering"><![CDATA[
+<iq to='pubsub.shakespeare.lit' type='set' id='orderby4'>
+  <query xmlns='urn:xmpp:mam:2' queryid='123' node='plays'>
+    <order xmlns='urn:xmpp:order-by:0' by='creation'/>
+  </query>
+</iq>
+]]></example>
+    <p>This way, filters can be used with specific ordering</p>
+  </section2>
+  <section2 topic='Reversing the Order' anchor='reverse'>
+    <p>The ordering can be reversed by using the mechanisms already provided by &xep0059;</p>
+  </section2>
+  <section2 topic='Extending this Specification' anchor='extending'>
+    <p>This specification can be extended by further XEPs, proposing other kind of ordering in the 'by' attribute (e.g. ordering by filename for a file sharing service). But this is beyond the scope of this XEPs, and a client should not assume that other ordering than "creation" and "modification" are available without negociation.</p>
+    <p>In a similar way, the semantic described here could be re-used in other use cases as for Pubsub or MAM, but this would need to be detailed in a separate specification.</p>
+  </section2>
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>If a server supports the "order by" protocol, it MUST report that fact by including a service discovery feature of "urn:xmpp:order-by:0" &NSNOTE; in response to a &xep0030; information request:</p>
+  <example caption="Service Discovery information request"><![CDATA[
+<iq from='example.org'
+    id='disco1'
+    to='example.com'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq from='example.com'
+    id='disco1'
+    to='example.org'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:order-by:0'/>
+    ...
+  </query>
+</iq>
+]]></example>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <p>Several ordering elements may be used, this allow to solve next levels of ordering in case of conflicts. In this case, the first ordering (i.e. the top most &lt;order&gt; element) is the main one, the the second &lt;order&gt; element is used in case of conflict, then the next one if a new conflict happen and so on.</p>
+  <p>In case of conflict, if no new &lt;order&gt; element is specified, the item order is not guarented and is up to the implementation</p>
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>For implementations based on SQL databases, the "ORDER BY" clause can be used to easily implement this specification. Other kind of databases should have similar mechanisms</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>
+    This document introduces no additional security considerations above and
+    beyond those defined in the documents on which it depends.
+  </p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>'urn:xmpp:order-by:0'</li>
+    </ul>
+  </section2>
+  <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:order-by:0'
+    xmlns='urn:xmpp:order-by:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='order' maxOccurs='unbounded'>
+      <xs:complexType>
+          <xs:attribute name='by' type='xs:string' use='required'/>
+      </xs:complexType>
+  </xs:element>
+
+</xs:schema>
+]]></code>
+</section1>
+</xep>
