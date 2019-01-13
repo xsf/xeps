@@ -35,6 +35,10 @@ def extract_revision_text(remark_el):
     for child in remark_children:
         if child.tagName == "p":
             lines.append(minidom_get_text(child))
+        elif child.tagName == "ul":
+            for ul_child in minidom_children(child):
+                if ul_child.tagName == "li":
+                    lines.append("* {}".format(minidom_get_text(ul_child)))
 
     return "\n".join(lines)
 
