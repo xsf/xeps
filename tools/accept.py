@@ -124,7 +124,7 @@ def main():
     parser.add_argument(
         "votedate",
         type=isodate,
-        help="The date of the vote, in ISO format (%Y-%m-%d)."
+        help="The date of the vote, in ISO format (%%Y-%%m-%%d)."
     )
 
     parser.add_argument(
