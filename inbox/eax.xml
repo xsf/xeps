@@ -1,0 +1,160 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>E2E Authentication in XMPP</title>
+  <abstract>This specification describes how X.509 certificates can be used for end-to-end authentication in XMPP.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <author>
+    <firstname>Evgeny</firstname>
+    <surname>Khramtsov</surname>
+    <email>ekhramtsov@process-one.net</email>
+    <jid>xram@zinid.ru</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2019-02-08</date>
+    <initials>evk</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>X.509 version 3 certificates can be used to provide a strong cryptographic identity of an XMPP entity, i.e. an association of an XMPP address (&rfc7622;) with its cryptographic key (formally defined under Section 13.7.1.4 of &rfc6120;). They were initially intended for the use in SASL EXTERNAL for c2s and mutual s2s authentication (see &xep0178;). This document extends their usage for end-to-end (e2e) authentication of any entities attached to the XMPP network. A separate document also defines how Certificate Signing Request (CSR) of an XMPP account can be issued and signed using the XMPP protocol (XEP-EAX-SIGN).</p>
+  <p>Example usages:</p>
+  <dl>
+    <di><dt>E2E encryption</dt><dd>For end-to-end encryption, XMPP clients may use certificates to mutually identify each other, i.e. check that the cryptographic key belongs to this exact XMPP address.</dd></di>
+    <di><dt>External services</dt><dd>An XMPP server may authenticate users of other servers at its local services, such as an HTTP Upload component (&xep0363;), e.g. for granting file uploads, or a TURN server (&rfc5766;).</dd></di>
+    <di><dt>XMPP Usage of RELOAD</dt><dd>XMPP entities attached to the XOR overlay (XEP-XOR) are supposed to use certificates for mutual authentication.</dd></di>
+    <di><dt>SPAM protection</dt><dd>Since certificate authorities are required to be Sybil resistant (XEP-EAX-CAR), a spammer is limited in ability to create accounts massively. Thus it is expected that SPAM dissemination will fall to negligible levels.</dd></di>
+    <di><dt>Registration delegation</dt><dd>XMPP accounts registration typically creates a huge burden for operators of public servers. An operator may want to delegate a registration of accounts of its own server to a trusted CA. The CA will validate the users' identities and will issue certificates for them. The users can use these certificates in c2s SASL EXTERNAL authentication at the operator's server as well as for e2e authentication with other entities.</dd></di>
+  </dl>
+  <p>Note that an XMPP client may use the same certificate for different kinds of e2e authentication.</p>
+  <p>Conceptually, the idea is to build PKIX trees where in each tree a node corresponds to a certificate of a CA signing certificates of its successors. A leaf in the tree represents a certificate assigned to an XMPP account, a "leaf certificate". The leaf certificates are supposed to be used for (but not limited to) e2e authentication.</p>
+  <example><![CDATA[
+          Tree 1                  Tree 2                      Tree N
+  +--------------------+  +---------------------+     +-----------------------+
+  |     Root CA 1      |  |       Root CA 2     | ... |       Root CA N       |
+  +--------------------+  +---------------------+     +-----------------------+
+            |                        |                           |
+            |                        |                           |
+  +--------------------+  +---------------------+     +-----------------------+
+  | juliet@capulet.lit |  | Intermediate CA 2.1 |     | CA of shakespeare.lit |
+  +--------------------+  +---------------------+     +-----------------------+
+                                     |                           |
+                                     |                           |
+                          +---------------------+     +-----------------------+
+                          | romeo@montague.lit  |     | bard@shakespeare.lit  |
+                          +---------------------+     +-----------------------+
+]]></example>
+  <p>In the example above, XMPP servers of domains "capulet.lit" and "montague.lit" do not have associated certificate authorities, so Root CA 1 and Intermediate CA 2.1 sign certificates of "juliet@capulet.lit" and "romeo@montague.lit" directly. An XMPP server of domain "shakespeare.lit" has an associated CA (whose certificate is signed by Root CA N) and thus is able to sign certificates for users of "shakespeare.lit" (and only for them). As long as all root CAs are trusted by all parties, "juliet@capulet.lit", "romeo@montague.lit" and "bard@shakespeare.lit" may mutually authenticate each other using their certificates (for sharing resources, exchanging messages, etc).</p>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di><dt>CA</dt><dd>Certificate authority - an entity that issues X.509 certificates.</dd></di>
+    <di><dt>CSR</dt><dd>Certificate signing request - a message sent from an applicant to a certificate authority in order to apply for an X.509 certificate.</dd></di>
+    <di><dt>Leaf certificate</dt><dd>A certificate assigned to an XMPP account.</dd></di>
+    <di><dt>Domain-associated certificate</dt><dd>An intermediate certificate assigned for a particular XMPP domain. Such certificates can be used to sign leaf certificates associated with the same XMPP domain only.</dd></di>
+    <di><dt>Intermediate certificate</dt><dd>A non-root certificate used for signing any other certificates.</dd></di>
+    <di><dt>Root certificate</dt><dd>A self-signed certificate used for signing any other certificates.</dd></di>
+  </dl>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <section2 topic='General Requirements' anchor='gen-req'>
+    <ol>
+      <li>The leaf certificate MUST be compliant with c2s SASL EXTERNAL authentication (&rfc6120;, &xep0178;).</li>
+      <li>The leaf certificate MUST be compliant with RELOAD authentication (RFC6940).</li>
+    </ol>
+  </section2>
+  <section2 topic='Certificate Requirements' anchor='cert-req'>
+    <p>The following rules apply to any certificate:</p>
+    <ol>
+      <li>The certificate MUST conform to &rfc5280;.</li>
+      <li>The subject field MUST NOT be null.</li>
+      <li>The certificate MUST contain a keyUsage extension with the digitalSignature bit set.</li>
+      <li>The certificate SHOULD use Elliptic Curve Cryptography. FIXME: correctly define this statement.</li>
+    </ol>
+    <p>The following rules apply to leaf certificates:</p>
+    <ol>
+      <li>The certificate MUST NOT contain a basicConstraints extension with the cA boolean set to TRUE.</li>
+      <li>The certificate MUST include a CRL Distribution Points extension that specifies an URI of a Certificate Revocation List.</li>
+      <li>The certificate MUST possess a single XMPP address represented as an XmppAddr as specified under Section 13.7.1.4 of &rfc6120;.</li>
+      <li>The SubjectAltName field in the certificate MUST contain a single RELOAD URI as specified under Section 14.15 of RFC6940 encoded as uniformResourceIdentifier type. The "destination" part of the URI MUST be a RELOAD Node-ID. The Node-ID MAY be hexadecimal-encoded. The "overlay" part of the URI MUST be "xmpp.org". The "specifier" part of the URI MUST be empty.</li>
+      <li>If the XMPP address doesn't contain non-ASCII characters, it MUST be encoded in the SubjectAltName field as rfc822Name type.</li>
+    </ol>
+    <p>Note that the rules for leaf certificates comply with the rules defined for client certificates under Sections 13.7.1.1 and 13.7.1.4 of &rfc6120;. Thus they can be used for c2s SASL EXTERNAL authentication.</p>
+    <p>The requirement to possess a RELOAD URI and an rfc822Name address makes it possible to use the certificate for RELOAD authentication. Even if XOR extension (XEP-XOR) is unused, the RELOAD URI uniquely identifies a user device: a user MAY have several certificates assigned to their XMPP address but with different RELOAD URIs.</p>
+    <p>The following rules apply to domain-associated certificates:</p>
+    <ol>
+      <li>The certificate MUST contain a keyUsage extension with the keyCertSign bit set.</li>
+      <li>The certificate MUST contain a basicConstraints extension with the cA boolean set to TRUE and pathLenConstraint set to 0 (zero).</li>
+      <li>The certificate MUST include a CRL Distribution Points extension that specifies an URI of a Certificate Revocation List.</li>
+      <li>The certificate MUST possess the associated domain name encoded as DNS-ID identifier type. The domain name MUST NOT contain the wildcard character '*'.</li>
+    </ol>
+    <p>The following rules apply to intermediate certificates, excluding domain-associated certificates:</p>
+    <ol>
+      <li>The certificate MUST contain a keyUsage extension with the keyCertSign bit set.</li>
+      <li>The certificate MUST contain a basicConstraints extension with the cA boolean set to TRUE.</li>
+      <li>The certificate MUST include a CRL Distribution Points extension that specifies an URI of a Certificate Revocation List.</li>
+    </ol>
+    <p>The following rules apply to root certificates:</p>
+    <ol>
+      <li>The certificate MUST contain a keyUsage extension with the keyCertSign bit set.</li>
+      <li>The certificate MUST contain a basicConstraints extension with the cA boolean set to TRUE.</li>
+    </ol>
+  </section2>
+  <section2 topic='CA Requirements' anchor='ca-req'>
+    <p>CA Requirements are outlined in XEP-EAX-CAR.</p>
+  </section2>
+</section1>
+<section1 topic='Certificate Validation' anchor='cert-valid'>
+  <p>The certificate is considered valid if it follows the rules specified in <link url='#cert-req'>Certificate Requirements</link> and, in the case when it is signed by a domain-associated certificate, it is a leaf certificate and the domain from the domain-associated certificate matches the domain part of the XmppAddr of the certificate. Otherwise, the certificate MUST be considered invalid.</p>
+  <p>In the case of a certificate chain, the rules for certification path validation are applied (&rfc5280;).</p>
+</section1>
+<section1 topic='Root Certificates Discovery' anchor='root-cert-disco'>
+  <p>An XMPP entity MAY maintain its own list of root certificates. However, in practice it's convenient to retrieve this list from a trusted source. For example, several organizations in the Internet maintain and provide such lists for certificates verification in the Web. This section specifies how the list of root certificates can be retrieved for the purpose of e2e authentication in XMPP.</p>
+  <p>Since the authentication is intended to be compliant with RELOAD and creating new document formats or DNS TXT records without exigency are in general discouraged, the Overlay Configuration document is reused to provide the list of root certificates (see Section 11.1 of RFC6940). The root certificates are PEM-encoded (RFC7468) with encapsulation boundaries removed and are included in &lt;root-cert/&gt; elements of the Overlay Configuration.</p>
+  <p>In order to retrieve the Overlay Configuration, an HTTP GET request is performed to "https://xmpp.org/.well-known/reload-config". The requesting UA MUST be prepared to process HTTP redirects. In the case of a failure, the UA MAY repeat the request. In this case exponential backoff MUST be applied. Since the list of root certifcates is not a subject for frequent updates, under normal conditions, the UA SHOULD NOT request the Overlay Configuration more often than once per day. Usage of 'If-Modified-Since' is RECOMMENDED (RFC7232).</p>
+  <p>Further versions of this specification MAY extend the Overlay Configuration with new XML elements.</p>
+</section1>
+<section1 topic='Leaf Certificates Discovery' anchor='leaf-cert-disco'>
+  <p>An XMPP entity MAY want to publish its certificate so other XMPP entities MAY retrieve it. The method to accomplish this depends on the usage:</p>
+  <ul>
+    <li>In the case of an ordinary XMPP usage (&rfc6120;) a special PEP node (&xep0163;) is used as specified in XEP-EAX-SIGN.</li>
+    <li>In the case of XMPP Usage of RELOAD (XEP-XOR) a peer is REQUIRED to store its certificate in the RELOAD overlay (see Section 8 of RFC6940).</li>
+  </ul>
+</section1>
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>None required.</p>
+</section1>
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>None required.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>TBD.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>None required.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>None required.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>None required.</p>
+</section1>
+</xep>
