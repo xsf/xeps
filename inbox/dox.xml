@@ -1,0 +1,181 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>DNS Queries over XMPP (DoX)</title>
+  <abstract>This specification defines an XMPP protocol extension for sending DNS queries and getting DNS responses over XML streams. Each DNS query-response pair is mapped
+   into an IQ exchange.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0030</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>dox</shortname>
+  <schemaloc>
+    <url>http://www.xmpp.org/schemas/dox.xsd</url>
+  </schemaloc>
+  <author>
+    <firstname>Travis</firstname>
+    <surname>Burtrum</surname>
+    <email>travis@burtrum.org</email>
+    <jid>travis@burtrum.org</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2019-03-11</date>
+    <initials>tjb</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>This document defines a specific protocol, DNS over XMPP (DoX), for
+   sending DNS &rfc1035; queries and getting DNS responses over &xmppcore; (and therefore TLS &rfc8446; security for integrity and confidentiality.</p>
+   <p>The integration with XMPP provides a transport suitable for both
+   existing DNS clients and native XMPP applications seeking access to
+   the DNS.</p>
+   <p>This protocol is almost identical in scope to DNS Queries over HTTPS (DoH) &rfc8484;</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <p>This specification addresses the following requirements:</p>
+  <ol start='1'>
+    <li>Sending a DNS query.</li>
+    <li>Responding with a DNS response.</li>
+  </ol>
+</section1>
+
+<section1 topic='Protocol' anchor='protocol'>
+  <p>The DoX protocol is extremely simple:</p>
+  <ol>
+    <li>The requesting entity (requestor) sends an IQ-get containing a &lt;dns/&gt; element qualified by the 'urn:xmpp:dox:0' namespace, which contains the DNS query.</li>
+    <li>The resolving entity (resolver) returns either an IQ-result containing a &lt;dns/&gt; element qualified by the 'urn:xmpp:dox:0' namespace, which contains the DNS response (if it supports the namespace) or an IQ-error (if it does not).</li>
+    <li>In both the query and response, the content of the &lt;dns/&gt; element is the DNS on-the-wire format as defined in &rfc1035;. The body MUST be encoded with base64 &rfc4648;. Padding characters for base64 MUST NOT be included.</li>
+  </ol>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+    <p>Sending a DNS query is done by sending an &IQ; get over the stream from the requestor to the resolver.</p>
+    <example caption="Query"><![CDATA[
+<iq from='romeo@montague.lit/home' to='juliet@capulet.lit/chamber'
+ id='s2c1' type='get'>
+  <dns xmlns='urn:xmpp:dox:0'>vOIBIAABAAAAAAABB2V4YW1wbGUDb3JnAAABAAEAACkQAAAAAAAADAAKAAj5HO5JuEe+mA</dns>
+</iq>
+]]></example>
+    <p>If the resolver supports the dns namespace, it MUST return an IQ-result, which contains the DNS response:</p>
+    <example caption="Response"><![CDATA[
+<iq from='juliet@capulet.lit/chamber' to='romeo@montague.lit/home'
+ id='s2c1' type='result'>
+  <dns xmlns='urn:xmpp:dox:0'>vOKBoAABAAEAAAABB2V4YW1wbGUDb3JnAAABAAHADAABAAEAAAhjAARduNgiAAApEAAAAAAAAAA</dns>
+</iq>
+]]></example>
+    <p>If the resolver does not support the dns namespace, it MUST return a &unavailable; error:</p>
+    <example caption="DNS Not Supported"><![CDATA[
+<iq from='juliet@capulet.lit/chamber' to='romeo@montague.lit/home' id='s2c1' type='error'>
+  <dns xmlns='urn:xmpp:dox:0'>vOIBIAABAAAAAAABB2V4YW1wbGUDb3JnAAABAAEAACkQAAAAAAAADAAKAAj5HO5JuEe+mA</dns>
+  <error type='cancel'>
+    <service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>
+]]></example>
+    <p>The other error conditions defined in <cite>RFC 6120</cite> could also be returned if appropriate.</p>
+</section1>
+
+<section1 topic='Determining Support' anchor='support'>
+  <p>If an entity supports the DoX protocol, it MUST report that fact by including a service discovery feature of "urn:xmpp:dox:0" in response to a &xep0030; information request:</p>
+  <example caption="Service Discovery information request"><![CDATA[
+<iq type='get'
+    from='juliet@capulet.lit/balcony'
+    to='capulet.lit'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq type='result'
+    from='capulet.lit'
+    to='juliet@capulet.lit/balcony'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:dox:0'/>
+    ...
+  </query>
+</iq>
+]]></example>
+  <p>In order for an application to determine whether an entity supports this protocol, where possible it SHOULD use the dynamic, presence-based profile of service discovery defined in &xep0115;. However, if an application has not received entity capabilities information from an entity, it SHOULD use explicit service discovery instead.</p>
+  <p>Support could also be pre-arranged between parties by putting a resolver at a known JID, in which case the requestor can just start sending queries to the resolver</p>
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>Some XMPP clients do not respond to IQ stanzas containing unsupported payloads. Although this is in violation of &xmppcore;, this behavior can result in disconnection of clients that are in fact actively connected to the server.</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Running DNS over XMPP relies on the security of the underlying XMPP
+   transport, therefore all queries and responses MUST use TLS or equivalent connection security.  This mitigates classic amplification attacks for UDP-
+   based DNS.</p>
+  <p>Session-level encryption has well-known weaknesses with respect to
+   traffic analysis, which might be particularly acute when dealing with
+   DNS queries. DoX resolvers can also add DNS padding
+   &rfc7830; if the DoX requestor requests it in the DNS query.  An
+   experimental effort to offer guidance on choosing the padding length
+   can be found in &rfc8467;.</p>
+  <p>The TLS connection provides transport security for the interaction
+   between the DoX resolver and requestor, but it does not provide the
+   response integrity of DNS data provided by DNSSEC.  DNSSEC and DoX
+   are independent and fully compatible protocols, each solving
+   different problems.  The use of one does not diminish the need nor
+   the usefulness of the other.  It is the choice of a requestor to either
+   perform full DNSSEC validation of answers or to trust the DoX resolver
+   to do DNSSEC validation and inspect the AD (Authentic Data) bit in
+   the returned message to determine whether an answer was authentic or
+   not.</p>
+  <p>In the absence of DNSSEC information, a DoX resolver can give a requestor
+   invalid data in response to a DNS query.  A DoX capable requestor MUST discard any responses not specifically requested, this prohibition does not guarantee protection against invalid data, but it does reduce the risk.</p>
+  <p>If a server receives a dns request directed to a full JID &LOCALFULL; associated with a registered account but there is no connected resource matching the 'to' address, <cite>RFC 6120</cite> requires it to reply with a &unavailable; error and set the 'from' address of the IQ-error to the full JID provided in the 'to' address of the dns request. If a connected resource receives a dns request but it does not want to reveal its network availability to the sender for any reason (e.g., because the sender is not authorized to know the connected resource's availability), then it too MUST reply with a &unavailable; error. This consistency between the server response and the resolver response helps to prevent presence leaks.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>No interaction with &IANA; is necessary as a result of this document.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>The &REGISTRAR; includes "urn:xmpp:dox:0" in its registry of protocol namespaces (see &NAMESPACES;).</p>
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:dox:0'
+    xmlns='urn:xmpp:dox:0'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      XEP-XXXX: https://xmpp.org/extensions/inbox/dox.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name='dns' type='base64Binary'/>
+
+</xs:schema>
+]]></code>
+</section1>
+</xep>
