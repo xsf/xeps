@@ -135,6 +135,13 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     <html>
       <head>
         <title>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></title>
+        <style type='text/css'>
+/* don't mind this hack */
+nav#toc h2:before {
+display: none;
+content: "XEP-<xsl:value-of select='/xep/header/number'/>";
+}
+        </style>
         <link rel='stylesheet' type='text/css' href='xmpp.v2.css' />
         <link href="prettify.css" type="text/css" rel="stylesheet" />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
@@ -442,7 +449,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   </xsl:template>
 
   <xsl:template name='processTOC'>
-    <h2>Table of Contents</h2>
+    <a href="#top"><h2>Table of Contents</h2></a>
     <ol class='toc'>
       <xsl:apply-templates select='//section1' mode='toc'/>
     </ol>
