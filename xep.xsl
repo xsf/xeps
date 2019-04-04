@@ -420,10 +420,9 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <!-- REVISION HISTORY -->
         <h3 id='appendix-revs'>Appendix H: Revision History<xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='"appendix-revs"'/></xsl:call-template></h3>
           <p>Note: Older versions of this specification might be available at <a href='http://xmpp.org/extensions/attic/'>http://xmpp.org/extensions/attic/</a></p>
-          <div class='indent'>
+          <ol class="revision-history">
             <xsl:apply-templates select='/xep/header/revision'/>
-          </div>
-        <hr />
+          </ol>
         <p>END</p>
       </body>
     </html>
@@ -570,9 +569,11 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   </xsl:template>
 
   <xsl:template match='revision'>
-    <h5>Version <xsl:value-of select='version'/><xsl:text> </xsl:text>(<xsl:value-of select='date'/>)</h5>
-    <xsl:apply-templates select='remark'/>
-    <xsl:text> </xsl:text>(<xsl:value-of select='initials'/>)
+    <li>
+      <div class='revision-head'>Version <xsl:value-of select='version'/><xsl:text> </xsl:text>(<xsl:value-of select='date'/>)</div>
+      <xsl:apply-templates select='remark'/>
+      <p>(<xsl:value-of select='initials'/>)</p>
+    </li>
   </xsl:template>
 
   <xsl:template match='section1' mode='toc'>
