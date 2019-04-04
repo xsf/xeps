@@ -1053,7 +1053,13 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   </xsl:template>
 
   <xsl:template match='div'>
-    <div>
+    <xsl:variable name='type'>
+      <xsl:choose>
+        <xsl:when test='@class = "example"'>figure</xsl:when>
+        <xsl:otherwise>div</xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <xsl:element name='{$type}'>
       <xsl:variable name='class.count' select='count(@class)'/>
       <xsl:if test='$class.count=1'>
         <xsl:attribute name='class'><xsl:value-of select='@class'/></xsl:attribute>
@@ -1063,7 +1069,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <xsl:attribute name='style'><xsl:value-of select='@style'/></xsl:attribute>
       </xsl:if>
       <xsl:apply-templates/>
-    </div>
+    </xsl:element>
   </xsl:template>
 
   <xsl:template match='em'>
