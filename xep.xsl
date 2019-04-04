@@ -195,7 +195,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <h1>XEP-<xsl:value-of select='/xep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></h1>
         <!-- TOP TABLE -->
         <xsl:variable name='authors.count' select='count(/xep/header/author)'/>
-        <dl>
+        <dl id="docmeta">
           <dt>Abstract</dt>
           <dd><xsl:value-of select='/xep/header/abstract'/></dd>
           <xsl:if test='$authors.count=1'>
