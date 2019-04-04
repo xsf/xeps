@@ -228,7 +228,9 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <!-- COUNCIL NOTE -->
         <xsl:apply-templates select='/xep/header/councilnote'/>
         <!-- TABLE OF CONTENTS -->
-        <xsl:call-template name='processTOC' />
+        <nav id="toc">
+          <xsl:call-template name='processTOC' />
+        </nav>
         <!-- END FRONT MATTER -->
         <!-- BEGIN XEP CONTENTS -->
         <xsl:apply-templates select='/xep/section1'/>
