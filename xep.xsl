@@ -592,6 +592,8 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
       <p><xsl:apply-templates select='/xep/header/legal/liability'/></p>
       <h4>IPR Conformance</h4>
       <p><xsl:apply-templates select='/xep/header/legal/conformance'/></p>
+      <h4>Visual Presentation</h4>
+      <p>The HTML representation (you are looking at) is maintained by the XSF. It is based on the <a href="http://yaml.de">YAML CSS Framework</a>, which is licensed under the terms of the <a href="https://creativecommons.org/licenses/by/2.0/">CC-BY-SA 2.0</a> license.</p>
     </div>
   </xsl:template>
 
