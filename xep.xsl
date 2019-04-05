@@ -577,9 +577,11 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
 
   <xsl:template match='revision'>
     <li>
-      <div class='revision-head'>Version <xsl:value-of select='version'/><xsl:text> </xsl:text>(<xsl:value-of select='date'/>)</div>
+      <xsl:variable name='anchor'>revision-history-v<xsl:value-of select='version'/></xsl:variable>
+      <xsl:attribute name='id'><xsl:value-of select='$anchor'/></xsl:attribute>
+      <div class='revision-head'>Version <xsl:value-of select='version'/><xsl:text> </xsl:text>(<xsl:value-of select='date'/>)<xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='$anchor'/></xsl:call-template></div>
       <xsl:apply-templates select='remark'/>
-      <p>(<xsl:value-of select='initials'/>)</p>
+      <div class='revision-author'><xsl:value-of select='initials'/></div>
     </li>
   </xsl:template>
 
