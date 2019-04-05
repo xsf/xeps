@@ -131,6 +131,40 @@ OR OTHER DEALINGS IN THE SOFTWARE.
     </div>
   </xsl:template>
 
+  <xsl:template name='make-timeline'>
+    <xsl:param name='thestatus'/>
+    <xsl:param name='thetype'/>
+    <xsl:choose>
+      <xsl:when test='$thetype = "Standards Track"'>
+        <li><xsl:if test='$thestatus = "Experimental"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Experimental</li>
+        <xsl:if test='$thestatus = "Deferred"'><li class='current inserted'>Deferred</li></xsl:if>
+        <xsl:if test='$thestatus = "Retracted"'><li class='current inserted'>Retracted</li></xsl:if>
+        <li><xsl:if test='$thestatus = "Proposed"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Proposed</li>
+        <xsl:if test='$thestatus = "Rejected"'><li class='current inserted'>Rejected</li></xsl:if>
+        <li><xsl:if test='$thestatus = "Draft"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Draft</li>
+        <li><xsl:if test='$thestatus = "Final"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Final</li>
+        <xsl:if test='$thestatus = "Deprecated"'><li class='current inserted'>Deprecated</li></xsl:if>
+        <xsl:if test='$thestatus = "Obsolete"'><li class='current inserted'>Obsolete</li></xsl:if>
+      </xsl:when>
+      <xsl:when test='$thetype = "Procedural" or $thetype = "Informational" or $thetype = "Historical"'>
+        <li><xsl:if test='$thestatus = "Experimental"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Experimental</li>
+        <xsl:if test='$thestatus = "Deferred"'><li class='current inserted'>Deferred</li></xsl:if>
+        <xsl:if test='$thestatus = "Retracted"'><li class='current inserted'>Retracted</li></xsl:if>
+        <li><xsl:if test='$thestatus = "Proposed"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Proposed</li>
+        <xsl:if test='$thestatus = "Rejected"'><li class='current inserted'>Rejected</li></xsl:if>
+        <li><xsl:if test='$thestatus = "Active"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Active</li>
+        <xsl:if test='$thestatus = "Deprecated"'><li class='current inserted'>Deprecated</li></xsl:if>
+        <xsl:if test='$thestatus = "Obsolete"'><li class='current inserted'>Obsolete</li></xsl:if>
+      </xsl:when>
+      <xsl:when test='$thetype = "Humorous"'>
+        <li><xsl:if test='$thestatus = "Active"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Active</li>
+      </xsl:when>
+      <xsl:otherwise>
+        <li class='current inserted'><xsl:value-of select='$thestatus'/></li>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
   <xsl:template match='/'>
     <html>
       <head>
@@ -202,7 +236,8 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <h1>XEP-<xsl:value-of select='/xep/header/number' />:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></h1>
         <!-- TOP TABLE -->
         <xsl:variable name='authors.count' select='count(/xep/header/author)'/>
-        <dl id="docmeta">
+        <div class="docmeta-wrap">
+        <dl id="docmeta" class='compact'>
           <dt>Abstract</dt>
           <dd><xsl:value-of select='/xep/header/abstract'/></dd>
           <xsl:if test='$authors.count=1'>
@@ -232,6 +267,15 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
           <dt>Version</dt>
           <dd><xsl:value-of select='/xep/header/revision[position()=1]/version'/> (<xsl:value-of select='/xep/header/revision[position()=1]/date'/>)</dd>
         </dl>
+        <div class="timeline-wrap">
+          <div class="timeline-head">Document Lifecycle</div>
+          <ol class="timeline">
+            <xsl:call-template name='make-timeline'>
+              <xsl:with-param name='thestatus' select='/xep/header/status'/>
+              <xsl:with-param name='thetype' select='/xep/header/type'/>
+            </xsl:call-template>
+        </ol></div>
+        </div>
         <!-- COUNCIL NOTE -->
         <xsl:apply-templates select='/xep/header/councilnote'/>
         <!-- TABLE OF CONTENTS -->
