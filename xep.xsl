@@ -103,7 +103,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         </xsl:choose>
       </xsl:if>
       <xsl:if test='$thestatus = "Proposed"'>
-        <xsl:text>NOTICE: This document is currently within Last Call or under consideration by the XMPP Council for advancement to the next stage in the XSF standards process.</xsl:text>
+        <xsl:text>NOTICE: This document is currently within Last Call or under consideration by the XMPP Council for advancement to the next stage in the XSF standards process. </xsl:text>
         <xsl:if test='/xep/header/lastcall'>The Last Call ends on <xsl:value-of select='/xep/header/lastcall'/>.
         </xsl:if>
         <xsl:text>Please send your feedback to the </xsl:text><a href='http://mail.jabber.org/mailman/listinfo/standards'>standards@xmpp.org</a><xsl:text> discussion list.</xsl:text>
