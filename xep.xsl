@@ -180,7 +180,7 @@ display: none;
 content: "XEP-<xsl:value-of select='/xep/header/number'/>";
 }
         </style>
-        <link rel='stylesheet' type='text/css' href='xmpp.v2.css' />
+        <link rel='stylesheet' type='text/css' href='xmpp.css' />
         <link href="prettify.css" type="text/css" rel="stylesheet" />
         <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico' />
         <script type="text/javascript" src="prettify.js">

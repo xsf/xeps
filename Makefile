@@ -8,7 +8,7 @@ TEXMLDEPS=xep2texml.xsl $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf
 XEPDIRS=. inbox
 HTMLDEPS=xep.xsl $(CSSTARGETS) $(JSTARGETS)
 
-base_CSSTARGETS=xmpp.css xmpp.v2.css prettify.css
+base_CSSTARGETS=xmpp.css prettify.css
 CSSTARGETS=$(addprefix $(OUTDIR)/,$(base_CSSTARGETS))
 proto_CSSTARGETS=$(addprefix $(OUTDIR)/inbox/,$(base_CSSTARGETS))
 base_JSTARGETS=prettify.js
