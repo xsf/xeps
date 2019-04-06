@@ -143,8 +143,10 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <xsl:if test='$thestatus = "Rejected"'><li class='current inserted'>Rejected</li></xsl:if>
         <li><xsl:if test='$thestatus = "Draft"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Draft</li>
         <li><xsl:if test='$thestatus = "Final"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Final</li>
-        <xsl:if test='$thestatus = "Deprecated"'><li class='current inserted'>Deprecated</li></xsl:if>
-        <xsl:if test='$thestatus = "Obsolete"'><li class='current inserted'>Obsolete</li></xsl:if>
+        <xsl:if test='$thestatus = "Deprecated" or $thestatus = "Obsolete"'>
+          <li><xsl:if test='$thestatus = "Deprecated"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Deprecated</li>
+          <li><xsl:if test='$thestatus = "Obsolete"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Obsolete</li>
+        </xsl:if>
       </xsl:when>
       <xsl:when test='$thetype = "Procedural" or $thetype = "Informational" or $thetype = "Historical"'>
         <li><xsl:if test='$thestatus = "Experimental"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Experimental</li>
@@ -153,8 +155,10 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <li><xsl:if test='$thestatus = "Proposed"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Proposed</li>
         <xsl:if test='$thestatus = "Rejected"'><li class='current inserted'>Rejected</li></xsl:if>
         <li><xsl:if test='$thestatus = "Active"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Active</li>
-        <xsl:if test='$thestatus = "Deprecated"'><li class='current inserted'>Deprecated</li></xsl:if>
-        <xsl:if test='$thestatus = "Obsolete"'><li class='current inserted'>Obsolete</li></xsl:if>
+        <xsl:if test='$thestatus = "Deprecated" or $thestatus = "Obsolete"'>
+          <li><xsl:if test='$thestatus = "Deprecated"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Deprecated</li>
+          <li><xsl:if test='$thestatus = "Obsolete"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Obsolete</li>
+        </xsl:if>
       </xsl:when>
       <xsl:when test='$thetype = "Humorous"'>
         <li><xsl:if test='$thestatus = "Active"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Active</li>
