@@ -91,8 +91,8 @@ xep-%.html: $(OUTDIR)/xep-%.html ;
 .PHONY: xep-%.pdf
 xep-%.pdf: $(OUTDIR)/xep-%.pdf ;
 
-$(all_xep_xmls): $(OUTDIR)/%.xml: %.xml $(OUTDIR)
-	cp $< $@
+$(all_xep_xmls): $(OUTDIR)/%.xml: %.xml $(XMLDEPS)
+	xmllint --nonet --noent --loaddtd --dropdtd $< --output $@
 
 $(OUTDIR)/xep.xsl: xep.xsl $(OUTDIR)
 	cp $< $@
