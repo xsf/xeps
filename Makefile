@@ -71,7 +71,7 @@ xml: $(xep_xmls) $(xep_ancillary)
 inbox-html: $(proto_xep_htmls)
 
 .PHONY: inbox-xml
-inbox-xml: $(proto_xep_xmls)
+inbox-xml: $(OUTDIR)/inbox $(proto_xep_xmls)
 
 .PHONY: pdf
 pdf: $(xep_pdfs)
