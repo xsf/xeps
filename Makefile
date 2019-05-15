@@ -26,6 +26,7 @@ all_xeps=$(xeps) $(proto_xeps)
 xep_xmls=$(patsubst %.xml,$(OUTDIR)/%.xml,$(xeps))
 proto_xep_xmls=$(patsubst %.xml,$(OUTDIR)/%.xml,$(proto_xeps))
 all_xep_xmls=$(xep_xmls) $(proto_xep_xmls)
+xep_ancillary=$(patsubst %,$(OUTDIR)/%,xep.xsl)
 
 xep_htmls=$(patsubst %.xml,$(OUTDIR)/%.html,$(xeps))
 proto_xep_htmls=$(patsubst %.xml,$(OUTDIR)/%.html,$(proto_xeps))
@@ -64,13 +65,13 @@ xeplist: $(OUTDIR)/xeplist.xml
 html: $(xep_htmls)
 
 .PHONY: xml
-xml: $(xep_xmls)
+xml: $(xep_xmls) $(xep_ancillary)
 
 .PHONY: inbox-html
 inbox-html: $(proto_xep_htmls)
 
 .PHONY: inbox-xml
-inbox-xml: $(proto_xep_xmls)
+inbox-xml: $(OUTDIR)/inbox $(proto_xep_xmls)
 
 .PHONY: pdf
 pdf: $(xep_pdfs)
@@ -90,7 +91,10 @@ xep-%.html: $(OUTDIR)/xep-%.html ;
 .PHONY: xep-%.pdf
 xep-%.pdf: $(OUTDIR)/xep-%.pdf ;
 
-$(all_xep_xmls): $(OUTDIR)/%.xml: %.xml
+$(all_xep_xmls): $(OUTDIR)/%.xml: %.xml $(XMLDEPS)
+	xmllint --nonet --noent --loaddtd --dropdtd $< --output $@
+
+$(OUTDIR)/xep.xsl: xep.xsl $(OUTDIR)
 	cp $< $@
 
 $(OUTDIR)/xeplist.xml: $(wildcard *.xml) $(wildcard inbox/*.xml)
