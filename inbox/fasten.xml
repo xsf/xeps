@@ -1,0 +1,127 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+        <!ENTITY % ents SYSTEM 'xep.ent'>
+        %ents;
+        ]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Message Fastening</title>
+  <abstract>This specification defines a way for payloads on a message to be marked as being logically fastened to a previous message.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0115</spec>
+    <spec>XEP-0359</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>fasten</shortname>
+  <author>
+    <firstname>Kevin</firstname>
+    <surname>Smith</surname>
+    <email>kevin.smith@isode.com</email>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2019-09-04</date>
+    <initials>ks</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>
+    There are many situations in which a message contains a payload that contains content that adds additional information to the context of a previous message. Examples of this might be a user sending a rection (e.g. a thumbs-up emoji) to another user's message, or a server adding information on a link previously posted to a chat room, a user updating/editing the content of a message they've previously sent. This specification provides a generic wrapper to fasten such new payloads to the message to which they apply.
+  </p>
+</section1>
+<section1 topic='Discovering support' anchor='disco'>
+  <p>
+    If a client implements message fastening (that is, it is capable of understanding the payload when received),
+    it MUST specify the
+    'urn:xmpp:fasten:0' feature in its service discovery information features
+    as specified in &xep0030; and the Entity Capabilities profile specified in &xep0115;.
+  </p>
+  <example caption='Client requests information about a chat partner&apos;s client'><![CDATA[
+<iq type='get'
+    to='romeo@montague.lit/orchard'
+    from='juliet@capulet.lit/balcony'
+    id='info1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption='Partner&apos;s client advertises support for reactions'><![CDATA[
+<iq type='result'
+    to='juliet@capulet.lit/balcony'
+    from='romeo@montague.lit/orchard'
+    id='info1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+...
+    <feature var='urn:xmpp:fasten:0'/>
+...
+  </query>
+</iq>]]></example>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+    <section2 topic="Wrapped Payloads" anchor="wrapped-payloads">
+      <p>In order to mark that a payload applies to a previous message, a message is sent containing an "apply-to" element in the namespace "urn:xmpp:fasten:0", with attribute "id" that contains the &xep0359; origin-id of the stanza to which it applies, the children of which element are those that apply to the previous message (these are "wrapped payloads" because they are wrapped inside the &lt;apply-to&gt; element). The id of this apply-to-containing message is unimportant, and the type SHOULD be "normal" (KS: I don't care about this, it just seemed easier to spell it out).</p>
+      <p>If "user2@chatservice.example" wanted to send their approval (using a fictional 'i-like-this' element) for a message previously sent to chat room "chatroom@chatservice.example" with origin-id "origin-id-1", they would do the following.</p>
+      <example caption="User2 sends fictional approval"><![CDATA[
+<message id="2" from="user2@chatservice.example" to "chatroom@chatservice.example">
+  <apply-to xmlns="urn:xmpp:fasten:0" id="origin-id-1">
+      <i-like-this xmlns='urn:example:lik'/>
+  </apply-to>
+</message>
+]]></example>
+  </section2>
+  <section2 topic="External Payloads" anchor="external-payloads">
+      <p>Where the payload being fastened needs top-level child elements of the stanza holding the fastening (e.g. if a message edit uses the top-level &lt;body&gt; child), these can be listed in &lt;external&gt; child elements of the &lt;apply-to&gt; element, in the same namespace. An &lt;external&gt; element has two attributes: the 'name' attribute MUST be included, and is the name of the top-level stanza child element; the 'element-namespace' attribute specifies the namespace of the element, or if absent indicates that the element is in the same namespace as the stanza (eliding the stream namespace in this way avoids issues when transporting fastenings across combinations of 'jabber:server' and 'jabber:client' streams.</p>
+      <p>If "user2@chatservice.example" wanted to send an edit (using a fictional protocol) of a message they previously sent with origin-id 'origin-id-2', and the edit protocol used top-level &lt;body&gt; and &lt;custom&gt; elements, it would look like this.</p>
+      <example caption="User2 applies"><![CDATA[
+<message id="4" from="user2@chatservice.example" to "chatroom@chatservice.example">
+  <apply-to xmlns="urn:xmpp:fasten:0" id="origin-id-2">
+    <external name='body'/>
+    <external name='custom' element-namespace='urn:example:custom'/>
+    <edit xmlns='urn:example.edit'/>
+  </apply-to>
+  <body>Hi there</body>
+  <custom xmlns='urn:example:custom'>New data</custom>
+</message>
+]]></example>
+  </section2>
+  <section2 topic="Replacing a previous fastening" anchor="replace">
+      <p>When an entity wishes to replace a fastening they have previously applied it does this by including an attribute 'replace' with value 'true' on the &lt;apply-to&gt; element. The child payload of the &lt;apply-to&gt; element then logically replaces a fastening previously applied by the sending entity with the same name and namespace.</p>
+      <p>For example, if user2 wished to update the fastening from the first example they would send:</p>
+      <example caption="User2 applies"><![CDATA[
+<message id="6" from="user2@chatservice.example" to "chatroom@chatservice.example">
+  <apply-to xmlns="urn:xmpp:fasten:0" id="origin-id-1" replace='true'>
+      <i-like-this xmlns='urn:example:lik'>Vary much</i-like-this>
+  </apply-to>
+</message>
+]]></example>
+  </section2>
+</section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <p>In order for a message to be able to have fastenings applied to it it must contain a &xep0359; stanza id.</p>
+  <p>A message must only contain a single "apply-to" element (i.e. a message cannot be fastened to multiple other messages).</p>
+  <p>Fastenings are not to be chained - an &lt;apply-to&gt; element MUST reply to the original message to which it applies, not to an earlier fastening-containing-message (the 'id' attribute of an &lt;apply-to&gt; element must not be that of a stanza that itself contains an &lt;apply-to&gt;). For example, if this spec is used in the future to wrap multiple subsquent message edits for the same source message, each &lt;apply-to&gt; would contain the original stanza's id, not the id of any subsequent fastening stanza.</p>
+  <p>Some payloads should not be allowed to be fastened to a particular message by all users - e.g. if used to wrap message edits, it would be expected that only the original author be allowed to edit their message. It's the responsibility of specifications for protocols to be fastened to destribe such "who is allowed to do this?" applicability rules.</p>
+  <p>TODO: (future XEP) special handling by the archive to allow grouping and querying of things fastened to a message (this is going to involve following the externals and potentially wrapping them inside the apply-to when fetching from the archive).</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>The &REGISTRAR; includes 'urn:xmpp:fasten:0' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+    <ul>
+      <li>urn:xmpp:fasten:0</li>
+    </ul>
+  </section2>
+</section1>
+</xep>
