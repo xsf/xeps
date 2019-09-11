@@ -1,0 +1,417 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Authorization Tokens</title>
+  <abstract>This document defines an XMPP protocol extension for issuing authentication tokens to client applications and provides methods for managing сlient connections.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>xabber-tokens</shortname>
+  <author>
+    <firstname>Andrey</firstname>
+    <surname>Gagarin</surname>
+    <email>andrey.gagarin@redsolution.com</email>
+    <jid>andrey.gagarin@redsolution.com</jid>
+  </author>
+  <author>
+    <firstname>Andrew</firstname>
+    <surname>Nenakhov</surname>
+    <email>andrew.nenakhov@redsolution.com</email>
+    <jid>andrew.nenakhov@redsolution.com</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2019-09-11</date>
+    <initials>ag/an</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>When an XMPP client is negotiating a stream with an XMPP server, it typically needs to perform authentication and authorization. Typically stream negotiation requires providing a password on each connection attempt. Naturally this means that an XMPP client needs to store password: reconnections are very frequent on some types of clients, asking a user to provide a password on each reconnect would result in a very bad user experience.</p>
+  <p>This results in increased security threats associated with storing account password on physical device: password can be extracted from this device by whoever gains access to it. Also, a user can't revoke access to clients without changing password. More, password change won't help to  immediately revoke access from a  device with established connection.</p>
+  <p>This document describes a method address mentioned issues and provide more security for users. The idea is to use XMPP-based tokens, which allow to control client sessions.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+<ol>
+  <li>It is RECOMMENDED for the client to transfer information about connected device: type of client, version of the operating system.</li>
+  <li>Server MUST show latest IP address used with the token</li>
+</ol>
+</section1>
+<section1 topic='Obtaining a token' anchor='obtaining_a_token'>
+<section2 topic='Issuing a token' anchor='issuing_a_token'>
+  <p>The following example illustrates the XML structure to be sent when issuing new token for client.</p>
+  <example caption='The client sends a request with information about his operating system and the client version to the server to issue new token'><![CDATA[
+    <iq type='set' from='juliet@capulet.lit/chamber' to='capulet.it' id='1'>
+      <issue xmlns='https://xabber.com/protocol/auth-tokens'>
+        <client>xabber-web</client>
+        <device>MacOS 10.14</device>
+      </issue>
+    </iq>]]></example>
+<example caption='The server in response sends a new token to the the client'><![CDATA[
+  <iq type='result' from='capulet.it' to='juliet@capulet.it/balcony' id='1'>
+    <x xmlns='https://xabber.com/protocol/auth-tokens'>
+      <token>VkpTYqfpPcLpwciTRtgHaV7HLBC9O9kY</token>
+      <expire>1536322632</expire>
+      <token-uid>49975a48609793c5c93f5e9eab264f6706f04164</token-uid>
+    </x>
+  </iq>]]></example>
+</section2>
+<section2 topic='Issuing a token with a specified lifetime' anchor='issuing_a_token_with_lifetime'>
+  <example caption='If the client wants to explicitly indicate the lifetime of the token, it MAY add the expire tag with expiration time in seconds'><![CDATA[
+    <iq type='set' from='juliet@capulet.lit/chamber' to='capulet.it' id='2'>
+      <issue xmlns='https://xabber.com/protocol/auth-tokens'>
+        <client>xabber-web</client>
+        <device>iMac Pro MacOS 10.14</device>
+        <expire>3600</expire>
+      </issue>
+    </iq>]]></example>
+<example caption='The server in response sends a new token to the the client'><![CDATA[
+  <iq type='result' from='capulet.it' to='juliet@capulet.it/balcony' id='2'>
+    <x xmlns='https://xabber.com/protocol/auth-tokens'>
+      <token>VkpTYqfpPcLpwciTRtgHaV7HLBC9O9kY</token>
+      <expire>1536321232</expire>
+      <token-uid>49975a48609793c5c93f5e9eab264f6706f04164</token-uid>
+    </x>
+  </iq>]]></example>
+</section2>
+<section2 topic='Issuing a new token during authentication before bind' anchor='issuing_a_token_before_bind'>
+<p>During authentication process the client can receive a token before bind.</p>
+<example caption='The client establishes a connection to the server'><![CDATA[
+  <?xml version='1.0'?>
+  <stream:stream xmlns="jabber:client" to="capulet.it" version="1.0" xmlns:stream="http://etherx.jabber.org/streams" xml:lang="ru">]]></example>
+<p>The server accepts the connection and sends a list of supported stream features. Feature x-token is also on the list:</p>
+<example><![CDATA[
+  <?xml version='1.0'?>
+  <stream:stream xmlns="jabber:client" to="capulet.it" version="1.0" xmlns:stream="http://etherx.jabber.org/streams" xml:lang="ru">
+
+  <stream:features>
+    <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/>
+    ...
+    <x-token xmlns='https://xabber.com/protocol/auth-tokens'/>
+  </stream:features>]]></example>
+<example caption='After passing all authentication steps, the client makes a standard request to issue a token'><![CDATA[
+  <iq to='capulet.it' type='set' id='2'>
+    <issue xmlns='https://xabber.com/protocol/auth-tokens'>
+      <client>xabber-web</client>
+      <device>MacOS 10.14</device>
+    </issue>
+  </iq>]]></example>
+<example caption='The server responds with a new client token'><![CDATA[
+  <iq from='capulet.it' type='result' id='2'>
+    <x xmlns='https://xabber.com/protocol/auth-tokens'>
+      <token>VkpTYqfpPcLpwciTRtgHaV7HLBC9O9kY</token>
+      <expire>1536322632</expire>
+      <token-uid>49975a48609793c5c93f5e9eab264f6706f04164</token-uid>
+    </x>
+  </iq>]]></example>
+</section2>
+</section1>
+<section1 topic='Authentication' anchor='authentication'>
+  <example caption='The client establishes a connection with the server'><![CDATA[
+    <?xml version='1.0'?>
+    <stream:stream xmlns="jabber:client" to="capulet.it" version="1.0" xmlns:stream="http://etherx.jabber.org/streams" xml:lang="ru" >]]></example>
+  <example caption='The server accepts this connection and sends a list of supported protocols for authentication'><![CDATA[
+    <?xml version='1.0'?>
+    <stream:stream xmlns="jabber:client" to="capulet.it" version="1.0" xmlns:stream="http://etherx.jabber.org/streams" xml:lang="ru" >
+
+    <stream:features>
+      <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+        ...
+        <mechanism>X-TOKEN</mechanism>
+        ...
+      </mechanisms>
+    </stream:features>]]></example>
+  <example caption='The client sends the next element for authentication:'><![CDATA[
+    <auth xmlns="urn:ietf:params:xml:ns:xmpp-sasl" mechanism="X-TOKEN">
+      base64("\0" + user_name + "\0" + auth_token)
+    </auth>]]></example>
+  <p>The content in the auth element should be base64 encoding of a string containing a null byte, followed by username, another null byte and the string representation of the user authentication token. This is similar to authentication with a password using the PLAIN mechanism, except the token is added instead of password.</p>
+  <example caption='The response is standard for SASL XMPP authentication. For example, on success, the server will reply with:'><![CDATA[
+    <success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>]]></example>
+</section1>
+<section1 topic='Token management' anchor='token_management'>
+  <section2 topic='List of tokens' anchor='token_list'>
+    <example caption='To get a list of all existing tokens, the client sends a request to the server'><![CDATA[
+      <iq type='get' from='juliet@capulet.it/balcony' to='capulet.it' id='3'>
+        <query xmlns='https://xabber.com/protocol/auth-tokens#items'/>
+      </iq>]]></example>
+    <example caption='The server responds to the client with a list of tokens with unique identifiers'><![CDATA[
+      <iq type='result' from='capulet.it' to='juliet@capulet.it/balcony' id='3'>
+        <x xmlns='https://xabber.com/protocol/auth-tokens#items'>
+          <field var='1'>
+            <client>xabber-web 2.3</client>
+            <device>iMac Pro MacOS 10.14</device>
+            <token-uid>
+              024717297867c1d32714cadde305825a9909ef7c
+            </token-uid>
+            <expire>1536322632</expire>
+            <ip>192.168.1.2</ip>
+            <last-auth>1536322632</last-auth>
+          </field>
+          <field var='2'>
+            <client>xabber-android 2.363</client>
+            <device>Nokia  Android 8.0</device>
+            <token-uid>
+              7dbf8541c4de1d24a0f748cc01f98a140100979a
+            </token-uid>
+            <expire>1536322632</expire>
+            <ip>192.168.1.3</ip>
+            <last-auth>1536322632</last-auth>
+          </field>
+          <field var='3'>
+            <client>xabber-ios 1.8</client>
+            <device>iphone 5s IOS 12.3.1</device>
+            <token-uid>
+              49975a48609793c5c93f5e9eab264f6706f04164
+            </token-uid>
+            <expire>1536322632</expire>
+            <ip>192.168.1.3</ip>
+            <last-auth>1536322632</last-auth>
+          </field>
+          <field var='4'>
+            <client>xabber-desktop 1.2</client>
+            <device>PC Arch Linux x86_64</device>
+            <token-uid>
+              86c763fcdca9b3372685ca4b258b1a207b9138f5
+            </token-uid>
+            <expire>1536322632</expire>
+            <ip>192.168.1.5</ip>
+            <last-auth>1536322632</last-auth>
+          </field>
+        </x>
+      </iq>]]></example>
+  </section2>
+  <section2 topic='Token revocation' anchor='token_revocation'>
+    <example caption='To revoke a token, the client sends to the server'><![CDATA[
+      <iq type='set' from='juliet@capulet.it/balcony' to='capulet.it' id='4'>
+        <revoke xmlns='https://xabber.com/protocol/auth-tokens'>
+          <token-uid>
+            86c763fcdca9b3372685ca4b258b1a207b9138f5
+          </token-uid>
+        </revoke>
+      </iq>]]></example>
+    <example caption='If the client wants to delete several tokens, it needs to send them in a list'><![CDATA[
+      <iq type='set' from='juliet@capulet.it/balcony' to='capulet.it' id='5'>
+        <revoke xmlns='https://xabber.com/protocol/auth-tokens'>
+          <token-uid>
+            49975a48609793c5c93f5e9eab264f6706f04164
+          </token-uid>
+          <token-uid>
+            7dbf8541c4de1d24a0f748cc01f98a140100979a
+          </token-uid>
+        </revoke>
+      </iq>]]></example>
+    <example caption='On success, the server responds to the client'><![CDATA[
+<iq from='capulet.it' to='juliet@capulet.it/balcony' type='result' id='5'/>]]></example>
+    <example caption='The server also sends notification'><![CDATA[
+      <message type='headline' from='capulet.it' to='juliet@capulet.it/balcony' id='5'>
+        <revoke xmlns='https://xabber.com/protocol/auth-tokens'>
+          <token-uid>
+            49975a48609793c5c93f5e9eab264f6706f04164
+          </token-uid>
+          <token-uid>
+            7dbf8541c4de1d24a0f748cc01f98a140100979a
+          </token-uid>
+        </revoke>
+      </message>]]></example>
+    <example caption='On failure, the server responds to the client'><![CDATA[
+      <iq type='error' from='capulet.it' to='juliet@capulet.it/balcony' id='5'>
+        <error code='400' type='modify'>
+          <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+        </error>
+      </iq>]]></example>
+  </section2>
+  <section2 topic='Notification about new token' anchor='notification_about_new_token'>
+    <p>The server issues a new token and sends a message with a notification about the entrance from the new device.</p>
+    <example><![CDATA[
+      <message type='chat' from='capulet.it' to='juliet@capulet.it/balcony' id='msg1'>
+        <x xmlns='https://xabber.com/protocol/auth-tokens'>
+          <token-uid>dnbo3gasxia1agsj5nxzrlxr57ilibh9</token-uid>
+        </x>
+        <body>New login. Dear juliet@capulet.it, we detected a new login into your account from a new device on 01/09/2019 at 05:39:10 UTC
+          Xabber Web 2.6.5.642
+          PC Linux x86_64
+          192.168.1.2
+          If this wasn't you, go to Settings > XMPP Account > Active sessions and terminate suspicious sessions.
+        </body>
+      </message>]]></example>
+  </section2>
+  <section2 topic='Token revocation before bind' anchor='token_revocation_before_bind'>
+    <p>During authentication process the client can revoke all tokens before bind. This might be necessary if someone has gained access to a client device and revokes all tokens immediately after connection, not giving a chance to account owner to revoke access.</p>
+    <p>After passing all the authentication steps, the client makes a request to delete all tokens</p>
+    <example><![CDATA[
+      <iq type='set' to='capulet.it' id='6'>
+        <revoke-all xmlns='https://xabber.com/protocol/auth-tokens'/>
+      </iq>]]></example>
+    <example caption='On success, the server responds to the client'><![CDATA[
+      <iq from='capulet.it' type='result' id='6'/>]]></example>
+  </section2>
+  <section2 topic='Request token information' anchor='request_token_information'>
+    <example caption='To view information about the token, the client sends a request to the server'><![CDATA[
+      <iq type='get' from='juliet@capulet.it/balcony' to='capulet.it' id='7'>
+        <query xmlns='https://xabber.com/protocol/auth-tokens#items'>
+          <token>VkpTYqfpPcLpwciTRtgHaV7HLBC9O9kY</token>
+        </query>
+      </iq>]]></example>
+    <example caption='The server responds with return full information about the token'><![CDATA[
+      <iq  type='result' from='capulet.it' to='juliet@capulet.it/balcony' id='7'>
+        <x xmlns='https://xabber.com/protocol/auth-tokens#items'>
+          <field var='1'>
+            <client>xabber-web 2.3</client>
+            <device>iMac Pro MacOS 10.14</device>
+            <token-uid>
+              024717297867c1d32714cadde305825a9909ef7c
+            </token-uid>
+            <expire>1536322632</expire>
+            <ip>192.168.1.2</ip>
+            <last-auth>1536322632</last-auth>
+          </field>
+        </x>
+      </iq>]]></example>
+  </section2>
+</section1>
+<section1 topic='Determining support' anchor='support'>
+  <example caption='The client requests list of supported protocols from his server'><![CDATA[
+    <iq type='get' from='juliet@capulet.it/balcony' to='capulet.it'  id='1'>
+      <query xmlns='http://jabber.org/protocol/disco#info'/>
+    </iq>]]></example>
+  <example caption='The server announces support for token protocol'><![CDATA[
+    <iq type='result' from='capulet.it' to='juliet@capulet.it/balcony' id='1'>
+      <query xmlns='http://jabber.org/protocol/disco#info'>
+        ...
+        <feature var='https://xabber.com/protocol/auth-tokens'/>
+        ...
+      </query>
+    </iq>]]></example>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>The server is recording IP addresses used by user. While this enforces privacy during regular usage, making user aware of a malicious attempts to access his data, it also creates a privacy risk for a user if this data is leaked: it might help to determine user identity and location. Server operators should be warned about this risk and take measures against it.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>The &REGISTRAR; includes 'https://xabber.com/protocol/auth-tokens' and 'https://xabber.com/protocol/auth-tokens#items' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+    <ul>
+      <li>https://xabber.com/protocol/auth-tokens</li>
+      <li>https://xabber.com/protocol/auth-tokens#items</li>
+    </ul>
+  </section2>
+</section1>
+<section1 topic='XML Schemas' anchor='schemas'>
+  <section2 topic='Namespace https://xabber.com/protocol/auth-tokens' anchor='schemas-x-tokens'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='https://xabber.com/protocol/auth-tokens'
+    xmlns='https://xabber.com/protocol/auth-tokens'
+    elementFormDefault='qualified'>
+
+    <xs:annotation>
+      <xs:documentation>
+        The protocol documented by this schema is defined in
+        XEP-xxxx: http://www.xmpp.org/extensions/xep-xxxx.html
+      </xs:documentation>
+    </xs:annotation>
+
+  <xs:element name='x'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='token' type='xs:string' minOccurs='0' maxOccurs='1'/>
+        <xs:element name='token-uid' type='xs:string' minOccurs='0' maxOccurs='1'/>
+        <xs:element name='expire' type='xs:unsigned' minOccurs='0' maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='issue'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='client' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='device' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='expire' type='xs:unsigned' minOccurs='0' maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='revoke'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='token-uid' type='xs:string' minOccurs='1' maxOccurs='unbounded'/>
+        <xs:element ref='revoke-all' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='revoke-all'/>
+
+</xs:schema>]]></code>
+  </section2>
+  <section2 topic='Namespace https://xabber.com/protocol/auth-tokens#items' anchor='schemas-auth-tokens-items'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='https://xabber.com/protocol/auth-tokens#items'
+    xmlns='https://xabber.com/protocol/auth-tokens#items'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      XEP-xxxx: http://www.xmpp.org/extensions/xep-xxxx.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name='query'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='token' type='xs:string' minOccurs='0' maxOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='x'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='field' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='field'>
+  <xs:complexType>
+      <xs:sequence>
+        <xs:attribute name='var' type='xs:string' use='required'/>
+        <xs:element name='client' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='device' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='token-uid' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='expire' type='xs:unsigned' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='ip' type='xs:string' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='last-auth' type='xs:unsigned' minOccurs='1' maxOccurs='1'/>
+      </xs:sequence>
+  </xs:complexType>
+  </xs:element>
+
+</xs:schema>]]></code>
+  </section2>
+</section1>
+</xep>
