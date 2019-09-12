@@ -72,21 +72,7 @@ An issue is considered triaged when an editor has been assigned to it.
 Untriaged issues that are in need of attention can be found using the following
 filter: [`is:open is:pr no:assignee`]
 
-To triage new issues or PRs:
-
-- Is the issue a duplicate? Close it (referencing the original issue).
-- Is the issue a question and not an issue? Close it, pointing them at the
-  mailing list or chat room.
-- Is the PR a new ProtoXEP? Add the "[ProtoXEP]" label and ensure that the
-  file is in the "inbox/" tree and does not start with "xep-" (if not, leave a
-  comment asking for it to be moved).
-- Is the issue a specific change to an existing XEP or a few XEPs (eg. not
-  whitespace changes to many XEPs, use your judgement)? Make sure the title
-  starts with "XEP-XXXX:" or "XEP-XXXX, XEP-YYYY:".
-- Finally, assign an editor (pick one at random, or pick the one with the least
-  issues already assigned to them; we may re-assign it later so don't feel bad).
-  The list of active editors can be found here:
-  https://xmpp.org/about/xsf/editor-team
+To triage new issues or PRs, see the [Triaging a PR][#triaging-a-pr] section below.
 
 
 Editor
@@ -122,33 +108,44 @@ applies.
     2. Add the [ProtoXEP] and [Ready to Merge] labels.
     3. Stop.
 
-1. Are the changes *for all XEPs* purely editorial?
+2. Sanity checks
+
+    1. Ensure that all XEPs are mentioned in the title as `XEP-XXXX`. E.g. `XEP-0084, XEP-0123: something`.
+    2. Continue.
+
+3. Are the changes *for all XEPs* purely editorial?
 
     1. Add the [Editorial Change] and [Ready to Merge] labels.
-    2. Stop.
+    2. If the PR does not add a revision block, add the [Needs Version Block] label.
+    3. If the PR adds a revision block and does not only bump the patch-level (third) version number part, add the [Needs Version Block] label and a comment explaining the situation.
+    4. Stop.
 
-2. Is the XEP **not** in Experimental state?
+4. Is the XEP **not** in Experimental state?
 
     (Changes to Non—Experimental XEPs need approval by the approving body as
     defined in the XEP file itself.)
 
     1. Add the [Needs Council]/[Needs Board] label.
-    2. Put the PR in the [Council Trello] project.
-    3. Stop.
+    2. Send an email to the council chair and/or announce the PR in [The Council Room].
+    3. If the PR does not add a revision block, add the [Needs Version Block] label.
+    4. If the PR adds a revision block and does not bump the minor-level (second) version number part, add the [Needs Version Block] label and a comment explaining the situation.
+    5. Stop.
 
-2. Is the XEP in Experimental state and the PR opener is not an author of the
+5. Is the XEP in Experimental state and the PR opener is not an author of the
    XEP?
 
-    1. If the issue has not been discussed on the standards list *or* if
-       the authors have not been involved in the discussion:
+    1. If the PR does not a revision block, add the [Needs Version Block] label.
+    2. If the PR adds a revision block and does not bump the minor-level (second) version number part, add the [Needs Version Block] label and a comment explaining the situation.
+    3. If the issue has not been discussed on the standards list *or* if
+       the authors have not been involved in the discussion *or* the author
+       has not explicitly ACKed the PR:
 
         1. Make sure the standards@ discussion (if it exists) is linked in the
            PR.
         2. Add the [Needs Author] label.
-        3. Put the PR in the [Editor Trello] project.
-        4. Stop.
+        3. Stop.
 
-3. Mark the PR as [Ready to Merge].
+6. Mark the PR as [Ready to Merge].
 
 Discussions
 -----------
@@ -405,10 +402,12 @@ When you get to the point that the PR is [Ready to Merge], do the following:
 [Needs Author]: https://github.com/xsf/xeps/labels/Needs%20Author
 [Ready to Merge]: https://github.com/xsf/xeps/labels/Ready%20to%20Merge
 [Needs List Discussion]: https://github.com/xsf/xeps/labels/Needs%20List%20Discussion
+[Needs Version Block]: https://github.com/xsf/xeps/labels/Needs%20Version%20Block
 [Editorial Change]: https://github.com/xsf/xeps/labels/Editorial%20Change
 [xep-attic]: https://github.com/xsf/xep-attic
 [Docker Build]: https://hub.docker.com/r/xmppxsf/xeps/builds/
 [@horazont]: https://github.com/horazont/
 [jonasw]: https://wiki.xmpp.org/web/User:Jwi
+[The Council Room]: xmpp:council@muc.xmpp.org?join
 
 [modeline]: # ( vim: set fenc=utf-8 ff=unix spell spl=en textwidth=80: )
