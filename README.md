@@ -62,7 +62,7 @@ Gardening (Issue triaging by non-editors)
 -----------------------------------------
 
 For new PRs, anyone with permission may perform gardening tasks.
-The [Go wiki] sumarizes "gardening" as:
+The [Go wiki] summarizes "gardening" as:
 
 > the background maintenance tasks done to keep the project healthy & growing &
 > nice looking.
@@ -287,13 +287,11 @@ New ProtoXEPs
 Promoting a ProtoXEP
 --------------------
 
-- It is easiest to start a new branch, in case you screw something up on the
-    way.
+- It is easiest to start a new branch, in case you screw something up on the way.
 - Once the council approves a ProtoXEP, *copy* it out of the inbox and into the
   root, assigning it the next available number in the XEP series.
 - Modify the `<number/>` element in the XML file to match.
-- Set the version to `0.1` and the initials to `XEP Editor: xyz` (replacing
-  "xyz" with your own initials).
+- Set the version to `0.1` and the initials to `XEP Editor: xyz` (replacing "xyz" with your own initials).
 - Remove the `<interim/>` element from the XML file if it is included.
 - Set the status to `Experimental`.
 - Add a reference to the XEP in `xep.ent`.
