@@ -1,0 +1,183 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Message Moderation</title>
+  <abstract>This specification defines a method for groupchat moderators to moderate messages.</abstract>
+  &LEGALNOTICE;
+  <number>XXXX</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>XEP-0313</spec>
+    <spec>XEP-0422</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>message-moderation</shortname>
+  &jcbrand;
+   <revision>
+    <version>0.0.1</version>
+    <date>2019-09-25</date>
+    <initials>jcb</initials>
+    <remark><p>First draft</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Occasionally, a &xep0045; moderator might wish to moderate certain groupchat messages by, for example, retracting them from the groupchat history as part of an effort to address and remedy issues such as message spam, indecent language for the venue or exposing private third-party personal information. Alternatively, a moderator might want to correct a message on another user's behalf, or flag a message as inappropriate without requiring that it be retracted.</p>
+  <p>Due to the federated nature of XMPP and as with any content moderation tool, the moderation request can <strong>only be considered as a hint</strong> and clients which don't support message moderation are not obligated to enforce any such request.</p>
+</section1>
+<section1 topic='Discovering support' anchor='disco'>
+  <p>If a client or service implements message moderation, it MUST specify the 'urn:xmpp:message-moderate:0' feature in its service discovery information features as specified in &xep0030; and the Entity Capabilities profile specified in &xep0115;.</p>
+    <example caption='Client requests information from a groupchat service'><![CDATA[
+<iq type='get'
+    from='romeo@montague.example/orchard'
+    to='room@muc.example.com'
+    id='info1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+    <example caption='The groupchat service advertises support for moderation'><![CDATA[
+<iq type='result'
+    to='romeo@montague.example/home'
+    from='room@muc.example.com'
+    id='info1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+...
+    <feature var='urn:xmpp:message-moderate:0'/>
+...
+  </query>
+</iq>]]></example>
+</section1>
+<section1 topic='Use Case' anchor='usecase'>
+  <p>Consider a situation where a user sends a message that may be deemed inappropriate by a groupchat moderator. The groupchat service will append a &xep0359; stanza ID to the message before relaying it to all participants..</p>
+  <example caption="The user's client sends a message and the groupchat service adds a stanza id."><![CDATA[
+<message type="groupchat" to='room@muc.example.com' id='inappropriate-1'>
+  <body>This message contains information not appropriate for this room.</body>
+  <stanza-id xmlns='urn:xmpp:sid:0' id='stanza-id-1' by='room@muc.example.com'/>
+</message>]]></example>
+
+  <p>The moderator sees the message and indicates to their client that the message should be retracted. The client then sends an IQ stanza to the MUC service, requesting that the message be retracted.</p>
+
+  <example caption="The moderator's client sends an IQ stanza to the MUC service"><![CDATA[
+<iq type='set' to='room@muc.example.com' id='retract-request-1'>
+  <apply-to id="stanza-id-1" xmlns="urn:xmpp:fasten:0">
+    <moderate xmlns='urn:xmpp:message-moderate:0'>
+      <retract xmlns='urn:xmpp:message-retract:0'/>
+      <reason>This message contains inappropriate content for this forum</reason>
+    </moderate>
+  </apply-to>
+</iq>]]></example>
+
+  <section2 topic='Success case' anchor='usecase-success'>
+
+  <p>If the moderator is allowed to moderate the message, the groupchat service will send a message stanza to all participants (including the moderator), indicating that the message has been retracted and by whom.</p>
+  <p>This message will use &xep0422; to indicate that it applies to the moderated message, by referring to its XEP-0359 origin ID.</p>
+
+<example caption='The groupchat service sends a moderation message to all participants'><![CDATA[
+<message type="groupchat" id='retraction-id-1' from='room@muc.example.com' to="juliet@capulet.example/balcony">
+  <apply-to id="stanza-id-1" xmlns="urn:xmpp:fasten:0">
+    <moderated by='juliet@capulet.example' xmlns='urn:xmpp:message-moderate:0'>
+      <retract xmlns='urn:xmpp:message-retract:0' />
+      <reason>This message contains inappropriate content for this forum</reason>
+    </moderated>
+  </apply-to>
+</message>]]></example>
+
+  <p>Only then, does groupchat the service respond with an IQ result stanza.</p>
+
+  <example caption='The groupchat service responds to the IQ stanza'><![CDATA[
+<iq type='result' to='juliet@montague.example/home' id='retract-request-1'></iq>]]></example>
+  </section2>
+
+  <section2 topic='Error case' anchor='usecase-error'>
+    <p>In case the message could for some reason not be retracted, the grouchat service responds with an IQ stanza of type error.</p>
+  <example caption='The groupchat service responds with an error stanza'><![CDATA[
+<iq type='error' to='juliet@montague.example/home' id='retract-request-1'>
+<error type='modify'>
+  <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  <text xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>
+    Only moderators are allowed to moderate other participants' messages
+  </text>
+</error>
+</iq>]]></example>
+  </section2>
+</section1>
+
+<section1 topic='Tombstones' anchor='tombstones'>
+  <p>An archiving service MAY replace the contents of a message that was retracted due to moderation with a 'tombstone' similar to the one described in the protoXEP message-retraction.</p>
+  <p>The archiving service replaces the message with a &lt;moderated/&gt; element which contains a &lt;retracted/&gt; element. The &lt;moderated/&gt; element MUST include a 'by' attribute specifying the JID of the moderating entity. The &lt;retracted/&gt; element SHOULD contain a 'from' attribute which points to the JID of the author of the retracted message.</p>
+  <p>If the message was sent in a semi-anonymous MUC, the occupant id from &xep0421; needs to be included for the moderator and the message author in the &lt;moderated/&gt; and &lt;retracted/&gt; elements respectively. </p>
+
+  <example caption='Retracted groupchat message tombstone in a MAM result'><![CDATA[
+<message id='aeb213' to='room@muc.example.com/macbeth'>
+  <result xmlns='urn:xmpp:mam:2' queryid='f28' id='28482-98726-73624'>
+    <forwarded xmlns='urn:xmpp:forward:0'>
+      <delay xmlns='urn:xmpp:delay' stamp='2019-09-20T23:18:41Z'/>
+      <moderated by="witch@shakespeare.example">
+        <occupant-id xmlns="urn:xmpp:occupant-id:0" id="dd72603deec90a38ba552f7c68cbcc61bca202cd" />
+        <retracted from='macbeth@shakespeare.example' stamp='2019-09-20T23:19:12Z' xmlns='urn:xmpp:message-retract:0'>
+          <occupant-id xmlns="urn:xmpp:occupant-id:0" id="ab91cd8deec71a4888559f0c68cbcc61bca2123e" />
+        </retracted>
+        <reason>This message contains inappropriate content for this forum</reason>
+    </forwarded>
+  </result>
+</message>]]></example>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <p>A moderator MUST NOT send a moderation request for a message with non-messaging payloads. For example, a moderator MUST NOT moderate a roster item exchange request or a file transfer part.</p>
+  <p>In MUCs, only moderation messages (not tombstones, but messages containing the &lt;moderate/&gt; element) received from the MUC service itself are legitimate, all other such messages MUST be discarded.</p>
+  <p>If message moderation includes a retraction request, the MUC or other service that supports message retraction SHOULD prevent further distribution of the retracted message by the service and the archiving service MAY replace the retracted message with a tombstone as detailed in (TBD: XEP number for message retractions required).</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>There can never be a guarantee that a moderated message will appear as such in all clients. Clients should therefore, when possible, inform users that no such guarantee exists.</p>
+  <p>To prevent message spoofing, it's very important to check that the moderation message comes from the MUC service (as explained in the  <link url='#rules'>Business Rules</link> section).</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>None.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>The &REGISTRAR; includes 'urn:xmpp:message-moderate:0' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+    <ul>
+      <li>urn:xmpp:message-moderate:0</li>
+    </ul>
+  </section2>
+  <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:message-moderate:0'
+    xmlns='urn:xmpp:message-moderate:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='moderate'></xs:element>
+
+  <xs:element name='moderated'>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='xs:string'>
+          <xs:attribute name='by' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>
+    ]]></code>
+</section1>
+</xep>
