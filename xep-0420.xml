@@ -63,7 +63,7 @@
 
   <p>In order to achieve its goal, Stanza Content Encryption does the following:</p>
   <ul>
-    <li>Define elements that hold sensitive information and their encrypted form</li>
+    <li>Define elements that hold sensitive information</li>
     <li>Speficy rules about how extension elements are encrypted and embedded in the message</li>
     <li>Specify rules about which elements are allowed inside and outside the protected domain</li>
   </ul>
@@ -90,26 +90,26 @@
     <tr>
       <td>&rpad;</td>
       <td>Random-length random-content padding</td>
-      <td>Prevent known ciphertext and message length correlation attacks</td>
+      <td>Prevent known ciphertext and message length correlation attacks. The content of this element is a randomly generated sequence of base64 characters of random length between 0 and 200 characters. TODO: sane boundaries?</td>
       <td>None. This element is only used to change the length of the ciphertext and doesn't need to be verified</td>
     </tr>
     <tr>
       <td>&time;</td>
       <td>Timestamp</td>
-      <td>Prevent replay attacks using old messages</td>
+      <td>Prevent replay attacks using old messages. This element MUST have one attribute 'stamp', whos value is a timestamp following the format described in &xep0082;. The timestamp represents the time at which the message was encrypted by the sender.</td>
       <td>Receiving clients MUST check whether the difference between the timestamp and the sending time derived from the stanza itself lays within a reasonable margin. The client SHOULD use the content of the timestamp element when displaying the send date of the message</td>
     </tr>
     <tr>
       <td>&to;</td>
       <td>Recipient of the message</td>
-      <td>Prevent spoofing of the recipient</td>
-      <td>Receiving clients MUST check, if they are recipient of the message and otherwise alert the user/reject the message</td>
+      <td>Prevent spoofing of the recipient. This element MUST have one attribute 'jid', whos value is the JID of the intended recipient.</td>
+      <td>Receiving clients MUST check, if the JID matches the to attribute of the enclosing stanza and otherwise alert the user/reject the message</td>
     </tr>
     <tr>
       <td>&from;</td>
       <td>Sender of the message</td>
-      <td>Prevent spoofing of the sender</td>
-      <td>Receiving clients MUST check, if the content of the from element matches the from attribute of the enclosing stanza and otherwise alert the user/reject the message</td>
+      <td>Prevent spoofing of the sender. This element MUST have one attribute 'jid', whos value is the JID of the sender of the message.</td>
+      <td>Receiving clients MUST check, if the value matches the from attribute of the enclosing stanza and otherwise alert the user/reject the message</td>
     </tr>
   </table>
 
@@ -117,10 +117,11 @@
 
 </section1>
 
-<section1 topic='Use Cases' anchor='usecases'>
-  <p>The main use case of Stanza Content Encryption is the use of end-to-end encryption protocols in combination with extension protocols that store sensitive information in other places than the message body. Some end-to-end encryption protocols like &xep0384; are historically limited to encryption of the message body only. This approach excludes other extension elements from the protected domain of the payload element, exposing them to potential attackers.</p>
+<section1 topic='Motivation' anchor='motivation'>
 
-  <example caption='The Narrator sends an imperfectly encrypted message, leaking dangerous information about the conversation through the OOB extension element.'><![CDATA[
+  <p>Some end-to-end encryption protocols like &xep0384; are historically limited to encryption of the message body only. This approach excludes other extension elements from the protected domain of the payload element, exposing them to potential attackers.</p>
+
+  <example caption='An imperfectly encrypted message which leaks dangerous information about the conversation through the plaintext OOB extension element'><![CDATA[
 <message from='narrator@jabber.org'
          to='viewer@jabber.org'>
   <encrypted xmlns='eu.siacs.conversations.axolotl'>
@@ -136,17 +137,53 @@
   <x xmlns='jabber:x:oob'>
     <url>https://en.wikipedia.org/wiki/Fight_Club#Plot</url>
   </x>
-</message>]]>
+</message>
+]]>
   </example>
   <p>The example above obviously leaks information about the communication through the unencrypted OOB extension element.</p>
 
-  <p>Another example of a possible use case would be encrypted &lt;iq/&gt; queries. A resource might want to query sensitive information from another resource capable of Stanza Content Encryption. This problem can also be solved using SCE.</p>
+  <p>Most end-to-end encryption mechanisms are also focussed solely on message content encryption and do not tackle &lt;iq/&gt; requests/replies at all. Stanza Content Encryption can be applied to those as well.</p>
+
+  <example caption='Unencrypted IQ request'><![CDATA[
+<iq from='doctor@shakespeare.lit/pda'
+    id='get-data-1'
+    to='ladymacbeth@shakespeare.lit/castle'
+    type='get'>
+  <data xmlns='urn:xmpp:bob'
+        cid='sha1+8f35fef110ffc5df08d579a50083ff9308fb6242@bob.xmpp.org'/>
+</iq>
+]]>
+  </example>
+
+  <example caption='Likewise unencrypted reply'><![CDATA[
+<iq from='ladymacbeth@shakespeare.lit/castle'
+    id='get-data-1'
+    to='doctor@shakespeare.lit/pda'
+    type='result'>
+  <data xmlns='urn:xmpp:bob'
+        cid='sha1+8f35fef110ffc5df08d579a50083ff9308fb6242@bob.xmpp.org'
+        max-age='86400'
+        type='image/png'>
+    iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAABGdBTUEAALGP
+    C/xhBQAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9YGARc5KB0XV+IA
+    AAAddEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIFRoZSBHSU1Q72QlbgAAAF1J
+    REFUGNO9zL0NglAAxPEfdLTs4BZM4DIO4C7OwQg2JoQ9LE1exdlYvBBeZ7jq
+    ch9//q1uH4TLzw4d6+ErXMMcXuHWxId3KOETnnXXV6MJpcq2MLaI97CER3N0
+    vr4MkhoXe0rZigAAAABJRU5ErkJggg==
+  </data>
+</iq>
+]]>
+  </example>
+
 </section1>
 
-<section1 topic='Sending an encrypted message' anchor='sending'>
-  <p>To fix the issue of leaking extension elements using Stanza Content Encryption, the sender prepares the message by placing the content elements inside the &content; element.</p>
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Use in &lt;message/&gt; stanzas' anchor='use-case-message'>
+    <p>The main use case of Stanza Content Encryption is the use of end-to-end encryption protocols in combination with extension protocols that store sensitive information in other places than the message body.</p>
 
-  <example caption='Content element containing the messages body and the OBB element.'><![CDATA[
+    <p>This applies to many extension elements that add additional information to &lt;message/&gt; stanzas, such as those of &xep0066;.</p>
+
+    <example caption='Content element containing the messages body and the OBB element.'><![CDATA[
 <content xmlns='urn:xmpp:sce:0'>
   <payload>
     <body xmlns='jabber:client'>[...]</body>
@@ -155,33 +192,112 @@
     </x>
   </payload>
 </content>]]>
-  </example>
+    </example>
 
-  <p>The &content; element is then serialized into XML and encrypted using the encryption mechanism in place. The result is embedded in the &envelope; element and appended to the message.</p>
-
-  <example caption='Same message as in the previous example but encrypted using Stanza Content Encryption to also protect the OBB extension element.'><![CDATA[
+    <example caption='Finished message stanza containing the &lt;content/&gt; element from the previous example encrypted using a hypothetical encryption protocol and SCE.'><![CDATA[
 <message from='narrator@jabber.org'
          to='viewer@jabber.org'>
-  <encrypted xmlns='eu.siacs.conversations.axolotl'>
-    <header sid='27183'>
-      ...
-    </header>
-    <envelope xmlns='urn:xmpp:sce:0'>
+  <encrypted xmlns='urn:xmpp:encryption:stub:sce:0'>
+    <payload>
       PGNvbnRlbnQgeG1sbnM9J3Vybjp4bXBwOnNjZTowJz48cGF5bG9hZD48Ym9keSB4bWxucz0namFi
       YmVyOmNsaWVudCc+SSBnb3QgaW4gZXZlcnlvbmUncyBob3N0aWxlIGxpdHRsZSBmYWNlLiBZZXMs
       IHRoZXNlIGFyZSBicnVpc2VzIGZyb20gZmlnaHRpbmcuIFllcywgSSdtIGNvbWZvcnRhYmxlIHdp
       dGggdGhhdC4gSSBhbSBlbmxpZ2h0ZW5lZC48L2JvZHk+PHggeG1sbnM9J2phYmJlcjp4Om9vYic+
       PHVybD5odHRwczovL2VuLndpa2lwZWRpYS5vcmcvd2lraS9GaWdodF9DbHViI1Bsb3Q8L3VybD48
       L3g+PC9wYXlsb2FkPjwvY29udGVudD4=
-    </envelope>
+    </payload>
   </encrypted>
 </message>]]>
-  </example>
+    </example>
+  </section2>
 
+  <section2 topic='Use in &lt;iq/&gt; stanzas' anchor='use-case-iq'>
+    <p>Stanza Content Encryption thrives not only to allow for rich content encryption in &lt;message/&gt; stanzas, but is also applicable to &lt;iq/&gt; queries. A resource might want to query sensitive information from another resource capable of Stanza Content Encryption.</p>
+
+    <example caption='Sender prepares a &content; element containing the query subject.'><![CDATA[
+<content xmlns='urn:xmpp:sce:0'>
+  <payload>
+    <data xmlns='urn:xmpp:bob'
+        cid='sha1+8f35fef110ffc5df08d579a50083ff9308fb6242@bob.xmpp.org'/>
+  </payload>
+  <from jid='doctor@shakespeare.lit/pda'/>
+  <to jid='ladymacbeth@shakespear.lit/castle'/>
+</content>
+]]>
+    </example>
+
+    <example caption='The sender then encrypts the &content; element for the recipient and sends the &lt;iq/&gt; containing the result of the encryption.'><![CDATA[
+<iq from='doctor@shakespeare.lit/pda'
+    id='get-data-1'
+    to='ladymacbeth@shakespeare.lit/castle'
+    type='get'>
+  <encrypted xmlns='urn:xmpp:encryption:stub:sce:0'>
+    <payload>
+      V2FpdCwgd2hhdD8gQXJlIHlvdSBzZXJpb3VzPyBEaWQgeW91IHJlYWxseSBqdXN0IGdyYWIgeW91
+      ciBmYXZvdXJpdGUgYmFzZTY0IGRlY29kZXIganVzdCB0byBjaGVjayB0aGlzIGRvY3VtZW50IGZv
+      ciBoaWRkZW4gbWVzc2FnZXM/IFdoYXQgYXJlIHlvdSBzb21lIGtpbmQgb2YgbmVyZD8gU29tZSBn
+      ZWVrIHdpdGggYSBiaW5hcnkgd3Jpc3Qgd2F0Y2g/
+    </payload>
+  </encrypted>
+</iq>]]>
+    </example>
+
+    <example caption='The recipient prepares the reply to the request by assembling the &content; element.'><![CDATA[
+<content xmlns='urn:xmpp:sce:0'>
+  <payload>
+    <data xmlns='urn:xmpp:bob'
+        cid='sha1+8f35fef110ffc5df08d579a50083ff9308fb6242@bob.xmpp.org'
+        max-age='86400'
+        type='image/png'>
+    iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAMAAAC67D+PAAAAclBMVEUAAADYZArfaA9GIAoBAAGN
+    QA3MXgniaAiEOgZMIATDXRXZZhHUZBHIXhDrbQ6sUQ7OYA2TRAubRwqMQQq7VQlKHgMAAAK5WRfJ
+    YBOORBFoMBCwUQ/ycA6FPgvbZQpeKglNJQmrTQeOPgQyFwR6MwACAABRPE/oAAAAW0lEQVQI1xXI
+    Rw6EMBTAUP8kJKENnaF37n9FQPLCekAgzklhgCwfrlNHEXhrvCsxaU/SwLGAFuIWZFpBERtKm9Xf
+    JqH+vVWh4POqgHrsAtht095b+geYRSl57QHSPgP3+CwvAAAAAABJRU5ErkJggg==
+    </data>
+  </payload>
+  <from jid='ladymacbeth@shakespear.lit/castle'/>
+  <to jid='doctor@shakespeare.lit/pda'/>
+</content>]]>
+    </example>
+
+    <example caption='The &content; element is then encrypted and sent as a reply to the initiator of the request.'><![CDATA[
+<iq from='ladymacbeth@shakespeare.lit/castle'
+    id='get-data-1'
+    to='doctor@shakespeare.lit/pda'
+    type='result'>
+  <encrypted xmlns='urn:xmpp:encryption:stub:sce:0'>
+    <payload>
+      PGNvbnRlbnQgeG1sbnM9J3Vybjp4bXBwOnNjZTowJz4KICA8cGF5bG9hZD4KICAgIDxkYXRhIHht
+      bG5zPSd1cm46eG1wcDpib2InCiAgICAgICAgY2lkPSdzaGExKzhmMzVmZWYxMTBmZmM1ZGYwOGQ1
+      NzlhNTAwODNmZjkzMDhmYjYyNDJAYm9iLnhtcHAub3JnJwogICAgICAgIG1heC1hZ2U9Jzg2NDAw
+      JwogICAgICAgIHR5cGU9J2ltYWdlL3BuZyc+CiAgICBpVkJPUncwS0dnb0FBQUFOU1VoRVVnQUFB
+      QW9BQUFBS0NBTUFBQUM2N0QrUEFBQUFjbEJNVkVVQUFBRFlaQXJmYUE5R0lBb0JBQUdOCiAgICBR
+      QTNNWGduaWFBaUVPZ1pNSUFURFhSWFpaaEhVWkJISVhoRHJiUTZzVVE3T1lBMlRSQXViUndxTVFR
+      cTdWUWxLSGdNQUFBSzVXUmZKCiAgICBZQk9PUkJGb01CQ3dVUS95Y0E2RlBndmJaUXBlS2dsTkpR
+      bXJUUWVPUGdReUZ3UjZNd0FDQUFCUlBFL29BQUFBVzBsRVFWUUkxeFhJCiAgICBSdzZFTUJUQVVQ
+      OGtKS0VObmFGMzduOUZRUExDZWtBZ3prbGhnQ3dmcmxOSEVYaHJ2Q3N4YVUvU3dMR0FGdUlXWkZw
+      QkVSdEttOVhmCiAgICBKcUgrdlZXaDRQT3FnSHJzQXRodDA5NWIrZ2VZUlNsNTdRSFNQZ1AzK0N3
+      dkFBQUFBQUJKUlU1RXJrSmdnZz09CiAgICA8L2RhdGE+CiAgPC9wYXlsb2FkPgogIDxmcm9tIGpp
+      ZD0nbGFkeW1hY2JldGhAc2hha2VzcGVhci5saXQvY2FzdGxlJy8+CiAgPHRvIGppZD0nZG9jdG9y
+      QHNoYWtlc3BlYXJlLmxpdC9wZGEnLz4KPC9jb250ZW50Pgo=
+    </payload>
+  </encrypted>
+</iq>]]>
+    </example>
+  </section2>
+</section1>
+
+<section1 topic='Sending an encrypted stanza' anchor='sending'>
+
+  <p>In order to send an encrypted message without leaking extension elements the sender prepares the message by placing the sensitive extension elements inside a &payload; element inside a &content; element.</p>
+  <p>Depending on the encryption-specific SCE-profile, some affix elements are added as child elements of the &content; element.</p>
+  <p>The &content; element is then serialized into XML and encrypted using the SCE-specific profile of the encryption mechanism in place. The result is appended to the message.</p>
+  <p>Since the outer message element does not contain a &lt;body/&gt; element the sender appends an unencrypted &lt;store/&gt; hint as specified in &xep0334;.</p>
   <p>The message can then be sent to the recipient.</p>
 </section1>
 
-<section1 topic='Receiving an encrypted message' anchor='receiving'>
+<section1 topic='Receiving an encrypted stanza' anchor='receiving'>
   <p>The recipient of the message decrypts the content of the &envelope; element to retrieve the &content; element. Depending on the affix profiles specified by the used encryption protocol, the affix elements are verified to prevent certain attacks from taking place.</p>
   <p>Next the extension elements of the &content; elements &payload; element are checked against the whitelist/blacklist and any disallowed elements are discarded.</p>
   <p>As a last step, the original unencrypted stanza is recreated by replacing the &envelope; element of the stanza with the contents of the &payload; element.</p>
@@ -215,11 +331,13 @@
 
 <section1 topic='Business Rules' anchor='rules'>
   <p>Unencrypted &content; elements are NOT ALLOWED as child elements of the stanza and MUST be dropped.</p>
-  <p>Elements in the &content; element MUST be identified using an element name and namespace. Notably the &lt;body/&gt; element MUST contain a valid namespace (i.e. "jabber:client").</p>
-  <p>Recipient must verify that the decrypted &content; element contains valid XML before processing it any further. Invalid XML must be rejected.</p>
+  <p>Elements in the &content; elements &payload; element MUST be identified using an element name and namespace. Notably the &lt;body/&gt; element MUST contain a valid namespace (i.e. "jabber:client").</p>
+  <p>The recipient must verify that the decrypted &content; element contains valid XML before processing it any further. Invalid XML must be rejected.</p>
   <p>After verifying the integrity of the &content; element, the recipient needs to make sure that no blacklisted elements are found within the payload. Any forbidden elements MUST be dropped before the message is processed any further.</p>
+  <p>Furthermore the receiving client MUST ignore any extension elements considered as sensitive which are found outside of the &content; element, especially as direct unencrypted child elements of the enclosing stanza.</p>
   <p>Duplicate elements within the &content; element MUST be dropped.</p>
   <p>Elements in the &content; element override elements in the enclosing stanza. TODO: Maybe we want to remove this rule by disallowing duplicate elements all together?</p>
+  <p>Since a message encrypted with SCE MUST NOT contain a &lt;body/&gt; element, it is not eligible for MAM message storage (&xep0313;). Therefore sending entities MUST append an unencrypted &xep0334; &lt;store/&gt; hint as a direct child element to the message.</p>
 </section1>
 
 <section1 topic='Implementation Notes' anchor='impl'>
@@ -228,6 +346,7 @@
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
+  <p>For the sake of simplicity, the examples in this document are not encrypted. A real-world implementation MUST make use of real cryptographic protocols.</p>
   <section2 topic='Encryption Profiles' anchor='security_profiles'>
     <p>This specification presents a set of affix elements which can be used to counter certain attacks. However it does not dictate any behaviour regarding what elements MUST be used/verified or when.</p>
     <p>Different cryptographic protocols come with different possible attack scenarios which must be taken into consideration, so it is left up to those cryptographic protocols to define profiles that describe the use of affix elements.</p>
