@@ -6,11 +6,11 @@
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 <xep>
 <header>
-  <title>JID Prep</title>
-  <abstract>This specification defines a way for an XMPP client to request an XMPP server to prep and normalize a given JID.</abstract>
+  <title>JID Preperation and Validation Service</title>
+  <abstract>This specification defines a way for an XMPP entity to request another entity to prepare and validate a given JID.</abstract>
   &LEGALNOTICE;
   <number>0328</number>
-  <status>Deferred</status>
+  <status>Experimental</status>
   <type>Standards Track</type>
   <sig>Standards</sig>
   <dependencies>
@@ -20,13 +20,34 @@
   </dependencies>
   <supersedes/>
   <supersededby/>
-  <shortname>NOT_YET_ASSIGNED</shortname>
+  <shortname>jid-prep</shortname>
   <author>
     <firstname>Lance</firstname>
     <surname>Stout</surname>
     <email>lance@lance.im</email>
     <jid>lance@lance.im</jid>
   </author>
+  &flow;
+  <revision>
+    <version>0.2</version>
+    <date>2019-09-09</date>
+    <initials>fs</initials>
+    <remark>
+      <ul>
+        <li>Do not return error IQ result if the string to validate is
+        not a valid JID. It is indistinguishable if the error is
+        caused by the string to check, or if some other involved JID,
+        like the one in the 'to' attribute, is malformed.</li>
+        <li>Return the normalized JID in its parts, to make it clear
+        which parts constitute the JID</li>
+        <li>Do not use text as child of an IQ child element. Using
+        text makes it impossible to inject further child elements as
+        XMPP disallows mixed content.</li>
+        <li>Add support for base64 encoding.</li>
+        <li>Always announce the jidprep identity.</li>
+      </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.1</version>
     <date>2013-05-28</date>
@@ -46,137 +67,198 @@
     <remark><p>Initial version.</p></remark>
   </revision>
 </header>
+
 <section1 topic='Introduction' anchor='intro'>
-  <p>In order to properly compare and match JIDs, a normalization and prepping step is required by &rfc6122;. The responsibility for such normalization is split between the server and client, where the server is expected to prep any JID slots that it recognizes, particulary those related to stanza routing and roster items. However, the server can not prep JID slots that it does not understand, and so those are left for the client to process.</p>
-  <p>In some environments (in particular, browser based environments), a client does not have access to the various Unicode and internationalization libraries necessary to properly prep and normalize a JID. For those situations, this protocol defines a way for a client to ask a server to normalize a JID on its behalf.</p>
+
+  <p>To accurately compare and match JIDs, a normalization step is
+  required by &rfc7622;. This normalization is split into two steps
+  called 'Preparation' and 'Enforcement' by &rfc8264; and maybe
+  resource-intensive. The protocol defined herein, called "JID Prep"
+  can be used to ask XMPP entities to perform such a
+  normalization. Amongst other use-cases, this protocol can be used
+  for testing purposes, where a test suite checks the conformance of
+  an normalization implementation of, e.g., an XMPP server
+  implementation.</p>
+
+  <p>Furthermore, in some environments, especially ones like IoT where
+  devices with constraint resources are used, a client may not have
+  access to the various Unicode and internationalization libraries
+  necessary to properly normalize a JID. For those situations, this
+  protocol can be used by a client to ask a server to normalize a JID
+  on its behalf.</p>
+
 </section1>
+
 <section1 topic='Discovering support' anchor='disco'>
-  <p>If a server supports JID prep queries, it MUST specify the 'urn:xmpp:jidprep:0' feature in its service discovery information features as specified in &xep0030; and the Entity Capabilities profile specified in &xep0115;.</p>
-  <example caption='Client checks for support by the server'><![CDATA[
-<iq type="get"
-    to="capulet.lit"
-    from="juliet@capulet.lit/balcony"
-    id="info1">
-  <query xmlns="http://jabber.org/protocol/disco#info"/>
-</iq>]]></example>
+
+  <p>If a server supports JID Prep queries, it MUST specify the
+  'urn:xmpp:jidprep:1' feature in its service discovery information
+  features as specified in &xep0030;.</p>
+
   <example caption='Server advertises support for JID prep queries'><![CDATA[
 <iq type="result"
     to="juliet@capulet.lit/balcony"
     from="capulet.lit"
     id="info1">
   <query xmlns="http://jabber.org/protocol/disco#info">
-    ...
-    <feature var="urn:xmpp:jidprep:0"/>
-    ...
-  </query>
-</iq>]]></example>
-  <p>The JID prep service MAY be supported through the use of an external component (&xep0114;); in which case, the component MUST return an identity of "component/jidprep" in addition to the "urn:xmpp:jidprep:0" feature.</p>
-  <example caption='Server component advertises support for JID prep queries'><![CDATA[
-<iq type="result"
-    to="juliet@capulet.lit/balcony"
-    from="jidprep.capulet.lit"
-    id="info2">
-  <query xmlns="http://jabber.org/protocol/disco#info">
     <identity category="component" type="jidprep" />
     ...
-    <feature var="urn:xmpp:jidprep:0" />
+    <feature var="urn:xmpp:jidprep:1" />
   </query>
 </iq>]]></example>
+
 </section1>
+
 <section1 topic='Use Cases' anchor='usecases'>
-  <p>In order to request prepping for a JID, the client sends an &IQ; stanza of type "get" to the server, containing a &lt;jid/&gt; element qualified by the 'urn:xmpp:jidprep:0' namespace and whose XML character data is the JID in question:</p>
-  <example caption='Client requests the server to prep and normalize a JID'><![CDATA[
-<iq type="get"
-    to="capulet.lit"
-    id="prep1">
-  <jid xmlns="urn:xmpp:jidprep:0">ROMeo@montague.lit/orchard</jid>
-</iq>
-]]></example>
-  <p>The server MUST return either an IQ-result or an IQ-error. When returning an IQ-result, the server sends an &IQ; staza of type='result' containing a &lt;jid/&gt; element qualifed by the 'urn:xmpp:jidprep:0' namespace and whose XML character data MUST be the prepped and normalized version of the requested JID:</p>
-  <example caption='Server responds with the prepped JID'><![CDATA[
-<iq type="result"
-    to="juliet@capulet.lit/balcony"
-    from="capulet.lit"
-    id="prep1">
-  <jid xmlns="urn:xmpp:jidprep:0">romeo@montague.lit/orchard</jid>
-</iq>
-]]></example>
-  <p>If an IQ-error is returned, then it SHOULD specify an error condition of &lt;jid-malformed/&gt; if the given JID could not be processed to a normalized form:</p>
-  <example caption='Server responds with an error for an invalid JID'><![CDATA[
-<iq type="error"
-    to="juliet@capulet.lit/balcony"
-    from="capulet.lit"
-    id="prep1">
-  <jid xmlns="urn:xmpp:jidprep:0">romeo@@montague.lit/orchard</jid>
-  <error type="modify">
-    <jid-malformed xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" />
-  </error>
-</iq>
-]]></example>
+
+  <p>To request preparation and enforcement, and thus normalization
+  and validation, of a string to a JID, the client sends a JID Prep
+  request to the service. This request is an &IQ; of type 'get',
+  containing a &lt;jid-validate-request/&gt; element qualified by the
+  'urn:xmpp:jidprep:1' namespace. This element contains a
+  &lt;maybe-jid/&gt; child element whose textual content is the string
+  to normalize to and validate as JID.</p>
+
+  <example caption='JID prep request (valid JID)'><![CDATA[
+<iq type='get'
+    from='user@example.org/resource'
+    to='example.org'
+    id='request1'>
+  <jid-validate-request xmlns='urn:xmpp:jidprep:1'>
+    <maybe-jid>Σ@example.com/resource</maybe-jid>
+  </jid-validate-request>
+</iq>]]></example>
+
+    <p>If the given string can be enforced to a valid JID, then a
+    &lt;jid-validate-result/&gt; with a &lt;valid-jid/&gt; child
+    element is returned. This child element contains the normalized
+    JID parts. The valid-jid element MUST contain &lt;domainpart/&gt;
+    and may contain &lt;localpart/&gt; and/or &lt;resourcepart/&gt;
+    elements. If the JID does not contain a local- or resourcepart,
+    then the corresponding element is omitted. Those elements contain the
+    normalized, i.e., PRECIS enforced, strings of the own JID
+    parts.</p>
+
+  <example caption='Valid JID result'><![CDATA[
+<iq type='result'
+    from='example.org'
+    to='user@example.org/resource'
+    id='request1'>
+  <jid-validate-result xmlns='urn:xmpp:jidprep:1'>
+    <valid-jid>
+      <localpart>σ</localpart>
+      <domainpart>example.com</domainpart>
+      <resourcepart>resource</resourcepart>
+    <valid-jid>
+  </jid-validate-result>
+</iq>]]></example>
+
+  <p>If the service is given an invalid JID, a
+  &lt;jid-validate-result/&gt; IQ result response with an
+  &lt;invalid-jid/&gt; elmeent is returned.</p>
+
+  <example caption='JID Prep request (invalid JID)'><![CDATA[
+<iq type='get'
+    from='user@example.org/resource'
+    to='example.org'
+    id='request2'>
+  <jid-validate-request xmlns='urn:xmpp:jidprep:1'>
+    <maybe-jid>henryⅣ@example.com</maybe-jid>
+  </jid-validate-request>
+</iq>]]></example>
+
+  <example caption='Invalid JID result'><![CDATA[
+<iq type='result'
+    from='example.org'
+    to='user@example.org/resource'
+    id='request2'>
+  <jid-validate-result xmlns='urn:xmpp:jidprep:1'>
+    <invalid-jid>
+      <reason>Invalid codepoint 'Ⅳ' in localpart.</reason>
+    </invalid-jid>
+  </jid-validate-result>
+</iq>]]></example>
+
 </section1>
+
+<section1 topic='Optional Base64 Encoding' anchor='base64'>
+
+  <p>To be able to feed arbitrary strings into the validator, not
+  being limited by XML 1.0, the protocol supports an optional Base64
+  encoding of the string to validate. The requestor first encodes the
+  string to UTF-8, then encodes the UTF-8 byte-sequence using Base64
+  (&rfc4648; <link
+  url='https://tools.ietf.org/html/rfc4648#section-4'>§ 4</link>) and
+  places the result into an &lt;base64-maybe-jid/&gt; element. This
+  element is a put under the &lt;jid-validate-base64-request/&gt; IQ
+  child element qualified by the 'urn:xmpp:jidprep:1' namespace.</p>
+
+  <p>The IQ respones of the service are identical to the ones of the
+  non-Base64 case.</p>
+
+  <p>If supported, service announces 'urn:xmpp:jidprep:base64:1'
+  feature.</p>
+
+    <example caption='JID Prep request using Base64'><![CDATA[
+<iq type='get'
+    from='user@example.org/resource'
+    to='example.org'
+    id='request1'>
+  <jid-validate-base64-request xmlns='urn:xmpp:jidprep:1'>
+    <base64-maybe-jid>zqNAZXhhbXBsZS5jb20vcmVzb3VyY2U=</base64-maybe-jid>
+  </jid-validate-base64-request>
+</iq>]]></example>
+
+</section1>
+
 <section1 topic="Implementation Notes" anchor='impl'>
-  <p>If a client has the ability to perform the prepping and normalization process itself, it SHOULD NOT make a JID prep request to the server.</p>
-  <p>Upon a successful response, the client SHOULD cache the result, mapping the original JID to the normalized version.</p>
-  <p>In order to reduce the number of queries made by clients, the server MUST enforce normalization rules for any JID slots understood by the server (e.g. the to and from attributes, roster item JIDs, etc).<note>This requirement is intended to be subsumed by the requirements introduced in &rfc6122bis;</note></p>
+
+  <p>If a client has the ability to perform the normalization process
+  itself, it SHOULD NOT make use of the protocol defined herein.</p>
+
+  <p>Upon a successful response, it is RECOMMENDED that the client
+  caches the result, mapping the original JID to the normalized
+  version.</p>
+
 </section1>
+
 <section1 topic='Security Considerations' anchor='security'>
-  <p>As the process for normalizing a JID can be resource intensive, there is a possibility for denial of service attacks. A server MAY rate limit the number of requests to prevent such attacks. Likewise, the server MAY only respond to requests from users that are local to the server.</p>
+
+  <p>As the process for normalizing and validating a JID can be
+  resource intensive, there is a possibility for denial of service
+  attacks. A server MAY rate limit the number of requests to prevent
+  such attacks. Likewise, the server MAY restrict access to the
+  service torequests from users that are local to the server or
+  otherwhise trusted.</p>
+
 </section1>
+
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with &IANA;.</p>
 </section1>
+
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+
   <section2 topic='Protocol Namespaces' anchor='ns'>
-    <p>The &REGISTRAR; includes 'urn:xmpp:jidprep:0' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+
+    <p>The &REGISTRAR; includes 'urn:xmpp:jidprep:1' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+
     <ul>
-      <li>urn:xmpp:jidprep:0</li>
+      <li>urn:xmpp:jidprep:1</li>
     </ul>
+
   </section2>
+
   <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
     &NSVER;
   </section2>
-  <section2 topic='Service Discovery Category/Type' anchor='registrar-disco'>
-    <p>The &REGISTRAR; includes a category of "component" in its registry of Service Discovery identities (see &DISCOCATEGORIES;); as a result of this document, the Registrar includes a type of "jidprep" to that category.</p>
-    <p>The registry submission is as follows:</p>
-    <code><![CDATA[
-    <category>
-      <name>component</name>
-      <type>
-        <name>jidprep</name>
-        <desc>
-          A server component that offers a JID prepping
-          and normalization service to constrained clients.
-        </desc>
-        <doc>XEP-0328</doc>
-      </type>
-    </category>
-]]></code>
-  </section2>
+
 </section1>
+
 <section1 topic='XML Schema' anchor='schema'>
-  <code><![CDATA[
-<?xml version='1.0' encoding='UTF-8'?>
 
-<xs:schema
-    xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='urn:xmpp:jidprep:0'
-    xmlns='urn:xmpp:jidprep:0'
-    elementFormDefault='qualified'>
+  <p>TODO: Add once the XEP leaves the experimental state.</p>
 
-  <xs:annotation>
-    <xs:documentation>
-      The protocol documented by this schema is defined in
-      XEP-xxxx: http://www.xmpp.org/extensions/xep-xxxx.html
-    </xs:documentation>
-  </xs:annotation>
-
-  <xs:element name='jid'>
-    <xs:complexType>
-      <xs:simpleContent />
-    </xs:complexType>
-  </xs:element>
-
-</xs:schema>
-]]></code>
 </section1>
+
 </xep>
