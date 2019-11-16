@@ -23,6 +23,7 @@
     <spec>XEP-0054</spec>
     <spec>XEP-0060</spec>
     <spec>XEP-0084</spec>
+    <spec>XEP-0115</spec>
     <spec>XEP-0128</spec>
     <spec>XEP-0198</spec>
     <spec>XEP-0292</spec>
@@ -38,6 +39,16 @@
   <shortname>MIX-PAM</shortname>
   &ksmithisode;
   &skille;
+  <revision>
+    <version>0.6.0</version>
+    <date>2019-11-16</date>
+    <initials>lnj</initials>
+    <remark>
+      MIX channels are no longer added to the user's roster;
+      Add private PEP node for clients to receive notifications about joined channels;
+      Add XEP-0115 dependency;
+    </remark>
+  </revision>
   <revision>
     <version>0.5.0</version>
     <date>2019-09-30</date>
@@ -123,11 +134,16 @@ This approach  enables flexible support of multiple clients for a MIX channel pa
       <li>Messages from a MIX client to a MIX channel will go direct to the MIX service.  They are relayed, but not modified, by the participant's server.</li>
       <li>Messages from a MIX channel to a MIX client are always sent to the MIX participant's server (addressed by bare JID) and MUST be handled by the MIX participant's server.</li>
       <li>All MIX messages received by the MIX participant's server for a participant MUST be stored using MAM in the participant's archive.</li>
-      <li>The MIX participant's server will only forward messages to online clients and will not forward messages if no clients are online.
-        This means that a MIX client needs to resynchronize with all MIX channels when it comes online.  This message synchronization will happen between the MIX client and the MAM archive held on the MIX participant's server.</li>
-
-      <li>The MIX client will generally send management and other messages directly to the MIX channel and this MUST be done except where this specification requires otherwise.  </li>
-      <li>The user's roster contains each MIX channel to which the user is subscribed.   To achieve this the user's server needs to manage the roster on behalf of the user.  For this reason, MIX join and leave commands MUST be sent by a client to the user's server.   This enables the user's server to correctly manage the roster on behalf of the user.</li>
+      <li>
+        The MIX participant's server will only forward messages to online clients and will not forward messages if no clients are online.
+        This means that a MIX client needs to resynchronize with all MIX channels when it comes online.  This message synchronization will happen between the MIX client and the MAM archive held on the MIX participant's server.
+      </li>
+      <li>
+        The MIX client will generally send management and other messages directly to the MIX channel and this MUST be done except where this specification requires otherwise.
+      </li>
+      <li>
+        A private PEP node is used to store the channels the user is subscribed to. The node is managed by the server and only accesible to the user, not other contacts. This enables the user's server to correctly manage the PEP node on behalf of the user.
+      </li>
     </ol>
     <p>
    Messages from a MIX channel to a MIX participant (which will be of type=groupchat), presence information, and other information sent as a result of MIX channel subscription are sent to the participant's server using the participant's bare JID.  This means that the MIX participant's server  MUST implement the  modification of the standard &rfc6121; message processing rules specified here.
@@ -203,10 +219,13 @@ This approach  enables flexible support of multiple clients for a MIX channel pa
     </p>
   </section2>
 
-
   <section2 topic="Client Determines MIX Capability of Client's Server" anchor="user-server-client-capability">
     <p>
-      Servers supporting this specification MUST advertise this to clients for which they wish to support this specification.     A client wishing to use MIX MUST check for this capability in the local server before using MIX, by verifying support for the client's account.  The capability is represented by the 'urn:xmpp:mix:pam:2' feature.  In addition to this the server MAY advertize the 'urn:xmpp:mix:pam:2#archive' feature, which shows that the local server archives MIX messages.
+      Servers supporting this specification MUST advertise this to clients for which they wish to support this specification.
+      A client wishing to use MIX MUST check for this capability in the local server before using MIX, by verifying support for the client's account.
+      A client wishing to use the channels PEP node MUST verify the support of 'urn:xmpp:mix:pam:channels:0' on the client's account first.
+      The capability is represented by the 'urn:xmpp:mix:pam:2' feature.
+      In addition to this the server MAY advertise the 'urn:xmpp:mix:pam:2#archive' feature, which shows that the local server archives MIX messages.
     </p>
     <example caption="Client Determines MIX Capability for Server Account"><![CDATA[
 <iq from='hag66@shakespeare.example/UUID-c8y/1573'
@@ -221,6 +240,7 @@ This approach  enables flexible support of multiple clients for a MIX channel pa
   <query xmlns='http://jabber.org/protocol/disco#info'>
     <feature var='urn:xmpp:mix:pam:2'/>
     <feature var='urn:xmpp:mix:pam:2#archive'/>
+    <feature var='urn:xmpp:mix:pam:channels:0'/>
   </query>
 </iq>
 ]]></example>
@@ -234,7 +254,7 @@ This approach  enables flexible support of multiple clients for a MIX channel pa
 
   <section2 topic="MIX Join and Leave Support on Local Server" anchor="mix-join-leave">
   <p>
-    Channel Join and Leave functions operate indirectly through the participant's server.  The reason for this is that where a channel shares user presence, the channel is included in the user's roster which is managed in the local server.  The Join and Leave functions lead to roster changes and so they MUST go through the participant's server.   To achieve this, this specification wraps the operations so that the server can correctly route messages.
+    Channel Join and Leave functions operate indirectly through the participant's server.  The reason for this is that where a channel shares user presence, the channel is included in a private PEP node of the user which is managed on the local server.  The Join and Leave functions lead to PubSub notifications and so they MUST go through the participant's server.   To achieve this, this specification wraps the operations so that the server can correctly route messages.
   </p>
   </section2>
 
@@ -297,8 +317,8 @@ This approach  enables flexible support of multiple clients for a MIX channel pa
 ]]></example>
 
     <p>
-      The user's server will then make roster modifications as set out in a later section of this specification.
-      After making these changes, the user's server will  send the client-join response containing the server's join response back to the client that made the join request.  This has the 'from' set to the user's bare JID and the 'to' set to the client's full JID.  This is illustrated below:
+      The user's server will then make modifications to the user's private 'urn:xmpp:mix:pam:channels' PEP node as set out in a later section of this specification.
+      After making these changes, the user's server will send the client-join response containing the server's join response back to the client that made the join request.  This has the 'from' set to the user's bare JID and the 'to' set to the client's full JID.  This is illustrated below:
     </p>
 
     <example caption="User's Server sends response to Client"><![CDATA[
@@ -364,7 +384,7 @@ This approach  enables flexible support of multiple clients for a MIX channel pa
 ]]></example>
 
     <p>
-      After receiving the confirmation that the user has left the MIX channel, the user's server will remove the MIX channel entry from the user's roster and follow other processing as specified below.   The user's server will then notify the client with the servers response.
+      After receiving the confirmation that the user has left the MIX channel, the user's server will remove the MIX channel entry from the user's 'urn:xmpp:mix:pam:channels' PEP node and follow other processing as specified below.   The user's server will then notify the client with the servers response.
       This wraps the response from the server with a client-leave, with the 'from' set to the user's bare JID and the 'to' set to the client's full JID.  This is illustrated below:
     </p>
 
@@ -380,16 +400,10 @@ This approach  enables flexible support of multiple clients for a MIX channel pa
 ]]></example>
   </section2>
 
-  <section2 topic="Roster Management" anchor="usecase-roster">
-      <p>
-        As part of the channel joining process, the user's server MUST add the MIX channel to the user's roster.  This is done to share the user's presence status with the channel and channel participants subscribing to presence, when the user wishes this presence to be shared.  These roster entries also enables the user's client to quickly determine which channels the user has joined.  The user's server will need to record those roster entries that are associated with MIX channels in order to correctly handle MIX processing.
-        This roster entry will lead to the user's server correctly sending user's presence from all the user's MIX clients to the MIX channel.  Where the user wishes to share presence, the roster subscription is configured with one way presence, as presence is sent to the MIX channel but no presence information about the MIX channel is sent to the user.
-      </p>
+  <section2 topic="Presence Management" anchor="usecase-presence">
     <p>
-      As part of the channel joining process, the user's server MUST add the MIX channel to the user's roster.
-      This is done to share the user's presence status with the channel and channel participants subscribing to presence, when the user wishes this presence to be shared.
-      These roster entries also enables the user's client to quickly determine which channels the user has joined.
-      The user's server will need to record those roster entries that are associated with MIX channels in order to correctly handle MIX processing.
+      The user's presence status is shared with the channel and channel participants subscribing to presence.
+      The user's server will need to record the subscribed channels in the user's channels PEP node in order to correctly handle MIX processing.
       This roster entry will lead to the user's server correctly sending user's presence from all the user's MIX clients to the MIX channel.
       Where the user wishes to share presence, the roster subscription is configured with one way presence, as presence is sent to the MIX channel but no presence information about the MIX channel is sent to the user.
     </p>
@@ -522,38 +536,117 @@ This approach  enables flexible support of multiple clients for a MIX channel pa
     </section3>
   </section2>
 
-  <section2 topic="MIX Roster Item Capability Sharing" anchor="mix-roster-capability-sharing">
-    <p>It is useful for a MIX client to know which roster members are MIX channels, as this will facilitate convenient presentation of subscribed MIX channels to the user.  A MIX client MAY request that the server return this additional information that annotates roster elements with MIX capability. The server MUST return the additional information. The request is made by extending the standard roster get request by adding a child element &lt;annotate/&gt; to the &lt;query/&gt; element.  The &lt;annotate/&gt; element is qualified by the ‘urn:xmpp:mix:roster:0' namespace.</p>
-    <example caption="Roster Get Requesting MIX Information"><![CDATA[
-<iq from='juliet@example.com/balcony'
-    id='bv1bs71f'
-    type='get'>
-  <query xmlns='jabber:iq:roster'>
-    <annotate xmlns='urn:xmpp:mix:roster:0'/>
+  <section2 topic="Channels PEP Node" anchor="channels-node">
+    <p>
+      As part of the channel joining process, the user's server MUST add the MIX channel to the user's private channels PEP node.
+      This PEP node enables the user's client to quickly determine which channels the user has joined and which stable participant ids it has in those channels.
+      The node MUST only be edited by the server and MUST only be accesible to the user, not other contacts subscribed to the user's presence.
+    </p>
+
+    <section3 topic="Retrieving joined channels" anchor="retrieve-joined-channels">
+      <p>
+        To retrieve all currently joined channels a PubSub query on the user's own virtual PubSub service is made.
+        The used PEP node is 'urn:xmpp:mix:pam:channels'.
+      </p>
+      <example caption="The client requets all joined MIX channels"><![CDATA[
+<iq type='get' to='hag66@shakespeare.example' id='items1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:mix:pam:channels'/>
+  </pubsub>
+</iq>
+]]></example>
+      <p>
+        Upon that the server returns all currently joined channels.
+        Each channel is represented by one PubSub item.
+        The id of the item MUST be the channel JID.
+        Each item MUST have a &lt;channel/&gt; element qualified by the 'urn:xmpp:mix:pam:channels:0' namespace.
+        The &lt;channel/&gt; element MUST also include a 'participant-id' attribute that is the stable ID of the client.
+        This facilitates the client to match messages that reference this stable ID.
+      </p>
+      <p>
+        A server MUST only return the joined channels to the user, e.g. it MUST NOT return the channels joined by Bob to Alice.
+      </p>
+      <example caption="The user's server returns all joined channels"><![CDATA[
+<iq type='result'
+    from='hag66@shakespeare.example'
+    to='hag66@shakespeare.example/UUID-a1j/7533'
+    id='items1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:mix:pam:channels'>
+      <item id='coven@mix.shakespeare.example'>
+        <channel xmlns='urn:xmpp:mix:pam:channels:0' participant-id='123456'/>
+      </item>
+      <item id='cauldron-cooking@mix.shakespeare.example'>
+        <channel xmlns='urn:xmpp:mix:pam:channels:0' participant-id='234567'/>
+      </item>
+      <item id='balcony@example.net'>
+        <channel xmlns='urn:xmpp:mix:pam:channels:0' participant-id='345678'/>
+      </item>
+    </items>
+  </pubsub>
+</iq>
+]]></example>
+    </section3>
+
+    <section3 topic="Receiving notifications" anchor="joined-channel-notifications">
+      <p>
+        It is important for other clients to know when a channel was joined or left, so they can correctly display the channel to the user.
+        To receive those notifications, the client needs to subscribe to its private PEP node 'urn:xmpp:mix:pam:channels'.
+        This is done by adding the 'urn:xmpp:mix:pam:channels+notify' feature to the client's &xep0030; features and including &xep0115; in the client's presence.
+      </p>
+      <example caption="The client publishes entity capabilities in its presence"><![CDATA[
+<presence from='hag66@shakespeare.example/UUID-a1j/7533'>
+  <c xmlns='http://jabber.org/protocol/caps'
+     hash='sha-1'
+     node='http://www.chatopus.com'
+     ver='cmFuZG9tcmFuZG9tZmVhdHVyZXMK'/>
+</presence>
+]]></example>
+      <p>
+        In case the server has not cached the features for the 'ver' attribute, it will need to request the client's features.
+        The client needs to include the 'urn:xmpp:mix:pam:channels+notify' feature, if it wants to receive join and leave notifications.
+      </p>
+      <example caption="The client returns its service discovery features"><![CDATA[
+<iq type='result' id='disco123'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='client' name='Exodus 0.9.1' type='pc'/>
+    <feature var='http://jabber.org/protocol/disco#info'/>
+    <feature var='http://jabber.org/protocol/disco#items'/>
+    <feature var='http://jabber.org/protocol/tune'/>
+    <feature var='http://jabber.org/protocol/tune+notify'/>
+    <feature var='urn:xmpp:mix:pam:channels+notify'>
   </query>
 </iq>
 ]]></example>
-
-    <p>
-      A standard roster item is encoded as follows.
-    </p>
-    <example caption="Standard Roster Item Encoding"><![CDATA[
-<item jid='romeo@example.net'/>
+      <p>
+        When another client joins or leaves a channel, the server MUST send notifications to all subscribed resources.
+        It MUST NOT send notifications to other users.
+      </p>
+      <example caption="Server sends notification about newly joined channel"><![CDATA[
+<message from='hag66@shakespeare.example'
+         to='hag66@shakespeare.example/UUID-a1j/7533'
+         id='joined-channel'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:xmpp:mix:pam:channels'>
+      <item id='balcony@example.net'>
+        <channel xmlns='urn:xmpp:mix:pam:channels:0' participant-id='345678'/>
+      </item>
+    </items>
+  </event>
+</message>
 ]]></example>
-
-    <p>
-      MIX channels in the roster information returned in response to a request for this additional MIX information MUST have an element &lt;channel/&gt; qualified by the ‘urn:xmpp:mix:roster:0' namespace  included in the roster item.  The &lt;channel/&gt; element MUST also include a 'participant-id' attribute that is the stable ID of the client.   This facilitates the client to match messages that reference this stable ID.   A MIX extended roster item is shown in the following example.
-    </p>
-
-    <example caption="Roster Item Encoding of a MIX Channel"><![CDATA[
-<item jid='balcony@example.net'>
-  <channel xmlns='urn:xmpp:mix:roster:0' participant-id='123456'/>
-</item>
+      <example caption="Server sends notification about left channel"><![CDATA[
+<message from='hag66@shakespeare.example'
+         to='hag66@shakespeare.example/UUID-a1j/7533'
+         id='left-channel'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:xmpp:mix:pam:channels'>
+      <retract id='balcony@example.net'/>
+    </items>
+  </event>
+</message>
 ]]></example>
-
-    <p>
-      Once a client has made an IQ request to return additional MIX information, the server MUST return this information on all subsequent roster updates that are sent by the server to the client.   The server MUST NOT send additional MIX information when this has not been explicitly requested.  It is anticipated that a client will fetch the roster after connection has been established and will set its preference for this MIX capability information at that time.
-    </p>
+    </section3>
   </section2>
 
   <section2 topic="MAM Archive Support" anchor="usecase-mam">
