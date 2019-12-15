@@ -1,0 +1,195 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+  %ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Character counting in message bodies</title>
+  <abstract>
+    This document describes how to correctly count characters in message bodies.
+    This is required when referencing a position in the body.
+  </abstract>
+  &LEGALNOTICE;
+  <number>XXXX</number>
+  <status>Experimental</status>
+  <type>Informational</type>
+  <sig>Standards</sig>
+  <dependencies/>
+  <supersedes/>
+  <supersededby/>
+  <shortname>charcount</shortname>
+  <author>
+    <firstname>Marvin</firstname>
+    <surname>Wissfeld</surname>
+    <email>xsf@larma.de</email>
+    <jid>jabber@larma.de</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2019-12-15</date>
+    <initials>mw</initials>
+    <remark>Initial attempt to finalize the discussions.</remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>
+    Various use-cases require the possibility to reference a part of the message
+    body. This was realized by providing the offset of the beginning and end of
+    the referenced region as offset from the beginning of the message. XEPs
+    doing so include &xep0372; (and thereof derived &xep0385;) and &xep0394;.
+  </p>
+  <p>
+    For this method, it is highly relevant to decide how to count "characters"
+    in a message body. While it at first sounds trivial, there are various ways
+    of doing so in modern font systems. The purpose of this XEP is to define how
+    characters shall be counted for the purpose of the aforementioned XEPs and
+    any future XEP relying on a similar feature.
+  </p>
+</section1>
+
+<section1 topic='Character counting' anchor='counting'>
+  <p>
+    When counting characters in a body, they shall be counted by their
+    <strong>number of Unicode code points</strong>. Message bodies must not be
+    normalized when counting code points.
+  </p>
+  <table caption='Example strings and their counted length'>
+    <tr>
+      <th>String</th>
+      <th>Grapheme cluster</th>
+      <th>UTF-8 bytes</th>
+      <th>UTF-16 units (2 bytes)</th>
+      <th>Code points</th>
+    </tr>
+    <tr>
+      <td>Hello, world!</td>
+      <td>13</td>
+      <td>13</td>
+      <td>13</td>
+      <td>13</td>
+    </tr>
+    <tr>
+      <td>こんにちは世界</td>
+      <td>7</td>
+      <td>21</td>
+      <td>7</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <td>🧛🏾 👨‍👨‍👦‍👦 🇺🇳</td>
+      <td>
+        5
+        <note>
+          There are spaces between the emojis. You may also perceive this as
+          more than 5 glyphs if your font or display engine does not support
+          the required Unicode version.
+        </note>
+      </td>
+      <td>43</td>
+      <td>21</td>
+      <td>13</td>
+    </tr>
+  </table>
+  <section2 topic='Illegal offsets' anchor='illegal-offsets'>
+    <p>
+      As grapheme clusters may consist of multiple code points, a code point
+      offset might be illegal if it points inside a grapheme cluster.
+    </p>
+    <p>
+      However, receiving entities SHOULD NOT consider illegal offsets invalid,
+      as different Unicode versions may have different understanding of what a
+      grapheme cluster is. Instead, receiving entities may choose one of the
+      following behaviors:
+    </p>
+    <ul>
+      <li>
+        Split the grapheme cluster into multiple graphemes. In most cases, this
+        is closest to the intended behavior. Many font display engines will do
+        this automatically as needed.
+      </li>
+      <li>
+        When the offset defines the end of a region, include the full grapheme
+        cluster in the region. Otherwise, take the offset as if it pointed to
+        the beginning of the grapheme cluster.
+      </li>
+    </ul>
+  </section2>
+  <section2 topic='Developer notes' anchor='developer-notes'>
+    <p>
+      Some programming languages include a string type that operates directly on
+      Unicode code points. If these types are used, offset numbers can be used
+      as-is in string operations. Popular examples of such programming languages
+      are Python and Haskell.
+    </p>
+    <p>
+      Other programming languages include a string type that operates on UTF-16
+      units. As can be seen in the table above, those match the number of code
+      points in many cases and thus are sometimes confused to be the same.
+      Popular examples of such programming languages are C#, Java and
+      JavaScript.
+    </p>
+    <p>
+      C/C++ includes a wide character and string type. Those behave differently
+      across platforms and as such should be used with care.
+    </p>
+  </section2>
+</section1>
+
+<section1 topic='Rationale' anchor='rationale'>
+  <p>
+    The most obvious way of counting characters is to count them how humans
+    would. This sounds easy when only having western scripts in mind but becomes
+    more complicated in other scripts and most importantly is not well-defined
+    across Unicode versions. New unicode versions regularly added new
+    possibilities to build grapheme clusters, including from existing code
+    points. To be forward compatible, counting grapheme clusters, graphemes,
+    glyphs or similar is thus not an option.
+    This leaves basically the two options of using the number of code units of
+    the encoded string or the number of code points.
+  </p>
+  <p>
+    The main advantage of using the code units would be that those are native to
+    many programming languages, easing the task for developers.
+    However programming languages do not share a common encoding for their
+    string type (C/C++ use UTF-8, C#/Java use UTF-16, Python 3 hides the
+    internal encoding from the developer and only presents it in code points),
+    so there is no best pick here.
+    If one was to choose an encoding, the best choice would be UTF-8, the native
+    encoding of XMPP. However this makes counting bytes a more complex task for
+    programming languages that use a different encoding like UTF-16, as strings
+    would need to be transcoded first.
+  </p>
+  <p>
+    Counting code points has the advantage that offset counts cannot point
+    inside a code point. This could happen when using code units of any encoding
+    that may use more than one unit to represent a code point (such as UTF-8 and
+    UTF-16).
+    If an offset count points inside a code point, that would be an invalid
+    offset, raising more uncertainty of the correct behavior in such cases. Most
+    notably the opportunity of splitting (as it exists for grapheme cluster) is
+    not an option in that case, because splitting a code point would not create
+    any usable output.
+    Counting code points is widely supported in programming languages and can
+    easily be implemented for encoded strings when not.
+  </p>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+  <p>
+    Unicode terminology used across this document, can be looked up in the
+    Unicode glossary at <link url='https://www.unicode.org/glossary/'>https://www.unicode.org/glossary/</link>.
+  </p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;. </p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This document requires no interaction with &REGISTRAR;.</p>
+</section1>
+
+</xep>
