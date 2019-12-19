@@ -1,185 +1,140 @@
-.SILENT:
+.POSIX:
+.SUFFIXES:
+.PHONY: \
+	clean \
+	docker \
+	dockerhtml \
+	examples \
+	help \
+	html \
+	pdf \
+	preview \
+	refs \
+	stopdocker \
+	xeplist \
+	xml \
+	testdocker
 
-OUTDIR?=build
-REFSDIR?=$(OUTDIR)/refs
-EXAMPLESDIR?=$(OUTDIR)/examples
-XMLDEPS=xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
-TEXMLDEPS=xep2texml.xsl $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf
-XEPDIRS=. inbox
-HTMLDEPS=xep.xsl $(CSSTARGETS) $(JSTARGETS)
+# Normalize .CURDIR as used by NetBSD Make et al and CURDIR as used by GNU Make.
+.CURDIR?=$(CURDIR)
+.CURDIR?=$(PWD)
 
-base_CSSTARGETS=xmpp.css prettify.css
-CSSTARGETS=$(addprefix $(OUTDIR)/,$(base_CSSTARGETS))
-proto_CSSTARGETS=$(addprefix $(OUTDIR)/inbox/,$(base_CSSTARGETS))
-base_JSTARGETS=prettify.js
-JSTARGETS=$(addprefix $(OUTDIR)/,$(base_JSTARGETS))
-proto_JSTARGETS=$(addprefix $(OUTDIR)/inbox/,$(base_JSTARGETS))
+OUT?=build
+XEPS!=find . -type d -path ./$(OUT) -prune -o -type f \( -name '*.xml' ! -name '*.tex.xml' \) -print
+NUMBERED!=find . -maxdepth 1 -type f -regex '.*xep-....\.xml' -print
+REFS:=$(NUMBERED:./xep-%.xml=$(OUT)/refs/reference.XSF.XEP-%.xml)
+EXAMPLES:=$(NUMBERED:./xep-%.xml=$(OUT)/examples/%.xml)
 
-proto_HTMLDEPS=xep.xsl $(proto_CSSTARGETS) $(proto_JSTARGETS)
+CSS=xmpp.css prettify.css
+JS=prettify.js
 
-DO_XELATEX=cd $(OUTDIR); xelatex --interaction=nonstopmode -no-shell-escape "$(notdir $(basename $@)).tex" >/dev/null
-
-xeps=$(wildcard *.xml)
-proto_xeps=$(wildcard inbox/*.xml)
-all_xeps=$(xeps) $(proto_xeps)
-
-xep_xmls=$(patsubst %.xml,$(OUTDIR)/%.xml,$(xeps))
-proto_xep_xmls=$(patsubst %.xml,$(OUTDIR)/%.xml,$(proto_xeps))
-all_xep_xmls=$(xep_xmls) $(proto_xep_xmls)
-xep_ancillary=$(patsubst %,$(OUTDIR)/%,xep.xsl)
-
-xep_htmls=$(patsubst %.xml,$(OUTDIR)/%.html,$(xeps))
-proto_xep_htmls=$(patsubst %.xml,$(OUTDIR)/%.html,$(proto_xeps))
-all_xep_htmls=$(xep_htmls) $(proto_xep_htmls)
-
-xep_pdfs=$(patsubst %.xml,$(OUTDIR)/%.pdf,$(xeps))
-xep_refs=$(patsubst xep-%.xml, $(REFSDIR)/reference.XSF.XEP-%.xml, $(xeps))
-xep_examples=$(patsubst xep-%.xml, $(EXAMPLESDIR)/%.xml, $(xeps))
-
-
-.PHONY: help
 help:
-	@echo 'XEP makefile targets:'
+	@echo 'Makefile targets:'
 	@echo ' '
-	@echo '                  help  -  (this message)'
-	@echo '                   all  -  build all XEPs (same as make html)'
-	@echo '                  refs  -  build all IETF refs'
-	@echo '                  html  -  build all XEPs'
-	@echo '            inbox-html  -  build all ProtoXEPs'
-	@echo '                 clean  -  recursively unlink the build tree'
-	@echo '               preview  -  builds html whenever an XEP changes (requires inotify-tools)'
-	@echo '              examples  -  extract all examples'
-	@echo '              xep-xxxx  -  build HTML, PDF, examples, and reference for the XEP'
-	@echo '          xep-xxxx.pdf  -  build xep-xxxx.pdf (requires xelatex and texml)'
-	@echo '         xep-xxxx.html  -  build xep-xxxx.html'
+	@echo '   xep-xxxx.pdf — build xep-xxxx.pdf (requires xelatex and texml)'
+	@echo '  xep-xxxx.html — build xep-xxxx.html'
 	@echo ' '
-	@echo 'Output directory: "$(OUTDIR)/"'
+	@echo '           help — (this message)'
+	@echo '           refs — build all IETF refs to $(OUT)/refs/'
+	@echo '           html — build all XEPs to $(OUT)/'
+	@echo '          clean — recursively unlink $(OUT) tree and other build files'
+	@echo '        preview — builds html whenever an XEP changes (requires inotify-tools)'
+	@echo '       examples — extract all examples'
+	@echo '        xeplist — build the index of XEPs'
+	@echo ' '
+	@echo 'Output directory: "$(OUT)/"'
 
-.PHONY: all
-all: html
+$(OUT) $(OUT)/examples $(OUT)/refs $(OUT)/inbox:
+	mkdir -p $@
 
-.PHONY: xeplist
-xeplist: $(OUTDIR)/xeplist.xml
-
-.PHONY: html
-html: $(xep_htmls)
-
-.PHONY: xml
-xml: $(xep_xmls) $(xep_ancillary)
-
-.PHONY: inbox-html
-inbox-html: $(proto_xep_htmls)
-
-.PHONY: inbox-xml
-inbox-xml: $(OUTDIR)/inbox $(proto_xep_xmls)
-
-.PHONY: pdf
-pdf: $(xep_pdfs)
-
-.PHONY: refs
-refs: $(xep_refs)
-
-.PHONY: examples
-examples: $(xep_examples)
-
-.PHONY: xep-%
-xep-%: $(OUTDIR)/xep-%.html $(REFSDIR)/reference.XSF.XEP-%.xml $(OUTDIR)/xep-%.pdf $(EXAMPLESDIR)/%.xml;
-
-.PHONY: xep-%.html
-xep-%.html: $(OUTDIR)/xep-%.html ;
-
-.PHONY: xep-%.pdf
-xep-%.pdf: $(OUTDIR)/xep-%.pdf ;
-
-$(all_xep_xmls): $(OUTDIR)/%.xml: %.xml $(XMLDEPS)
-	xmllint --nonet --noent --loaddtd --dropdtd $< --output $@
-
-$(OUTDIR)/xep.xsl: xep.xsl $(OUTDIR)
-	cp $< $@
-
-$(OUTDIR)/xeplist.xml: $(wildcard *.xml) $(wildcard inbox/*.xml)
-	./tools/extract-metadata.py > $@
-
-$(EXAMPLESDIR)/%.xml: xep-%.xml $(XMLDEPS) examples.xsl $(EXAMPLESDIR)
-	xsltproc --path $(CURDIR) examples.xsl "$<" > "$@" && echo "Finished building $@"
-
-$(REFSDIR)/reference.XSF.XEP-%.xml: xep-%.xml $(XMLDEPS) ref.xsl $(REFSDIR)
-	xsltproc --path $(CURDIR) ref.xsl "$<" > "$@" && echo "Finished building $@"
-
-$(xep_htmls): $(OUTDIR)/xep-%.html: xep-%.xml $(XMLDEPS) $(HTMLDEPS)
+.SUFFIXES: .xml .html
+.xml.html: $< xep.xsl $(CSS) $(JS)
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
-	# Check for non-data URIs
+	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" "$<" 2>/dev/null && true
+
+	RELPATH=$$(realpath --relative-to=`dirname $@` $(.CURDIR)); xsltproc --path $(.CURDIR) --param htmlbase $${RELPATH} xep.xsl "$<" > "$@"
+
+$(CSS:%=$(OUT)/%) $(JS:%=$(OUT)/%) $(OUT)/xmpp.pdf $(OUT)/xmpp-text.pdf: $(OUT) xmpp.pdf xmpp-text.pdf $(CSS) $(JS)
+	cp "$$(basename $@)" '$(OUT)'
+
+.SUFFIXES: .xml .pdf
+.xml.pdf: $< xep2texml.xsl xmpp.pdf xmpp-text.pdf
+	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
 
-	# Actually build the HTML
-	xsltproc --path $(CURDIR) --param htmlbase "$(if $(findstring inbox,$<),'../','./')" xep.xsl "$<" > "$@" && echo "Finished building $@"
-
-$(proto_xep_htmls): $(OUTDIR)/inbox/%.html: inbox/%.xml $(XMLDEPS) $(proto_HTMLDEPS)
-	xmllint --nonet --noout --noent --loaddtd --valid "$<"
-	# Check for non-data URIs
-	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
-
-	# Actually build the HTML
-	xsltproc --path $(CURDIR) --param htmlbase "$(if $(findstring inbox,$<),'../','./')" xep.xsl "$<" > "$@" && echo "Finished building $@"
-
-$(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf: $(OUTDIR)
-	cp "resources/$(notdir $@)" "$@"
-
-$(OUTDIR)/%.pdf: %.xml $(XMLDEPS) $(TEXMLDEPS)
-	xmllint --nonet --noout --noent --loaddtd --valid "$<"
-	# Check for non-data URIs
-	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
-
-	xsltproc --path $(CURDIR) xep2texml.xsl "$<" > "$(@:.pdf=.tex.xml)"
-	texml -e utf8 "$(@:.pdf=.tex.xml)" "$(@:.pdf=.tex)"
+	xsltproc --path $(.CURDIR) xep2texml.xsl "$<" > "$(@:%.pdf=%.tex.xml)"
+	texml -e utf8 "$(@:%.pdf=%.tex.xml)" "$(@:%.pdf=%.tex)"
 	sed -i -e 's|\([\s"]\)\([^"]http://[^ "]*\)|\1\\path{\2}|g' \
 		-e 's|\\hyperref\[#\([^}]*\)\]|\\hyperref\[\1\]|g' \
-		-e 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' "$(@:.pdf=.tex)"
-	while ($(DO_XELATEX) ; \
-		grep -q "Rerun to get" $(<:.xml=.log) ) do true; \
+		-e 's|\\pageref{#\([^}]*\)}|\\pageref{\1}|g' "$(@:%.pdf=%.tex)"
+
+	while (cd "$$(dirname $@)"; xelatex --interaction=nonstopmode -no-shell-escape "$$(basename $(@:%.pdf=%)).tex" >/dev/null ; \
+		grep -q "Rerun to get" "$$(basename $(<:%.xml=%.log))" ) do true; \
 	done
-	echo "Finished building $@"
 
-$(JSTARGETS): $(OUTDIR)
-	cp "$(notdir $@)" "$@"
-
-$(CSSTARGETS): $(OUTDIR)
-	cp "$(notdir $@)" "$@"
-
-$(proto_JSTARGETS): $(OUTDIR)/inbox
-	cp "$(notdir $@)" "$@"
-
-$(proto_CSSTARGETS): $(OUTDIR)/inbox
-	cp "$(notdir $@)" "$@"
-
-$(EXAMPLESDIR) $(REFSDIR) $(OUTDIR) $(OUTDIR)/inbox:
-	mkdir -p "$@"
-
-.PHONY: clean
 clean:
-	rm -rf $(OUTDIR)
+	@rm -f $(XEPS:%.xml=%.aux)
+	@rm -f $(XEPS:%.xml=%.html)
+	@rm -f $(XEPS:%.xml=%.log)
+	@rm -f $(XEPS:%.xml=%.out)
+	@rm -f $(XEPS:%.xml=%.pdf)
+	@rm -f $(XEPS:%.xml=%.tex)
+	@rm -f $(XEPS:%.xml=%.tex.xml)
+	@rm -f $(XEPS:%.xml=%.toc)
+	@rm -rf ./$(OUT)
 
-.PHONY: preview
-preview:
-	inotifywait -m -e close_write,moved_to --format '%e %w %f' $(XEPDIRS) | \
-	while read -r event dir file; do \
-		if [ "$${file: -4}" == ".xml" ]; then \
-			xsltproc --path $(CURDIR) xep.xsl "$${dir}/$${file}" > "$(OUTDIR)/$${file%.*}.html" && echo "Built $${file%.*}.html $${event}"; \
-		fi \
+html: $(XEPS:%.xml=%.html) $(CSS:%=$(OUT)/%) $(JS:%=$(OUT)/%)
+	@mkdir -p $$(dirname $(XEPS:%.xml=$(OUT)/%))
+	@for f in $(XEPS:%.xml=%.html); do \
+		cp "$$f" "$(OUT)/$$(dirname $$f)/"; \
 	done
 
-.PHONY: docker
+pdf: $(XEPS:%.xml=%.pdf) $(OUT)/xmpp.pdf $(OUT)/xmpp-text.pdf
+	@mkdir -p $$(dirname $(XEPS:%.xml=$(OUT)/%))
+	@for f in $(XEPS:%.xml=%.pdf); do \
+		cp "$$f" "$(OUT)/$$(dirname $$f)/"; \
+	done
+
+$(XEPS:./%.xml=$(OUT)/%.xml): $(XEPS)
+	mkdir -p "$$(dirname $@)"
+	echo xmllint --nonet --noent --loaddtd --dropdtd "$(@:$(OUT)/%.xml=%.xml)" --output $@
+
+$(OUT)/xeplist.xml: $(OUT) $(XEPS)
+	./tools/extract-metadata.py > $@
+
+$(EXAMPLES): $(XEPS) xep.xsd xep.ent xep.dtd examples.xsl $(OUT)/examples
+	xsltproc --path $(.CURDIR) examples.xsl "$(@:$(OUT)/examples/%.xml=xep-%.xml)" > "$@"
+
+$(REFS): $(XEPS) xep.xsd xep.ent xep.dtd ref.xsl $(OUT)/refs
+	xsltproc --path $(.CURDIR) ref.xsl "$(@:$(OUT)/refs/reference.XSF.XEP-%.xml=xep-%.xml)" > "$@"
+
 docker:
 	docker build -t xmpp-org/extensions .
 
-.PHONY: dockerhtml
 dockerhtml:
-	docker build -t xmpp-org/extensions . --build-arg NCORES=9 --build-arg TARGETS="html inbox-html"
+	docker build -t xmpp-org/extensions . --build-arg NCORES=9 --build-arg TARGETS="html"
 
-.PHONY: testdocker
 testdocker:
 	docker run -d --name tmpxeps -p 3080:80 xmpp-org/extensions
 
-.PHONY: stopdocker
 stopdocker:
 	docker stop tmpxeps; docker rm -v tmpxeps
+
+preview: $(CSS:%=$(OUT)/%) $(JS:%=$(OUT)/%)
+	inotifywait -m -e close_write,moved_to --format '%e %w %f' . ./inbox | \
+	while read -r event dir file; do \
+		if [ "$${file: -4}" == ".xml" ]; then \
+			xsltproc --path $(.CURDIR) xep.xsl "$${dir}/$${file}" > "$(OUT)/$${file%.*}.html" && echo "Built $${file%.*}.html $${event}"; \
+		fi \
+	done
+
+xeplist: $(OUT)/xeplist.xml
+
+$(XEPS:%.xml=$(OUT)/%.xml): $<
+	xmllint --nonet --noent --loaddtd --dropdtd $< --output $@
+
+refs: $(REFS)
+
+xml: $(XEPS:./%.xml=$(OUT)/%.xml)
+
+examples: $(EXAMPLES)
