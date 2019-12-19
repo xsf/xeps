@@ -202,7 +202,7 @@ def main():
 
     has_error = False
 
-    for xepfile in args.xepdir.glob("xep-*.xml"):
+    for xepfile in args.xepdir.glob("xep-[0-9][0-9][0-9][0-9].xml"):
         number = xepfile.name.split("-", 1)[1].split(".", 1)[0]
         try:
             number = str(int(number))
