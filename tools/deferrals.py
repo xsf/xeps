@@ -56,7 +56,7 @@ def stash_guard():
         subprocess.check_call(["git", "stash", "pop"])
 
 
-def defer_xep(number, last_version, initials):
+def defer_xep(number, last_version, initials, insert_revision):
     filename = "xep-{:04d}.xml".format(number)
     with open(filename, "r") as f:
         xep_text = f.read()
@@ -76,14 +76,15 @@ def defer_xep(number, last_version, initials):
         del version[2:]
     version.append("0")
 
-    xep_text = (
-        xep_text[:revision_match.start()] +
-        REVISION_TEMPLATE.format(
-            now=datetime.utcnow(),
-            version=".".join(version),
-            initials=initials,
-        ) + xep_text[revision_match.start():]
-    )
+    if insert_revision:
+        xep_text = (
+            xep_text[:revision_match.start()] +
+            REVISION_TEMPLATE.format(
+                now=datetime.utcnow(),
+                version=".".join(version),
+                initials=initials,
+            ) + xep_text[revision_match.start():]
+        )
 
     with open(filename, "w") as f:
         f.write(xep_text)
@@ -120,6 +121,14 @@ def main():
     )
 
     parser.add_argument(
+       "--no-revision",
+       dest="insert_revision",
+       action="store_false",
+       default=True,
+       help="Do not create a revision block",
+    )
+
+    parser.add_argument(
         "-c", "--commit",
         default=False,
         action="store_true",
@@ -145,19 +154,23 @@ def main():
             if args.modify:
                 defer_xep(deferred_info["number"],
                           deferred_info["last_revision"]["version"],
-                          args.modify)
+                          args.modify,
+			  args.insert_revision)
                 if args.commit:
                     subprocess.check_call([
                         "git", "add", "xep-{:04d}.xml".format(
                             deferred_info["number"],
                         ),
                     ])
-                    subprocess.check_call([
-                        "git", "commit", "-vem",
+                    commit_argv = [
+                        "git", "commit", "-vm",
                         "XEP-{:04d}: deferred due to lack of activity".format(
                             deferred_info["number"],
-                        ),
-                    ])
+                        )
+                    ]
+                    if args.insert_revision:
+                        commit_argv.append("-e")
+                    subprocess.check_call(commit_argv)
 
             if args.verbose:
                 print(
