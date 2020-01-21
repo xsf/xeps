@@ -1,0 +1,161 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+        <!ENTITY ns "urn:xmpp:inbox:0">
+        <!ENTITY nsx "urn:example:">
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Inbox</title>
+  <abstract>This specification proposes a mechanism by which clients can find a list of ongoing conversations and their state.</abstract>
+  &LEGALNOTICE;
+  <number>XXXX</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0313</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>inbox</shortname>
+  &dcridland;
+  <revision>
+    <version>0.0.1</version>
+    <date>2019-12-30</date>
+    <initials>dwd</initials>
+    <remark>
+      <ul>
+        <li>Initial Revision</li>
+      </ul>
+    </remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>When initially run, a messaging client typically shows some list of contacts and chatrooms, and whether any new
+    messages are present in each.</p>
+  <p>The current mechanism for achieving this UX involves a complete synchronization of the server-side archive, and is both
+    time-consuming and bandwidth-intensive. This specification proposes a solution to directly obtain such data from
+    the server.</p>
+  <p>Moreover, the information gathered by the server to support this can be used in support of mobile push notifications.</p>
+  <section2 topic="Terminology">
+    <p>Nomenclature used for instant messages versus ancillary messages will need to be adjusted to make it consistent
+      with &xep0422; et al.</p>
+  </section2>
+</section1>
+
+<section1 topic='Overview' anchor="overview">
+  <section2 topic="Discovering Support" anchor="feature">
+    <p>Support for this protocol is advertised by the Service Discovery protocol defined in &xep0030; using a feature
+      of <tt>&ns;</tt>.</p>
+  </section2>
+  <section2 topic="The Inbox">
+    <p>The Inbox consists semantically of a list of conversations in order of last activity. Each conversation is
+      identified by a jid - for group chats this would be the chatroom, and for individual contacts this would be their
+      bare jid.</p>
+    <p>Each Inbox entry includes a count of messages considered new, the last MAM stanza-id relating to this conversation,
+      and the last MAM result for this conversation, as defined by &xep0313;. In addition, a client-controlled boolean
+      marker can be used to indicate a manual "set unread" state.</p>
+    <p>Finding more messages from this conversation can be achieved via a MAM query using <tt>with</tt> to specify the
+      conversation required.</p>
+  </section2>
+</section1>
+
+  <section1 topic="Protocol Elements">
+    <section2 topic="Querying">
+      <p>An &IQ; of type "get" is used, containing a single element <tt>&lt;inbox/></tt>, containing an optional RSM
+        filter as specified by &xep0059;. This will typically be sent only to the user's own bare jid. The server
+        responds with a sequence of &MESSAGE; stanzas, each containing an <tt>&lt;entry/></tt> element qualified by the
+        <tt>&ns;</tt> namespace with a number of attributes:</p>
+      <ul>
+        <li><tt>jid</tt> - contains the Jid of the conversation for this entry.</li>
+        <li><tt>unread</tt> - contains a count of messages which are deemed to be unread by the server.</li>
+        <li><tt>marked</tt> - a boolean indicating that a client has explicitly marked the conversation for some reason.</li>
+      </ul>
+      <p>The <tt>&lt;entry/></tt> element contains the latest instant message, if any, which is encapsulated as a
+        <tt>&lt;result/></tt> element as defined by &xep0313;. This contains collated fastenings if supported by the
+        server.</p>
+      <p>After all entries required have been returned, the server then responds with an &IQ; result containing a
+        <tt>&lt;fin/></tt> element qualified by <tt>&ns;</tt>. This contains the RSM data, a total count of conversation
+        entries within the inbox, a count of conversations with unread messages, and a total count of unread messages.</p>
+      <p>Any counter of unread SHOULD be accurate, however client implementors please note that due to heuristics
+      involved and other issues these counters can be inaccurate at times.</p>
+    </section2>
+    <section2 topic="Marking">
+      <p>A client MAY at any time set a conversation as marked by sending an &IQ; of type "set" containing something or
+        other. This causes the server to set the "marked" flag on a conversation. A client SHOULD display a marked
+        conversation in the same way as an unread conversation, and explicitly removed the marked flag when the
+        conversation is considered re-read.</p>
+      <p>Removing a marked flag, even when the conversation is not currently marked, causes the unread counter for that
+        conversation to be set to zero.</p>
+    </section2>
+  </section1>
+
+  <section1 topic="Unread Messages">
+    <p>Servers MUST track which instant messages sent to clients remain unread.</p>
+    <ul>
+      <li>An instant message is always read if it is followed by an instant message which is read.</li>
+      <li>An instant message always starts unread.</li>
+      <li>A Chat Marker (see &xep0333;) of "displayed" or "acknowledged" causes the message to be read (and also causes
+      all prior messages to be read by implication).</li>
+      <li>A Message Receipt (see &xep0184;) does not cause messages to be considered unread. Perhaps it should?</li>
+      <li>Unmarking a conversation always sets the unread counter to zero, and by implication sets all messages to be
+        read.</li>
+    </ul>
+  </section1>
+
+  <section1 topic="Examples">
+    <p>Let us assume a user has only two contacts they have exchanges messages with, and a single chatroom. Asking for their inbox is simple:</p>
+    <example><![CDATA[
+    <iq type='get' id='iq_stanza_id'>
+      <inbox xmlns=']]>&ns;<![CDATA['/>
+    </iq>
+    ]]></example>
+    <p>The server responds with a list of conversations:</p>
+    <example><![CDATA[
+    <message>
+      <entry xmlns=']]>&ns;<![CDATA[' unread='2' marked='false' jid='first_contact@example.net'>
+        <result xmlns='urn:xmpp:mam:2' queryid='iq_stanza_id' id='uuid-1'>
+          <forwarded xmlns='urn:xmpp:forward:0'>
+            <message xmlns='jabber:client' from='first_contact@example.net' to='user@example.org' type='chat'>
+              <body>Greetings from Alpha Centauri!</body>
+            </message>
+          </forwarded>
+        </result>
+      </entry>
+    </message>
+    ]]></example>
+    <p>After the list of messages, the server completes its response with a the reply to the original IQ.</p>
+    <example><![CDATA[
+      <iq type='result' id='iq_stanza_id'>
+        <fin xmlns=']]>&ns;<![CDATA[' total='3' unread='1' all-unread='2'>
+          <!-- RSM -->
+        </fin>
+    ]]></example>
+  </section1>
+
+  <section1 topic="Schema">
+    <p>TODO - Hopefully roughly given by the examples.</p>
+  </section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>TODO</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This XEP requires no interaction with &IANA;. </p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>None.</p>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>The author notes that this protocol is heavily based on the <tt>mod_inbox</tt> system of MongooseIM. In addition, Kevin Smith provided useful feedback which has shaped this specification.</p>
+</section1>
+
+</xep>
