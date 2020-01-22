@@ -34,7 +34,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 
 <xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='1.0'>
 
-  <xsl:output doctype-public='-//W3C//DTD XHTML 1.0 Transitional//EN' doctype-system='http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd' method='html' indent='no'/>
+  <xsl:output method='html' encoding='utf-8' omit-xml-declaration='yes' indent='no'/>
 
   <xsl:template name="status-notice">
     <xsl:param name="thestatus"/>
@@ -170,6 +170,8 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   </xsl:template>
 
   <xsl:template match='/'>
+    <xsl:text disable-output-escaping='yes'>&lt;!DOCTYPE html&gt;
+</xsl:text>
     <html>
       <head>
         <title>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></title>
