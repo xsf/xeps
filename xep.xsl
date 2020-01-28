@@ -57,7 +57,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <xsl:text>WARNING: This document has been automatically Deferred after 12 months of inactivity in its previous Experimental state. Implementation of the protocol described herein is not recommended for production systems. However, exploratory implementations are encouraged to resume the standards process.</xsl:text>
       </xsl:if>
       <xsl:if test='$thestatus = "Deprecated"'>
-        <xsl:text>WARNING: This document has been </xsl:text><strong>Deprecated</strong><xsl:text> by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one</xsl:text>
+        <xsl:text>WARNING: This document has been </xsl:text><strong>Deprecated</strong><xsl:text> by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one </xsl:text>
         <xsl:variable name='supersededby.count' select='count(/xep/header/supersededby/spec)'/>
         <xsl:choose>
           <xsl:when test='$supersededby.count &gt; 0'>
@@ -89,7 +89,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <xsl:text>NOTICE: The protocol defined herein is a </xsl:text><strong>Final Standard</strong><xsl:text> of the XMPP Standards Foundation and can be considered a stable technology for implementation and deployment.</xsl:text>
       </xsl:if>
       <xsl:if test='$thestatus = "Obsolete"'>
-        <xsl:text>WARNING: This document has been obsoleted by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this on</xsl:text>
+        <xsl:text>WARNING: This document has been obsoleted by the XMPP Standards Foundation. Implementation of the protocol described herein is not recommended. Developers desiring similar functionality are advised to implement the protocol that supersedes this one </xsl:text>
         <xsl:variable name='supersededby.count' select='count(/xep/header/supersededby/spec)'/>
         <xsl:choose>
           <xsl:when test='$supersededby.count &gt; 0'>
