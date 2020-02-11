@@ -2,7 +2,7 @@
 <!DOCTYPE xep SYSTEM 'xep.dtd' [
   <!ENTITY % ents SYSTEM 'xep.ent'>
 %ents;
-        <!ENTITY ns "urn:xmpp:inbox:0">
+        <!ENTITY ns "urn:xmpp:inbox:1">
         <!ENTITY nsx "urn:example:">
 ]>
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
@@ -23,6 +23,19 @@
   <supersededby/>
   <shortname>inbox</shortname>
   &dcridland;
+  <revision>
+    <version>0.2.0</version>
+    <date>2020-02-03</date>
+    <initials>dwd</initials>
+    <remark>Updates from the Summit 24 discussion:
+      <ul>
+        <li>Remove Marked</li>
+        <li>Metadata in sibling</li>
+        <li>Ensure the last "mam id" is present in metadata, and describe how that can be used.</li>
+        <li>Add options to control unread-only and elide messages.</li>
+      </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.1.0</version>
     <date>2020-01-29</date>
@@ -74,30 +87,26 @@
   <section1 topic="Protocol Elements">
     <section2 topic="Querying">
       <p>An &IQ; of type "get" is used, containing a single element <tt>&lt;inbox/></tt>, containing an optional RSM
-        filter as specified by &xep0059;. This will typically be sent only to the user's own bare jid. The server
+        filter as specified by &xep0059;. This will typically be sent only to the user's own bare jid. If a client
+        requests the inbox without RSM, the server MAY limit the number of conversations arbitrarily by either time or number. This element has a number of attributes:</p>
+      <ul>
+        <li><tt>unread-only</tt> - Defaults to false. If true, the server will list only conversations with at least one unread message.</li>
+        <li><tt>messages</tt> - Defaults to true. If true, the server includes the last message; if false, this is elided.</li>
+      </ul>
+      <p>The server
         responds with a sequence of &MESSAGE; stanzas, each containing an <tt>&lt;entry/></tt> element qualified by the
         <tt>&ns;</tt> namespace with a number of attributes:</p>
       <ul>
         <li><tt>jid</tt> - contains the Jid of the conversation for this entry.</li>
-        <li><tt>unread</tt> - contains a count of messages which are deemed to be unread by the server.</li>
-        <li><tt>marked</tt> - a boolean indicating that a client has explicitly marked the conversation for some reason.</li>
+        <li><tt>unread</tt> - contains a count of messages which are deemed to be unread by the server. Clients may use this to indicate unread messages to the user.</li>
+        <li><tt>id</tt> - contains the last id in the MAM archive for this conversation. Clients may use this as a marker to fetch additional messages (or collated fastenings, see &xep0427;) about the conversation via MAM.</li>
       </ul>
-      <p>The <tt>&lt;entry/></tt> element contains the latest instant message, if any, which is encapsulated as a
+      <p>If the <tt>messages</tt> attribute is missing or set to <tt>true</tt>, the <tt>&lt;entry/></tt> element is followed by the latest instant message, if any, which is encapsulated as a
         <tt>&lt;result/></tt> element as defined by &xep0313;. This contains collated fastenings if supported by the
         server.</p>
       <p>After all entries required have been returned, the server then responds with an &IQ; result containing a
         <tt>&lt;fin/></tt> element qualified by <tt>&ns;</tt>. This contains the RSM data, a total count of conversation
         entries within the inbox, a count of conversations with unread messages, and a total count of unread messages.</p>
-      <p>Any counter of unread SHOULD be accurate, however client implementors please note that due to heuristics
-      involved and other issues these counters can be inaccurate at times.</p>
-    </section2>
-    <section2 topic="Marking">
-      <p>A client MAY at any time set a conversation as marked by sending an &IQ; of type "set" containing something or
-        other. This causes the server to set the "marked" flag on a conversation. A client SHOULD display a marked
-        conversation in the same way as an unread conversation, and explicitly removed the marked flag when the
-        conversation is considered re-read.</p>
-      <p>Removing a marked flag, even when the conversation is not currently marked, causes the unread counter for that
-        conversation to be set to zero.</p>
     </section2>
   </section1>
 
@@ -108,14 +117,14 @@
       <li>An instant message always starts unread.</li>
       <li>A Chat Marker (see &xep0333;) of "displayed" or "acknowledged" causes the message to be read (and also causes
       all prior messages to be read by implication).</li>
-      <li>A Message Receipt (see &xep0184;) does not cause messages to be considered unread. Perhaps it should?</li>
+      <li>A Message Receipt (see &xep0184;) does not cause messages to be considered unread.</li>
       <li>Unmarking a conversation always sets the unread counter to zero, and by implication sets all messages to be
         read.</li>
     </ul>
   </section1>
 
   <section1 topic="Examples">
-    <p>Let us assume a user has only two contacts they have exchanges messages with, and a single chatroom. Asking for their inbox is simple:</p>
+    <p>Let us assume a user has only three jids they have exchanged messages with. Asking for their inbox is simple:</p>
     <example><![CDATA[
     <iq type='get' id='iq_stanza_id'>
       <inbox xmlns=']]>&ns;<![CDATA['/>
@@ -124,21 +133,43 @@
     <p>The server responds with a list of conversations:</p>
     <example><![CDATA[
     <message>
-      <entry xmlns=']]>&ns;<![CDATA[' unread='2' marked='false' jid='first_contact@example.net'>
-        <result xmlns='urn:xmpp:mam:2' queryid='iq_stanza_id' id='uuid-1'>
-          <forwarded xmlns='urn:xmpp:forward:0'>
-            <message xmlns='jabber:client' from='first_contact@example.net' to='user@example.org' type='chat'>
-              <body>Greetings from Alpha Centauri!</body>
-            </message>
-          </forwarded>
-        </result>
-      </entry>
+      <entry xmlns=']]>&ns;<![CDATA[' unread='5' jid='first_contact@example.net' id='uuid-1'/>
+      <result xmlns='urn:xmpp:mam:2' queryid='iq_stanza_id' id='uuid-1'>
+        <forwarded xmlns='urn:xmpp:forward:0'>
+          <message xmlns='jabber:client' from='first_contact@example.net' to='user@example.org' type='chat'>
+            <body>Greetings from Alpha Centauri!</body>
+          </message>
+        </forwarded>
+      </result>
+    </message>
+
+    <message>
+      <entry xmlns=']]>&ns;<![CDATA[' unread='0' jid='second_contact@example.net' id='uuid-5'/>
+      <result xmlns='urn:xmpp:mam:2' queryid='iq_stanza_id' id='uuid-5'>
+        <forwarded xmlns='urn:xmpp:forward:0'>
+          <message xmlns='jabber:client' from='second_contact@example.net' to='user@example.org' type='chat'>
+            <body>Greetings from Mars!</body>
+          </message>
+        </forwarded>
+      </result>
+    </message>
+
+    <message>
+      <entry xmlns=']]>&ns;<![CDATA[' unread='1' jid='third_contact@example.net' id='uuid-8'/>
+      <result xmlns='urn:xmpp:mam:2' queryid='iq_stanza_id' id='uuid-8'>
+        <forwarded xmlns='urn:xmpp:forward:0'>
+          <message xmlns='jabber:client' from='third_contact@example.net' to='user@example.org' type='chat'>
+            <body>Greetings from Somewhere Else!</body>
+          </message>
+        </forwarded>
+      </result>
     </message>
     ]]></example>
-    <p>After the list of messages, the server completes its response with a the reply to the original IQ.</p>
+    <p>If the <tt>id</tt> of a conversation has changed, a client might fetch the missing messages and metadata by requesting the MAM archive <tt>with</tt> the <tt>jid</tt> of the entry, and <tt>after</tt> the previous known <tt>id</tt> for the conversation.</p>
+    <p>After the list of conversations, the server completes its response with a the reply to the original IQ.</p>
     <example><![CDATA[
       <iq type='result' id='iq_stanza_id'>
-        <fin xmlns=']]>&ns;<![CDATA[' total='3' unread='1' all-unread='2'>
+        <fin xmlns=']]>&ns;<![CDATA[' total='3' unread='2' all-unread='6'>
           <!-- RSM -->
         </fin>
     ]]></example>
@@ -161,7 +192,7 @@
 </section1>
 
 <section1 topic='Acknowledgements' anchor='ack'>
-  <p>The author notes that this protocol is heavily based on the <tt>mod_inbox</tt> system of MongooseIM. In addition, Kevin Smith provided useful feedback which has shaped this specification.</p>
+  <p>The author notes that this protocol is heavily based on the <tt>mod_inbox</tt> system of MongooseIM. In addition, Kevin Smith and several others at the XMPP Summit 24 provided useful feedback which has shaped this specification.</p>
 </section1>
 
 </xep>
