@@ -1,13 +1,13 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE xep SYSTEM 'xep.dtd' [
-        <!ENTITY namespace "urn:xmpp:bookmarks:0">
+        <!ENTITY namespace "urn:xmpp:bookmarks:1">
         <!ENTITY % ents SYSTEM 'xep.ent'>
         %ents;
         ]>
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 <xep>
     <header>
-        <title>Bookmarks 2 (This Time it's Serious)</title>
+        <title>PEP Native Bookmarks</title>
         <abstract>This specification defines a syntax and storage profile for keeping a list of chatroom bookmarks on the server.</abstract>
         &LEGALNOTICE;
         <number>0402</number>
@@ -26,6 +26,17 @@
         <discuss>standards</discuss>
         &dcridland;
         &jcbrand;
+  <revision>
+    <version>0.4.0</version>
+    <date>2020-02-13</date>
+    <initials>dwd</initials>
+    <remark><ul>
+      <li>Remove sense of humour</li>
+        <li>Re-add Password field</li>
+        <li>Add metadata container</li>
+        <li>Show edit flow</li>
+    </ul></remark>
+  </revision>
   <revision>
     <version>0.3.0</version>
     <date>2019-09-28</date>
@@ -75,15 +86,21 @@
             containing all bookmarks inside a single Pubsub item.</p>
         <p>Most implementations have kept to the original, Private XML Storage based solution, and
             while some newer implementations have used Pubsub, these are limited in capability by the use of
-            a single item.</p>
-        <p>This specification resolves both issues by providing a new Bookmarks specification to migrate to,
+            a single item, which prevents safe atomic updates of individual bookmarks.</p>
+        <p>Finally, while some clients used custom XML elements to store additional private metadata about
+        bookmarks, this was usually stripped when any bookmark was edited by another client.</p>
+        <p>This specification resolves all three issues by providing a new Bookmarks specification to migrate to,
             and takes the opportunity to update the XML namespace in use as well. The URL storage is dropped,
             since it is rarely used. Storage of URL bookmarks is therefore out of scope.</p>
+        <p>This specification was originally entitled "Bookmarks 2: This Time It's Serious". Any implication of a sense
+            of humour has been removed with the change in title.</p>
     </section1>
 
     <section1 topic="Outline of use">
         <p>Clients store each bookmarked chatroom as a Pubsub item within the '&namespace;' node. Each
-            item SHALL have, as item id, the Room JID of the chatroom (eg, coven@chat.shakespeare.lit).</p>
+            item SHALL have, as item id, the Room JID of the chatroom (eg, coven@chat.shakespeare.lit). While a client can
+        typically assume a chatroom based on &xep0045;, clients are free to store chatrooms based on any particular groupchat
+        protocol.</p>
         <p>The payload of the item SHALL be a conference element qualified by the '&namespace;' namespace, with the following syntax:</p>
         <table caption='Syntax of conference element'>
             <tr>
@@ -100,14 +117,26 @@
             </tr>
             <tr>
                 <td>'name' attribute</td>
-                <td>A friendly name for the bookmark.</td>
+                <td>A friendly name for the bookmark, specified by the user. Clients SHOULD NOT attempt to autogenerate this from the JID.</td>
                 <td>string</td>
-                <td>RECOMMENDED</td>
+                <td>OPTIONAL</td>
             </tr>
             <tr>
                 <td>&lt;nick/&gt; element</td>
-                <td>The user's preferred roomnick for the chatroom.</td>
+                <td>The user's preferred roomnick for the chatroom, if different to that specified by &xep0172;. In the absence of this element being present, the nickname from &xep0172; SHOULD be used if present.</td>
                 <td>string</td>
+                <td>OPTIONAL</td>
+            </tr>
+            <tr>
+                <td>&lt;password/&gt; element</td>
+                <td>A password used to access the chatroom. Note this is not intended to be a secure storage.</td>
+                <td>string</td>
+                <td>OPTIONAL</td>
+            </tr>
+            <tr>
+                <td>&lt;extensions/&gt; element</td>
+                <td>A set of child elements (of potentially any namespace). Clients MUST preserve these (particularly preserving unknown elements) when editing items.</td>
+                <td>XML Elements</td>
                 <td>OPTIONAL</td>
             </tr>
         </table>
@@ -130,14 +159,14 @@
     <section1 topic='Workflow' anchor='workflow'>
 
         <section2 topic='Registering to receive notifications' anchor='enable-updates'>
-            <p>A client interested in bookmarks SHOULD include the 'urn:xmpp:bookmarks:0+notify' feature in its &xep0115;, as per &xep0163;, so that it receives notifications for updates done by other clients of the user, and reacts accordingly.  The actual notifications are explained in the <link url='#notifications'>Bookmark Notifications</link> section of this specification.</p>
+            <p>A client interested in bookmarks SHOULD include the '&namespace;+notify' feature in its &xep0115;, as per &xep0163;, so that it receives notifications for updates done by other clients of the user, and reacts accordingly.  The actual notifications are explained in the <link url='#notifications'>Bookmark Notifications</link> section of this specification.</p>
 
             <example caption='Client replies with +notify to a XEP-0030 query from its server'><![CDATA[
 <iq from='juliet@capulet.lit/balcony' to='capulet.lit' type='result' id='disco1'>
   <query xmlns='http://jabber.org/protocol/disco#info'>
     <identity category='client' type='pc' name='poezio'/>
     <feature var='http://jabber.org/protocol/disco#info'/>
-    <feature var='urn:xmpp:bookmarks:0+notify'/>
+    <feature var=']]>&namespace;<![CDATA[+notify'/>
     <!-- … -->
   </query>
 </iq>
@@ -150,7 +179,7 @@
             <example caption='Client retrieves all bookmarks'><![CDATA[
 <iq from='juliet@capulet.lit/balcony' type='get' id='retrieve1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <items node='urn:xmpp:bookmarks:0'/>
+    <items node=']]>&namespace;<![CDATA['/>
   </pubsub>
 </iq>
 ]]></example>
@@ -159,7 +188,7 @@
     to='juliet@capulet.lit/balcony'
     id='retrieve1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <items node='urn:xmpp:bookmarks:0'>
+    <items node=']]>&namespace;<![CDATA['>
       <item id='theplay@conference.shakespeare.lit'>
           <conference xmlns=']]>&namespace;<![CDATA['
                       name='The Play&apos;s the Thing'
@@ -169,9 +198,12 @@
       </item>
       <item id='orchard@conference.shakespeare.lit'>
           <conference xmlns=']]>&namespace;<![CDATA['
-                      name='The Orchard'
+                      name='The Orcard'
                       autojoin='1'>
             <nick>JC</nick>
+            <extensions>
+              <state xmlns='http://myclient.example/bookmark/state' minimized='true'/>
+            </extensions>
           </conference>
       </item>
     </items>
@@ -187,7 +219,7 @@
             <example caption='Client adds a new bookmark'><![CDATA[
 <iq from='juliet@capulet.lit/balcony' type='set' id='pip1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <publish node='urn:xmpp:bookmarks:0'>
+    <publish node=']]>&namespace;<![CDATA['>
       <item id='theplay@conference.shakespeare.lit'>
         <conference xmlns=']]>&namespace;<![CDATA['
                     name='The Play&apos;s the Thing'
@@ -223,6 +255,53 @@
 ]]></example>
         </section2>
 
+        <section2 topic='Editing a bookmark' anchor='adding-a-bookmark'>
+            <p>Editing a bookmark means republishing the item, with the same bookmark JID as id, to the '&namespace;' node.</p>
+            <p>Note that clients MUST preserve any XML elements they do not understand, particularly including unknown elements, within the &lt;extensions/> element of the bookmark.</p>
+            <p>publish-options (as defined in <link url='https://xmpp.org/extensions/xep-0060.xml#publisher-publish-options'>XEP-0060</link>) MUST be supported by the server in order to check that the node is correctly configured before publishing a new conference.  This is especially important to avoid leaking your bookmarks to your contacts for instance.</p>
+
+            <example caption='Client corrects typo in name of bookmark'><![CDATA[
+<iq from='juliet@capulet.lit/balcony' type='set' id='pip2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node=']]>&namespace;<![CDATA['>
+      <item id='orchard@conference.shakespeare.lit'>
+        <conference xmlns=']]>&namespace;<![CDATA['
+                    name='The Orchard'
+                    autojoin='true'>
+          <nick>JC</nick>
+          <extensions>
+            <state xmlns='http://myclient.example/bookmark/state' minimized='true'/>
+          </extensions>
+        </conference>
+      </item>
+    </publish>
+    <publish-options>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#publish-options</value>
+        </field>
+        <field var='pubsub#persist_items'>
+          <value>true</value>
+        </field>
+        <field var='pubsub#max_items'>
+          <value>10000</value>
+        </field>
+        <field var='pubsub#send_last_published_item'>
+          <value>never</value>
+        </field>
+        <field var='pubsub#access_model'>
+          <value>whitelist</value>
+        </field>
+      </x>
+    </publish-options>
+  </pubsub>
+</iq>
+]]></example>
+            <example caption='Server acknowledges successful storage'><![CDATA[
+<iq to='juliet@capulet.lit/balcony' type='result' id='pip2'/>
+]]></example>
+        </section2>
+
         <section2 topic='Removing a bookmark' anchor='removing-a-bookmark'>
             <p>Removing a bookmark means retracting an existing item, identified by the bookmark's JID, form the '&namespace;' node.</p>
             <p>This implies that server support for the "delete-items" pubsub feature is REQUIRED.</p>
@@ -231,7 +310,7 @@
             <example caption='Client removes a new bookmark'><![CDATA[
 <iq from='juliet@capulet.lit/balcony' type='set' id='remove-bookmark1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <retract node='urn:xmpp:bookmarks:0' notify='true'>
+    <retract node=']]>&namespace;<![CDATA[' notify='true'>
       <item id='theplay@conference.shakespeare.lit'/>
     </retract>
   </pubsub>
@@ -251,7 +330,7 @@
         <example caption='Client receives a new bookmark notification'><![CDATA[
 <message from='juliet@capulet.lit' to='juliet@capulet.lit/balcony' type='headline' id='new-room1'>
   <event xmlns='http://jabber.org/protocol/pubsub#event'>
-    <items node='urn:xmpp:bookmarks:0'>
+    <items node=']]>&namespace;<![CDATA['>
       <item id='theplay@conference.shakespeare.lit'>
         <conference xmlns=']]>&namespace;<![CDATA['
                     name='The Play&apos;s the Thing'
@@ -264,12 +343,12 @@
 </iq>
 ]]></example>
 
-        <p>On the other hand, if the 'autojoin' attribute is absent or false, or when the event is a retract notification, the client SHOULD leave the room immediately.</p>
+        <p>On the other hand, if the event is a retract notification, the client SHOULD leave the room immediately.</p>
 
         <example caption='Client receives a bookmark retraction notification'><![CDATA[
 <message from='juliet@capulet.lit' to='juliet@capulet.lit/balcony' type='headline' id='removed-room1'>
   <event xmlns='http://jabber.org/protocol/pubsub#event'>
-    <items node='urn:xmpp:bookmarks:0'>
+    <items node=']]>&namespace;<![CDATA['>
       <retract id='theplay@conference.shakespeare.lit'/>
     </items>
   </event>
@@ -291,8 +370,8 @@
         <section2 topic="Compatibility">
             <p>A server MAY choose to unify the bookmarks from both &xep0049; based and the current &xep0048;.</p>
             <p>It is encouraged to at least support unification between Private XML Storage because as of 2019 this is still the storage backend that is implemented in the majority of clients.</p>
-            <p>A server that supports unifying bookmarks from &xep0049; and &xep0402; SHOULD announce the "urn:xmpp:bookmarks:0#compat" feature on the account. Clients may use that feature as an indication that it is safe to store bookmarks using only &xep0402; without losing backward compatibility to clients that are only using &xep0049;.</p>
-            <p>A server that supports unifying bookmarks between &xep0223; and &xep0402; SHOULD announce the "urn:xmpp:bookmarks:0#compat-pep" feature on the account.</p>
+            <p>A server that supports unifying bookmarks from &xep0049; and &xep0402; SHOULD announce the "&namespace;#compat" feature on the account. Clients may use that feature as an indication that it is safe to store bookmarks using only &xep0402; without losing backward compatibility to clients that are only using &xep0049;.</p>
+            <p>A server that supports unifying bookmarks between &xep0223; and &xep0402; SHOULD announce the "&namespace;#compat-pep" feature on the account.</p>
             <section3 topic="Publishing via this specification">
             <p>When a client publishes a new item, the server MAY collate all items, casting them into the 'storage:bookmarks' namespace and setting the jid attribute to the item id in each case. When contained within a storage element qualified by the 'storage:bookmarks' namespace, this will be the correct format for both current and previous variants of &xep0048;</p>
             </section3>
@@ -304,8 +383,8 @@
 
     <section1 topic='Determining Support' anchor='support'>
         <p>This specification relies fully on a number of others. Most particularly, support for this protocol is available if &xep0223; is supported.</p>
-        <p>Server side unification between &xep0049; bookmarks and Bookmarks 2 is announced with the feature "urn:xmpp:bookmarks:0#compat" on the account.</p>
-        <p>Server side unification between the current use of XEP-0048 bookmarks (PEP) is annouced with the feature "urn:xmpp:bookmarks:0#compat-pep" on the account.</p>
+        <p>Server side unification between &xep0049; bookmarks and PEP Native Bookmarks is announced with the feature "&namespace;#compat" on the account.</p>
+        <p>Server side unification between the current use of XEP-0048 bookmarks (PEP) is annouced with the feature "&namespace;#compat-pep" on the account.</p>
     </section1>
 
     <section1 topic="Acknowledgements">
