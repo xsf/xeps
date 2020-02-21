@@ -1,0 +1,535 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+  <!ENTITY basens "urn:xmpp:channel-search:0">
+  <!ENTITY searchns "&basens;:search">
+  <!ENTITY paramsns "&basens;:search-params">
+  <!ENTITY orderns "&basens;:order">
+  <!ENTITY errorns "&basens;:error">
+  <!ENTITY ordernusers "{&orderns;}nusers">
+  <!ENTITY orderaddress "{&orderns;}address">
+  <!ENTITY anonns "&basens;:anonymity">
+  <!ENTITY servicens "&basens;:service">
+  <!ENTITY searcher "Searcher">
+  <!ENTITY searchservice "Search Service">
+  <!ENTITY resultel "&lt;result/&gt;">
+  <!ENTITY itemel "&lt;item/&gt;">
+  <!ENTITY gcs "Group Chat Service">
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<!-- TODO: Specify defaults for service type and how it’s handled. -->
+<!-- TODO: Public vs. non-public use-cases -->
+<!-- TODO: hash out implementation vs. business rules -->
+<header>
+  <title>Extended Channel Search</title>
+  <abstract>This specification provides a standardised protocol to search for public group chats. In contrast to XEP-0030 (Service Discovery), it works across multiple domains and in contrast to XEP-0055 (Jabber Search) it more clearly handles extensibility.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0004</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0059</spec>
+    <spec>XEP-0068</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>ECS</shortname>
+  &jonaswielicki;
+  <revision>
+    <version>0.0.1</version>
+    <date>2020-02-19</date>
+    <initials>jsc</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+
+<section1 topic='Introduction &amp; Motivation' anchor='intro'>
+  <p>The XMPP instant messaging ecosystem is a federated one. This leads to many different group chat service providers existing and interesting public group chats being spread out across them. In order to provide users with a way to find public group chats (henceforth called channels) of interest to them, there needs to be a way to execute a cross-domain search based on keywords.</p>
+  <p>The protocol in this document provides a general and extensible search for channels across different domains and service types (e.g. MUC vs. MIX). It provides meta-information right in the result set, which allows searching entities to skip additional &xep0030; queries against the channels themselves.</p>
+  <p>The protocol is not only useful for cross-domain search, but also as an alternative to using a &xep0030; disco#items request followed by many disco#info requests on a group chat service.</p>
+</section1>
+
+
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The protocol:</p>
+  <ul>
+    <li>must work without state on the server side. This is to allow stateless proxies to be used for pseudonymisation or anonymisation.</li>
+    <li>must allow searching the list using a free-text keyword-based search.</li>
+    <li>must allow future extensions to the search query and the result.</li>
+    <li>must allow retrieving the entire data set (although, for clarification, an operator may choose to turn this off).</li>
+    <li>must use completely machine-readable and machine-writable data.</li>
+  </ul>
+</section1>
+
+
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di>
+      <dt>Channel</dt>
+      <dd>A public group chat hosted on a &gcs;. This can either be a &xep0045; room, a &xep0369; channel or something else entirely.</dd>
+    </di>
+    <di>
+      <dt>&gcs;</dt>
+      <dd>An entity or deployment which offers multi-user chat relay, such as by &xep0045; or &xep0369;.</dd>
+    </di>
+    <di>
+      <dt>&searchservice;</dt>
+      <dd>An entity which offers the service described in this specification.</dd>
+    </di>
+    <di>
+      <dt>&searcher;</dt>
+      <dd>An entity which requests information from the &searchservice;.</dd>
+    </di>
+  </dl>
+</section1>
+
+
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Announcing/discovering support' anchor='usecases-support'>
+    <p>An entity annouces that it supports serving search queries by publishing
+      the <tt>&searchns;</tt> feature via &xep0030;:</p>
+    <example caption='XEP-0030 disco#info response'><![CDATA[
+<iq from='search.service.example' to='client@user.example' id='id1' type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <!-- ... -->
+    <feature var=']]>&searchns;<![CDATA['/>
+    <!-- ... -->
+  </query>
+</iq>
+]]></example>
+  </section2>
+
+  <section2 topic='Executing a keyword search' anchor='usecases-search'>
+    <p>To execute a keyword search, the &searcher; MAY first request the search form from the &searchservice;. Alternatively, the &searcher; MAY use the form specified in this document with only the fields which must be implemented by the &searchservice;.</p>
+    <p>After obtaining the search form, the &searcher; completes the form and sends it back to the &searchservice;. The &searchservice; replies with a &xep0059; paginated list of results.</p>
+    <p>The search form is a form conforming to &xep0068;.</p>
+    <section3 topic='Requesting the search form' anchor='usecases-search-form'>
+      <p>To request the search form, an entity sends an empty <tt>search</tt> element qualified by the <tt>&searchns;</tt> namespace:</p>
+      <example caption='&searcher; requests form from the &searchservice;'><![CDATA[
+<iq from='client@user.example' to='search.service.example' id='id2' type='get' xml:lang='en'>
+  <search xmlns=']]>&searchns;<![CDATA['/>
+</iq>
+]]></example>
+      <p>The &searchservice; replies with the form as in the following example:</p>
+      <example caption='&searchservice; returns the search form'><![CDATA[
+<iq from='search.service.example' to='client@user.example' id='id2' type='result' xml:lang='en'>
+  <search xmlns=']]>&searchns;<![CDATA['>
+    <x xmlns='jabber:x:data' type='form'>
+      <field type='hidden' var='FORM_TYPE'>
+        <value>]]>&paramsns;<![CDATA[</value>
+      </field>
+      <field type='text-single' var='q' label='Search for'/>
+      <field type='boolean' var='all' label='Return all entries (ignore search terms)'/>
+      <field type='boolean' var='sinname' label='Search in name'>
+        <value>true</value>
+      </field>
+      <field type='boolean' var='sindescription' label='Search in description'>
+        <value>true</value>
+      </field>
+      <field type='boolean' var='sinaddr' label='Search in address'>
+        <value>true</value>
+      </field>
+      <field type='text-single' var='min_users' label='Minimum number of users'>
+        <value>1</value>
+      </field>
+      <field var="types" type="list-multi" label="Service types">
+        <value>xep-0045</value>
+        <option label='XEP-0045 Multi User Chats'><value>xep-0045</value></option>
+        <option label='XEP-0369 MIX channels'><value>xep-0369</value></option>
+      </field>
+      <field type='list-single' var='key' label='Sort results by'>
+        <value>]]>&ordernusers;<![CDATA[</value>
+        <option label='Number of online users'><value>]]>&ordernusers;<![CDATA[</value></option>
+        <option label='Address'><value>]]>&orderaddress;<![CDATA[</value></option>
+      </field>
+    </x>
+</search>
+</iq>
+]]></example>
+      <p><strong>Note:</strong> Not all of the fields shown above are mandatory to implement. See <link url='#impl-searchformfields'>Search Form Fields</link> for a list of fields and their implementation status.</p>
+    </section3>
+
+    <section3 topic='Send a search request' anchor='usecases-search-request'>
+      <p>To request the result list for a given search query, a &searcher; submits a form with the &paramsns; <tt>FORM_TYPE</tt>. The &searcher; MAY include a &xep0059; <tt>&lt;set/&gt;</tt> element inside the <tt>&lt;search/&gt;</tt> element. In either case, the &searchservice; may reply with a RSM-paginated result and the &searcher; MUST be able to process that.</p>
+      <p>If a &searcher; composes a search request using a search form template obtained by the &searchservice;, it MAY omit all fields it does not know or where it does not change the value already supplied by the &searchservice;.</p>
+      <example caption='&searcher; submits a form to the &searchservice;'><![CDATA[
+<iq from='client@user.example' to='search.service.example' id='id3' type='get' xml:lang='en'>
+  <search xmlns=']]>&searchns;<![CDATA['>
+    <set xmlns="http://jabber.org/protocol/rsm">
+      <max>5</max>
+    </set>
+    <x xmlns="jabber:x:data" type="submit">
+      <field type='hidden' var='FORM_TYPE'>
+        <value>]]>&paramsns;<![CDATA[</value>
+      </field>
+      <field var="q" type="text-single" label="Search for">
+        <value>xmpp.org</value>
+      </field>
+      <field var="key" type="list-single" label="Sort results by">
+        <value>{]]>&orderns;<![CDATA[}address</value>
+        <option label='Number of online users'><value>{]]>&orderns;<![CDATA[}nusers</value></option>
+        <option label='Address'><value>{]]>&orderns;<![CDATA[}address</value></option>
+      </field>
+    </x>
+  </search>
+</iq>
+]]></example>
+      <section4 topic='Success Case' anchor='usecase-search-request-success'>
+        <p>The &searchservice; calculates the result, paginates it according to its own policy (possibly taking into account the pagination request from the client) and returns a single result page in the response IQ.</p>
+        <example caption='&searcher; submits a form to the &searchservice;'><![CDATA[
+<iq from='search.service.example' to='client@user.example' id='id3' type='result' xml:lang='en'>
+  <result xmlns=']]>&searchns;<![CDATA['>
+    <item address='commteam@muc.xmpp.org'>
+      <name>commteam</name>
+      <nusers>10</nusers>
+      <is-open/>
+    </item>
+    <!-- three more items -->
+    <item address='operators@muc.xmpp.org'>
+      <name>XMPP Service Operators</name>
+      <description>Discussion venue for operators of federated XMPP services</description>
+      <nusers>43</nusers>
+      <is-open/>
+    </item>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <first>opaque-string-1</first>
+      <last>opaque-string-2</last>
+      <max>5</max>
+    </set>
+  </result>
+</iq>
+]]></example>
+        <p>The result items are <tt>&itemel;</tt> elements wrapped in a <tt>&resultel;</tt> element qualified by the <tt>&searchns;</tt> namespace. The schema, along with extension rules, is described in <link url='#impl-resultitemformat'>Result Item Format</link>.</p>
+        <p>To obtain further results, the &searcher; re-submits the identical form with an appropriate &xep0059; pagination request, using the information provided by the &searchservice; in the result <tt>&lt;set/&gt;</tt> element.</p>
+      </section4>
+      <section4 topic='Unsupported Sort Key' anchor='usecases-search-request-unsuppsortkey'>
+        <p>If the sort <tt>key</tt> requested by the &searcher; is not supported by the &searchservice;, the &searchservice; MUST reply with <tt>&lt;feature-not-implemented/&gt;</tt> and the <tt>&lt;invalid-sort-key&gt;</tt> application defined condition and a <tt>modify</tt> type:</p>
+        <example caption='&searchservice; replies with feature-not-implemented'><![CDATA[
+<iq from='search.service.example' to='client@user.example' id='id3' type='error' xml:lang='en'>
+  <error type='modify'>
+    <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <invalid-sort-key xmlns=']]>&errorns;<![CDATA['/>
+  </error>
+</iq>
+]]></example>
+      </section4>
+      <section4 topic='Invalid Search Terms' anchor='usecases-search-request-searchinvalid'>
+        <p>If the <tt>q</tt> field was supplied by the &searcher; and the contents of the <tt>q</tt> field did not yield any term suitable for search, the &searchservice; MUST reply with an <tt>&lt;bad-request/&gt;</tt> error and the <tt>&lt;invalid-search-terms/&gt;</tt> application defined condition. The error type MUST be <tt>modify</tt>.</p>
+        <p>The server SHOULD include a human-readable description of the constraints for search terms which were not met in the <tt>&lt;text/&gt;</tt> element of the error.</p>
+        <example caption='&searchservice; replies with the invalid-search-terms error'><![CDATA[
+<iq from='search.service.example' to='client@user.example' id='id3' type='error' xml:lang='en'>
+  <error type='modify'>
+    <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <text xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>
+      Search terms must have at least three characters.
+    </text>
+    <invalid-search-terms xmlns=']]>&errorns;<![CDATA['/>
+  </error>
+</iq>
+]]></example>
+      </section4>
+      <section4 topic='Rate Limiting' anchor='usecases-support-request-ratelimit'>
+        <p>If the &searchservice; can not or does (by policy) not want to process the request due to excessive amounts of requests (either by the requesting entity, their domain or any other criteria), it MUST reply with an <tt>&lt;resource-constraint/&gt;</tt> error with type <tt>wait</tt>.</p>
+        <p>The application defined error condition <tt>&lt;rate-limit/&gt;</tt> MUST be included. This error condition has a RECOMMENDED attribute, <tt>retry-after</tt>, which provides the amount of seconds after which the &searcher; MAY retry the request.</p>
+        <p>The &searchservice; MAY include a human-readable description of the rate limit and when to retry in the <tt>&lt;text/&gt;</tt> element.</p>
+        <example caption='&searchservice; replies with a rate limit notification'><![CDATA[
+<iq from='search.service.example' to='client@user.example' id='id3' type='error' xml:lang='en'>
+  <error type='wait'>
+    <resource-constraint xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <rate-limit xmlns=']]>&errorns;<![CDATA[' retry-after='30'/>
+  </error>
+</iq>
+]]></example>
+        <p><strong>Note:</strong> See also the rate-limiting related business rules for &searcher; entities.</p>
+      </section4>
+      <section4 topic='Rejection of Full List Retrieval' anchor='usecases-support-request-nofulllist'>
+        <p>If the &searchservice; can not or does (by policy) not want to allow a &searcher; to retrieve the entire database of channels, it MUST reject queries which set the <tt>all</tt> field to true with an error as follows:</p>
+        <ul>
+          <li>If the feature is generally disabled: <tt>&lt;not-allowed/&gt;</tt> with type <tt>cancel</tt></li>
+          <li>If the feature is not offered to the &searcher; based on its identity: <tt>&lt;forbidden/&gt;</tt> with type <tt>auth</tt></li>
+        </ul>
+        <p>In all cases, the application defined condition <tt>&lt;full-set-retrieval-rejected/&gt;</tt> MUST be included.</p>
+        <p>The &searchservice; MAY include a human-readable description of the restrictions around full-list retrieval.</p>
+        <p>For example, if the full set retrieval had been disabled service-wide by configuration, the &searchservice; would reply with the following error:</p>
+        <example caption='&searchservice; replies with a full-set-retrieval-rejected error'><![CDATA[
+<iq from='search.service.example' to='client@user.example' id='id3' type='error' xml:lang='en'>
+  <error type='cancel'>
+    <not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <text xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>
+      Retrieval of the full database is not allowed.
+    </text>
+    <full-set-retrieval-rejected xmlns=']]>&errorns;<![CDATA['/>
+  </error>
+</iq>
+]]></example>
+      </section4>
+      <section4 topic='Conflicting Field Options' anchor='usecases-support-request-conflictingoptions'>
+        <p>If the &searcher; provides form fields which are conflicting, the &searchservice; MUST reply with a <tt>&lt;bad-request/&gt;</tt> error of type <tt>modify</tt>. In addition, the <tt>&lt;conflicting-fields/&gt;</tt> application specific condition MUST be included.</p>
+        <p>Conflicting field values are those which fundamentally cannot be used in the same query in such a way that the definition of their function is still adhered to. For example, <tt>q</tt> restricts the results by keywords, but <tt>all</tt> specifies that <em>all</em> entries are returned.</p>
+        <p>The &searchservice; SHOULD include a human-readable description of the conflicting fields, referencing to the <tt>label</tt> values of the involved fields.</p>
+        <p>The <tt>&lt;conflicting-fields/&gt;</tt> element MAY have one or more <tt>&lt;var/&gt;</tt> child elements which refer to <tt>var</tt> values of the submitted fields. At least one of the referenced fields must be changed in order for a follow-up query to succeed.`</p>
+        <p>For example, if the &searcher; has set <tt>all</tt> to true and provided a query in <tt>q</tt>, the &searchservice; would reply with an error similar to the following:</p>
+        <example caption='&searchservice; replies with a conflicting-fields error'><![CDATA[
+<iq from='search.service.example' to='client@user.example' id='id3' type='error' xml:lang='en'>
+  <error type='cancel'>
+    <not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <text xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>
+      Cannot both return all results and search by keywords.
+    </text>
+    <conflicting-fields xmlns=']]>&errorns;<![CDATA['>
+      <var>all</var>
+      <var>q</var>
+    </conflicting-fields>
+  </error>
+</iq>
+]]></example>
+      </section4>
+      <section4 topic='No Search Conditions' anchor='usecases-search-request-nosearch'>
+        <p>If no field which would define a result set and which is understood by the &searchservice; is present, it MUST reply with a <tt>&lt;bad-request/&gt;</tt> error of type <tt>cancel</tt>.</p>
+        <p>In addition, the <tt>&lt;no-search-conditions/&gt;</tt> application defined condition MUST be included.</p>
+        <example caption='&searchservice; replies with the no-search-conditions error'><![CDATA[
+<iq from='search.service.example' to='client@user.example' id='id3' type='error' xml:lang='en'>
+  <error type='modify'>
+    <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <no-search-conditions xmlns=']]>&errorns;<![CDATA['/>
+  </error>
+</iq>
+]]></example>
+        <p>An example of this situation would be a form where neither <tt>q</tt> nor <tt>all</tt> are given.</p>
+      </section4>
+    </section3>
+  </section2>
+</section1>
+
+
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>When sending the form template, the &searchservice; MUST include all fields it supports with their respective default values.</li>
+    <li>When submitting a form to the &searchservice;, a &searcher; MAY omit all fields it either does not understand or it has left unchanged.</li>
+    <li>When submitting a form to the &searchservice;, a &searcher; MAY omit the <tt>&lt;option/&gt;</tt> elements.</li>
+    <li>When receiving a search form, the &searchservice; MUST ignore fields with a <tt>var</tt> value it does not understand.</li>
+    <li>When executing a keyword search, the service may process the keyword string in implementation-defined ways. This may include interpreting quotes and other "special" characters, removing keywords which do not fit internal criteria for suitability and others.</li>
+    <li>If the &searcher; receives a <tt>&lt;rate-limit/&gt;</tt> error, the behaviour of the &searcher; depends on the <tt>retry-after</tt> attribute:
+      <ul>
+        <li>If the <tt>retry-after</tt> attribute is present, the &searcher; MUST NOT send another search request before the amount of seconds indicated in the <tt>retry-after</tt> attribute have elapsed. There is no guarantee that the request will be accepted at that time.</li>
+        <li>If the <tt>retry-after</tt> attribute is <em>not</em> present, the &searcher; should wait for an implementation-defined amount of time and SHOULD back off exponentially on each subsequent <tt>&lt;rate-limit/&gt;</tt> error.</li>
+      </ul>
+    </li>
+    <li>If a search request does not yield any results, the &searchservice; MUST reply with a <tt>&resultel;</tt> without any <tt>&itemel;</tt> children in a <tt>type='result'</tt> IQ. Specifically, it MUST NOT reply with an <tt>&lt;item-not-found/&gt;</tt> error.</li>
+    <li>If the <tt>all</tt> field is set to true and the &searchservice; allows this operation, all results MUST be included in the result set (and then paginated using &xep0059;).</li>
+  </ul>
+</section1>
+
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <section2 topic='Search Form Fields' anchor='impl-searchformfields'>
+    <p>The search form is extensible as per &xep0068;. Implementations are free to add fields on both sides of the exchange, as long as they are properly namespaced using Clark Notation.</p>
+    <p>The following fields are specified by this document:</p>
+    <table caption='Search Form Field Summary'>
+      <tr>
+        <th>var</th>
+        <th>type</th>
+        <th>Support level</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><tt>q</tt></td>
+        <td><tt>text-single</tt></td>
+        <td>RECOMMENDED</td>
+        <td>Input for the keyword-based search. Conflicts with <tt>all</tt>.</td>
+      </tr>
+      <tr>
+        <td><tt>all</tt></td>
+        <td><tt>boolean</tt></td>
+        <td>OPTIONAL</td>
+        <td>Return all results, ignoring text search terms. This does not influence the restrictions imposed by the <tt>types</tt> field. Conflicts with <tt>q</tt>.</td>
+      </tr>
+      <tr>
+        <td><tt>sinaddress</tt></td>
+        <td><tt>boolean</tt></td>
+        <td>RECOMMENDED if <tt>q</tt> is supported</td>
+        <td>Control whether the keyword search searches in the address of the channel.</td>
+      </tr>
+      <tr>
+        <td><tt>sinname</tt></td>
+        <td><tt>boolean</tt></td>
+        <td>REQUIRED if <tt>q</tt> is supported</td>
+        <td>Control whether the keyword search searches in the name of the channel.</td>
+      </tr>
+      <tr>
+        <td><tt>sindescription</tt></td>
+        <td><tt>boolean</tt></td>
+        <td>REQUIRED if <tt>q</tt> is supported</td>
+        <td>Control whether the keyword search searches in the textual description of the channel.</td>
+      </tr>
+      <tr>
+        <td><tt>types</tt></td>
+        <td><tt>list-multi</tt></td>
+        <td>RECOMMENDED</td>
+        <td>Constrain the service types of channels to return. If not supported, the search MUST only cover &xep0045; group chats.</td>
+      </tr>
+      <tr>
+        <td><tt>key</tt></td>
+        <td><tt>list-single</tt></td>
+        <td>REQUIRED</td>
+        <td>Select how the results are ordered.</td>
+      </tr>
+    </table>
+    <p>The sort keys specified by this document are the following:</p>
+    <table caption='Sort Key Values'>
+      <tr>
+        <th>Value</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><tt>&orderaddress;</tt></td>
+        <td>Order the results by the address of the channel. This ordering mode guarantees that the &searcher; gets a duplicate-free view without omissions when paginating.</td>
+      </tr>
+      <tr>
+        <td><tt>&ordernusers;</tt></td>
+        <td>Order the results descendingly by the number of users. This mode does not guarantee that all channels in the database are returned, nor does it guarantee that no duplicates occur across multiple pages.</td>
+      </tr>
+    </table>
+    <section3 topic='Extensibility of the Search Form Fields' anchor='impl-searchformfields-extensibility'>
+      <p>&searchservice; implementations may offer custom values for the <tt>key</tt> field, provided Clark Notation is used to namespace the values.</p>
+    </section3>
+  </section2>
+  <section2 topic='Result Item Format' anchor='impl-resultitemformat'>
+    <p>The result items are <tt>&itemel;</tt> elements qualified by the <tt>&searchns;</tt> namespace.</p>
+    <p>Each <tt>&itemel;</tt> element MUST have an <tt>address</tt> attribute whose value is a proper JID (as per either &rfc6122; or &rfc7622;). It identifies the channel uniquely.</p>
+    <p>The following child elements of <tt>&itemel;</tt> are defined by this specification. They are all qualified by the same namespace as <tt>&itemel;</tt> itself.</p>
+    <table caption='Child elements of result items'>
+      <tr>
+        <th>Element name</th>
+        <th>Content model</th>
+        <th>Occurences</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><tt>name</tt></td>
+        <td>text character data</td>
+        <td>1</td>
+        <td>The human-readable name of the channel.</td>
+      </tr>
+      <tr>
+        <td><tt>description</tt></td>
+        <td>text character data</td>
+        <td>1</td>
+        <td>The human-readable description of the channel.</td>
+      </tr>
+      <tr>
+        <td><tt>language</tt></td>
+        <td>text character data</td>
+        <td>1</td>
+        <td>A valid <tt>xml:lang</tt> code which indicates the primary language of the channel.</td>
+      </tr>
+      <tr>
+        <td><tt>nusers</tt></td>
+        <td>non-negative integer character data</td>
+        <td>1</td>
+        <td>Number of occupants</td>
+      </tr>
+      <tr>
+        <td><tt>service-type</tt></td>
+        <td>enumeration character data</td>
+        <td>1</td>
+        <td>The type of the service which hosts the channel. See below for values and semantics.</td>
+      </tr>
+      <tr>
+        <td><tt>is-open</tt></td>
+        <td>boolean character data</td>
+        <td>1</td>
+        <td>If set to true, it indicates that the channel can be joined without extra credentials.</td>
+      </tr>
+      <tr>
+        <td><tt>anonymity-mode</tt></td>
+        <td>enumeration character data</td>
+        <td>1</td>
+        <td>Anonymity level of participation. See below for values and semantics.</td>
+      </tr>
+    </table>
+    <p><strong>Notes:</strong></p>
+    <ol>
+      <li>Any child element may be omitted by a &searchservice; if the data is not available for any or all rooms.</li>
+      <li>The number of occupants may be stale by an undefined amount of time.</li>
+      <li>A service MAY return future versions of those elements alongside with past versions. Entities need to treat elements with the same name, but different namespace, as entirely different elements.</li>
+    </ol>
+    <table caption='Anonymity modes'>
+      <tr>
+        <th>Value</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><tt>{&anonns;}none</tt></td>
+        <td>The bare JID of the account or the full JID of one or more devices of each occupant is visible to every other occupant.</td>
+      </tr>
+      <tr>
+        <td><tt>muc_semianonymous</tt></td>
+        <td>As specified in &xep0045;</td>
+      </tr>
+    </table>
+    <table caption='Service types'>
+      <tr>
+        <th>Value</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><tt>xep-0045</tt></td>
+        <td>A &xep0045; service.</td>
+      </tr>
+      <tr>
+        <td><tt>xep-0369</tt></td>
+        <td>A &xep0369; service.</td>
+      </tr>
+    </table>
+    <p>If a &searchservice; would return entries with the same address with different service types, it SHOULD prefer &xep0369; over &xep0045;. Note that a &searchservice; MUST NOT return service types the client has not asked for.</p>
+    <section3 topic='Extensibility' anchor='impl-resultitemformat-extensibility'>
+      <p>&searchservice; implementations are free to add custom child elements to <tt>&itemel;</tt> elements. &searcher; implementations MUST be prepared to handle any unknown elements in <tt>&itemel;</tt>, for example by ignoring them.</p>
+      <p>Additional values for the <tt>&lt;anonymity-mode/&gt;</tt> element may be specified by future extensions. If an implementation encounters an unknown value on this field, it is RECOMMENDED to either treat it as synonymous to <tt>{&anonns;}none</tt> or request the anonymity mode from the <tt>address</tt> using a protocol appropriate for the channel's service.</p>
+    </section3>
+  </section2>
+</section1>
+
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>When sending a search form with a <tt>q</tt> field, the &searcher; transmits potentially sensitive information to a third party.</p>
+</section1>
+
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This specification does not require any interaction with the IANA.</p>
+</section1>
+
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This specification should probably create registries for the various fields it defines, as well as register a form type.</p>
+</section1>
+
+
+<section1 topic='XML Schema' anchor='schema'>
+  <p>To be done.</p>
+</section1>
+
+
+<section1 topic='Design Considerations' anchor='design'>
+  <p>Instead of rolling a custom protocol for the result items, &xep0055; could have been used.</p>
+  <p>While the result format of &xep0055; allows for some generality, it does so in a rather restricted way. It is limited by the data formats and types expressable in &xep0004;. Sturctured data, beyond lists of text and JIDs, can not be represented with &xep0004; at all. Machine-readable data would also have to be human-readable at the same time to provide a fallback view for human users. Interationalization of such human-readable data in field values is not possible with &xep0004;.</p>
+  <p>The advantage of entities being able to process unknown fields in a degraded manner is, principally, still present in the current proposal (although with a different kind of degration).</p>
+  <p>Given the complexity of fully and correctly processing &xep0004; report data, the slim benefits did, in the eyes of the authors, not outweigh the costs.</p>
+</section1>
+
+
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>The basis for this protocol was developed for the search.jabber.network public group chat search service. It has been cleaned up for publication as a Standards Track XEP by the author and modified to support more use-cases.</p>
+</section1>
+
+
+</xep>
