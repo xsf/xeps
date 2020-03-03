@@ -1058,9 +1058,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   </xsl:template>
 
   <xsl:template match='di'>
-    <di>
-      <xsl:apply-templates/>
-    </di>
+    <xsl:apply-templates/>
   </xsl:template>
 
   <xsl:template match='dt'>
