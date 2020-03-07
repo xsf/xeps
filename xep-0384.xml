@@ -170,16 +170,16 @@
     </p>
   </section2>
   <section2 topic='Discovering peer support' anchor='usecases-discovering'>
-    <p>In order to determine whether a given contact has devices that support OMEMO, the devicelist node in PEP is consulted. Devices MUST subscribe to 'eu.siacs.conversations.axolotl.devicelist' via PEP, so that they are informed whenever their contacts add a new device. They MUST cache the most up-to-date version of the devicelist.</p>
+    <p>In order to determine whether a given contact has devices that support OMEMO, the devicelist node in PEP is consulted. Devices MUST subscribe to 'urn:xmpp:omemo:1:devices' via PEP, so that they are informed whenever their contacts add a new device. They MUST cache the most up-to-date version of the devicelist.</p>
     <example caption='Devicelist update received by subscribed clients'><![CDATA[
 <message from='juliet@capulet.lit'
          to='romeo@montague.lit'
          type='headline'
          id='update_01'>
   <event xmlns='http://jabber.org/protocol/pubsub#event'>
-    <items node='eu.siacs.conversations.axolotl.devicelist'>
+    <items node='urn:xmpp:omemo:1:devices'>
       <item id='current'>
-        <list xmlns='eu.siacs.conversations.axolotl'>
+        <devices xmlns='urn:xmpp:omemo:1'>
           <device id='12345' />
           <device id='4223' />
         </list>
@@ -193,9 +193,9 @@
     <example caption='Adding the own device ID to the list'><![CDATA[
 <iq from='juliet@capulet.lit' type='set' id='announce1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <publish node='eu.siacs.conversations.axolotl.devicelist'>
+    <publish node='urn:xmpp:omemo:1:devices'>
       <item id='current'>
-        <list xmlns='eu.siacs.conversations.axolotl'>
+        <list xmlns='urn:xmpp:omemo:1'>
           <device id='12345' />
           <device id='4223' />
           <device id='31415' />
@@ -206,37 +206,49 @@
 </iq>]]></example>
     <p>NOTE: as per <link url='https://xmpp.org/extensions/xep-0060.html#impl-singleton'><cite>XEP-0060</cite> §12.20</link>, it is RECOMMENDED for the publisher to specify an ItemID of "current" to ensure that the publication of a new item will overwrite the existing item.</p>
     <p>This step presents the risk of introducing a race condition: Two devices might simultaneously try to announce themselves, unaware of the other's existence. The second device would overwrite the first one. To mitigate this, devices MUST check that their own device ID is contained in the list whenever they receive a PEP update from their own account. If they have been removed, they MUST reannounce themselves.</p>
-    <p>Furthermore, a device MUST announce its IdentityKey, a signed PreKey, and a list of PreKeys in a separate, per-device PEP node. The list SHOULD contain 100 PreKeys, but MUST contain no less than 20.</p>
-    <example caption='Announcing bundle information'><![CDATA[
-<iq from='juliet@capulet.lit' type='set' id='announce2'>
+    <p>Furthermore, a device MUST publish its IdentityKey, a signed PreKey, and a list of PreKeys. This tuple is called a bundle. Bundles are maintained as multiple items in a PEP node called ‘urn:xmpp:omemo:1:bundle’. Each bundle MUST be stored in a seperate item. The item id MUST be set to the device id.</p>
+    <p>A bundle is an element called ‘bundle’ in the ‘urn:xmpp:omomo:1’ namespace. It has a child element called ‘spk’ that contains the signed PreKey as base64 encoded data and a child element called ‘ik’ that contains the identity key as base64 encoded data. PreKeys are multiple elements called ‘pk’ that each contain one PreKey as base64 encoded data. PreKeys are wrapped in an element called ‘prekeys’ which is a child of the bundle element.</p>
+    <example caption='Publishing bundle information'><![CDATA[
+<iq from='juliet@capulet.lit' type='set' id='annouce2'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <publish node='eu.siacs.conversations.axolotl.bundles:31415'>
-      <item id='current'>
-        <bundle xmlns='eu.siacs.conversations.axolotl'>
-          <signedPreKeyPublic signedPreKeyId='1'>
-            BASE64ENCODED...
-          </signedPreKeyPublic>
-          <signedPreKeySignature>
-            BASE64ENCODED...
-          </signedPreKeySignature>
-          <identityKey>
-            BASE64ENCODED...
-          </identityKey>
+    <publish node='urn:xmpp:omemo:1:bundle'>
+      <item id='31415'>
+        <bundle xmlns='urn:xmpp:omemo:1'>
+          <spk id='0'>BASE64ENCODED</spk>
+          <ik>BASE64ENCODED</ik>
           <prekeys>
-            <preKeyPublic preKeyId='1'>
-              BASE64ENCODED...
-            </preKeyPublic>
-            <preKeyPublic preKeyId='2'>
-              BASE64ENCODED...
-            </preKeyPublic>
-            <preKeyPublic preKeyId='3'>
-              BASE64ENCODED...
-            </preKeyPublic>
-            <!-- ... -->
+            <pk id='0'>BASE64ENCODED</pk>
+            <pk id='1'>BASE64ENCODED</pk>
+            <!-- … -->
+            <pk id='99'>BASE64ENCODED</pk>
           </prekeys>
         </bundle>
       </item>
     </publish>
+  </pubsub>
+</iq>]]></example>
+  <p>It is RECOMMENDED to set the access model of the ‘urn:xmpp:omemo:1:bundle’ node to ‘open’ to give entities without presence subscription read access to the bundles and allow them to establish an OMEMO session. Not having presence subscription is a common occurrence on the first few messages between two contacts and can also happen fairly frequently in group chats as not every participant had prior communication with every other participant.</p>
+  <p>The access model can be changed efficiently by using publish-options as described in <link url="https://xmpp.org/extensions/xep-0060.html#publisher-publish-options"><cite>XEP-0060</cite> §7.1.5</link>.</p>
+  <example caption='Publishing bundle information with an open access model'><![CDATA[
+<iq from='juliet@capulet.lit' type='set' id='annouce2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:omemo:1:bundle'>
+      <item id='31415'>
+        <bundle xmlns='urn:xmpp:omemo:1'>
+          <!-- … -->
+        </bundle>
+      </item>
+    </publish>
+    <publish-options>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#publish-options</value>
+        </field>
+        <field var='pubsub#access_model'>
+          <value>open</value>
+        </field>
+      </x>
+    </publish-options>
   </pubsub>
 </iq>]]></example>
   </section2>
@@ -248,7 +260,9 @@
     to='juliet@capulet.lit'
     id='fetch1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
-    <items node='eu.siacs.conversations.axolotl.bundles:31415'/>
+    <items node='urn:xmpp:omemo:1:bundle'>
+      <item id='31415'/>
+    <items>
   </pubsub>
 </iq>]]></example>
     <p>A random preKeyPublic entry is selected, and used to build a SignalProtocol session.</p>
