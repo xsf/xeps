@@ -889,6 +889,33 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
     </div>
   </xsl:template>
 
+  <xsl:template match='section5'>
+    <xsl:variable name='oid'>
+      <xsl:call-template name='object.id'/>
+    </xsl:variable>
+    <xsl:variable name='anch'>
+      <xsl:value-of select='@anchor'/>
+    </xsl:variable>
+    <div class='indent'>
+    <h6>
+      <xsl:attribute name='id'>
+        <xsl:choose>
+          <xsl:when test='$anch != ""'>
+            <xsl:value-of select='@anchor'/>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:text>sect-</xsl:text><xsl:value-of select='$oid'/>
+          </xsl:otherwise>
+        </xsl:choose>
+      </xsl:attribute>
+      <xsl:number level='single' count='section1'/>.<xsl:number level='single' count='section2'/>.<xsl:number level='single' count='section3'/>.<xsl:number level='single' count='section4'/>.<xsl:number level='single' count='section5'/>
+      <xsl:text> </xsl:text>
+      <xsl:value-of select='@topic' />
+    </h6>
+    <xsl:apply-templates/>
+    </div>
+  </xsl:template>
+
   <xsl:template match='remark'>
     <xsl:apply-templates/>
   </xsl:template>
