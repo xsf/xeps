@@ -160,6 +160,71 @@
     </dl>
   </section2>
 </section1>
+<section1 topic='Protocol Definition' anchor='protocol'>
+  <section2 topic='Overview' anchor='protocol-overview'>
+    <p>
+      This protocol uses the DoubleRatchet encryption mechanism in conjunction with the X3DH key exchange. The following section provides detailed technical information about the protocol that should be sufficient to build a compatible OMEMO implementation. Readers who do not intend to build an OMEMO-compatible library can safely skip this section, relevant details are repeated where needed.
+    </p>
+  </section2>
+  <section2 topic='Key Exchange' anchor='protocol-key_exchange'>
+    <p>
+      The X3DH key exchange is specified <link url="https://signal.org/docs/specifications/x3dh/">here</link> and placed under the public domain. OMEMO uses this key exchange mechanism with the following parameters/settings:
+    </p>
+    <dl>
+      <di><dt>curve</dt><dd>X25519</dd></di>
+      <di><dt>hash function</dt><dd>SHA-256</dd></di>
+      <di><dt>info string</dt><dd>&quot;OMEMO X3DH&quot;</dd></di>
+      <di><dt>byte-encoding of the public keys</dt><dd>the default as used by most crypto libraries TODO</dd></di>
+      <di><dt>signed pre-key rotation period</dt><dd>Signed pre-keys SHOULD be rotated periodically once a week to once a month. A faster or slower rotation period should not be required.</dd></di>
+      <di><dt>time to keep the private key of the old signed pre-key after rotating it</dt><dd>The private key of the old signed pre-key SHOULD be kept for another rotation period as defined above, to account for delayed messages using the old signed pre-key.</dd></di>
+      <di><dt>number of pre-keys to provide in the bundle</dt><dd>The bundle SHOULD always contain around 100 pre-keys.</dd></di>
+      <di><dt>minimum number of pre-keys to provide in the bundle</dt><dd>The bundle MUST always contain at least 25 pre-keys.</dd></di>
+      <di><dt>associated data</dt><dd>The associated data is created by concatenating the identity keys of Alice and Bob: <tt>AD = Encode(IK_A) || Encode(IK_B)</tt></dd></di>
+      <di><dt>XEdDSA</dt><dd>To reduce the amount of bytes that have to be transferred, the key exchange uses <link url="https://signal.org/docs/specifications/xeddsa/">XEdDSA</link> on curves X25519/Ed25519 (aka XEd25519) to derive signing keys from encryption keys.</dd></di>
+    </dl>
+  </section2>
+  <section2 topic='Double Ratchet' anchor='protocol-double_ratchet'>
+    <p>NOTE: <tt>OMEMOMessage.proto</tt> and <tt>OMEMOAuthenticatedMessage.proto</tt> refer to the protobuf structures as defined <link url="#protobuf-schema">here</link>.</p>
+    <p>
+      The DoubleRatchet protocol is specified <link url="https://signal.org/docs/specifications/doubleratchet/">here</link> and placed under the public domain. OMEMO uses this protocol with the following parameters/settings:
+    </p>
+    <dl>
+      <di><dt>ratchet initialization</dt><dd>The double ratchet is initialized using the shared secret, ad and public keys as yielded by the X3DH key exchange, as explained in the double ratchet specification.</dd></di>
+      <di><dt>MAX_SKIP</dt><dd>It is RECOMMENDED to keep around 1000 skipped message keys.</dd></di>
+      <di><dt>deletion policy for skipped message keys</dt><dd>Skipped message keys MUST be stored until MAX_SKIP message keys are stored. At that point, keys are discarded on a LRU basis to make space for new message keys. Implementations SHOULD not keep skipped message keys around forever, but discard old keys on a different implementation-defined policy. It is RECOMMENDED to base this policy on deterministic events rather than time.</dd></di>
+      <di><dt>authentication tag truncation</dt><dd>Authentication tags are truncated to 16 bytes/128 bits.</dd></di>
+      <di><dt>CONCAT(ad, header)</dt><dd><tt>CONCAT(ad, header) = ad || OMEMOMessage.proto(header)</tt> NOTE: the <tt>OMEMOMessage.proto</tt> is initialized without the ciphertext, which is optional. NOTE: Implementations are not strictly required to return a parseable byte array here, as the unpacked/parsed data is required later in the protocol.</dd></di>
+      <di><dt>KDF_RK(rk, dh_out)</dt><dd>HKDF-SHA-256 using the rk as HKDF salt, dh_out as HKDF input material and &quot;OMEMO Root Chain&quot; as HKDF info.</dd></di>
+      <di><dt>KDF_CK(ck)</dt><dd>HMAC-SHA-256 using ck as the HMAC key, a single byte constant <tt>0x01</tt> as HMAC input to produce the next message key and a single byte constant <tt>0x02</tt> as HMAC input to produce the next chain key.</dd></di>
+      <di><dt>ENCRYPT(mk, plaintext, associated_data)</dt><dd>
+        The encryption step uses authenticated encryption consisting of AES-256-CBC with HMAC-SHA-256.
+        <ol>
+          <li>Use HKDF-SHA-256 to generate 80 bytes of output from the message key by providing mk as HKDF input, 256 zero-bits as HKDF salt and &quot;OMEMO Message Key Material&quot; as HKDF info.</li>
+          <li>Divide the HKDF output into a 32-byte encryption key, a 32-byte authentication key and a 16 byte IV.</li>
+          <li>Encrypt the plaintext (which is a 16 bytes key as specified <link url="#protocol-message_encryption">here</link>) using AES-256-CBC with PKCS#7 padding, using the encryption key and IV derived in the previous step.</li>
+          <li>Split the associated data as returned by <tt>CONCAT</tt> into the original ad and the <tt>OMEMOMessage.proto</tt> structure.</li>
+          <li>Add the ciphertext to the <tt>OMEMOMessage.proto</tt> structure.</li>
+          <li>Serialize the ad and the <tt>OMEMOMessage.proto</tt> structure into a parseable byte array by concatenating ad and the serialized protobuf structure.</li>
+          <li>Calculate the HMAC-SHA-256 using the authentication key and the input material as derived in the steps above.</li>
+          <li>Put the <tt>OMEMOMessage.proto</tt> structure and the HMAC into a new <tt>OMEMOAuthenticatedMessage.proto</tt> structure.</li>
+        </ol>
+      </dd></di>
+    </dl>
+  </section2>
+  <section2 topic='Message Encryption' anchor='protocol-message_encryption'>
+    <p>
+      The contents are encrypted and authenticated using a combination of AES-256-CBC and HMAC-SHA-256.
+    </p>
+    <ol>
+      <li>Generate 16 bytes of cryptographically secure random data, called <tt>key</tt> in the remainder of this algorithm.</li>
+      <li>Encrypt this key using the double ratchet as specified above, once for each intended recipient.</li>
+      <li>Use HKDF-SHA-256 to generate 80 bytes of output from the key by providing the key as HKDF input, 256 zero-bits as HKDF salt and &quot;OMEMO Payload&quot; as HKDF info.</li>
+      <li>Divide the HKDF output into a 32-byte encryption key, a 32-byte authentication key and a 16 byte IV.</li>
+      <li>Encrypt the plaintext using AES-256-CBC with PKCS#7 padding, using the encryption key and IV derived in the previous step.</li>
+      <li>Calculate the HMAC-SHA-256 using the authentication key and the ciphertext from the previous steps.</li>
+    </ol>
+  </section2>
+</section1>
 <section1 topic='Use Cases' anchor='usecases'>
   <section2 topic='Setup' anchor='usecases-setup'>
     <p>
@@ -472,6 +537,21 @@
   </xs:element>
 
 </xs:schema>
+]]></code>
+</section1>
+<section1 topic='Protobuf Schema' anchor='protobuf-schema'>
+  <code><![CDATA[
+message OMEMOMessage {
+    bytes dh_pub;
+    uint32 n;
+    uint32 pn;
+    optional bytes ciphertext;
+}
+
+message OMEMOAuthenticatedMessage {
+    bytes omemo_message;
+    bytes mac;
+}
 ]]></code>
 </section1>
 
