@@ -182,6 +182,9 @@
       <di><dt>associated data</dt><dd>The associated data is created by concatenating the identity keys of Alice and Bob: <tt>AD = Encode(IK_A) || Encode(IK_B)</tt></dd></di>
       <di><dt>XEdDSA</dt><dd>To reduce the amount of bytes that have to be transferred, the key exchange uses <link url="https://signal.org/docs/specifications/xeddsa/">XEdDSA</link> on curves X25519/Ed25519 (aka XEd25519) to derive signing keys from encryption keys.</dd></di>
     </dl>
+    <p>
+      The key exchange is done just-in-time when sending the first message to a device. Thus, each key exchange message always also contains encrypted content as produced by the double ratchet algorithm below.
+    </p>
   </section2>
   <section2 topic='Double Ratchet' anchor='protocol-double_ratchet'>
     <p>NOTE: <tt>OMEMOMessage.proto</tt>, <tt>OMEMOAuthenticatedMessage.proto</tt> and <tt>OMEMOKeyExchange.proto</tt> refer to the protobuf structures as defined <link url="#protobuf-schema">here</link>.</p>
@@ -210,6 +213,16 @@
         </ol>
       </dd></di>
     </dl>
+    <p>
+      If encrypting this message required a key exchange, the X3DH key exchange header data is placed into a new <tt>OMEMOKeyExchange.proto</tt> structure together with the <tt>OMEMOAuthenticatedMessage.proto</tt> structure.
+    </p>
+    <p>
+      To account for lost and out-of-order messages during the key exchange, <tt>OMEMOKeyExchange.proto</tt> structures are sent until a response by the recipient confirms that the key exchange was successfully completed. To do so, the X3DH key exchange header data is stored and added on each subsequent message until a response is received. This looks roughly as follows:
+    </p>
+    <ol>
+      <li>The first content is encrypted for a new recipient. This results in an X3DH header and a <tt>OMEMOAuthenticatedMessage.proto</tt> structure. Both are packed into an <tt>OMEMOKeyExchange.proto</tt> structure. The X3DH header is stored for following messages.</li>
+      <li>A second message is encrypted for the same recipient. This results in only a <tt>OMEMOAuthenticatedMessage.proto</tt> structure, as a new key exchange is not required. Together with the X3DH header that was stored in the previous step, an <tt>OMEMOKeyExchange.proto</tt> structure is constructed and sent to the recipient.</li>
+    </ol>
   </section2>
   <section2 topic='Message Encryption' anchor='protocol-message_encryption'>
     <p>
@@ -471,23 +484,12 @@
 </section1>
 <section1 topic='Implementation Notes' anchor='impl'>
   <!-- TODO: I think this is still true? -->
-  <p>
-    The SignalProtocol-library uses a trust model that doesn't work very well with
-    OMEMO. For this reason it may be desirable to have the library consider all
-    keys trusted, effectively disabling its trust management. This makes it
-    necessary to implement trust handling oneself.
-  </p>
+  <!-- TODO: Write something about trust here -->
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
   <p>Clients MUST NOT use a newly built session to transmit data without user intervention. If a client were to opportunistically start using sessions for sending without asking the user whether to trust a device first, an attacker could publish a fake device for this user, which would then receive copies of all messages sent by/to this user. A client MAY use such "not (yet) trusted" sessions for decryption of received messages, but in that case it SHOULD indicate the untrusted nature of such messages to the user.</p>
-  <p>When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex string, QR code, or other unique representation, such that it can be compared by the user.</p>
+  <p>When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex string, QR code, or other unique representation, such that it can be compared by the user. TODO: consistent color foo</p>
   <p>While it is RECOMMENDED that clients postpone private key deletion until after MAM catch-up and this standards mandates that clients MUST NOT use duplicate-PreKey sessions for sending, clients MAY delete such keys immediately for security reasons. For additional information on potential security impacts of this decision, refer to <note>Menezes, Alfred, and Berkant Ustaoglu. "On reusing ephemeral keys in Diffie-Hellman key agreement protocols." International Journal of Applied Cryptography 2, no. 2 (2010): 154-158.</note>.</p>
-  <p>
-    In order to be able to handle out-of-order messages, the SignalProtocol stack has to
-    cache the keys belonging to "skipped" messages that have not been seen yet.
-    It is up to the implementor to decide how long and how many of such keys to
-    keep around.
-  </p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA). </p>
