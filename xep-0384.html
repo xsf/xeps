@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><title>XEP-0384: OMEMO Encryption</title><style type="text/css">
+/* don't mind this hack */
+nav#toc h2:before {
+display: none;
+content: "XEP-0384";
+}
+        </style><link rel="stylesheet" type="text/css" href="xmpp.css"><link href="prettify.css" type="text/css" rel="stylesheet"><link rel="shortcut icon" type="image/x-icon" href="/favicon.ico"><script type="text/javascript" src="prettify.js"></script><meta name="viewport" content="width=device-width; initial-scale=1.0; maximum-scale=2.0"><meta name="DC.Title" content="OMEMO Encryption"><meta name="DC.Creator" content="Andreas Straub"><meta name="DC.Description" content="This specification defines a protocol for end-to-end encryption in one-on-one chats that may have multiple clients per account."><meta name="DC.Publisher" content="XMPP Standards Foundation"><meta name="DC.Contributor" content="XMPP Extensions Editor"><meta name="DC.Date" content="2018-07-31"><meta name="DC.Type" content="XMPP Extension Protocol"><meta name="DC.Format" content="XHTML"><meta name="DC.Identifier" content="XEP-0384"><meta name="DC.Language" content="en"><meta name="DC.Rights" content="This XMPP Extension Protocol is copyright © 1999 – 2020 by the XMPP Standards Foundation (XSF)."></head><body onload="prettyPrint()"><h1>XEP-0384: OMEMO Encryption</h1><div class="docmeta-wrap"><dl id="docmeta" class="compact"><dt>Abstract</dt><dd>This specification defines a protocol for end-to-end encryption in one-on-one chats that may have multiple clients per account.</dd><dt>Author</dt><dd>Andreas Straub</dd><dt>Copyright</dt><dd>© 1999 – 2020 XMPP Standards Foundation. <a href="#appendix-legal">SEE LEGAL NOTICES</a>.</dd><dt>Status</dt><dd><p>Deferred</p><div id="status-notice" class="deferred standards track">WARNING: This document has been automatically Deferred after 12 months of inactivity in its previous Experimental state. Implementation of the protocol described herein is not recommended for production systems. However, exploratory implementations are encouraged to resume the standards process.</div></dd><dt>Type</dt><dd>Standards Track</dd><dt>Version</dt><dd>0.3.0 (2018-07-31)</dd></dl><div class="timeline-wrap"><div class="timeline-head">Document Lifecycle</div><ol class="timeline"><li>Experimental</li><li class="current inserted">Deferred</li><li>Proposed</li><li>Draft</li><li>Final</li></ol></div></div><nav id="toc"><a href="#top"><h2>Table of Contents</h2></a><ol class="toc"><li><a href="#intro">Introduction</a><ol><li><a href="#intro-motivation">Motivation</a></li><li><a href="#intro-overview">Overview</a></li></ol></li><li><a href="#reqs">Requirements</a></li><li><a href="#glossary">Glossary</a><ol><li><a href="#glossary-general">General Terms</a></li><li><a href="#glossary-signalprotocol">SignalProtocol-specific</a></li></ol></li><li><a href="#usecases">Use Cases</a><ol><li><a href="#usecases-setup">Setup</a></li><li><a href="#usecases-discovering">Discovering peer support</a></li><li><a href="#usecases-announcing">Announcing support</a></li><li><a href="#usecases-building">Building a session</a></li><li><a href="#usecases-messagesend">Sending a message</a></li><li><a href="#usecases-keysend">Sending a key</a></li><li><a href="#usecases-receiving">Receiving a message</a></li></ol></li><li><a href="#rules">Business Rules</a></li><li><a href="#impl">Implementation Notes</a></li><li><a href="#security">Security Considerations</a></li><li><a href="#iana">IANA Considerations</a></li><li><a href="#registrar">XMPP Registrar Considerations</a><ol><li><a href="#namespaces">Protocol Namespaces</a></li><li><a href="#versioning">Protocol Versioning</a></li></ol></li><li><a href="#schema">XML Schema</a></li><li><a href="#ack">Acknowledgements</a></li></ol><h6><a href="#appendices">Appendices</a></h6><ol class="toc-appendices"><li><a href="#appendix-docinfo">Document Information</a></li><li><a href="#appendix-authorinfo">Author Information</a></li><li><a href="#appendix-legal">Legal Notices</a></li><li><a href="#appendix-xmpp">Relation to XMPP</a></li><li><a href="#appendix-discuss">Discussion Venue</a></li><li><a href="#appendix-conformance">Requirements Conformance</a></li><li><a href="#appendix-notes">Notes</a></li><li><a href="#appendix-revs">Revision History</a></li></ol></nav><h2 id="intro">1.
+       Introduction<a class="anchor-link" href="#intro"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+  <div class="indent"><h3 id="intro-motivation">1.1 Motivation<a class="anchor-link" href="#intro-motivation"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">
+      There are two main end-to-end encryption schemes in common use in the XMPP
+      ecosystem, Off-the-Record (OTR) messaging (<span class="ref" style=""><a href="https://xmpp.org/extensions/xep-0364.html">Current Off-the-Record Messaging Usage (XEP-0364)</a></span>  [<a href="#nt-idm76">1</a>]) and OpenPGP
+      (<span class="ref" style=""><a href="https://xmpp.org/extensions/xep-0027.html">Current Jabber OpenPGP Usage (XEP-0027)</a></span>  [<a href="#nt-idm80">2</a>]). OTR has significant usability drawbacks for inter-client
+      mobility. As OTR sessions exist between exactly two clients, the chat
+      history will not be synchronized across other clients of the involved
+      parties. Furthermore, OTR chats are only possible if both participants are
+      currently online, due to how the rolling key agreement scheme of OTR
+      works. OpenPGP, while not suffering from these mobility issues, does not
+      provide any kind of forward secrecy and is vulnerable to replay attacks.
+      Additionally, PGP over XMPP uses a custom wireformat which is defined by
+      convention rather than standardization, and involves quite a bit of
+      external complexity.
+    </p>
+    <p class="" style="">
+      This XEP defines a protocol that leverages the SignalProtocol encryption to provide
+      multi-end to multi-end encryption, allowing messages to be synchronized
+      securely across multiple clients, even if some of them are offline. The SignalProtocol
+      is a cryptographic double ratched protocol based on work by Trevor Perrin
+      and Moxie Marlinspike first published as the Axolotl protocol. While the
+      protocol itself has specifications in the public domain, the
+      protobuf-based wire format of the signal protocol is not fully
+      documented. The signal protocol currently only exists in GPLv3-licensed
+      implementations maintained by OpenWhisperSystems.
+    </p>
+  </div>
+  <div class="indent"><h3 id="intro-overview">1.2 Overview<a class="anchor-link" href="#intro-overview"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">
+      The general idea behind this protocol is to maintain separate,
+      long-standing SignalProtocol-encrypted sessions with each device of each contact
+      (as well as with each of our other devices), which are used as secure key
+      transport channels. In this scheme, each message is encrypted with a
+      fresh, randomly generated encryption key. An encrypted header is added to
+      the message for each device that is supposed to receive it. These headers
+      simply contain the key that the payload message is encrypted with, and
+      they are separately encrypted using the session corresponding to the
+      counterpart device. The encrypted payload is sent together with the
+      headers as a &lt;message&gt; stanza. Individual recipient devices can
+      decrypt the header item intended for them, and use the contained payload
+      key to decrypt the payload message.
+    </p>
+    <p class="" style="">
+      As the encrypted payload is common to all recipients, it only has to be
+      included once, reducing overhead. Furthermore, SignalProtocols’s transparent handling
+      of messages that were lost or received out of order, as well as those sent
+      while the recipient was offline, is maintained by this protocol. As a
+      result, in combination with <span class="ref" style=""><a href="https://xmpp.org/extensions/xep-0280.html">Message Carbons (XEP-0280)</a></span>  [<a href="#nt-idm88">3</a>] and <span class="ref" style=""><a href="https://xmpp.org/extensions/xep-0313.html">Message Archive Management (XEP-0313)</a></span>  [<a href="#nt-idm92">4</a>], the desired property
+      of inter-client history synchronization is achieved.
+    </p>
+    <p class="" style="">
+      OMEMO currently uses version 3 SignalProtocol. Instead of a Signal key
+      server, <span class="ref" style=""><a href="https://xmpp.org/extensions/xep-0163.html">Personal Eventing Protocol (XEP-0163)</a></span>  [<a href="#nt-idm97">5</a>] (PEP) is used to publish key data.
+    </p>
+  </div>
+<h2 id="reqs">2.
+       Requirements<a class="anchor-link" href="#reqs"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+    <ul class="" style="">
+      <li class="" style="">Provide forward secrecy</li>
+      <li class="" style="">Ensure chat messages can be deciphered by all (capable) clients of both parties</li>
+      <li class="" style="">Be usable regardless of the participants' online statuses</li>
+      <li class="" style="">Provide a method to exchange auxilliary keying material. This could for example be used to secure encrypted file transfers.</li>
+    </ul>
+<h2 id="glossary">3.
+       Glossary<a class="anchor-link" href="#glossary"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+  <div class="indent"><h3 id="glossary-general">3.1 General Terms<a class="anchor-link" href="#glossary-general"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <div class="indent"><dl>
+      <dt><strong>Device</strong></dt><dd>A communication end point, i.e. a specific client instance</dd>
+      <dt><strong>OMEMO element</strong></dt><dd>An &lt;encrypted&gt; element in the eu.siacs.conversations.axolotl namespace. Can be either MessageElement or a KeyTransportElement</dd>
+      <dt><strong>MessageElement</strong></dt><dd>An OMEMO element that contains a chat message. Its &lt;payload&gt;, when decrypted, corresponds to a &lt;message&gt;'s &lt;body&gt;.</dd>
+      <dt><strong>KeyTransportElement</strong></dt><dd>An OMEMO element that does not have a &lt;payload&gt;. It contains a fresh encryption key, which can be used for purposes external to this XEP.</dd>
+      <dt><strong>Bundle</strong></dt><dd>A collection of publicly accessible data that can be used to build a session with a device, namely its public IdentityKey, a signed PreKey with corresponding signature, and a list of (single use) PreKeys.</dd>
+      <dt><strong>rid</strong></dt><dd>The device id of the intended recipient of the containing &lt;key&gt;</dd>
+      <dt><strong>sid</strong></dt><dd>The device id of the sender of the containing OMEMO element</dd>
+
+    </dl></div>
+  </div>
+  <div class="indent"><h3 id="glossary-signalprotocol">3.2 SignalProtocol-specific<a class="anchor-link" href="#glossary-signalprotocol"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <div class="indent"><dl>
+      <dt><strong>IdentityKey</strong></dt><dd>Per-device public/private key pair used to authenticate communications</dd>
+      <dt><strong>PreKey</strong></dt><dd>A Diffie-Hellman public key, published in bulk and ahead of time</dd>
+      <dt><strong>PreKeySignalMessage</strong></dt><dd>An encrypted message that includes the initial key exchange. This is used to transparently build sessions with the first exchanged message.</dd>
+      <dt><strong>SignalMessage</strong></dt><dd>An encrypted message</dd>
+    </dl></div>
+  </div>
+<h2 id="usecases">4.
+       Use Cases<a class="anchor-link" href="#usecases"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+  <div class="indent"><h3 id="usecases-setup">4.1 Setup<a class="anchor-link" href="#usecases-setup"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">
+      The first thing that needs to happen if a client wants to start using
+      OMEMO is they need to generate an IdentityKey and a Device ID. The
+      IdentityKey is a <span class="ref" style=""><a href="http://cr.yp.to/ecdh/curve25519-20060209.pdf">Curve25519</a></span>  [<a href="#nt-idm148">6</a>] public/private Key pair. The Device ID is a
+      randomly generated integer between 1 and 2^31 - 1.
+    </p>
+  </div>
+  <div class="indent"><h3 id="usecases-discovering">4.2 Discovering peer support<a class="anchor-link" href="#usecases-discovering"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">In order to determine whether a given contact has devices that support OMEMO, the devicelist node in PEP is consulted. Devices MUST subscribe to 'urn:xmpp:omemo:1:devices' via PEP, so that they are informed whenever their contacts add a new device. They MUST cache the most up-to-date version of the devicelist.</p>
+    <figure class="code-example" id="example-1"><figcaption><strong>Example 1.</strong> Devicelist update received by subscribed clients<a class="anchor-link" href="#example-1"><abbr title="Link to this point in the document">¶</abbr></a></figcaption><pre class="prettyprint">
+&lt;message from='juliet@capulet.lit'
+         to='romeo@montague.lit'
+         type='headline'
+         id='update_01'&gt;
+  &lt;event xmlns='http://jabber.org/protocol/pubsub#event'&gt;
+    &lt;items node='urn:xmpp:omemo:1:devices'&gt;
+      &lt;item id='current'&gt;
+        &lt;devices xmlns='urn:xmpp:omemo:1'&gt;
+          &lt;device id='12345' /&gt;
+          &lt;device id='4223' /&gt;
+        &lt;/devices&gt;
+      &lt;/item&gt;
+    &lt;/items&gt;
+  &lt;/event&gt;
+&lt;/message&gt;</pre></figure>
+  </div>
+  <div class="indent"><h3 id="usecases-announcing">4.3 Announcing support<a class="anchor-link" href="#usecases-announcing"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">In order for other devices to be able to initiate a session with a given device, it first has to announce itself by adding its device ID to the devicelist PEP node. </p>
+    <figure class="code-example" id="example-2"><figcaption><strong>Example 2.</strong> Adding the own device ID to the list<a class="anchor-link" href="#example-2"><abbr title="Link to this point in the document">¶</abbr></a></figcaption><pre class="prettyprint">
+&lt;iq from='juliet@capulet.lit' type='set' id='announce1'&gt;
+  &lt;pubsub xmlns='http://jabber.org/protocol/pubsub'&gt;
+    &lt;publish node='urn:xmpp:omemo:1:devices'&gt;
+      &lt;item id='current'&gt;
+        &lt;devices xmlns='urn:xmpp:omemo:1'&gt;
+          &lt;device id='12345' /&gt;
+          &lt;device id='4223' /&gt;
+          &lt;device id='31415' /&gt;
+        &lt;/devices&gt;
+      &lt;/item&gt;
+    &lt;/publish&gt;
+  &lt;/pubsub&gt;
+&lt;/iq&gt;</pre></figure>
+    <p class="" style="">NOTE: as per <a href="https://xmpp.org/extensions/xep-0060.html#impl-singleton"><span class="ref">XEP-0060</span> §12.20</a>, it is RECOMMENDED for the publisher to specify an ItemID of "current" to ensure that the publication of a new item will overwrite the existing item.</p>
+    <p class="" style="">This step presents the risk of introducing a race condition: Two devices might simultaneously try to announce themselves, unaware of the other's existence. The second device would overwrite the first one. To mitigate this, devices MUST check that their own device ID is contained in the list whenever they receive a PEP update from their own account. If they have been removed, they MUST reannounce themselves.</p>
+    <p class="" style="">Furthermore, a device MUST publish its IdentityKey, a signed PreKey, and a list of PreKeys. This tuple is called a bundle. Bundles are maintained as multiple items in a PEP node called ‘urn:xmpp:omemo:1:bundles’. Each bundle MUST be stored in a seperate item. The item id MUST be set to the device id.</p>
+    <p class="" style="">A bundle is an element called ‘bundle’ in the ‘urn:xmpp:omomo:1’ namespace. It has a child element called ‘spk’ that contains the signed PreKey as base64 encoded data and a child element called ‘ik’ that contains the identity key as base64 encoded data. PreKeys are multiple elements called ‘pk’ that each contain one PreKey as base64 encoded data. PreKeys are wrapped in an element called ‘prekeys’ which is a child of the bundle element.</p>
+    <p class="" style="">The bundle element MAY contain an attribute called label, which is a user defined string describing the device that published that bundle.</p>
+    <figure class="code-example" id="example-3"><figcaption><strong>Example 3.</strong> Publishing bundle information<a class="anchor-link" href="#example-3"><abbr title="Link to this point in the document">¶</abbr></a></figcaption><pre class="prettyprint">
+&lt;iq from='juliet@capulet.lit' type='set' id='annouce2'&gt;
+  &lt;pubsub xmlns='http://jabber.org/protocol/pubsub'&gt;
+    &lt;publish node='urn:xmpp:omemo:1:bundles'&gt;
+      &lt;item id='31415'&gt;
+        &lt;bundle xmlns='urn:xmpp:omemo:1'
+                label='My desktop client'&gt;
+          &lt;spk id='0'&gt;BASE64ENCODED&lt;/spk&gt;
+          &lt;ik&gt;BASE64ENCODED&lt;/ik&gt;
+          &lt;prekeys&gt;
+            &lt;pk id='0'&gt;BASE64ENCODED&lt;/pk&gt;
+            &lt;pk id='1'&gt;BASE64ENCODED&lt;/pk&gt;
+            &lt;!-- … --&gt;
+            &lt;pk id='99'&gt;BASE64ENCODED&lt;/pk&gt;
+          &lt;/prekeys&gt;
+        &lt;/bundle&gt;
+      &lt;/item&gt;
+    &lt;/publish&gt;
+  &lt;/pubsub&gt;
+&lt;/iq&gt;</pre></figure>
+  <p class="" style="">It is RECOMMENDED to set the access model of the ‘urn:xmpp:omemo:1:bundles’ node to ‘open’ to give entities without presence subscription read access to the bundles and allow them to establish an OMEMO session. Not having presence subscription is a common occurrence on the first few messages between two contacts and can also happen fairly frequently in group chats as not every participant had prior communication with every other participant.</p>
+  <p class="" style="">The access model can be changed efficiently by using publish-options as described in <a href="https://xmpp.org/extensions/xep-0060.html#publisher-publish-options"><span class="ref">XEP-0060</span> §7.1.5</a>.</p>
+  <figure class="code-example" id="example-4"><figcaption><strong>Example 4.</strong> Publishing bundle information with an open access model<a class="anchor-link" href="#example-4"><abbr title="Link to this point in the document">¶</abbr></a></figcaption><pre class="prettyprint">
+&lt;iq from='juliet@capulet.lit' type='set' id='annouce2'&gt;
+  &lt;pubsub xmlns='http://jabber.org/protocol/pubsub'&gt;
+    &lt;publish node='urn:xmpp:omemo:1:bundles'&gt;
+      &lt;item id='31415'&gt;
+        &lt;bundle xmlns='urn:xmpp:omemo:1'&gt;
+          &lt;!-- … --&gt;
+        &lt;/bundle&gt;
+      &lt;/item&gt;
+    &lt;/publish&gt;
+    &lt;publish-options&gt;
+      &lt;x xmlns='jabber:x:data' type='submit'&gt;
+        &lt;field var='FORM_TYPE' type='hidden'&gt;
+          &lt;value&gt;http://jabber.org/protocol/pubsub#publish-options&lt;/value&gt;
+        &lt;/field&gt;
+        &lt;field var='pubsub#access_model'&gt;
+          &lt;value&gt;open&lt;/value&gt;
+        &lt;/field&gt;
+      &lt;/x&gt;
+    &lt;/publish-options&gt;
+  &lt;/pubsub&gt;
+&lt;/iq&gt;</pre></figure>
+  </div>
+  <div class="indent"><h3 id="usecases-building">4.4 Building a session<a class="anchor-link" href="#usecases-building"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">In order to build a session with a device, their bundle information is fetched.</p>
+    <figure class="code-example" id="example-5"><figcaption><strong>Example 5.</strong> Fetching a device's bundle information<a class="anchor-link" href="#example-5"><abbr title="Link to this point in the document">¶</abbr></a></figcaption><pre class="prettyprint">
+&lt;iq type='get'
+    from='romeo@montague.lit'
+    to='juliet@capulet.lit'
+    id='fetch1'&gt;
+  &lt;pubsub xmlns='http://jabber.org/protocol/pubsub'&gt;
+    &lt;items node='urn:xmpp:omemo:1:bundles'&gt;
+      &lt;item id='31415'/&gt;
+    &lt;items&gt;
+  &lt;/pubsub&gt;
+&lt;/iq&gt;</pre></figure>
+    <p class="" style="">A random preKeyPublic entry is selected, and used to build a SignalProtocol session.</p>
+  </div>
+  <div class="indent"><h3 id="usecases-messagesend">4.5 Sending a message<a class="anchor-link" href="#usecases-messagesend"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">
+      In order to send a chat message, its &lt;body&gt; first has to be
+      encrypted. The client MUST use fresh, randomly generated key with
+      AES-256..
+      The 16 bytes key and the GCM authentication tag (The tag SHOULD have at least
+      128 bit) are concatenated and for each intended recipient device,
+      i.e. both own devices as well as devices associated with the contact, the
+      result of this concatenation is encrypted using the corresponding
+      long-standing SignalProtocol session. Each encrypted payload key/authentication tag
+      tuple is tagged with the recipient device's ID. The key element MUST be
+      tagged with a prekey attribute set to true if a PreKeySignalMessage is being
+      used. This is all serialized into a MessageElement, which is transmitted
+      in a &lt;message&gt; as follows:
+    </p>
+    <figure class="code-example" id="example-6"><figcaption><strong>Example 6.</strong> Sending a message<a class="anchor-link" href="#example-6"><abbr title="Link to this point in the document">¶</abbr></a></figcaption><pre class="prettyprint">
+&lt;message to='juliet@capulet.lit' from='romeo@montague.lit' id='send1'&gt;
+  &lt;encrypted xmlns='urn:xmpp:omemo:1'&gt;
+    &lt;header sid='27183'&gt;
+      &lt;keys jid='juliet@capulet.lit'&gt;
+        &lt;key rid='31415'&gt;BASE64ENCODED...&lt;/key&gt;
+      &lt;/keys&gt;
+      &lt;keys jid='remeo@montague.lit'&gt;
+        &lt;key rid='1337'&gt;BASE64ENCODED...&lt;/key&gt;
+        &lt;key prekey="true" rid='12321'&gt;BASE64ENCODED...&lt;/key&gt;
+        &lt;!-- ... --&gt;
+      &lt;/keys&gt;
+    &lt;/header&gt;
+    &lt;payload&gt;BASE64ENCODED&lt;/payload&gt;
+  &lt;/encrypted&gt;
+  &lt;store xmlns='urn:xmpp:hints'/&gt;
+&lt;/message&gt;</pre></figure>
+  </div>
+  <div class="indent"><h3 id="usecases-keysend">4.6 Sending a key<a class="anchor-link" href="#usecases-keysend"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">
+      The client may wish to transmit keying material to the contact. This first
+      has to be generated. The client MUST generate a fresh, randomly generated key.
+      The 16 bytes key and the GCM authentication tag (The tag
+      SHOULD have at least 128 bit) are concatenated and for each intended
+      recipient device, i.e. both own devices as well as devices associated
+      with the contact, this key is encrypted using the corresponding
+      long-standing SignalProtocol session. Each encrypted payload key/authentication tag
+      tuple is tagged with the recipient device's ID. The key element MUST be
+      tagged with a prekey attribute set to true if a PreKeySignalMessage is being
+      used This is all serialized into a KeyTransportElement, omitting the
+      &lt;payload&gt; as follows:
+    </p>
+    <figure class="code-example" id="example-7"><figcaption><strong>Example 7.</strong> Sending a key<a class="anchor-link" href="#example-7"><abbr title="Link to this point in the document">¶</abbr></a></figcaption><pre class="prettyprint">
+&lt;encrypted xmlns='urn:xmpp:omemo:1'&gt;
+  &lt;header sid='27183'&gt;
+    &lt;keys jid='remeo@montague.lit'&gt;
+      &lt;key rid='31415'&gt;BASE64ENCODED...&lt;/key&gt;
+      &lt;key prekey="true" rid='12321'&gt;BASE64ENCODED...&lt;/key&gt;
+      &lt;!-- ... --&gt;
+    &lt;/keys&gt;
+  &lt;/header&gt;
+&lt;/encrypted&gt;</pre></figure>
+    <p class="" style="">This KeyTransportElement can then be sent over any applicable transport mechanism.</p>
+  </div>
+  <div class="indent"><h3 id="usecases-receiving">4.7 Receiving a message<a class="anchor-link" href="#usecases-receiving"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">When an OMEMO element is received, the client MUST check whether there is a &lt;key&gt; element with an rid attribute matching its own device ID. If this is not the case, the element MUST be silently discarded. If such an element exists, the client checks whether the element's contents are a PreKeySignalMessage.</p>
+    <p class="" style="">If this is the case, a new session is built from this received element. The client SHOULD then republish their bundle information, replacing the used PreKey, such that it won't be used again by a different client. If the client already has a session with the sender's device, it MUST replace this session with the newly built session. The client MUST delete the private key belonging to the PreKey after use.</p>
+    <p class="" style="">If the element's contents are a SignalMessage, and the client has a session with the sender's device, it tries to decrypt the SignalMessage using this session. If the decryption fails or if the element's contents are not a SignalMessage either, the OMEMO element MUST be silently discarded.</p>
+    <p class="" style="">If the OMEMO element contains a &lt;payload&gt;, it is an OMEMO message element. The client tries to decrypt the base64 encoded contents using the key and the authentication tag extracted from the &lt;key&gt; element. If the decryption fails, the client MUST silently discard the OMEMO message. If it succeeds, the decrypted contents are treated as the &lt;body&gt; of the received message.</p>
+    <p class="" style="">If the OMEMO element does not contain a &lt;payload&gt;, the client has received a KeyTransportElement. The key extracted from the &lt;key&gt; element can then be used for other purposes (e.g. encrypted file transfer).</p>
+  </div>
+<h2 id="rules">5.
+       Business Rules<a class="anchor-link" href="#rules"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+  <p class="" style="">Before publishing a freshly generated Device ID for the first time, a device MUST check whether that Device ID already exists, and if so, generate a new one.</p>
+  <p class="" style="">Clients SHOULD NOT immediately fetch the bundle and build a session as soon as a new device is announced. Before the first message is exchanged, the contact does not know which PreKey has been used (or, in fact, that any PreKey was used at all). As they have not had a chance to remove the used PreKey from their bundle announcement, this could lead to collisions where both Alice and Bob pick the same PreKey to build a session with a specific device. As each PreKey SHOULD only be used once, the party that sends their initial PreKeySignalMessage later loses this race condition. This means that they think they have a valid session with the contact, when in reality their messages MAY be ignored by the other end. By postponing building sessions, the chance of such issues occurring can be drastically reduced. It is RECOMMENDED to construct sessions only immediately before sending a message. </p>
+  <p class="" style="">As there are no explicit error messages in this protocol, if a client does receive a PreKeySignalMessage using an invalid PreKey, they SHOULD respond with a KeyTransportElement, sent in a &lt;message&gt; using a PreKeySignalMessage. By building a new session with the original sender this way, the invalid session of the original sender will get overwritten with this newly created, valid session.</p>
+  <p class="" style="">If a PreKeySignalMessage is received as part of a <span class="ref" style=""><a href="https://xmpp.org/extensions/xep-0313.html">Message Archive Management (XEP-0313)</a></span>  [<a href="#nt-idm92">4</a>] catch-up and used to establish a new session with the sender, the client SHOULD postpone deletion of the private key corresponding to the used PreKey until after MAM catch-up is completed. If this is done, the client MUST then also send a KeyTransportMessage using a PreKeySignalMessage before sending any payloads using this session, to trigger re-keying. (as above) This practice can mitigate the previously mentioned race condition by preventing message loss.</p>
+  <p class="" style="">As the asynchronous nature of OMEMO allows decryption at a later time to currently offline devices client SHOULD include a <span class="ref" style=""><a href="https://xmpp.org/extensions/xep-0334.html">Message Processing Hints (XEP-0334)</a></span>  [<a href="#nt-idm198">7</a>] &lt;store /&gt; hint in their OMEMO messages. Otherwise, server implementations of <span class="ref" style=""><a href="https://xmpp.org/extensions/xep-0313.html">Message Archive Management (XEP-0313)</a></span>  [<a href="#nt-idm92">4</a>] will generally not retain OMEMO messages, since they do not contain a &lt;body /&gt;</p>
+<h2 id="impl">6.
+       Implementation Notes<a class="anchor-link" href="#impl"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+  
+  <p class="" style="">
+    The SignalProtocol-library uses a trust model that doesn't work very well with
+    OMEMO. For this reason it may be desirable to have the library consider all
+    keys trusted, effectively disabling its trust management. This makes it
+    necessary to implement trust handling oneself.
+  </p>
+<h2 id="security">7.
+       Security Considerations<a class="anchor-link" href="#security"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+  <p class="" style="">Clients MUST NOT use a newly built session to transmit data without user intervention. If a client were to opportunistically start using sessions for sending without asking the user whether to trust a device first, an attacker could publish a fake device for this user, which would then receive copies of all messages sent by/to this user. A client MAY use such "not (yet) trusted" sessions for decryption of received messages, but in that case it SHOULD indicate the untrusted nature of such messages to the user.</p>
+  <p class="" style="">When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex string, QR code, or other unique representation, such that it can be compared by the user.</p>
+  <p class="" style="">While it is RECOMMENDED that clients postpone private key deletion until after MAM catch-up and this standards mandates that clients MUST NOT use duplicate-PreKey sessions for sending, clients MAY delete such keys immediately for security reasons. For additional information on potential security impacts of this decision, refer to  [<a href="#nt-idm210">8</a>].</p>
+  <p class="" style="">
+    In order to be able to handle out-of-order messages, the SignalProtocol stack has to
+    cache the keys belonging to "skipped" messages that have not been seen yet.
+    It is up to the implementor to decide how long and how many of such keys to
+    keep around.
+  </p>
+<h2 id="iana">8.
+       IANA Considerations<a class="anchor-link" href="#iana"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+  <p class="" style="">This document requires no interaction with the Internet Assigned Numbers Authority (IANA). </p>
+<h2 id="registrar">9.
+       XMPP Registrar Considerations<a class="anchor-link" href="#registrar"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+  <div class="indent"><h3 id="namespaces">9.1 Protocol Namespaces<a class="anchor-link" href="#namespaces"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">This specification defines the following XMPP namespaces:</p>
+    <ul class="" style="">
+      <li class="" style="">eu.siacs.conversations.axolotl</li>
+    </ul>
+  </div>
+  <div class="indent"><h3 id="versioning">9.2 Protocol Versioning<a class="anchor-link" href="#versioning"><abbr title="Link to this point in the document">¶</abbr></a></h3>
+    <p class="" style="">If the protocol defined in this specification undergoes a revision that is not fully backwards-compatible with an older version, the XMPP Registrar shall increment the protocol version number found at the end of the XML namespaces defined herein, as described in Section 4 of <span class="ref">XEP-0053</span>.</p>
+  </div>
+<h2 id="schema">10.
+       XML Schema<a class="anchor-link" href="#schema"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+  <figure class="code"><figcaption></figcaption><pre class="prettyprint">
+&lt;xml version="1.0" encoding="utf8"&gt;
+&lt;xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="eu.siacs.conversations.axolotl"
+    xmlns="eu.siacs.conversations.axolotl"&gt;
+
+  &lt;xs:element name="encrypted"&gt;
+    &lt;xs:element name="header"&gt;
+      &lt;xs:attribute name="sid" type="xs:integer"/&gt;
+      &lt;xs:complexType&gt;
+        &lt;xs:sequence&gt;
+          &lt;xs:element name="key" type="xs:base64Binary" maxOccurs="unbounded"&gt;
+            &lt;xs:attribute name="rid" type="xs:integer" use="required"/&gt;
+            &lt;xs:attribute name="prekey" type="xs:boolean"/&gt;
+          &lt;/xs:element&gt;
+          &lt;xs:element name="iv" type="xs:base64Binary"/&gt;
+      &lt;/xs:complexType&gt;
+    &lt;/xs:element&gt;
+    &lt;xs:element name="payload" type="xs:base64Binary" minOccurs="0"/&gt;
+  &lt;/xs:element&gt;
+
+  &lt;xs:element name="list"&gt;
+    &lt;xs:complexType&gt;
+      &lt;xs:sequence&gt;
+        &lt;xs:element name="device" maxOccurs="unbounded"&gt;
+          &lt;xs:attribute name="id" type="integer" use="required"/&gt;
+        &lt;/xs:element&gt;
+      &lt;/xs:sequence&gt;
+    &lt;/xs:complexType&gt;
+  &lt;/xs:element&gt;
+
+  &lt;xs:element name="bundle"&gt;
+    &lt;xs:complexType&gt;
+      &lt;xs:sequence&gt;
+        &lt;xs:element name="signedPreKeyPublic" type="base64Binary"&gt;
+          &lt;xs:attribute name="signedPreKeyId" type="integer"/&gt;
+        &lt;/xs:element&gt;
+        &lt;xs:element name="signedPreKeySignature" type="base64Binary"/&gt;
+        &lt;xs:element name="identityKey" type="base64Binary"/&gt;
+        &lt;xs:element name="prekeys"&gt;
+          &lt;xs:complexType&gt;
+            &lt;xs:sequence&gt;
+              &lt;xs:element name="preKeyPublic" type="base64Binary" maxOccurs="unbounded"&gt;
+                &lt;xs:attribute name="preKeyId" type="integer" use="required"/&gt;
+              &lt;/xs:element&gt;
+            &lt;/xs:sequence&gt;
+          &lt;/xs:complexType&gt;
+        &lt;/xs:element&gt;
+      &lt;/xs:sequence&gt;
+    &lt;/xs:complexType&gt;
+  &lt;/xs:element&gt;
+
+&lt;/xs:schema&gt;
+</pre></figure>
+<h2 id="ack">11.
+       Acknowledgements<a class="anchor-link" href="#ack"><abbr title="Link to this point in the document">¶</abbr></a></h2>
+  <p class="" style="">Big thanks to Daniel Gultsch for mentoring me during the development of this protocol. Thanks to Thijs Alkemade and Cornelius Aschermann for talking through some of the finer points of the protocol with me. And lastly I would also like to thank Sam Whited, Holger Weiss, and Florian Schmaus for their input on the standard.</p>
+<hr><a name="appendices"></a><h2>Appendices</h2><h3 id="appendix-docinfo">Appendix A: Document Information<a class="anchor-link" href="#appendix-docinfo"><abbr title="Link to this point in the document">¶</abbr></a></h3><dl class="compact"><dt>Series</dt><dd><a href="http://xmpp.org/extensions/">XEP</a></dd><dt>Number</dt><dd>0384</dd><dt>Publisher</dt><dd><a href="/xsf/">XMPP Standards Foundation</a></dd><dt>Status</dt><dd><a href="http://xmpp.org/extensions/xep-0001.html#states-Deferred">Deferred</a></dd><dt>Type</dt><dd><a href="http://xmpp.org/extensions/xep-0001.html#types-Standards%20Track">Standards Track</a></dd><dt>Version</dt><dd>0.3.0</dd><dt>Last Updated</dt><dd>2018-07-31</dd><dt>Approving Body</dt><dd><a href="http://xmpp.org/council/">XMPP Council</a></dd><dt>Dependencies</dt><dd>XMPP Core, XEP-0163</dd><dt>Supersedes</dt><dd>None</dd><dt>Superseded By</dt><dd>None</dd><dt>Short Name</dt><dd>OMEMO</dd><dt>Source Control</dt><dd><a class="standardsButton" href="https://github.com/xsf/xeps/blob/master/xep-0384.xml">HTML</a></dd></dl><p>
+          This document in other formats:
+          <a class="standardsButton" href="http://xmpp.org/extensions/xep-0384.xml">XML</a> 
+          <a class="standardsButton" href="http://xmpp.org/extensions/xep-0384.pdf">PDF</a></p><h3 id="appendix-authorinfo">Appendix B: Author Information<a class="anchor-link" href="#appendix-authorinfo"><abbr title="Link to this point in the document">¶</abbr></a></h3><h5>Andreas Straub</h5><dl class="compact"><dt>Email</dt><dd><a href="mailto:andy@strb.org">andy@strb.org</a></dd><dt>JabberID</dt><dd><a href="xmpp:andy@strb.org">andy@strb.org</a></dd></dl><h3 id="appendix-legal">Appendix C: Legal Notices<a class="anchor-link" href="#appendix-legal"><abbr title="Link to this point in the document">¶</abbr></a></h3><div class="indent"><h4>Copyright</h4><p>This XMPP Extension Protocol is copyright © 1999 – 2020 by the <a href="https://xmpp.org/">XMPP Standards Foundation</a> (XSF).</p><h4>Permissions</h4><p>Permission is hereby granted, free of charge, to any person obtaining a copy of this specification (the "Specification"), to make use of the Specification without restriction, including without limitation the rights to implement the Specification in a software program, deploy the Specification in a network service, and copy, modify, merge, publish, translate, distribute, sublicense, or sell copies of the Specification, and to permit persons to whom the Specification is furnished to do so, subject to the condition that the foregoing copyright notice and this permission notice shall be included in all copies or substantial portions of the Specification. Unless separate permission is granted, modified works that are redistributed shall not contain misleading information regarding the authors, title, number, or publisher of the Specification, and shall not claim endorsement of the modified works by the authors, any organization or project to which the authors belong, or the XMPP Standards Foundation.</p><h4>Disclaimer of Warranty</h4><p class="box info">## NOTE WELL: This Specification is provided on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. ##</p><h4>Limitation of Liability</h4><p>In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall the XMPP Standards Foundation or any author of this Specification be liable for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising from, out of, or in connection with the Specification or the implementation, deployment, or other use of the Specification (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if the XMPP Standards Foundation or such author has been advised of the possibility of such damages.</p><h4>IPR Conformance</h4><p>This XMPP Extension Protocol has been contributed in full conformance with the XSF's Intellectual Property Rights Policy (a copy of which can be found at &lt;<a href="https://xmpp.org/about/xsf/ipr-policy">https://xmpp.org/about/xsf/ipr-policy</a>&gt; or obtained by writing to XMPP Standards Foundation, P.O. Box 787, Parker, CO 80134 USA).</p><h4>Visual Presentation</h4><p>The HTML representation (you are looking at) is maintained by the XSF. It is based on the <a href="http://yaml.de">YAML CSS Framework</a>, which is licensed under the terms of the <a href="https://creativecommons.org/licenses/by/2.0/">CC-BY-SA 2.0</a> license.</p></div><h3 id="appendix-xmpp">Appendix D: Relation to XMPP<a class="anchor-link" href="#appendix-xmpp"><abbr title="Link to this point in the document">¶</abbr></a></h3><p class="indent">The Extensible Messaging and Presence Protocol (XMPP) is defined in the XMPP Core (RFC 6120) and XMPP IM (RFC 6121) specifications contributed by the XMPP Standards Foundation to the Internet Standards Process, which is managed by the Internet Engineering Task Force in accordance with RFC 2026. Any protocol defined in this document has been developed outside the Internet Standards Process and is to be understood as an extension to XMPP rather than as an evolution, development, or modification of XMPP itself.</p><h3 id="appendix-discuss">Appendix E: Discussion Venue<a class="anchor-link" href="#appendix-discuss"><abbr title="Link to this point in the document">¶</abbr></a></h3><p class="indent">The primary venue for discussion of XMPP Extension Protocols is the &lt;<a href="http://mail.jabber.org/mailman/listinfo/standards">standards@xmpp.org</a>&gt; discussion list.</p><p class="indent">Discussion on other xmpp.org discussion lists might also be appropriate; see &lt;<a href="http://xmpp.org/about/discuss.shtml">http://xmpp.org/about/discuss.shtml</a>&gt; for a complete list.</p><p class="indent">Errata can be sent to &lt;<a href="mailto:editor@xmpp.org">editor@xmpp.org</a>&gt;.</p><h3 id="appendix-conformance">Appendix F: Requirements Conformance<a class="anchor-link" href="#appendix-conformance"><abbr title="Link to this point in the document">¶</abbr></a></h3><p class="indent">The following requirements keywords as used in this document are to be interpreted as described in <a href="http://www.ietf.org/rfc/rfc2119.txt">RFC 2119</a>: "MUST", "SHALL", "REQUIRED"; "MUST NOT", "SHALL NOT"; "SHOULD", "RECOMMENDED"; "SHOULD NOT", "NOT RECOMMENDED"; "MAY", "OPTIONAL".</p><h3 id="appendix-notes">Appendix G: Notes<a class="anchor-link" href="#appendix-notes"><abbr title="Link to this point in the document">¶</abbr></a></h3><div class="indent"><p><a name="nt-idm76">1</a>. XEP-0364: Current Off-the-Record Messaging Usage &lt;<a href="https://xmpp.org/extensions/xep-0364.html">https://xmpp.org/extensions/xep-0364.html</a>&gt;.</p><p><a name="nt-idm80">2</a>. XEP-0027: Current Jabber OpenPGP Usage &lt;<a href="https://xmpp.org/extensions/xep-0027.html">https://xmpp.org/extensions/xep-0027.html</a>&gt;.</p><p><a name="nt-idm88">3</a>. XEP-0280: Message Carbons &lt;<a href="https://xmpp.org/extensions/xep-0280.html">https://xmpp.org/extensions/xep-0280.html</a>&gt;.</p><p><a name="nt-idm92">4</a>. XEP-0313: Message Archive Management &lt;<a href="https://xmpp.org/extensions/xep-0313.html">https://xmpp.org/extensions/xep-0313.html</a>&gt;.</p><p><a name="nt-idm97">5</a>. XEP-0163: Personal Eventing Protocol &lt;<a href="https://xmpp.org/extensions/xep-0163.html">https://xmpp.org/extensions/xep-0163.html</a>&gt;.</p><p><a name="nt-idm148">6</a>. Curve25519: new Diffie-Hellman speed records &lt;<a href="http://cr.yp.to/ecdh/curve25519-20060209.pdf">http://cr.yp.to/ecdh/curve25519-20060209.pdf</a>&gt;.</p><p><a name="nt-idm198">7</a>. XEP-0334: Message Processing Hints &lt;<a href="https://xmpp.org/extensions/xep-0334.html">https://xmpp.org/extensions/xep-0334.html</a>&gt;.</p><p><a name="nt-idm210">8</a>. Menezes, Alfred, and Berkant Ustaoglu. "On reusing ephemeral keys in Diffie-Hellman key agreement protocols." International Journal of Applied Cryptography 2, no. 2 (2010): 154-158.</p></div><h3 id="appendix-revs">Appendix H: Revision History<a class="anchor-link" href="#appendix-revs"><abbr title="Link to this point in the document">¶</abbr></a></h3><p>Note: Older versions of this specification might be available at <a href="http://xmpp.org/extensions/attic/">http://xmpp.org/extensions/attic/</a></p><ol class="revision-history"><li id="revision-history-v0.3.0"><div class="revision-head">Version 0.3.0 (2018-07-31)<a class="anchor-link" href="#revision-history-v0.3.0"><abbr title="Link to this point in the document">¶</abbr></a></div><p class="" style="">Make examples show items published to the id "current", as per <span class="ref">XEP-0060</span> §12.20.</p><div class="revision-author">egp</div></li><li id="revision-history-v0.2.2"><div class="revision-head">Version 0.2.2 (2018-11-03)<a class="anchor-link" href="#revision-history-v0.2.2"><abbr title="Link to this point in the document">¶</abbr></a></div>Fix a bunch of typos, batch-style.<div class="revision-author">pep</div></li><li id="revision-history-v0.2.1"><div class="revision-head">Version 0.2.1 (2018-05-21)<a class="anchor-link" href="#revision-history-v0.2.1"><abbr title="Link to this point in the document">¶</abbr></a></div>Fix attribute names in schema<div class="revision-author">mb</div></li><li id="revision-history-v0.2"><div class="revision-head">Version 0.2 (2017-06-02)<a class="anchor-link" href="#revision-history-v0.2"><abbr title="Link to this point in the document">¶</abbr></a></div>
+      <p class="" style="">Depend on SignalProtocol instead of Olm.</p>
+      <p class="" style="">Changed to eu.siacs.conversations.axolotl Namespace which is currently used in the wild</p>
+    <div class="revision-author">dg</div></li><li id="revision-history-v0.1"><div class="revision-head">Version 0.1 (2016-12-07)<a class="anchor-link" href="#revision-history-v0.1"><abbr title="Link to this point in the document">¶</abbr></a></div><p class="" style="">Initial version approved by the council.</p><div class="revision-author">XEP Editor: ssw</div></li><li id="revision-history-v0.0.2"><div class="revision-head">Version 0.0.2 (2016-09-22)<a class="anchor-link" href="#revision-history-v0.0.2"><abbr title="Link to this point in the document">¶</abbr></a></div><p class="" style="">Depend on Olm instead of Axolotl.</p><div class="revision-author">ssw, dg</div></li><li id="revision-history-v0.0.1"><div class="revision-head">Version 0.0.1 (2015-10-25)<a class="anchor-link" href="#revision-history-v0.0.1"><abbr title="Link to this point in the document">¶</abbr></a></div><p class="" style="">First draft.</p><div class="revision-author">as</div></li></ol><p>END</p></body></html>
