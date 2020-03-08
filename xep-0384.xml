@@ -142,9 +142,8 @@
   <section2 topic='General Terms' anchor='glossary-general'>
     <dl>
       <di><dt>Device</dt><dd>A communication end point, i.e. a specific client instance</dd></di>
-      <di><dt>OMEMO element</dt><dd>An &lt;encrypted&gt; element in the urn:xmpp:omemo:1 namespace. Can be either MessageElement or a KeyTransportElement</dd></di>
+      <di><dt>OMEMO element</dt><dd>An &lt;encrypted&gt; element in the urn:xmpp:omemo:1 namespace.</dd></di>
       <di><dt>MessageElement</dt><dd>An OMEMO element that contains a chat message. Its &lt;payload&gt;, when decrypted, corresponds to a &lt;message&gt;'s &lt;body&gt;.</dd></di>
-      <di><dt>KeyTransportElement</dt><dd>An OMEMO element that does not have a &lt;payload&gt;. It contains a fresh encryption key, which can be used for purposes external to this XEP.</dd></di>
       <di><dt>Bundle</dt><dd>A collection of publicly accessible data that can be used to build a session with a device, namely its public IdentityKey, a signed PreKey with corresponding signature, and a list of (single use) PreKeys.</dd></di>
       <di><dt>rid</dt><dd>The device id of the intended recipient of the containing &lt;key&gt;</dd></di>
       <di><dt>sid</dt><dd>The device id of the sender of the containing OMEMO element</dd></di>
@@ -426,32 +425,6 @@
   <store xmlns='urn:xmpp:hints'/>
 </message>]]></example>
   </section2>
-  <section2 topic='Sending a key' anchor='usecases-keysend'>
-    <p>
-      The client may wish to transmit keying material to the contact. This first
-      has to be generated. The client MUST generate a fresh, randomly generated key.
-      The 16 bytes key and the GCM authentication tag (The tag
-      SHOULD have at least 128 bit) are concatenated and for each intended
-      recipient device, i.e. both own devices as well as devices associated
-      with the contact, this key is encrypted using the corresponding
-      long-standing SignalProtocol session. Each encrypted payload key/authentication tag
-      tuple is tagged with the recipient device's ID. The key element MUST be
-      tagged with a prekey attribute set to true if a PreKeySignalMessage is being
-      used This is all serialized into a KeyTransportElement, omitting the
-      &lt;payload&gt; as follows:
-    </p>
-    <example caption="Sending a key"><![CDATA[
-<encrypted xmlns='urn:xmpp:omemo:1'>
-  <header sid='27183'>
-    <keys jid='remeo@montague.lit'>
-      <key rid='31415'>BASE64ENCODED...</key>
-      <key prekey="true" rid='12321'>BASE64ENCODED...</key>
-      <!-- ... -->
-    </keys>
-  </header>
-</encrypted>]]></example>
-    <p>This KeyTransportElement can then be sent over any applicable transport mechanism.</p>
-  </section2>
   <section2 topic='Receiving a message' anchor='usecases-receiving'>
     <p>When an OMEMO element is received, the client MUST check whether there is a &lt;keys&gt; element with a jid attribute matching its own bare jid and an inner &lt;key&gt; element with an rid attribute matching its own device ID. If this is not the case the message was not encrypted for this particular device and a warning message SHOULD be displayed instead. If such an element exists, the client checks whether the element's contents are a PreKeySignalMessage.</p>
     <p>If this is the case, a new session is built from this received element. The client SHOULD then republish their bundle information, replacing the used PreKey, such that it won't be used again by a different client. If the client already has a session with the sender's device, it MUST replace this session with the newly built session. The client MUST delete the private key belonging to the PreKey after use.</p>
@@ -462,8 +435,8 @@
 <section1 topic='Business Rules' anchor='rules'>
   <p>Before publishing a freshly generated Device ID for the first time, a device MUST check whether that Device ID already exists, and if so, generate a new one.</p>
   <p>Clients SHOULD NOT immediately fetch the bundle and build a session as soon as a new device is announced. Before the first message is exchanged, the contact does not know which PreKey has been used (or, in fact, that any PreKey was used at all). As they have not had a chance to remove the used PreKey from their bundle announcement, this could lead to collisions where both Alice and Bob pick the same PreKey to build a session with a specific device. As each PreKey SHOULD only be used once, the party that sends their initial PreKeySignalMessage later loses this race condition. This means that they think they have a valid session with the contact, when in reality their messages MAY be ignored by the other end. By postponing building sessions, the chance of such issues occurring can be drastically reduced. It is RECOMMENDED to construct sessions only immediately before sending a message. </p>
-  <p>As there are no explicit error messages in this protocol, if a client does receive a PreKeySignalMessage using an invalid PreKey, they SHOULD respond with a KeyTransportElement, sent in a &lt;message&gt; using a PreKeySignalMessage. By building a new session with the original sender this way, the invalid session of the original sender will get overwritten with this newly created, valid session.</p>
-  <p>If a PreKeySignalMessage is received as part of a &xep0313; catch-up and used to establish a new session with the sender, the client SHOULD postpone deletion of the private key corresponding to the used PreKey until after MAM catch-up is completed. If this is done, the client MUST then also send a KeyTransportMessage using a PreKeySignalMessage before sending any payloads using this session, to trigger re-keying. (as above) This practice can mitigate the previously mentioned race condition by preventing message loss.</p>
+  <p>As there are no explicit error messages in this protocol, if a client does receive a PreKeySignalMessage using an invalid PreKey, they SHOULD respond with a normal OMEMO encrypted message with a potentially empty SCE payload. By building a new session with the original sender this way, the invalid session of the original sender will get overwritten with this newly created, valid session.</p>
+  <p>If a PreKeySignalMessage is received as part of a &xep0313; catch-up and used to establish a new session with the sender, the client SHOULD postpone deletion of the private key corresponding to the used PreKey until after MAM catch-up is completed. If this is done, the client MUST then also send a normal OMEMO encrypted message with an empty SCE payload before sending any payloads using this session, to trigger re-keying. (as above) This practice can mitigate the previously mentioned race condition by preventing message loss.</p>
   <p>As the asynchronous nature of OMEMO allows decryption at a later time to currently offline devices client SHOULD include a &xep0334; &lt;store /&gt; hint in their OMEMO messages. Otherwise, server implementations of &xep0313; will generally not retain OMEMO messages, since they do not contain a &lt;body /&gt;</p>
   <p>When a client receives the first message for a given ratchet key with a counter of 53 or higher, it MUST send a heartbeat message. Heartbeat messages are normal OMEMO encrypted messages where they SCE payload does not include any elements. These heartbeat messages cause the ratchet to forward, thus consequent messages will have the counter restarted from 0.</p>
 </section1>
