@@ -2,7 +2,7 @@
 [![Build Status](https://img.shields.io/travis/xsf/xeps.svg)](https://travis-ci.org/xsf/xeps)
 
 XMPP Extension Protocols (XEPs)
-=========
+===============================
 
 This repository is used to manage work on XMPP Extension Protocols
 (XEPs), which are the specifications produced by the XMPP Standards
@@ -31,6 +31,10 @@ defines the standards process followed by the XMPP Standards Foundation.
 
 Building XEPs
 -------------
+
+You'll need xmllint and xsltproc.
+
+On Ubuntu, you can install them with `sudo apt install libxml2-utils xsltproc`
 
 To build a single XEP as HTML simply run:
 
