@@ -58,6 +58,17 @@
     <jid>jabber@larma.de</jid>
   </author>
   <revision>
+    <version>0.5.0</version>
+    <date>2020-03-26</date>
+    <initials>th</initials>
+    <remark>
+      <ul>
+        <li>Usage of Ed25519 public keys, made XEdDSA optional.</li>
+        <li>Threat model added.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>0.4.0</version>
     <date>2020-03-08</date>
     <initials>dg</initials>
@@ -200,15 +211,15 @@
     Trust management is a difficult topic, which is out of scope of this document.
   </p>
   <section2 topic='Threat Model' anchor='reqs-threat-model'>
-    <p>The OMEMO protocol protects against passive and active attackers which are able to read, modify, replay, delay and delete messages.</p>
-    <p>tbc</p>
+    <p>The use case for OMEMO is a situation where the content of a conversation needs to be protected, but where the servers the message passes by can’t be trusted to keep the content of the message secret. For example when information that is under strict embargo needs to passed within an organization and the server administrator is not one of the persons cleared to see the information or when a couple is exchanging intimate messages and they want to avoid leaking of those messages to the server administrator.</p>
+    <p>The OMEMO protocol protects against passive and active attackers which are able to read, modify, replay, delay and delete messages. The OMEMO protocol does not protect against attackers who rely on metadata and traffic analysis. The quality of the verification of the conversation participants OMEMO identity keys determines the level of protection OMEMO offers.</p>
   </section2>
 </section1>
 <section1 topic='Glossary' anchor='glossary'>
   <dl>
     <di><dt>Device</dt><dd>A communication end point, i.e. a specific client instance</dd></di>
     <di><dt>OMEMO element</dt><dd>An &lt;encrypted&gt; element in the <tt>&ns;</tt> namespace</dd></di>
-    <di><dt>Bundle</dt><dd>A collection of publicly accessible data used by the X3DH key exchange that can be used to build a session with a device, namely its public IdentityKey, a signed PreKey with corresponding signature, and a list of (single use) PreKeys.</dd></di>
+    <di><dt>Bundle</dt><dd>A collection of publicly accessible data used by the X3DH key agreement protocol that can be used to build a session with a device, namely its public IdentityKey, a signed PreKey with corresponding signature, and a list of (single use) PreKeys.</dd></di>
     <di><dt>rid</dt><dd>The device id of the intended recipient of the containing &lt;key&gt;</dd></di>
     <di><dt>sid</dt><dd>The device id of the sender of the containing OMEMO element</dd></di>
   </dl>
@@ -216,18 +227,17 @@
 <section1 topic='Protocol Definition' anchor='protocol'>
   <section2 topic='Overview' anchor='protocol-overview'>
     <p>
-      This protocol uses the Double Ratchet encryption scheme in conjunction with the X3DH key exchange. The following section provides detailed technical information about the protocol that should be sufficient to build an implementation of the OMEMO Double Ratchet. Readers who do not intend to build an OMEMO-compatible library can safely skip this section, relevant details are repeated where needed.
+      This protocol uses the &doubleratchet; encryption scheme in conjunction with the &x3dh; key agreement protocol. The following section provides detailed technical information about the protocol that should be sufficient to build an implementation of the OMEMO Double Ratchet. Readers who do not intend to build an OMEMO-compatible library can safely skip this section, relevant details are repeated where needed.
     </p>
   </section2>
   <section2 topic='Key Exchange' anchor='protocol-key_exchange'>
     <p>
-      The X3DH key exchange is specified <link url='https://signal.org/docs/specifications/x3dh/'>here</link> and placed under the public domain. OMEMO uses this key exchange mechanism with the following parameters/settings:
+      The &x3dh; key agreement protocol was specified by Trevor Perrin and Moxie Marlinspike and placed under the public domain. OMEMO uses a modified version of this key agreement protocol with the following parameters/settings:
     </p>
     <dl>
-      <di><dt>curve</dt><dd>X25519</dd></di>
+      <di><dt>curve</dt><dd>Curve25519/Ed25519</dd></di>
       <di><dt>hash function</dt><dd>SHA-256</dd></di>
       <di><dt>info string</dt><dd>&quot;OMEMO X3DH&quot;</dd></di>
-      <di><dt>byte-encoding of the public keys</dt><dd>The little-endian encoding of the u-coordinate as specified <link url='http://www.ietf.org/rfc/rfc7748.txt'>here</link> (this is the default way most crypto-libraries encode the public key).</dd></di>
       <di><dt>signed PreKey rotation period</dt><dd>Signed PreKeys SHOULD be rotated periodically once a week to once a month. A faster or slower rotation period should not be required.</dd></di>
       <di><dt>time to keep the private key of the old signed PreKey after rotating it</dt><dd>The private key of the old signed PreKey SHOULD be kept for another rotation period as defined above, to account for delayed messages using the old signed PreKey.</dd></di>
       <di><dt>number of PreKeys to provide in the bundle</dt><dd>The bundle SHOULD always contain around 100 PreKeys.</dd></di>
@@ -241,7 +251,7 @@
         </ol>
         There are essentially two ways in which libraries can fulfill these requirements:
         <ol>
-          <li>Libraries can use a Curve25519 key pair as their internal IdentityKey. In this case, the IdentityKey can be used for X25519 directly, and XEdDSA has to be used to produce EdDSA-compatible signatures. Note that libsignal by default does <strong>NOT</strong> use XEdDSA. libsignal <emph>includes</emph> XEdDSA though and has to be modified to use that to be compatible with OMEMO.</li>
+          <li>Libraries can use a Curve25519 key pair as their internal IdentityKey. In this case, the IdentityKey can be used for X25519 directly, and XEdDSA has to be used to produce EdDSA-compatible signatures. Note that libsignal by default does <strong>NOT</strong> use XEdDSA. libsignal <em>includes</em> XEdDSA though and has to be modified to use that to be compatible with OMEMO.</li>
           <li>Libraries can use an Ed25519 key pair as their internal IdentityKey. In this case, the IdentityKey can create EdDSA-compatible signatures directly, and has to be converted first to perform X25519.</li>
         </ol>
         Note that this decision is purely local to each client and OMEMO library. The public key is ALWAYS transferred in its Ed25519 form and only valid EdDSA signatures are transferred. The choice between Curve25519 and Ed25519 affects the definition of the <tt>Sig(PK, M)</tt> and <tt>DH(PK1, PK2)</tt> functions as defined below.</dd></di>
@@ -254,16 +264,16 @@
     </p>
   </section2>
   <section2 topic='Double Ratchet' anchor='protocol-double_ratchet'>
-    <p>NOTE: <tt>OMEMOMessage.proto</tt>, <tt>OMEMOAuthenticatedMessage.proto</tt> and <tt>OMEMOKeyExchange.proto</tt> refer to the protobuf structures as defined <link url='#protobuf-schema'>here</link>.</p>
+    <p>NOTE: <tt>OMEMOMessage.proto</tt>, <tt>OMEMOAuthenticatedMessage.proto</tt> and <tt>OMEMOKeyExchange.proto</tt> refer to the protobuf structures as defined in the <link url="#protobuf-schema">Protobuf Schemas</link>.</p>
     <p>
-      The Double Ratchet encryption scheme is specified <link url='https://signal.org/docs/specifications/doubleratchet/'>here</link> and placed under the public domain. OMEMO uses this protocol with the following parameters/settings:
+      The &doubleratchet; encryption scheme was specified by Trevor Perrin and Moxie Marlinspike and placed under the public domain. OMEMO uses this protocol with the following parameters/settings:
     </p>
     <dl>
-      <di><dt>ratchet initialization</dt><dd>The Double Ratchet is initialized using the shared secret, ad and public keys as yielded by the X3DH key exchange, as explained in the Double Ratchet specification.</dd></di>
+      <di><dt>ratchet initialization</dt><dd>The Double Ratchet is initialized using the shared secret, ad and public keys as yielded by the X3DH key agreement protocol, as explained in the Double Ratchet specification.</dd></di>
       <di><dt>MAX_SKIP</dt><dd>It is RECOMMENDED to keep around 1000 skipped message keys.</dd></di>
       <di><dt>deletion policy for skipped message keys</dt><dd>Skipped message keys MUST be stored until MAX_SKIP message keys are stored. At that point, keys are discarded on a FIFO basis to make space for new message keys. Implementations SHOULD not keep skipped message keys around forever, but discard old keys on a different implementation-defined policy. It is RECOMMENDED to base this policy on deterministic events rather than time.</dd></di>
       <di><dt>authentication tag truncation</dt><dd>Authentication tags are truncated to 16 bytes/128 bits.</dd></di>
-      <di><dt>CONCAT(ad, header)</dt><dd><tt>CONCAT(ad, header) = ad || OMEMOMessage.proto(header)</tt> NOTE: the <tt>OMEMOMessage.proto</tt> is initialized without the ciphertext, which is optional. NOTE: Implementations are not strictly required to return a parseable byte array here, as the unpacked/parsed data is required later in the protocol.</dd></di>
+      <di><dt>CONCAT(ad, header)</dt><dd><tt>CONCAT(ad, header) = ad || OMEMOMessage.proto(header)</tt> NOTE: the <tt>OMEMOMessage.proto</tt> is initialized without the ciphertext, which is optional. NOTE: Implementations are not strictly required to return a parseable byte array, as the unpacked/parsed data is required later in the protocol.</dd></di>
       <di><dt>KDF_RK(rk, dh_out)</dt><dd>HKDF-SHA-256 using the rk as HKDF salt, dh_out as HKDF input material and &quot;OMEMO Root Chain&quot; as HKDF info.</dd></di>
       <di><dt>KDF_CK(ck)</dt><dd>HMAC-SHA-256 using ck as the HMAC key, a single byte constant <tt>0x01</tt> as HMAC input to produce the next message key and a single byte constant <tt>0x02</tt> as HMAC input to produce the next chain key.</dd></di>
       <di><dt>ENCRYPT(mk, plaintext, associated_data)</dt><dd>
@@ -271,7 +281,7 @@
         <ol>
           <li>Use HKDF-SHA-256 to generate 80 bytes of output from the message key by providing mk as HKDF input, 256 zero-bits as HKDF salt and &quot;OMEMO Message Key Material&quot; as HKDF info.</li>
           <li>Divide the HKDF output into a 32-byte encryption key, a 32-byte authentication key and a 16 byte IV.</li>
-          <li>Encrypt the plaintext (which consists of a 32 bytes key and a 32 bytes HMAC as specified <link url='#protocol-message_encryption'>here</link>) using AES-256-CBC with PKCS#7 padding, using the encryption key and IV derived in the previous step.</li>
+          <li>Encrypt the plaintext (which consists of a 32 bytes key and a 32 bytes HMAC as specified in the section about <link url="#protocol-message_encryption">Message Encryption</link>) using AES-256-CBC with PKCS#7 padding, using the encryption key and IV derived in the previous step.</li>
           <li>Split the associated data as returned by <tt>CONCAT</tt> into the original ad and the <tt>OMEMOMessage.proto</tt> structure.</li>
           <li>Add the ciphertext to the <tt>OMEMOMessage.proto</tt> structure.</li>
           <li>Serialize the ad and the <tt>OMEMOMessage.proto</tt> structure into a parseable byte array by concatenating ad and the serialized protobuf structure.</li>
@@ -281,10 +291,10 @@
       </dd></di>
     </dl>
     <p>
-      If encrypting this message required a key exchange, the X3DH key exchange header data is placed into a new <tt>OMEMOKeyExchange.proto</tt> structure together with the <tt>OMEMOAuthenticatedMessage.proto</tt> structure.
+      If encrypting this message required a key exchange, the X3DH header data is placed into a new <tt>OMEMOKeyExchange.proto</tt> structure together with the <tt>OMEMOAuthenticatedMessage.proto</tt> structure.
     </p>
     <p>
-      To account for lost and out-of-order messages during the key exchange, <tt>OMEMOKeyExchange.proto</tt> structures are sent until a response by the recipient confirms that the key exchange was successfully completed. To do so, the X3DH key exchange header data is stored and added on each subsequent message until a response is received. This looks roughly as follows:
+      To account for lost and out-of-order messages during the key exchange, <tt>OMEMOKeyExchange.proto</tt> structures are sent until a response by the recipient confirms that the key exchange was successfully completed. To do so, the X3DH header data is stored and added on each subsequent message until a response is received. This looks roughly as follows:
     </p>
     <ol>
       <li>The first content is encrypted for a new recipient. This results in an X3DH header and a <tt>OMEMOAuthenticatedMessage.proto</tt> structure. Both are packed into an <tt>OMEMOKeyExchange.proto</tt> structure. The X3DH header is stored for following messages.</li>
@@ -639,7 +649,7 @@
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
   <p>Clients MUST NOT use a newly built session to transmit data without user intervention. If a client were to opportunistically start using sessions for sending without asking the user whether to trust a device first, an attacker could publish a fake device for this user, which would then receive copies of all messages sent by/to this user. A client MAY use such "not (yet) trusted" sessions for decryption of received messages, but in that case it SHOULD indicate the untrusted nature of such messages to the user.</p>
-  <p>When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex string, QR code, or other unique representation, such that it can be compared by the user. The fingerprint is often chosen to be the public part of the device's IdentityKey, but could also be a different combination data that guarantees absence of a man-in-the-middle when verified. When displaying the fingerprint as a hex string, one way to make it easier to compare the fingerprint is to split the hex string into 8 substrings of 8 chars each, then coloring each 8-char group using &xep0392;. Lowercase letters are recommended when displaying the fingerprint as a hex string.</p>
+  <p>When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex-string, QR code, or other unique representation, such that it can be compared by the user. To ensure interoperability between clients and older versions of OMEMO, the fingerprint SHOULD be chosen to be the public part of the IdentityKey in its byte-encoded Curve25519 form (see the notes on XEdDSA and the byte-encoding of public keys in the <link url="#protocol-key_exchange">X3DH protocol section</link> for details). When displaying the fingerprint as a hex-string, one way to make it easier to compare the fingerprint is to split the hex-string into 8 substrings of 8 chars each, then coloring each 8-char group using &xep0392;. Lowercase letters are recommended when displaying the fingerprint as a hex-string.</p>
   <p>While it is RECOMMENDED that clients postpone private key deletion until after message catch-up, the X3DH standard mandates that clients should not use duplicate-PreKey sessions for sending, so clients MAY delete such keys immediately for security reasons. For additional information on potential security impacts of this decision, refer to <note>Menezes, Alfred, and Berkant Ustaoglu. "On reusing ephemeral keys in Diffie-Hellman key agreement protocols." International Journal of Applied Cryptography 2, no. 2 (2010): 154-158.</note>.</p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
