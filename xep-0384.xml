@@ -233,7 +233,21 @@
       <di><dt>number of PreKeys to provide in the bundle</dt><dd>The bundle SHOULD always contain around 100 PreKeys.</dd></di>
       <di><dt>minimum number of PreKeys to provide in the bundle</dt><dd>The bundle MUST always contain at least 25 PreKeys.</dd></di>
       <di><dt>associated data</dt><dd>The associated data is created by concatenating the IdentityKeys of Alice and Bob: <tt>AD = Encode(IK_A) || Encode(IK_B)</tt></dd></di>
-      <di><dt>XEdDSA</dt><dd>To reduce the amount of bytes that have to be transferred, the key exchange uses <link url='https://signal.org/docs/specifications/xeddsa/'>XEdDSA</link> on curves X25519/Ed25519 (aka XEd25519) to build and verify signatures using encryption key pairs.</dd></di>
+      <di><dt>XEdDSA</dt><dd>OMEMO does not mandate the usage of &xeddsa; with &x3dh; for the IdentityKey. Instead, there are three simple rules that implementations MUST follow:
+        <ol>
+          <li>Implementations must use the birational map between the curves Curve25519 and Ed25519 to convert the public part of the IdentityKey whenever required, as defined in &rfc7748; (on page 5).</li>
+          <li>Implementations must be able to perform X25519 (ECDH on Curve25519) using the IdentityKey.</li>
+          <li>Implementations must be able to create EdDSA-compatible signatures on the curve Ed25519 using the IdentityKey.</li>
+        </ol>
+        There are essentially two ways in which libraries can fulfill these requirements:
+        <ol>
+          <li>Libraries can use a Curve25519 key pair as their internal IdentityKey. In this case, the IdentityKey can be used for X25519 directly, and XEdDSA has to be used to produce EdDSA-compatible signatures. Note that libsignal by default does <strong>NOT</strong> use XEdDSA. libsignal <emph>includes</emph> XEdDSA though and has to be modified to use that to be compatible with OMEMO.</li>
+          <li>Libraries can use an Ed25519 key pair as their internal IdentityKey. In this case, the IdentityKey can create EdDSA-compatible signatures directly, and has to be converted first to perform X25519.</li>
+        </ol>
+        Note that this decision is purely local to each client and OMEMO library. The public key is ALWAYS transferred in its Ed25519 form and only valid EdDSA signatures are transferred. The choice between Curve25519 and Ed25519 affects the definition of the <tt>Sig(PK, M)</tt> and <tt>DH(PK1, PK2)</tt> functions as defined below.</dd></di>
+      <di><dt>Sig(PK, M)</dt><dd>If the IdentityKey pair is chosen to be a Curve25519 key pair, the definition of <tt>Sig(PK, M)</tt> found in the X3DH specification applies. If the IdentityKey pair is chosen to be an Ed25519 key pair, the following definition applies: <tt>Sig(PK, M)</tt> represents the byte sequence that is an Ed25519 signature on the byte sequence <tt>M</tt> and verifies with public key <tt>PK</tt>, and which was created by signing <tt>M</tt> with <tt>PK</tt>'s corresponding private key. The byte-format of the signature is defined in &rfc8032;.</dd></di>
+      <di><dt>DH(PK1, PK2)</dt><dd>The original definition of <tt>DH(PK1, PK2)</tt> found in the X3DH specification applies with one exception: if the IdentityKey pair is chosen to be an Ed25519 key pair and either <tt>PK1</tt> or <tt>PK2</tt> corresponds to the IdentityKey, the respective key first has to be converted into its Curve25519 equivalent (see above). This conversion is implemented for example by <tt>libsodium</tt>, which exports the conversion as <tt>crypto_sign_ed25519_sk_to_curve25519</tt> and <tt>crypto_sign_ed25519_pk_to_curve25519</tt> for the private and public key, respectively (documented on <link url="https://download.libsodium.org/doc/advanced/ed25519-curve25519">libsodium.org</link>).</dd></di>
+      <di><dt>Encode(PK)</dt><dd>The public part of the IdentityKey pair is encoded as defined in &rfc8032;. Note that the IdentityKey is always transferred in its Ed25519 form. When using a Curve25519 key pair internally, the public key has to be converted to Ed25519 first. Curve25519 public keys are encoded using the little-endian encoding of the u-coordinate as specified in &rfc7748;.</dd></di>
     </dl>
     <p>
       The key exchange is done just-in-time when sending the first message to a device. Thus, each key exchange message always also contains encrypted content as produced by the Double Ratchet encryption scheme below.
