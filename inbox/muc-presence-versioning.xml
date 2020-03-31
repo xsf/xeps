@@ -1,0 +1,190 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>MUC presence versioning</title>
+  <abstract>This specification defines a versioning mechanism which reduces the amount of presence traffic in a XEP-0045 MUC</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>XEP-0045</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>omnipresent-muc-affiliates</shortname>
+  &jcbrand;
+  &mwild;
+   <revision>
+    <version>0.0.1</version>
+    <date>2020-03-30</date>
+    <initials>jcb</initials>
+    <remark><p>First draft</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+    <p>
+        Many modern-day non-XMPP groupchat implementations have discarded the metaphor of physical presence inside a room that a user must enter and exit, as implemented by &xep0045;.
+        The newer &xep0369; has therefore made presence subscriptions optional.
+    </p>
+    <p>
+        Often it no longer makes sense for a chat service to require that a user is "present" in order for them to be addressed by other occupants or to receive messages,
+        especially if the chat implementation will inform you out-of-band, for example via push notifications or email.
+        The notion of "room presence" is therefore less relevant than before, and in some cases can be done away with entirely.
+    </p>
+    <p>
+        Broadcasting all XEP-0045 MUC participants' presences to one another scales quadratically (O(n^2)) and can greatly increase the amount of network traffic, for potentially negligable gain.
+    </p>
+    <p>
+        Even though the metaphorical concept of presence inside a room might no longer be relevant for a groupchat implementation,
+        &lt;presence/&gt; stanzas might still contain useful metadata, such as the user's affiliation or their &xep0317;.
+    </p>
+    <p>
+        This XEP defines a versioning mechanism (similar to roster versioning in &rfc6121;) whereby the amount of presence traffic in a MUC may be greatly reduced.
+        It also describes additional measures which may be taken to further reduce the amount of presence traffic.
+    </p>
+</section1>
+
+<section1 topic="How it works">
+    <p>
+        A client that supports presence versioning needs to keep track and store the presence statuses of all MUC occupants, across multiple MUC sessions.
+        Similarly, a MUC service which supports presence versioning will also need to maintain a changelog of version numbers and presence states.
+    </p>
+    <p>
+        Before the client enters a MUC, it SHOULD use service discovery to check whether presence versioning is supported
+        (see <link url="#disco">determining support</link> below.).
+        If presence versioning is supported, the client MAY include a 'ver' attribute set to the last known presence version
+        in the &lt;{http://jabber.org/protocol/muc}x&gt; tag of the &lt;presence/&gt; stanza, which it sends to join the MUC.
+    </p>
+    <p>
+        If presence versioning is not supported by the server, the client MUST NOT include a 'ver' attribute.
+    </p>
+    <p>
+    </p>
+
+    <example caption='User specifies the last known presence version when seeking to enter a MUC'><![CDATA[
+<presence
+    from='hag66@shakespeare.lit/pda'
+    id='n13mt3l'
+    to='coven@chat.shakespeare.lit/thirdwitch'>
+  <x xmlns='http://jabber.org/protocol/muc' ver='ver14'/>
+</presence>
+]]></example>
+
+    <p>
+        The MUC will return only those presences that have changed since the version indicated by the client, and in the self-presence of the joining user it will add a
+        'ver' attribute with the latest version number on the &lt;{http://jabber.org/protocol/muc}x&gt; tag. The client must save the version number and use it next time it joins the MUC.
+    </p>
+
+    <example caption="Service Sends New Occupant's Presence to New Occupant"><![CDATA[
+<presence
+    from='coven@chat.shakespeare.lit/thirdwitch'
+    id='n13mt3l'
+    to='hag66@shakespeare.lit/pda'>
+  <x xmlns='http://jabber.org/protocol/muc#user' ver='ver16'>
+    <item affiliation='member' role='participant'/>
+    <status code='110'/>
+  </x>
+</presence>
+]]></example>
+
+    <p>
+        When presence versioning is enabled, every subsequent &lt;presence/&gt; stanza sent by the server MUST include a new version number, which replaces the existing one saved by the client.
+    </p>
+</section1>
+
+<section1 topic='Determining support' anchor='disco'>
+    <p>If a MUC implements presence versioning, it MUST specify the 'urn:xmpp:muc-presence-versioning:0' feature in its service discovery information features, as specified in &xep0030;.</p>
+<example caption='Client queries for information about a specific MUC'><![CDATA[
+    <iq type='get'
+        from='romeo@montague.example/orchard'
+        to='room@muc.shakespeare.example'
+        id='info1'>
+    <query xmlns='http://jabber.org/protocol/disco#info'/>
+    </iq>]]></example>
+
+    <example caption='The MUC advertises support for presence versioning'><![CDATA[
+    <iq type='result'
+        to='romeo@montague.example/home'
+        from='room@muc.shakespeare.example'
+        id='info1'>
+    <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+        <feature var='urn:xmpp:presence-versioning:0'/>
+    ...
+    </query>
+    </iq>]]></example>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+    <p>If a MUC receives a presence version number that's so old, so that it no longer has the corresponding state available, it needs to send all presence statuses back to the client.</p>
+    <p>
+        If the client has not yet saved a presence version number and the corresponding presence states,
+        then it MUST bootstrap presence versioning by sending a 'ver' attribute set to the empty string (i.e., ver="").
+    </p>
+    <p>
+        Even if the client did not include a 'ver' attribute in its "join" &lt;presence/&gt; stanza, the server SHOULD still set a 'ver' attribute on the relevant &lt;presence/&gt; stanzas.
+    </p>
+</section1>
+
+<section1 topic="Additional measures">
+    <p>
+        There are a number of &xep0045; features that a client and server may decide to configure and/or implement in order to further reduce the number of presence stanzas being sent around.
+    </p>
+
+
+    <section2 topic='Only broadcast presence for affiliated users' anchor='affiliate-presence'>
+        <p>
+            A MUC MAY be configured to only broadcast presence from occupants above a certain affiliation,
+            (see the <link url='https://xmpp.org/extensions/xep-0045.html#enter-pres'>presence broadcast</link> section of <cite>XEP-0045</cite>),
+            for example in a MUC where non-affiliated users are allowed to view the discussion but aren't allowed to send messages.
+        </p>
+        <section3 topic="Let users register themselves with a MUC">
+            <p>
+                This step can be taken in addition to letting users register themselves as members in the MUC.
+                XEP-45 describes in <link url='https://xmpp.org/extensions/xep-0045.html#register'>section 7.10 "Registering with a Room</link> how a user may register themselves with a room,
+                thereby receiving the "member" affiliation and having their preferred nickname reserved in that room.
+            </p>
+        </section3>
+    </section2>
+
+    <section2 topic='Restrict presence states to available and unavailable' anchor='restrict-states'>
+        <p>
+            In some cases, it makes sense to reduce the number of presence statuses to only a subset, in order to reduce to total amount of states the server needs to keep track off.
+            In the simplest case, this would mean keeping track only of two statuses, 'available' and 'unavailable'.
+        </p>
+        <section3 topic='Send presence stanzas for unavailable members' anchor='send-unavailable-presence'>
+            <p>
+                XEP-0045 documents the status code 102, which is used to indicate that a room shows unavailable members.
+                By also sending to newly joined users the presence stanzas of unavailable members,
+                it's possible to provide any necessary presence metadata of all relevant users in a groupchat and not just the currently "present" users.
+            </p>
+        </section3>
+    </section2>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>None.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>The &REGISTRAR; includes 'urn:xmpp:muc-presence-versioning:0' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+    <ul>
+      <li>urn:xmpp:muc-presence-versioning:0</li>
+    </ul>
+  </section2>
+  <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+</xep>
