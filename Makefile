@@ -160,7 +160,7 @@ clean:
 	rm -rf $(OUTDIR)
 
 .PHONY: preview
-preview:
+preview: $(OUTDIR)
 	inotifywait -m -e close_write,moved_to --format '%e %w %f' $(XEPDIRS) | \
 	while read -r event dir file; do \
 		if [ "$${file: -4}" == ".xml" ]; then \
