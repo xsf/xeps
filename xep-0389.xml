@@ -18,7 +18,7 @@
   </abstract>
   &LEGALNOTICE;
   <number>0389</number>
-  <status>Deferred</status>
+  <status>Experimental</status>
   <type>Standards Track</type>
   <sig>Standards</sig>
   <approver>Council</approver>
@@ -32,6 +32,18 @@
   <shortname>ibr2</shortname>
   &sam;
   <revision>
+    <version>0.3.0</version>
+    <date>2020-04-19</date>
+    <initials>ssw</initials>
+    <remark>
+      <ul>
+        <li>Move back to experimental.</li>
+        <li>Add IQ variant of registration/recovery.</li>
+        <li>Allow client to select between multiple flows.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>0.2.0</version>
     <date>2018-10-01</date>
     <initials>XEP Editor (jsc)</initials>
@@ -42,9 +54,7 @@
     <date>2017-03-16</date>
     <initials>XEP Editor (ssw)</initials>
     <remark>
-      <ul>
-        <li>Move to experimental.</li>
-      </ul>
+      Move to experimental.
     </remark>
   </revision>
   <revision>
@@ -67,9 +77,9 @@
 </header>
 <section1 topic='Introduction' anchor='intro'>
   <p>
-    Historically, registering with an XMPP service has been difficult.  Each
-    server either used customized out-of-band registration mechanisms such as
-    web forms which were difficult to discover, or they used &xep0077; which
+    Historically, registering with an XMPP service has been difficult.
+    Each server either used customized out-of-band registration mechanisms such
+    as web forms which were difficult to discover, or they used &xep0077; which
     could easily be abused by spammers to register large numbers of accounts and
     which allowed for only limited extensibility.
   </p>
@@ -101,26 +111,11 @@
       A client MUST be able to use the same mechanism to register an account and
       to recover a forgotten password (subject to server policy).
     </li>
+    <li>
+      A client MUST be able to register with a server as well as external
+      components.
+    </li>
   </ul>
-</section1>
-<section1 topic='Glossary' anchor='glossary'>
-  <dl>
-    <di>
-      <dt>Proof-of-work (PoW)</dt>
-      <dd>
-        A proof-of-work protocol requires that a client perform a
-        computationally intense task which is easily verified by the server.
-      </dd>
-    </di>
-    <di>
-      <dt>Proof-of-possession (PoP)</dt>
-      <dd>
-        A proof-of-possession protocol requires that a client prove that they
-        have posession of some resource (eg. a shared secret, or a valid mobile
-        phone number).
-      </dd>
-    </di>
-  </dl>
 </section1>
 <section1 topic='Use Cases' anchor='usecases'>
   <ul>
@@ -130,9 +125,8 @@
       proof-of-work function before registration is completed.
     </li>
     <li>
-      As a server operator I want to prevent zombie machines from registering
-      for accounts so I require that registrants submit a form which requires
-      user interaction.
+      As a server operator I want to prevent bots from registering accounts so I
+      require that registrants submit a form which requires user interaction.
     </li>
     <li>
       As a user I do not want to lose access to my account if I forget my
@@ -154,6 +148,7 @@
   </ul>
 </section1>
 <section1 topic='Discovering Support' anchor='disco'>
+  <section2 topic='Stream Feature'>
   <p>
     If a server supports registering for or recovering an account using
     Extensible IBR, it MUST inform the connecting client when returning stream
@@ -164,7 +159,7 @@
     recovery.
     The register and recovery features are always voluntary-to-negotiate.
     The registration and recovery features MUST NOT be advertised before
-    encryption has been negotiated, eg. using direct-TLS or STARTTLS.
+    encryption has been negotiated, eg. using direct TLS or opportunistic TLS.
     They SHOULD be advertised at the same time as the SASL authentication
     feature, meaning that after registration or recovery is completed SASL
     authentication can proceed.
@@ -173,13 +168,30 @@
     For recovery or registration, the server MUST include a list of all
     challenge types which the client may receive during the course of
     registering or recovering an account.
-    The purpose of this list is to allow clients to detect if registration
-    requires a challenge type which the client does not support, so servers
-    SHOULD only include each type once; the list is merely informative, and
-    should not be relied upon by clients except to ensure that all mechanisms
-    are supported.
-    This list should comprise &lt;challenge/&gt; elements containing a string
-    that uniquely identifies the type of challenge being issued.
+    These are grouped into "flows" and let the client pick a registration
+    workflow that only contains challenges which the client supports.
+    Each &lt;flow/&gt; element MUST have a unique "id" attribute which is used
+    by the client to identify the flow being selected.
+    They must also have at least one &lt;name/&gt; element containing a short,
+    human readable description of the flow.
+    If multiple &lt;name/&gt; elements are present they MUST have unique values
+    for the "xml:lang" attribute.
+    Clients MAY use the name element to show the different flows to the user and
+    ask them to pick between them.
+    Each flow must also contain a list of &lt;challenge/&gt; elements
+    representing the various challenges that must be completed to complete the
+    registration or recovery flow.
+    Each &lt;challenge/&gt; element contains a string that uniquely (within the
+    given parent element) identifies the type of challenge that will be offered.
+    If a flow would offer the same challenge twice (eg. two dataforms asking for
+    different data), the challenge SHOULD only be listed once in the flow
+    element.
+  </p>
+  <p>
+    For example, a server may advertise a "Verify with SMS" flow and a "Verify
+    by Phone Call" flow that both show a dataform asking for a phone number
+    and then a second dataform asking for a token provided to the user in a
+    text message or phone call depending on which flow the user selects.
   </p>
   <example caption="Host Advertises Stream Features"><![CDATA[
 <stream:features>
@@ -190,23 +202,67 @@
     <mechanism>PLAIN</mechanism>
   </mechanisms>
   <register xmlns='urn:xmpp:register:0'>
-    <challenge>jabber:x:data'</challenge>
-    <challenge>pow-example</challenge>
+    <flow id="0">
+      <name>Verify with SMS</name>
+      <challenge>jabber:x:data</challenge>
+    </flow>
+    <flow id="1">
+      <name>Verify by Phone Call</name>
+      <challenge>jabber:x:data</challenge>
+    </flow>
+    <flow id="2">
+      <name>Verify with the web</name>
+      <challenge>jabber:x:data</challenge>
+      <challenge>jabber:x:oob</challenge>
+    </flow>
   </register>
   <recovery xmlns='urn:xmpp:register:0'>
-    <challenge>jabber:x:oob</challenge>
+    <flow id="0">
+      <name>Visit Password Recovery Site</name>
+      <challenge>jabber:x:oob</challenge>
+    </flow>
   </recovery>
 </stream:features>]]></example>
+</section2>
+  <section2 topic='Service Discovery'>
+    <p>
+      Clients, servers, and other services such as components that support
+      Extensible IBR after stream negotiation is complete MUST advertise the
+      fact by including a feature of "urn::xmpp:register:0" in response to
+      &xep0030; information requests and in their &xep0115; profiles.
+    </p>
+    <example caption='Disco response'><![CDATA[
+<feature var='urn:xmpp:register:0' />]]></example>
+  </section2>
 </section1>
 <section1 topic='Challenges' anchor='challenge'>
   <p>
     A client selects the registration or recovery feature for negotiation by
-    replying with an empty element of the same name and namespace.
-    For example, to attempt account recovery the client would send a
-    &lt;recovery&gt; element qualified by the 'urn:xmpp:register:0' namespace.
+    replying with an element of the same name and namespace.
+    The element MUST contain a &lt;flow&gt; element that MUST have an "id"
+    attribute matching one of the flows advertised by the server.
+    For example, to select the "Verify by Phone Call" registration flow from
+    the previous example, the client would reply with:
   </p>
+  <example caption="Client selects a recovery flow"><![CDATA[
+<register xmlns='urn:xmpp:register:0'>
+  <flow id="1"/>
+</register>]]></example>
   <p>
-    The server then replies with a challenge.
+    If the client is initiating registration or recovery after a stream has
+    already been initiated it uses the same registration element wrapped in an
+    IQ of type "set".
+  </p>
+  <example caption="Client selects a recovery flow after stream negotiation"><![CDATA[
+<iq type="set" id="foo">
+  <recovery xmlns='urn:xmpp:register:0'>
+    <flow id="0"/>
+  </recovery>
+</iq>]]></example>
+  <p>
+    The server then replies to the IQ or feature selection with a challenge.
+    If replying to an IQ, the challenge must be wrapped in an IQ of type
+    "result".
     Challenges take the form of a &lt;challenge/&gt; element qualified by the
     'urn:xmpp:register:0' namespace with a 'type' attribute containing the
     challenge type and containing a challenge data payload.
@@ -275,41 +331,55 @@
   </x>
 </response>
 ]]></example>
+</section1>
+<section1 topic='Completing Registration or Recovery' anchor='completion'>
   <p>
-    If after receiving a challenge a client does not wish to continue
-    registration or recovery, it may send an empty &lt;cancel&gt; element
-    qualified by the 'urn:xmpp:register:0' namespace.
-    This informs the server that registration is complete.
+    If after receiving a challenge or response a client or server does not wish
+    to continue registration or recovery, it may send an empty &lt;cancel/&gt;
+    element qualified by the 'urn:xmpp:register:0' namespace.
+    This informs the client or server that registration is complete.
     This is the same as submitting a data form of type 'cancel' in response to a
     data form challenge.
   </p>
   <example caption='User Cancels Registration or Recovery'><![CDATA[
-<cancel xmlns='urn:xmpp:register:0'/>
-]]></example>
-</section1>
-<section1 topic='Completing Registration or Recovery' anchor='completion'>
+<cancel xmlns='urn:xmpp:register:0'/>]]></example>
   <p>
-    If the client submits invalid data, or the server wishes to cancel for some
-    other reason, it may reply with an empty &lt;cancel/&gt; element qualified
-    by the 'urn:xmpp:register:0' namespace.
-    If the client successfully completes the challenge, the server MAY return an
-    empty &lt;success/&gt; element qualified by the 'urn:xmpp:register:0'
-    namespace, at which point it may continue with the stream negotiation
-    process.
+    If the IQ based registration or recovery flow is being used and the server
+    wishes to cancel the flow, it MAY respond to any IQ from the client with the
+    cancel element and type "result".
+  </p>
+  <example caption='Server cancels rquest'><![CDATA[
+<iq type="result" id="bar">
+  <cancel xmlns='urn:xmpp:register:0'/>
+</iq>]]></example>
+  <p>
+    If the client successfully completes all required challenges during stream
+    negotiation the server MUST return an empty &lt;success/&gt; element
+    qualified by the 'urn:xmpp:register:0' namespace, at which point it may
+    continue with the stream negotiation process.
     If the server needs more information, for example, in the previous challenge
     the user entered an email and now the server wishes to ask for a code that
     was sent to that email, the server MAY send another challenge.
   </p>
+  <example caption='Server indicates success during steam negotiation'><![CDATA[
+<success xmlns='urn:xmpp:register:0'/>]]></example>
+  <p>
+    If the IQ based flow is being used and the server wishes to indicate success
+    it sends an empty IQ response of type "result".
+  </p>
+  <example caption='Server indicates success after stream negotation'><![CDATA[
+<iq type="result" id="bar" />]]></example>
 </section1>
 <section1 topic='Internationalization Considerations' anchor='i18n'>
   <p>
-    When providing instructions in a data form the server SHOULD use the
-    language specified in the XML stream's current xml:lang, or the closest
-    language for which the server has a translation (eg. based on mutual
-    intelligibility between scripts and languages).
+    When providing instructions in a data form, or in the name element of a
+    registration or recovery flow, the server SHOULD use the language specified
+    in the XML stream's current xml:lang, or the closest language for which the
+    server has a translation (eg. based on mutual intelligibility between
+    scripts and languages).
   </p>
   <p>
-    For more information about language tags and matching, see &bcp47;
+    For more information about language tags and matching, see &bcp47;.
   </p>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
