@@ -35,6 +35,7 @@ THE SOFTWARE.
   <xsl:template match='/'>
     <reference>
       <xsl:attribute name='anchor'><xsl:text>XEP-</xsl:text><xsl:value-of select='/xep/header/number'/></xsl:attribute>
+      <xsl:attribute name='target'><xsl:text>http://xmpp.org/extensions/xep-</xsl:text><xsl:value-of select='/xep/header/number'/><xsl:text>.html</xsl:text></xsl:attribute>
       <front>
         <title><xsl:value-of select='/xep/header/title' /></title>
         <xsl:apply-templates select='/xep/header/author'/>
