@@ -58,6 +58,14 @@
     <jid>jabber@larma.de</jid>
   </author>
   <revision>
+    <version>0.6.0</version>
+    <date>2020-06-09</date>
+    <initials>ps</initials>
+    <remark>
+      <p>Incorporate feedback around cryptographic terms and content by Sofía Celi.</p>
+    </remark>
+  </revision>
+  <revision>
     <version>0.5.0</version>
     <date>2020-03-26</date>
     <initials>th</initials>
@@ -194,15 +202,17 @@
   <p>OMEMO is an end-to-end encryption protocol based on the Double Ratchet specified in section <link url='#protocol-double_ratchet'>Double Ratchet</link>. It provides the following guarantees under the threat model described in the next section:</p>
   <ul>
     <li>Confidentiality: Nobody else except sender and receiver is able to read the content of a message.</li>
-    <li>Perfect forward secrecy: Compromised key material does not compromise previous or future message exchanges.</li>
+    <li>Forward Secrecy: Compromised key material does not compromise previous message exchanges.
+    It has been <link url="https://www.cypherpunks.ca/~iang/pubs/dakez-popets18.pdf">demonstrated</link>, that OMEMO provides only weak forward secrecy (it protects the session key only once both parties complete the key exchange).</li>
+    <li>Post-Compromize Security: A session which has been compromised due to leakage of key material recovers from the compromise after a few communication rounds.</li>
     <li>Authentication: Every peer is able to authenticate the sender or receiver of a message, even if the details of the authentication process is out-of-scope for this specification.</li>
-    <li>Immutability: Every peer can ensure that a message was not changed by any intermediate node.</li>
-    <li>Plausible deniability: No participant can prove who created a specific message.</li>
+    <li>Integrity: Every peer can ensure that a message was not changed by any intermediate node.</li>
+    <li>Deniability: X3DH is weakly offline deniable and provides no online deniability, as far as the research shows.</li>
     <li>Asynchronicity: The usability of the protocol does not depend on the online status of any participant.</li>
   </ul>
   <p>OMEMO is not intended to protect against the following use cases:</p>
   <ul>
-    <li>An attacker has permanent access to your device. Temporary access is covered by perfect forward secrecy.</li>
+    <li>An attacker has permanent access to your device. In this case, the attacker may extract decrypted messages from the device, eg. from the applications database. If the access is temporary, security will eventually be restored through forward secrecy.</li>
     <li>You lost your device and an attacker can read messages on your notification screen.</li>
     <li>Any kind of denial-of-service attack.</li>
     <li>tbc</li>
@@ -271,11 +281,11 @@
     <dl>
       <di><dt>ratchet initialization</dt><dd>The Double Ratchet is initialized using the shared secret, ad and public keys as yielded by the X3DH key agreement protocol, as explained in the Double Ratchet specification.</dd></di>
       <di><dt>MAX_SKIP</dt><dd>It is RECOMMENDED to keep around 1000 skipped message keys.</dd></di>
-      <di><dt>deletion policy for skipped message keys</dt><dd>Skipped message keys MUST be stored until MAX_SKIP message keys are stored. At that point, keys are discarded on a FIFO basis to make space for new message keys. Implementations SHOULD not keep skipped message keys around forever, but discard old keys on a different implementation-defined policy. It is RECOMMENDED to base this policy on deterministic events rather than time.</dd></di>
+      <di><dt>deletion policy for skipped message keys</dt><dd>Skipped message keys MUST be stored until MAX_SKIP message keys are stored. At that point, keys are discarded on a FIFO basis to make space for new message keys. Implementations SHOULD not keep skipped message keys around forever, but discard old keys on a different implementation-defined policy. It is RECOMMENDED to base this policy on deterministic events rather than time. To prevent an attacker from deleting arbitrary message keys, the deletion policy should be applied on a per-session basis.</dd></di>
       <di><dt>authentication tag truncation</dt><dd>Authentication tags are truncated to 16 bytes/128 bits.</dd></di>
       <di><dt>CONCAT(ad, header)</dt><dd><tt>CONCAT(ad, header) = ad || OMEMOMessage.proto(header)</tt> NOTE: the <tt>OMEMOMessage.proto</tt> is initialized without the ciphertext, which is optional. NOTE: Implementations are not strictly required to return a parseable byte array, as the unpacked/parsed data is required later in the protocol.</dd></di>
-      <di><dt>KDF_RK(rk, dh_out)</dt><dd>HKDF-SHA-256 using the rk as HKDF salt, dh_out as HKDF input material and &quot;OMEMO Root Chain&quot; as HKDF info.</dd></di>
-      <di><dt>KDF_CK(ck)</dt><dd>HMAC-SHA-256 using ck as the HMAC key, a single byte constant <tt>0x01</tt> as HMAC input to produce the next message key and a single byte constant <tt>0x02</tt> as HMAC input to produce the next chain key.</dd></di>
+      <di><dt>KDF_RK(rk, dh_out)</dt><dd>HKDF-SHA-256 using the root key (rk) as HKDF salt, the output of a Diffie-Hellman (dh_out) as HKDF input material and &quot;OMEMO Root Chain&quot; as HKDF info.</dd></di>
+      <di><dt>KDF_CK(ck)</dt><dd>HMAC-SHA-256 using a chain key (ck) as the HMAC key, a single byte constant <tt>0x01</tt> as HMAC input to produce the next message key (mk) and a single byte constant <tt>0x02</tt> as HMAC input to produce the next chain key.</dd></di>
       <di><dt>ENCRYPT(mk, plaintext, associated_data)</dt><dd>
         The encryption step uses authenticated encryption consisting of AES-256-CBC with HMAC-SHA-256.
         <ol>
@@ -290,6 +300,7 @@
         </ol>
       </dd></di>
     </dl>
+    <p>Information on the functions mentioned above can be found in the <link url="https://signal.org/docs/specifications/doubleratchet/#external-functions">Double Ratchet</link> specification.</p>
     <p>
       If encrypting this message required a key exchange, the X3DH header data is placed into a new <tt>OMEMOKeyExchange.proto</tt> structure together with the <tt>OMEMOAuthenticatedMessage.proto</tt> structure.
     </p>
@@ -306,7 +317,7 @@
       The contents are encrypted and authenticated using a combination of AES-256-CBC and HMAC-SHA-256.
     </p>
     <ol>
-      <li>Generate 32 bytes of cryptographically secure random data, called <tt>key</tt> in the remainder of this algorithm.</li>
+      <li>Generate 32 bytes of <link url="https://tools.ietf.org/html/rfc4086">cryptographically secure random data</link>, called <tt>key</tt> in the remainder of this algorithm.</li>
       <li>Use HKDF-SHA-256 to generate 80 bytes of output from the key by providing the key as HKDF input, 256 zero-bits as HKDF salt and &quot;OMEMO Payload&quot; as HKDF info.</li>
       <li>Divide the HKDF output into a 32-byte encryption key, a 32-byte authentication key and a 16 byte IV.</li>
       <li>Encrypt the plaintext using AES-256-CBC with PKCS#7 padding, using the encryption key and IV derived in the previous step.</li>
@@ -799,5 +810,6 @@ message OMEMOKeyExchange {
 <section1 topic='Acknowledgements' anchor='ack'>
   <p>Big thanks to Daniel Gultsch for mentoring me during the development of this protocol. Thanks to Thijs Alkemade and Cornelius Aschermann for talking through some of the finer points of the protocol with me. And lastly I would also like to thank Sam Whited, Holger Weiss, and Florian Schmaus for their input on the standard.</p>
   <p>The authors would like to thank the Chaosdorf for hosting them during the development of version 0.4.0 of this specification.</p>
+  <p>Furthermore, the authors want to thank Sofía Celi for her feedback and input on the document.</p>
 </section1>
 </xep>
