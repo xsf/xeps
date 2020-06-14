@@ -3,7 +3,7 @@
 OUTDIR?=build
 REFSDIR?=$(OUTDIR)/refs
 EXAMPLESDIR?=$(OUTDIR)/examples
-XMLDEPS=xep.xsd xep.ent xep.dtd ref.xsl $(OUTDIR)
+XMLDEPS=xep.xsd xep.ent xep.dtd ref.xsl
 TEXMLDEPS=xep2texml.xsl $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf
 XEPDIRS=. inbox
 HTMLDEPS=xep.xsl $(CSSTARGETS) $(JSTARGETS)
@@ -100,13 +100,13 @@ $(OUTDIR)/xep.xsl: xep.xsl $(OUTDIR)
 $(OUTDIR)/xeplist.xml: $(wildcard *.xml) $(wildcard inbox/*.xml)
 	./tools/extract-metadata.py > $@
 
-$(EXAMPLESDIR)/%.xml: xep-%.xml $(XMLDEPS) examples.xsl $(EXAMPLESDIR)
+$(EXAMPLESDIR)/%.xml: xep-%.xml $(XMLDEPS) examples.xsl | $(EXAMPLESDIR)
 	xsltproc --path $(CURDIR) examples.xsl "$<" > "$@" && echo "Finished building $@"
 
-$(REFSDIR)/reference.XSF.XEP-%.xml: xep-%.xml $(XMLDEPS) ref.xsl $(REFSDIR)
+$(REFSDIR)/reference.XSF.XEP-%.xml: xep-%.xml $(XMLDEPS) ref.xsl | $(REFSDIR)
 	xsltproc --path $(CURDIR) ref.xsl "$<" > "$@" && echo "Finished building $@"
 
-$(xep_htmls): $(OUTDIR)/xep-%.html: xep-%.xml $(XMLDEPS) $(HTMLDEPS)
+$(xep_htmls): $(OUTDIR)/xep-%.html: xep-%.xml $(XMLDEPS) $(HTMLDEPS) | $(OUTDIR)
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
@@ -114,7 +114,7 @@ $(xep_htmls): $(OUTDIR)/xep-%.html: xep-%.xml $(XMLDEPS) $(HTMLDEPS)
 	# Actually build the HTML
 	xsltproc --path $(CURDIR) --param htmlbase "$(if $(findstring inbox,$<),'../','./')" xep.xsl "$<" > "$@" && echo "Finished building $@"
 
-$(proto_xep_htmls): $(OUTDIR)/inbox/%.html: inbox/%.xml $(XMLDEPS) $(proto_HTMLDEPS)
+$(proto_xep_htmls): $(OUTDIR)/inbox/%.html: inbox/%.xml $(XMLDEPS) $(proto_HTMLDEPS) | $(OUTDIR)
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
 	# Check for non-data URIs
 	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
@@ -122,7 +122,7 @@ $(proto_xep_htmls): $(OUTDIR)/inbox/%.html: inbox/%.xml $(XMLDEPS) $(proto_HTMLD
 	# Actually build the HTML
 	xsltproc --path $(CURDIR) --param htmlbase "$(if $(findstring inbox,$<),'../','./')" xep.xsl "$<" > "$@" && echo "Finished building $@"
 
-$(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf: $(OUTDIR)
+$(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf: | $(OUTDIR)
 	cp "resources/$(notdir $@)" "$@"
 
 $(OUTDIR)/%.pdf: %.xml $(XMLDEPS) $(TEXMLDEPS)
@@ -140,16 +140,16 @@ $(OUTDIR)/%.pdf: %.xml $(XMLDEPS) $(TEXMLDEPS)
 	done
 	echo "Finished building $@"
 
-$(JSTARGETS): $(OUTDIR)
+$(JSTARGETS): | $(OUTDIR)
 	cp "$(notdir $@)" "$@"
 
-$(CSSTARGETS): $(OUTDIR)
+$(CSSTARGETS): | $(OUTDIR)
 	cp "$(notdir $@)" "$@"
 
-$(proto_JSTARGETS): $(OUTDIR)/inbox
+$(proto_JSTARGETS): | $(OUTDIR)/inbox
 	cp "$(notdir $@)" "$@"
 
-$(proto_CSSTARGETS): $(OUTDIR)/inbox
+$(proto_CSSTARGETS): | $(OUTDIR)/inbox
 	cp "$(notdir $@)" "$@"
 
 $(EXAMPLESDIR) $(REFSDIR) $(OUTDIR) $(OUTDIR)/inbox:

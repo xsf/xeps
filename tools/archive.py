@@ -11,13 +11,14 @@ from datetime import datetime, timedelta
 from xeplib import load_xepinfos, Status
 
 
-def do_archive(xeps_dir, attic, xep, old_version, new_version):
+def do_archive(xeps_dir, attic, xep, old_version, new_version, build):
     curr_file = xeps_dir / "xep-{:04d}.html".format(xep)
     attic_file = attic / "xep-{:04d}-{}.html".format(xep, new_version)
 
     print("XEP-{:04d}:".format(xep), old_version, "->", new_version)
 
-    subprocess.check_call(["make", "build/xep-{:04d}.html".format(xep)])
+    if build:
+        subprocess.check_call(["make", "build/xep-{:04d}.html".format(xep)])
 
     shutil.copy(str(curr_file), str(attic_file))
 
@@ -56,6 +57,13 @@ def main():
     )
 
     parser.add_argument(
+        "--no-build",
+        action="store_false",
+        dest="build",
+        default=True,
+    )
+
+    parser.add_argument(
         "xeps",
         nargs="*",
         type=int,
@@ -89,7 +97,7 @@ def main():
             continue
 
         force_archive.discard(xep)
-        do_archive(args.xeps_dir, args.attic, xep, old_version, new_version)
+        do_archive(args.xeps_dir, args.attic, xep, old_version, new_version, args.build)
         changed = True
 
     for xep in force_archive:
@@ -98,7 +106,7 @@ def main():
         )
         new_version = new_accepted[xep]["last_revision"]["version"]
 
-        do_archive(args.xeps_dir, args.attic, xep, old_version, new_version)
+        do_archive(args.xeps_dir, args.attic, xep, old_version, new_version, args.build)
         changed = True
 
     if changed:

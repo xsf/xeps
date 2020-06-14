@@ -133,6 +133,10 @@ def dummy_info(number):
     }
 
 
+def extract_version(info):
+    return info.get("last_revision", {}).get("version")
+
+
 def diff_infos(old, new):
     if old["status"] != new["status"]:
         if new["status"] == Status.PROTO:
@@ -151,13 +155,39 @@ def diff_infos(old, new):
             old["last_call"] != new["last_call"]):
         return Action.LAST_CALL
 
-    old_version = old.get("last_revision", {}).get("version")
-    new_version = new.get("last_revision", {}).get("version")
+    old_version = extract_version(old)
+    new_version = extract_version(new)
 
     if old_version != new_version:
         return Action.UPDATE
 
     return None
+
+
+def decompose_version(s):
+    version_info = list(s.split("."))
+    if len(version_info) < 3:
+        version_info.extend(['0'] * (3 - len(version_info)))
+    return version_info
+
+
+def filter_bump_level(old_version, new_version,
+                      include_editorial, include_non_editorial):
+    if old_version is None:
+        # treat as non-editorial
+        is_editorial = False
+    else:
+        old_version_d = decompose_version(old_version)
+        new_version_d = decompose_version(new_version)
+        # if the version number only differs in patch level or below, the change
+        # is editorial
+        is_editorial = old_version_d[:2] == new_version_d[:2]
+
+    if is_editorial and not include_editorial:
+        return False
+    if not is_editorial and not include_non_editorial:
+        return False
+    return True
 
 
 def wraptext(text):
@@ -262,10 +292,10 @@ def main():
     )
     parser.add_argument(
         "--no-proto",
-        dest="process_proto",
+        dest="include_protoxep",
         default=True,
         action="store_false",
-        help="Disable processing of ProtoXEPs.",
+        help="Do not announce ProtoXEPs",
     )
     parser.add_argument(
         "-n", "--dry-run",
@@ -273,6 +303,20 @@ def main():
         action="store_true",
         default=False,
         help="Instead of sending emails, print them to stdout (implies -y)",
+    )
+    parser.add_argument(
+        "--no-editorial",
+        action="store_false",
+        default=True,
+        dest="include_editorial",
+        help="Do not announce editorial changes."
+    )
+    parser.add_argument(
+        "--no-non-editorial",
+        action="store_false",
+        default=True,
+        dest="include_non_editorial",
+        help="Do not announce non-editorial changes."
     )
 
     parser.add_argument(
@@ -334,6 +378,13 @@ def main():
         new_info = new_accepted[common_xep]
 
         action = diff_infos(old_info, new_info)
+        if action == Action.UPDATE and not filter_bump_level(
+                extract_version(old_info),
+                extract_version(new_info),
+                args.include_editorial,
+                args.include_non_editorial):
+            continue
+
         if action is not None:
             updates.append((common_xep, action, new_info))
 
@@ -345,7 +396,7 @@ def main():
         if action is not None:
             updates.append((added_xep, action, new_info))
 
-    if args.process_proto:
+    if args.include_protoxep:
         for added_proto in added_protos:
             old_info = dummy_info('xxxx')
             new_info = new_proto[added_proto]
