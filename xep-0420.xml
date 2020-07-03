@@ -29,12 +29,19 @@
   <supersedes/>
   <supersededby/>
   <shortname>SCE</shortname>
-  <author>
-    <firstname>Paul</firstname>
-    <surname>Schaub</surname>
-    <email>vanitasvitae@fsfe.org</email>
-    <jid>vanitasvitae@jabberhead.tk</jid>
-  </author>
+  &paulschaub;
+  <revision>
+    <version>0.3.0</version>
+    <date>2020-07-03</date>
+    <initials>ps</initials>
+    <remark>
+      <p>Allow origin-id elements, disallow stanza-id and extended stanza addressing elements inside the payload element</p>
+      <p>Clarify wording on stanza processed elements and improve XEP formatting</p>
+      <p>Remove limitation of random padding content to base64 characters alone</p>
+      <p>Chat messages MUST contain message processing store hint</p>
+      <p>Credit where credit is due</p>
+    </remark>
+  </revision>
   <revision>
     <version>0.2.0</version>
     <date>2019-10-04</date>
@@ -99,7 +106,7 @@
     <tr>
       <td>&rpad;</td>
       <td>Random-length random-content padding</td>
-      <td>Prevent known ciphertext and message length correlation attacks. The content of this element is a randomly generated sequence of base64 characters of random length between 0 and 200 characters. TODO: sane boundaries?</td>
+      <td>Prevent known ciphertext and message length correlation attacks. The content of this element is a randomly generated sequence of random length between 0 and 200 characters. TODO: sane boundaries?</td>
       <td>None. This element is only used to change the length of the ciphertext and doesn't need to be verified</td>
     </tr>
     <tr>
@@ -320,23 +327,30 @@
   <p>As a last step, the original unencrypted stanza is recreated by replacing the &envelope; element of the stanza with the contents of the &payload; element.</p>
 </section1>
 
-<section1 topic='Blacklist' anchor='blacklist'>
-  <p>The receiving client MUST ignore certain elements that may allow for attacks to take place.</p>
-  <p>Since it is hard to come up with a complete list of blacklisted elements, a general rule of thumb would be the following:</p>
-  <p>Blacklisted are all elements that need to be read by the server at some point.</p>
-  <p>Below is an additional list of elements that are definitely forbidden inside the &content; element and MUST instead be placed in the message unencrypted.</p>
-  <table caption='Examples for elements that MUST be ignored by the recipient'>
+<section1 topic='Server-processed Elements' anchor='server-processed'>
+  <p>There are certain extension elements which are required to be available to the server in order to do message routing and processing.
+     Additionally there are some elements that MUST be filtered by the server.
+     Allowing for those elements to be included in, and parsed from the encrypted payload would allow a malicious client to perform a number of attacks.</p>
+  <p>Contrary to this, other elements are considered sensitive and MUST NOT be available in plaintext outside the &content; element.</p>
+  <p>It is hard to come up with a complete list of exceptional elements at this point, as there is no practical implementation experience.</p>
+  <p>Below is a non-exhaustive list of elements that are definitely blacklisted inside the &content; element and whitelisted as direct child elements of the message.</p>
+  <table caption='Examples for exceptional elements that MUST NOT be included in, or read from the &content; element and MUST instead be sent traditionally as direct child elements of the stanza.'>
     <tr>
       <th>Element</th>
       <th>Reason</th>
     </tr>
     <tr>
       <td>Elements of &xep0334;</td>
-      <td>Those elements are addressed to the server and of no interest for the client</td>
+      <td>Message Processing Hints are addressed to the server and MUST therefore be accessible in plaintext. A receiving client MUST ignore any message processing hints encountered inside the encrypted &content; element</td>
     </tr>
     <tr>
-      <td>Origin-ID elements of &xep0359;</td>
-      <td>These IDs may be used to identify a message even though it cannot be decrypted.</td>
+      <td>Stanza-ID elements of &xep0359;</td>
+      <td>Sending clients MUST NOT include Stanza-ID elements inside the &content; element, as this would prevent the server from filtering it.
+          A client MUST ignore Stanza-ID elements encountered inside &content; element</td>
+    </tr>
+    <tr>
+      <td>Elements of &xep0033;</td>
+      <td>The server MUST be able to access the &lt;addresses/&gt; and &lt;address/&gt; elements in order to do message routing, so they MUST NOT be encrypted.</td>
     </tr>
     <tr>
       <td>TODO: Other elements?</td>
@@ -348,17 +362,21 @@
 
 <section1 topic='Business Rules' anchor='rules'>
   <p>Unencrypted &content; elements are NOT ALLOWED as child elements of the stanza and MUST be dropped.</p>
-  <p>Elements in the &content; elements &payload; element MUST be identified using an element name and namespace. Notably the &lt;body/&gt; element MUST contain a valid namespace (i.e. "jabber:client").</p>
+  <p>Elements in the &content; elements &payload; element MUST be identified using an element name and namespace.
+     Notably the &lt;body/&gt; element MUST contain a valid namespace (i.e. "jabber:client").</p>
   <p>The recipient must verify that the decrypted &content; element contains valid XML before processing it any further. Invalid XML must be rejected.</p>
-  <p>After verifying the integrity of the &content; element, the recipient needs to make sure that no blacklisted elements are found within the payload. Any forbidden elements MUST be dropped before the message is processed any further.</p>
-  <p>Furthermore the receiving client MUST ignore any extension elements considered as sensitive which are found outside of the &content; element, especially as direct unencrypted child elements of the enclosing stanza.</p>
-  <p>Duplicate elements within the &content; element MUST be dropped.</p>
-  <p>Elements in the &content; element override elements in the enclosing stanza. TODO: Maybe we want to remove this rule by disallowing duplicate elements all together?</p>
-  <p>Since a message encrypted with SCE MUST NOT contain a &lt;body/&gt; element, it is not eligible for MAM message storage (&xep0313;). Therefore sending entities MUST append an unencrypted &xep0334; &lt;store/&gt; hint as a direct child element to the message.</p>
+  <p>After verifying the integrity of the &content; element, the recipient needs to make sure that no server-processed elements are found within the payload.
+     Any forbidden elements MUST be dropped before the message is processed any further.</p>
+  <p>Furthermore the receiving client MUST ignore any extension elements considered as sensitive which are found outside of the &content; element,
+     especially as direct unencrypted child elements of the enclosing stanza.</p>
+  <p>Since a chat message encrypted with SCE MUST NOT contain a &lt;body/&gt; element, it is not eligible for MAM message storage (&xep0313;).
+     Therefore sending entities MUST append an unencrypted &xep0334; &lt;store/&gt; hint as a direct child element to the message.</p>
 </section1>
 
 <section1 topic='Implementation Notes' anchor='impl'>
-  <p>As a first, naïve approach a recipient of a message containing an &envelope; element could simply reinject the reassambled unencrypted stanza into the XML stream. This might introduce some security issues. Most notably, there is no way to distinguish end-to-end encrypted elements from unencrypted elements.</p>
+  <p>As a first, naïve approach a recipient of a message containing an &envelope; element could simply reinject the reassambled unencrypted stanza into the XML stream.
+     This might introduce some security issues.
+     Most notably, depending on the clients implementation it may become ambiguous which elements were received end-to-end encrypted and which were received unencrypted.</p>
   <p>Implementations should rather handle encrypted elements explicitly.</p>
 </section1>
 
@@ -376,5 +394,10 @@
 
 <section1 topic='XML Schema' anchor='schema'>
   <p>TODO.</p>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acknowledgements'>
+  <p>Big thanks to the authors of &xep0373; (Florian Schmaus, Dominik Schürmann and Vincent Breitmoser) which heavily inspired the idea of this protocol.</p>
+  <p>Also thanks to Marvin Wißfeld, Tim Henkes, Daniel Gultsch, Melvin Keskin and Andreas Straub for their feedback.</p>
 </section1>
 </xep>
