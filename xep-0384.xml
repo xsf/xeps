@@ -63,7 +63,6 @@
     <initials>th</initials>
     <remark>
       <ul>
-        <li>Replaced the "naive" automatic session healing mechanism with a more sophisticated, hopefully secure alternative.</li>
         <li>Various fixes, clarifications and general improvements.</li>
       </ul>
     </remark>
@@ -288,16 +287,11 @@
   <section2 topic='Double Ratchet' anchor='protocol-double_ratchet'>
     <p>NOTE: <tt>OMEMOMessage.proto</tt>, <tt>OMEMOAuthenticatedMessage.proto</tt> and <tt>OMEMOKeyExchange.proto</tt> refer to the protobuf structures as defined in the <link url="#protobuf-schema">Protobuf Schemas</link>.</p>
     <p>
-      The &doubleratchet; encryption scheme was specified by Trevor Perrin and Moxie Marlinspike and placed under the public domain. OMEMO uses an extended version of this protocol with the following parameters/settings:
+      The &doubleratchet; encryption scheme was specified by Trevor Perrin and Moxie Marlinspike and placed under the public domain. OMEMO uses this protocol with the following parameters/settings:
     </p>
     <dl>
       <di><dt>ratchet initialization</dt><dd>
-        The Double Ratchet is initialized using the shared secret, ad and public keys as yielded by the X3DH key agreement protocol, as explained in the Double Ratchet specification. Additionally, the state is extended by the following values:
-        <ul>
-          <li><strong>ek</strong> &#8211; The public key of the ephemeral key pair used by the X3DH key agreement.</li>
-          <li><strong>DHrc</strong> &#8211; Tracks the Diffie-Hellman ratchet counter of the other party, initialized to 0.</li>
-          <li><strong>DHsc</strong> &#8211; Tracks the own Diffie-Hellman ratchet counter, initialized to 0.</li>
-        </ul>
+        The Double Ratchet is initialized using the shared secret, ad and public keys as yielded by the X3DH key agreement protocol, as explained in the Double Ratchet specification. Additionally, the ephemeral key pair (ek) used by the X3DH key agreement is stored with the session.
       </dd></di>
       <di><dt>MAX_SKIP</dt><dd>Storing skipped message keys introduces two potential DoS attacks. First, the maximum number of skipped message keys to store has to be limited, otherwise an attacker could fill the storage of the receiving device with skipped message keys. It is RECOMMENDED to keep 1000 skipped message keys around per session. Second, the maximum number of skipped message keys in a single message has to be limited, otherwise, with just a single malicious message, an attacker could make the receiving device calculate up to around 2^32 skipped message keys. The choice of this limit depends on the hardware capabilities of the device, though modern hardware is safe to choose values of around 1000 here too.</dd></di>
       <di><dt>deletion policy for skipped message keys</dt><dd>As soon as the maximum number of skipped message keys are stored for a session, keys for that session are discarded on a FIFO basis to make space for new skipped message keys. Implementations SHOULD NOT keep skipped message keys around forever, but discard old keys on a different implementation-defined policy. It is RECOMMENDED to base this policy on deterministic events rather than time.</dd></di>
@@ -319,7 +313,6 @@
           <li>Put the serialized <tt>OMEMOMessage.proto</tt> structure and the HMAC into a new <tt>OMEMOAuthenticatedMessage.proto</tt> structure.</li>
         </ol>
       </dd></di>
-      <di><dt>RatchetEncrypt</dt><dd>As specified, with one addition: if <tt>header.n</tt> equals zero, increment <tt>state.DHsc</tt> once.</dd></di>
     </dl>
     <p>Information on the functions mentioned above can be found in the <link url="https://signal.org/docs/specifications/doubleratchet/#external-functions">Double Ratchet</link> specification.</p>
     <p>
@@ -538,8 +531,8 @@
     <section3 topic='Message structure description' anchor='message-structure-description'>
       <p>
         An OMEMO encrypted message is specified to include an &lt;encrypted&gt; element in the <tt>&ns;</tt> namespace. It contains up to two child nodes, the &lt;header&gt; and the &payload; element. The &lt;header&gt; element must always be present, the &payload; element must be present unless an empty message is sent, as described below.
-        The &lt;header&gt; element has an attribute named 'sid' referencing the device id of the sending device and contains one or multiple &lt;keys&gt; elements, each with an attribute 'jid' of one of the recipients bare JIDs, an attribute 'dhcs_sig' containing the base64 encoded signature of the Diffie-Hellman ratchet counters as described below, as well as one or multiple &lt;key&gt; elements.
-        A &lt;key&gt; element has an attribute named 'rid' referencing the device id of the recipient device, and an attribute named 'kex' which defaults to 'false' and indicates if the enclosed encrypted message includes a key exchange, next to the two attributes 'dhc' and 'ekid' that are described below. The key and HMAC encrypted using the long-standing OMEMO session for that recipient device are encoded using base64 and placed as text content into the &lt;key&gt; element.
+        The &lt;header&gt; element has an attribute named 'sid' referencing the device id of the sending device and contains one or multiple &lt;keys&gt; elements, each with an attribute 'jid' of one of the recipients bare JIDs, as well as one or multiple &lt;key&gt; elements.
+        A &lt;key&gt; element has an attribute named 'rid' referencing the device id of the recipient device, and an attribute named 'kex' which defaults to 'false' and indicates if the enclosed encrypted message includes a key exchange. The key and HMAC encrypted using the long-standing OMEMO session for that recipient device are encoded using base64 and placed as text content into the &lt;key&gt; element.
         The encrypted &content; element is encoded using base64 and placed as text content into the &payload; element.
       </p>
       <p>A special case are <em>empty</em> messages, which are used in various places throughout the protocol purely to manage sessions and not to transfer content. With empty messages, the step of creating and encrypting the &payload; element is skipped. Instead of encrypting the key and authentication tag of the &payload; ciphertext with the Double Ratchet session, 32 zero-bytes are encrypted with the Double Ratchet session directly. The resulting OMEMOKeyExchange or OMEMOAuthenticatedMessage are put into &lt;key&gt; elements as usual, but the &payload; element is omitted altogether, so that the &lt;encrypted&gt; element only contains a &lt;header&gt;.</p>
@@ -547,12 +540,12 @@
 <message to='juliet@capulet.lit' from='romeo@montague.lit' id='send1'>
   <encrypted xmlns=']]>&ns;<![CDATA['>
     <header sid='27183'>
-      <keys jid='juliet@capulet.lit' dhcs_sig='b64/encoded/data'>
-        <key rid='31415' dhc='5' ekid='b64/encoded/data'>b64/encoded/data</key>
+      <keys jid='juliet@capulet.lit'>
+        <key rid='31415'>b64/encoded/data</key>
       </keys>
-      <keys jid='romeo@montague.lit' dhcs_sig='b64/encoded/data'>
-        <key rid='1337' dhc='2' ekid='b64/encoded/data'>b64/encoded/data</key>
-        <key kex='true' rid='12321' dhc='4' ekid='b64/encoded/data'>b64/encoded/data</key>
+      <keys jid='romeo@montague.lit'>
+        <key rid='1337'>b64/encoded/data</key>
+        <key kex='true' rid='12321'>b64/encoded/data</key>
         <!-- ... -->
       </keys>
     </header>
@@ -562,24 +555,6 @@
   </encrypted>
   <store xmlns='urn:xmpp:hints'/>
 </message>]]></example>
-      <p>
-        Each &lt;key&gt; element has an attribute called 'dhc', which is an unsigned integer. When encrypting and sending a message, the sender fills this attribute with the value of <tt>state.DHsc</tt> of the Double Ratchet session that belongs to the recipient device referenced by 'rid'. To fill the 'ekid' attribute, the sender first loads the value of <tt>state.ek</tt> of the Double Ratchet session that belongs to the recipient device referenced by 'rid'. The sender then calculates the SHA-256 checksum of <tt>state.ek</tt> and truncates the result to 8 bytes/64 bits. The result (which may be cached) is base64 encoded and assigned to 'ekid'. After filling all 'dhc' and 'ekid' attributes, the sender has to calculate the value of the 'dhcs_sig' attribute of each &lt;keys&gt; element. To do so, for each &lt;keys&gt; element, the sender creates a byte string <tt>jid || [(rid || ekid || dhc) || ...]</tt>, where
-      </p>
-      <ul>
-        <li>
-          <tt>(rid || ekid || dhc)</tt> is calculated for each &lt;key&gt; element:
-          <ul>
-            <li>'rid' is the value of the 'rid' attribute, encoded as four bytes in big-endian byte order.</li>
-            <li>'ekid' is the value of the 'ekid' attribute, before being base64 encoded.</li>
-            <li>'dhc' is the value of the 'dhc' attribute, encoded as four bytes in big-endian byte order.</li>
-          </ul>
-        </li>
-        <li>The byte strings <tt>(rid || ekid || dhc)</tt> are concatenated in ascending order of the corresponding 'rid' attributes.</li>
-        <li>'jid' is the value of the 'jid' attribute of the &lt;keys&gt; element, encoded into a byte sequence in UTF-8 encoding and prepended to the intermediate byte string.</li>
-      </ul>
-      <p>
-        The resulting byte string is then signed using the identity key of the sender, the (detached) signature is base64 encoded and assigned to the respective 'dhcs_sig' attribute.
-      </p>
     </section3>
   </section2>
   <section2 topic='Receiving a message' anchor='usecases-receiving'>
@@ -589,14 +564,6 @@
     <p>
       After either the OMEMOKeyExchange or the OMEMOAuthenticatedMessage is decrypted, the content is decrypted as described in the section about <link url='#protocol-message_decryption'>Message Decryption</link>.
     </p>
-    <p>
-      When done processing the message, regardless of whether the decryption failed or succeeded, the recipient proceeds by validating the signature in the 'dhcs_sig' attribute of the &lt;keys&gt; element belonging to the recipient. To do so, the recipient builds the same byte string that the sender built as described in <link url='#usecases-messagesend'>Sending a message</link>, then validates the signature on that byte string with the identitiy public key of the sender. If the validation fails, no further actions are taken. If the validation succeeds, the recipient proceeds by loading the values of <tt>state.DHrc</tt> and <tt>state.ek</tt> of the Double Ratchet state that belongs to the sending device referenced by 'sid'. The recipient calculates the ekid from <tt>state.ek</tt> and proceeds to differentiate between following cases:
-    </p>
-    <ol>
-      <li>The message decryption succeeded and <tt>'dhc' &gt; state.DHrc</tt>. In that case, 'dhc' is stored in <tt>state.DHrc</tt>, replacing the previous value.</li>
-      <li>The message decryption failed, <tt>'dhc' &lt; state.DHrc</tt> and 'ekid' matches. In that case, the recipient sends an empty (encrypted) message to the sender, following the rules of <link url='#usecases-messagesend'>Sending a message</link>.</li>
-      <li>The message decryption failed, <tt>'dhc' &gt; state.DHrc + 1</tt> and 'ekid' matches. In that case, the recipient considers the current session to be broken, discards the session, replaces it with a newly created session and notifies the sender be responding with an empty (encrypted) message, following the rules of <link url='#usecases-messagesend'>Sending a message</link>.</li>
-    </ol>
   </section2>
   <section2 topic='Opt-out' anchor='opt-out'>
     <p>An account can signal to a peer that it wants to stop communicating using
@@ -668,14 +635,14 @@
     type='groupchat'>
   <encrypted xmlns=']]>&ns;<![CDATA['>
     <header sid='27183'>
-      <keys jid='juliet@capulet.lit' dhcs_sig='b64/encoded/data'>
-        <key rid='31415' dhc='5' ekid='b64/encoded/data'>b64/encoded/data</key>
+      <keys jid='juliet@capulet.lit'>
+        <key rid='31415'>b64/encoded/data</key>
       </keys>
-      <keys jid='romeo@montague.lit' dhcs_sig='b64/encoded/data'>
-        <key kex='true' rid='123' dhc='7' ekid='b64/encoded/data'>b64/encoded/data</key>
+      <keys jid='romeo@montague.lit'>
+        <key kex='true' rid='123'>b64/encoded/data</key>
       </keys>
-      <keys jid='mercutio@verona.lit' dhcs_sig='b64/encoded/data'>
-        <key kex='true' rid='456' dhc='12' ekid='b64/encoded/data'>b64/encoded/data</key>
+      <keys jid='mercutio@verona.lit'>
+        <key kex='true' rid='456'>b64/encoded/data</key>
       </keys>
     </header>
     <payload>
@@ -695,7 +662,6 @@
   <p>When receiving a message that is not an OMEMOKeyExchange from a device there is no session with, clients SHOULD create a session with that device and notify it about the new session by responding with an empty (encrypted) message.</p>
   <p>There are various reasons why decryption of an OMEMOKeyExchange or an OMEMOAuthenticatedMessage could fail. One reason is if the message was received twice and already decrypted once, in this case the client MUST ignore the decryption failure and not show any warnings/errors. In all other cases of decryption failure, clients SHOULD notify their users (if applicable), so that the users know they potentially missed a message.</p>
   <p>If an OMEMOKeyExchange is received as part of a message catch-up mechanism (like &xep0313;) and used to establish a new session with the sender, the client SHOULD postpone deletion of the private key corresponding to the used PreKey until after the catch-up is completed. If this is done, the client MUST send an OMEMO encrypted message with empty SCE payload right after the key exchange is completed, to forward the ratchet and to move away from the possibly double-used PreKey. This practice can mitigate the previously mentioned race condition by preventing message loss.</p>
-  <p>Clients that support message catch-up mechanisms (like &xep0313;), SHOULD monitor message catch-ups for messages that were sent by themselves, that is by the JID and device id of the own device. When encountering such a message, the client first validates 'dhcs_sig' as described in <link url='#usecases-receiving'>Receiving a message</link>. If the validation fails, no further actions are taken. If the validation succeeds, the client checks for each &lt;key&gt; child of each &lt;keys&gt; element whether <tt>'dhc' &gt; state.DHsc</tt> and 'ekid' matches for the corresponding session. If that is the case, the recipient considers the session to be broken, discards the session, replaces it with a newly created session and notifies the corresponding receiving device referenced by 'rid' with an empty (encrypted) message, following the rules of <link url='#usecases-messagesend'>Sending a message</link>.</p>
   <p>OMEMO's forward secrecy and backup/restore mechanisms don't play well together. Restoring old data can lead to desynchronized, "broken" sessions. OMEMO is structured to automatically "heal" such broken sessions, but there are edge cases where OMEMO can't automatically recover in a secure manner. Because these cases exist, clients MUST offer a way to manually replace broken sessions. It is advisable to have a session replacement option per recipient/per chat, if applicable. Otherwise, at least an application-global session reset MUST be available.</p>
   <p>When a client receives the first message for a given ratchet key with a counter of 53 or higher, it MUST send a heartbeat message. Heartbeat messages are empty as messages as per <link url='#usecases-messagesend'>Sending a message</link>. These heartbeat messages cause the ratchet to forward, thus consequent messages will have the counter restarted from 0.</p>
   <p>When a client receives a message from a device id that is not on the device list, it SHOULD try to retrieve that user's devices node directly to ensure their local cached version of the devices list is up-to-date.</p>
@@ -713,9 +679,9 @@
   </section2>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
-  <p>Clients MUST NOT use a newly built session to transmit data without user intervention. If a client were to opportunistically start using sessions for sending without asking the user whether to trust a device first, an attacker could publish a fake device for this user, which would then receive copies of all messages sent by/to this user. A client MAY use such "not (yet) trusted" sessions for decryption of received messages, but in that case it SHOULD indicate the untrusted nature of such messages to the user. This rule does not apply to <em>empty</em> messages that are used purely to transfer key material, e.g. as part of automatic session healing, heartbeat messages or automatic key exchange completion.</p>
+  <p>Clients MUST NOT use a newly built session to transmit data without user intervention. If a client were to opportunistically start using sessions for sending without asking the user whether to trust a device first, an attacker could publish a fake device for this user, which would then receive copies of all messages sent by/to this user. A client MAY use such "not (yet) trusted" sessions for decryption of received messages, but in that case it SHOULD indicate the untrusted nature of such messages to the user. This rule does not apply to <em>empty</em> messages that are used purely to transfer key material, e.g. as part of heartbeat messages or automatic key exchange completion.</p>
   <p>When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex-string, QR code, or other unique representation, such that it can be compared by the user. To ensure interoperability between clients and older versions of OMEMO, the fingerprint SHOULD be chosen to be the public part of the IdentityKey in its byte-encoded Curve25519 form (see the notes on XEdDSA and the byte-encoding of public keys in the <link url="#protocol-key_exchange">X3DH protocol section</link> for details). When displaying the fingerprint as a hex-string, the RECOMMENDED way to make it easier to compare the fingerprint is to split the lowercase hex-string into 8 substrings of 8 chars each, then coloring each group of 8 lowercase hex chars using &xep0392;.</p>
-  <p>Clients MUST NOT react to decryption errors by initiating new sessions automatically and without user interaction, outside of the rules given in <link url='#usecases-receiving'>Receiving a message</link> and the <link url='#rules'>Business Rules</link>.</p>
+  <p>Clients MUST NOT react to decryption errors by initiating new sessions automatically and without user interaction. An exception to this rule is specified for clients that support automatic session healing as per XEP-XXXX. TODO: Refer to the omemo-session-healing XEP as soon as it is accepted.</p>
   <p>While it is RECOMMENDED that clients postpone private key deletion until after message catch-up, the X3DH standard mandates that clients should not use duplicate-PreKey sessions for sending, so clients MAY delete such keys immediately for security reasons. For additional information on potential security impacts of this decision, refer to <note>Menezes, Alfred, and Berkant Ustaoglu. "On reusing ephemeral keys in Diffie-Hellman key agreement protocols." International Journal of Applied Cryptography 2, no. 2 (2010): 154-158.</note>.</p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -765,7 +731,6 @@
                 <xs:element ref='key'/>
             </xs:sequence>
             <xs:attribute name='jid' type='xs:string' use='required'/>
-            <xs:attribute name='dhcs_sig' type='xs:base64Binary' use='required'/>
         </xs:complexType>
     </xs:element>
 
@@ -775,8 +740,6 @@
                 <xs:extension base='xs:base64Binary'>
                     <xs:attribute name='rid' type='xs:unsignedInt' use='required'/>
                     <xs:attribute name='kex' type='xs:boolean' default='false'/>
-                    <xs:attribute name='dhc' type='xs:unsignedInt' use='required'/>
-                    <xs:attribute name='ekid' type='xs:base64Binary' use='required'/>
                 </xs:extension>
             </xs:simpleContent>
         </xs:complexType>
