@@ -58,6 +58,16 @@
     <jid>jabber@larma.de</jid>
   </author>
   <revision>
+    <version>0.7.0</version>
+    <date>2020-09-05</date>
+    <initials>th</initials>
+    <remark>
+      <ul>
+        <li>Various fixes, clarifications and general improvements.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>0.6.0</version>
     <date>2020-06-09</date>
     <initials>ps</initials>
@@ -204,7 +214,7 @@
     <li>Confidentiality: Nobody else except sender and receiver is able to read the content of a message.</li>
     <li>Forward Secrecy: Compromised key material does not compromise previous message exchanges.
     It has been <link url="https://www.cypherpunks.ca/~iang/pubs/dakez-popets18.pdf">demonstrated</link>, that OMEMO provides only weak forward secrecy (it protects the session key only once both parties complete the key exchange).</li>
-    <li>Post-Compromize Security: A session which has been compromised due to leakage of key material recovers from the compromise after a few communication rounds.</li>
+    <li>Break-in Recovery: A session which has been compromised due to leakage of key material recovers from the compromise after a few communication rounds.</li>
     <li>Authentication: Every peer is able to authenticate the sender or receiver of a message, even if the details of the authentication process is out-of-scope for this specification.</li>
     <li>Integrity: Every peer can ensure that a message was not changed by any intermediate node.</li>
     <li>Deniability: X3DH is weakly offline deniable and provides no online deniability, as far as the research shows.</li>
@@ -212,7 +222,7 @@
   </ul>
   <p>OMEMO is not intended to protect against the following use cases:</p>
   <ul>
-    <li>An attacker has permanent access to your device. In this case, the attacker may extract decrypted messages from the device, eg. from the applications database. If the access is temporary, security will eventually be restored through forward secrecy.</li>
+    <li>An attacker has permanent access to your device. In this case, the attacker may extract decrypted messages from the device, eg. from the applications database. If the access is temporary, security will eventually be restored through break-in recovery.</li>
     <li>You lost your device and an attacker can read messages on your notification screen.</li>
     <li>Any kind of denial-of-service attack.</li>
     <li>tbc</li>
@@ -252,7 +262,8 @@
       <di><dt>time to keep the private key of the old signed PreKey after rotating it</dt><dd>The private key of the old signed PreKey SHOULD be kept for another rotation period as defined above, to account for delayed messages using the old signed PreKey.</dd></di>
       <di><dt>number of PreKeys to provide in the bundle</dt><dd>The bundle SHOULD always contain around 100 PreKeys.</dd></di>
       <di><dt>minimum number of PreKeys to provide in the bundle</dt><dd>The bundle MUST always contain at least 25 PreKeys.</dd></di>
-      <di><dt>associated data</dt><dd>The associated data is created by concatenating the IdentityKeys of Alice and Bob: <tt>AD = Encode(IK_A) || Encode(IK_B)</tt></dd></di>
+      <di><dt>usage of PeyKeys</dt><dd>All key exchanges MUST use a PreKey, key exchanges that don't use a PreKey MUST be rejected.</dd></di>
+      <di><dt>associated data</dt><dd>The associated data is created by concatenating the IdentityKeys of Alice and Bob: <tt>AD = Encode(IK_A) || Encode(IK_B)</tt>. <tt>Alice</tt> is the party that <em>actively initiated</em> the key exchange, while <tt>Bob</tt> is the party that <em>passively accepted</em> the key exchange.</dd></di>
       <di><dt>XEdDSA</dt><dd>OMEMO does not mandate the usage of &xeddsa; with &x3dh; for the IdentityKey. Instead, there are three simple rules that implementations MUST follow:
         <ol>
           <li>Implementations must use the birational map between the curves Curve25519 and Ed25519 to convert the public part of the IdentityKey whenever required, as defined in &rfc7748; (on page 5).</li>
@@ -279,10 +290,12 @@
       The &doubleratchet; encryption scheme was specified by Trevor Perrin and Moxie Marlinspike and placed under the public domain. OMEMO uses this protocol with the following parameters/settings:
     </p>
     <dl>
-      <di><dt>ratchet initialization</dt><dd>The Double Ratchet is initialized using the shared secret, ad and public keys as yielded by the X3DH key agreement protocol, as explained in the Double Ratchet specification.</dd></di>
-      <di><dt>MAX_SKIP</dt><dd>It is RECOMMENDED to keep around 1000 skipped message keys.</dd></di>
-      <di><dt>deletion policy for skipped message keys</dt><dd>Skipped message keys MUST be stored until MAX_SKIP message keys are stored. At that point, keys are discarded on a FIFO basis to make space for new message keys. Implementations SHOULD not keep skipped message keys around forever, but discard old keys on a different implementation-defined policy. It is RECOMMENDED to base this policy on deterministic events rather than time. To prevent an attacker from deleting arbitrary message keys, the deletion policy should be applied on a per-session basis.</dd></di>
-      <di><dt>authentication tag truncation</dt><dd>Authentication tags are truncated to 16 bytes/128 bits.</dd></di>
+      <di><dt>ratchet initialization</dt><dd>
+        The Double Ratchet is initialized using the shared secret, ad and public keys as yielded by the X3DH key agreement protocol, as explained in the Double Ratchet specification. Additionally, the ephemeral key pair (ek) used by the X3DH key agreement is stored with the session.
+      </dd></di>
+      <di><dt>MAX_SKIP</dt><dd>Storing skipped message keys introduces two potential DoS attacks. First, the maximum number of skipped message keys to store has to be limited, otherwise an attacker could fill the storage of the receiving device with skipped message keys. It is RECOMMENDED to keep 1000 skipped message keys around per session. Second, the maximum number of skipped message keys in a single message has to be limited, otherwise, with just a single malicious message, an attacker could make the receiving device calculate up to around 2^32 skipped message keys. The choice of this limit depends on the hardware capabilities of the device, though modern hardware is safe to choose values of around 1000 here too.</dd></di>
+      <di><dt>deletion policy for skipped message keys</dt><dd>As soon as the maximum number of skipped message keys are stored for a session, keys for that session are discarded on a FIFO basis to make space for new skipped message keys. Implementations SHOULD NOT keep skipped message keys around forever, but discard old keys on a different implementation-defined policy. It is RECOMMENDED to base this policy on deterministic events rather than time.</dd></di>
+      <di><dt>authentication tag truncation</dt><dd>Authentication tags are truncated to 16 bytes/128 bits by cutting off excess bytes from the end.</dd></di>
       <di><dt>CONCAT(ad, header)</dt><dd><tt>CONCAT(ad, header) = ad || OMEMOMessage.proto(header)</tt> NOTE: the <tt>OMEMOMessage.proto</tt> is initialized without the ciphertext, which is optional. NOTE: Implementations are not strictly required to return a parseable byte array, as the unpacked/parsed data is required later in the protocol.</dd></di>
       <di><dt>KDF_RK(rk, dh_out)</dt><dd>HKDF-SHA-256 using the root key (rk) as HKDF salt, the output of a Diffie-Hellman (dh_out) as HKDF input material and &quot;OMEMO Root Chain&quot; as HKDF info.</dd></di>
       <di><dt>KDF_CK(ck)</dt><dd>HMAC-SHA-256 using a chain key (ck) as the HMAC key, a single byte constant <tt>0x01</tt> as HMAC input to produce the next message key (mk) and a single byte constant <tt>0x02</tt> as HMAC input to produce the next chain key.</dd></di>
@@ -294,9 +307,10 @@
           <li>Encrypt the plaintext (which consists of a 32 bytes key and a 32 bytes HMAC as specified in the section about <link url="#protocol-message_encryption">Message Encryption</link>) using AES-256-CBC with PKCS#7 padding, using the encryption key and IV derived in the previous step.</li>
           <li>Split the associated data as returned by <tt>CONCAT</tt> into the original ad and the <tt>OMEMOMessage.proto</tt> structure.</li>
           <li>Add the ciphertext to the <tt>OMEMOMessage.proto</tt> structure.</li>
-          <li>Serialize the ad and the <tt>OMEMOMessage.proto</tt> structure into a parseable byte array by concatenating ad and the serialized protobuf structure.</li>
-          <li>Calculate the HMAC-SHA-256 using the authentication key and the input material as derived in the steps above.</li>
-          <li>Put the <tt>OMEMOMessage.proto</tt> structure and the HMAC into a new <tt>OMEMOAuthenticatedMessage.proto</tt> structure.</li>
+          <li>Serialize the <tt>OMEMOMessage.proto</tt> structure into a parseable byte array. To avoid potential problems regarding non-uniqueness of the serialization, make sure to only serialize <em>once</em> and to use that exact byte sequence in the following steps.</li>
+          <li>Concatenate the ad and the <tt>OMEMOMessage.proto</tt> structure into a parseable byte array. The result builds the HMAC input material for the next step.</li>
+          <li>Calculate the HMAC-SHA-256 using the authentication key and the input material as derived in the steps above. Truncate the output of the HMAC to 16 bytes/128 bits by cutting off excess bytes from the end.</li>
+          <li>Put the serialized <tt>OMEMOMessage.proto</tt> structure and the HMAC into a new <tt>OMEMOAuthenticatedMessage.proto</tt> structure.</li>
         </ol>
       </dd></di>
     </dl>
@@ -311,6 +325,9 @@
       <li>The first content is encrypted for a new recipient. This results in an X3DH header and a <tt>OMEMOAuthenticatedMessage.proto</tt> structure. Both are packed into an <tt>OMEMOKeyExchange.proto</tt> structure. The X3DH header is stored for following messages.</li>
       <li>A second message is encrypted for the same recipient. This results in only an <tt>OMEMOAuthenticatedMessage.proto</tt> structure, as a new key exchange is not required. Together with the X3DH header that was stored in the previous step, an <tt>OMEMOKeyExchange.proto</tt> structure is constructed and sent to the recipient.</li>
     </ol>
+    <p>
+      When receiving an OMEMOKeyExchange, the receiving device checks if it already has a Double Ratchet session with the sending device. If that is the case, the device compares the ephemeral public key stored in the Double Ratchet state with the ephemeral public key in the <tt>OMEMOKeyExchange.proto</tt> structure. If both are equal, the receiving device only processes the <tt>OMEMOAuthenticatedMessage.proto</tt> contained in the <tt>OMEMOKeyExchange.proto</tt>. Otherwise, it processes the whole <tt>OMEMOKeyExchange.proto</tt> structure.
+    </p>
   </section2>
   <section2 topic='Message Encryption' anchor='protocol-message_encryption'>
     <p>
@@ -321,7 +338,7 @@
       <li>Use HKDF-SHA-256 to generate 80 bytes of output from the key by providing the key as HKDF input, 256 zero-bits as HKDF salt and &quot;OMEMO Payload&quot; as HKDF info.</li>
       <li>Divide the HKDF output into a 32-byte encryption key, a 32-byte authentication key and a 16 byte IV.</li>
       <li>Encrypt the plaintext using AES-256-CBC with PKCS#7 padding, using the encryption key and IV derived in the previous step.</li>
-      <li>Calculate the HMAC-SHA-256 using the authentication key and the ciphertext from the previous steps.</li>
+      <li>Calculate the HMAC-SHA-256 using the authentication key and the ciphertext from the previous steps. Truncate the output of the HMAC to 16 bytes/128 bits by cutting off excess bytes from the end.</li>
       <li>Concatenate the key and the HMAC, encrypt them using the Double Ratchet as specified above, once for each intended recipient. This yields one OMEMOKeyExchange or OMEMOAuthenticatedMessage per recipient device.</li>
     </ol>
   </section2>
@@ -333,7 +350,7 @@
       <li>Decrypt the key and HMAC from the OMEMOKeyExchange or OMEMOAuthenticatedMessage, encrypted using the Double Ratchet belonging to this device.</li>
       <li>Use HKDF-SHA-256 to generate 80 bytes of output from the key by providing the key as HKDF input, 256 zero-bits as HKDF salt and &quot;OMEMO Payload&quot; as HKDF info.</li>
       <li>Divide the HKDF output into a 32-byte encryption key, a 32-byte authentication key and a 16 byte IV.</li>
-      <li>Verify the HMAC-SHA-256 using the authentication key derived in the previous step and the ciphertext.</li>
+      <li>Verify the (truncated) HMAC-SHA-256 using the authentication key derived in the previous step and the ciphertext.</li>
       <li>Decrypt the ciphertext using AES-256-CBC with PKCS#7 padding, using the encryption key and IV derived in the previous steps.</li>
     </ol>
   </section2>
@@ -341,7 +358,7 @@
 <section1 topic='Use Cases' anchor='usecases'>
   <section2 topic='Setup' anchor='usecases-setup'>
     <p>
-      To participate in OMEMO-encrypted chats, clients need to set up an OMEMO library and generate a device id, which is a randomly generated integer between 1 and 2^31 - 1. The device id must be unique for the account.
+      To participate in OMEMO-encrypted chats, clients need to set up an OMEMO library and generate a device id, which is a randomly generated integer between 1 and 2^31 - 1 (the positive numbers of a signed 32 bit integer, without 0). The device id must be unique for the account.
     </p>
   </section2>
   <section2 topic='Discovering peer support' anchor='usecases-discovering'>
@@ -398,7 +415,7 @@
     </section3>
     <section3 topic='Bundles' anchor='bundles'>
     <p>Furthermore, a device MUST publish its IdentityKey, a signed PreKey, and a list of PreKeys. This tuple is called a bundle and is provided by OMEMO libraries. Bundles are maintained as multiple items in a PEP node called <tt>&nsbundles;</tt>. Each bundle MUST be stored in a seperate item. The item id MUST be set to the device id.</p>
-    <p>A bundle is an element called 'bundle' in the <tt>&ns;</tt> namespace. It has a child element called ‘spk’ that contains the public part of the signed PreKey as base64 encoded data, a child element called ‘spks’ that contains the signed PreKey signature as base64 encoded data and a child element called ‘ik’ that contains the public part of the IdentityKey as base64 encoded data. PreKeys are multiple elements called ‘pk’ that each contain the public part of one PreKey as base64 encoded data. PreKeys are wrapped in an element called ‘prekeys’ which is a child of the bundle element. The ‘spk’ and the ‘pk’s are tagged with an ‘id’-attribute which is a positive integer that uniquely identifies the keys. The ‘spk’ and the ‘pk’s are considered separate, which means that an ‘spk’ can have the same ‘id’ as a ‘pk’. These ids are used to save bandwidth during key exchanges, which refer to the keys using their id instead of their full public parts.</p>
+    <p>A bundle is an element called 'bundle' in the <tt>&ns;</tt> namespace. It has a child element called ‘spk’ that contains the public part of the signed PreKey as base64 encoded data, a child element called ‘spks’ that contains the signed PreKey signature as base64 encoded data and a child element called ‘ik’ that contains the public part of the IdentityKey as base64 encoded data. PreKeys are multiple elements called ‘pk’ that each contain the public part of one PreKey as base64 encoded data. PreKeys are wrapped in an element called ‘prekeys’ which is a child of the bundle element. The ‘spk’ and the ‘pk’s are tagged with an ‘id’-attribute which is a positive integer between 1 and 2^31 - 1 (the positive numbers of a signed 32 bit integer, without 0) that uniquely identifies the keys. The ‘spk’ and the ‘pk’s are considered separate, which means that an ‘spk’ can have the same ‘id’ as a ‘pk’. These ids are used to save bandwidth during key exchanges, which refer to the keys using their id instead of their full public parts.</p>
     <p>When publishing bundles a client MUST make sure that the <tt>&nsbundles;</tt> node is configured to store multiple items. This is not the default with &xep0163;. If the node doesn’t exist yet it can be configured on the fly by using publish-options as described in <link url='https://xmpp.org/extensions/xep-0060.html#publisher-publish-options'><cite>XEP-0060</cite> §7.1.5</link>. The value for 'pubsub#max_items' in publish_options MUST be set to 'max'. If the node did exist and was configured differently the bundle publication will fail. Clients MUST then reconfigure the node as described in <link url='https://xmpp.org/extensions/xep-0060.html#owner-configure'><cite>XEP-0060</cite> §8.2</link>.</p>
     <example caption='Publishing bundle information'><![CDATA[
 <iq from='juliet@capulet.lit' type='set' id='annouce2'>
@@ -482,7 +499,6 @@
       For this reason OMEMO defines its own SCE profile.
     </p>
     <section3 topic='SCE Profile' anchor='sce'>
-      <!-- TODO: rpad should be the very first thing pushed into AES-CBC -->
       <p>
         An OMEMO SCE &content; element
       </p>
@@ -514,11 +530,13 @@
     </section3>
     <section3 topic='Message structure description' anchor='message-structure-description'>
       <p>
-        An OMEMO encrypted message is specified to include an &lt;encrypted&gt; element in the <tt>&ns;</tt> namespace. It always contains two child nodes, the &lt;header&gt; and the &payload; element.
-        The &lt;header&gt; element has an attribute named 'sid' referencing the device id of the sending device and contains one or multiple &lt;keys&gt; elements, each with an attribute 'jid' of one of the recipients bare JIDs as well as one or multiple &lt;key&gt; elements.
+        An OMEMO encrypted message is specified to include an &lt;encrypted&gt; element in the <tt>&ns;</tt> namespace. It contains up to two child nodes, the &lt;header&gt; and the &payload; element. The &lt;header&gt; element must always be present, the &payload; element must be present unless an empty OMEMO message is sent, as described below.
+        The &lt;header&gt; element has an attribute named 'sid' referencing the device id of the sending device and contains one or multiple &lt;keys&gt; elements, each with an attribute 'jid' of one of the recipients bare JIDs, as well as one or multiple &lt;key&gt; elements.
         A &lt;key&gt; element has an attribute named 'rid' referencing the device id of the recipient device, and an attribute named 'kex' which defaults to 'false' and indicates if the enclosed encrypted message includes a key exchange. The key and HMAC encrypted using the long-standing OMEMO session for that recipient device are encoded using base64 and placed as text content into the &lt;key&gt; element.
         The encrypted &content; element is encoded using base64 and placed as text content into the &payload; element.
       </p>
+      <!-- TODO: <p>Note that following &rfc6120; (section 8.4.), clients MUST ignore XML attributes and elements that are qualified with an unknown namespace, in order to allow for protocol extensions.</p> (qualified attributes are evil, right?) -->
+      <p>A special case are <em>empty</em> OMEMO messages, which are used in various places throughout the protocol purely to manage sessions and not to transfer content. With empty OMEMO messages, the step of creating and encrypting the &payload; element is skipped. Instead of encrypting the key and authentication tag of the &payload; ciphertext with the Double Ratchet session, 32 zero-bytes are encrypted with the Double Ratchet session directly. The resulting OMEMOKeyExchange or OMEMOAuthenticatedMessage are put into &lt;key&gt; elements as usual, but the &payload; element is omitted altogether, so that the &lt;encrypted&gt; element only contains a &lt;header&gt;.</p>
       <example caption='Sending a message'><![CDATA[
 <message to='juliet@capulet.lit' from='romeo@montague.lit' id='send1'>
   <encrypted xmlns=']]>&ns;<![CDATA['>
@@ -574,7 +592,7 @@
 ]]></example>
   </section2>
   <section2 topic='Group Chats' anchor='group-chats'>
-    <p>Note: OMEMO encrypted group chats are currently specified to work with &xep0045;. This XEP might be updated in the future to specify the usage of OMEMO in conjunction with &xep0369;.</p>
+    <p>NOTE: OMEMO encrypted group chats are currently specified to work with &xep0045;. This XEP might be updated in the future to specify the usage of OMEMO in conjunction with &xep0369;.</p>
     <p>A Multi-User Chat room that supports OMEMO MUST be configured non-anonymous and SHOULD be configured members-only.</p>
     <p>A participant wanting to send a message to a group chat MUST first retrieve the members list and then fetch the device list for each member (via pubsub and to their real JIDs) and then subsequently fetch all bundles referenced by the device lists.</p>
     <section3 topic='Retrieving and maintaining members list' anchor='members-list'>
@@ -622,10 +640,10 @@
         <key rid='31415'>b64/encoded/data</key>
       </keys>
       <keys jid='romeo@montague.lit'>
-        <key rid='123' prekey='true'>b64/encoded/data</key>
+        <key kex='true' rid='123'>b64/encoded/data</key>
       </keys>
       <keys jid='mercutio@verona.lit'>
-        <key rid='456' prekey='true'>b64/encoded/data</key>
+        <key kex='true' rid='456'>b64/encoded/data</key>
       </keys>
     </header>
     <payload>
@@ -641,9 +659,12 @@
 <section1 topic='Business Rules' anchor='rules'>
   <p>Before publishing a freshly generated device id for the first time, a device MUST check whether that device id already exists, and if so, generate a new one.</p>
   <p>Clients SHOULD NOT immediately fetch the bundle and build a session as soon as a new device is announced. Before the first message is exchanged, the contact does not know which PreKey has been used (or, in fact, that any PreKey was used at all). As they have not had a chance to remove the used PreKey from their bundle announcement, this could lead to collisions where both Alice and Bob pick the same PreKey to build a session with a specific device. As each PreKey SHOULD only be used once, the party that sends their initial OMEMOKeyExchange later loses this race condition. This means that they think they have a valid session with the contact, when in reality their messages MAY be ignored by the other end. By postponing building sessions, the chance of such issues occurring can be drastically reduced. It is RECOMMENDED to construct sessions only immediately before sending a message.</p>
-  <p>There are various reasons why decryption of an OMEMOKeyExchange or an OMEMOAuthenticatedMessage could fail. One reason is if the message was received twice and already decrypted once, in this case the client MUST ignore the decryption failure and not show any warnings/errors. In all other cases of decryption failure, clients SHOULD respond by forcibly doing a new key exchange and sending a new OMEMOKeyExchange with a potentially empty SCE payload. By building a new session with the original sender this way, the invalid session of the original sender will get overwritten with this newly created, valid session. This does NOT apply to the actual SCE content. If decrypting the SCE content fails, e.g. because the HMAC does not verify, this is not a reason to forcibly initiate a new key exchange.</p>
+  <p>After receiving an OMEMOKeyExchange and successfully building a new session, the receiving device SHOULD automatically respond with an empty OMEMO message (as per <link url='#usecases-messagesend'>Sending a message</link>) to the source of the OMEMOKeyExchange. This is to notify the device that the session initiation was completed successfully and that the device can stop sending OMEMOKeyExchanges.</p>
+  <p>When receiving a message that is not an OMEMOKeyExchange from a device there is no session with, clients SHOULD create a session with that device and notify it about the new session by responding with an empty OMEMO message as per <link url='#usecases-messagesend'>Sending a message</link>.</p>
+  <p>There are various reasons why decryption of an OMEMOKeyExchange or an OMEMOAuthenticatedMessage could fail. One reason is if the message was received twice and already decrypted once, in this case the client MUST ignore the decryption failure and not show any warnings/errors. In all other cases of decryption failure, clients SHOULD notify their users (if applicable), so that the users know they potentially missed a message.</p>
   <p>If an OMEMOKeyExchange is received as part of a message catch-up mechanism (like &xep0313;) and used to establish a new session with the sender, the client SHOULD postpone deletion of the private key corresponding to the used PreKey until after the catch-up is completed. If this is done, the client MUST send an OMEMO encrypted message with empty SCE payload right after the key exchange is completed, to forward the ratchet and to move away from the possibly double-used PreKey. This practice can mitigate the previously mentioned race condition by preventing message loss.</p>
-  <p>When a client receives the first message for a given ratchet key with a counter of 53 or higher, it MUST send a heartbeat message. Heartbeat messages are normal OMEMO encrypted messages where the SCE payload does not include any elements. These heartbeat messages cause the ratchet to forward, thus consequent messages will have the counter restarted from 0.</p>
+  <p>OMEMO's forward secrecy and backup/restore mechanisms don't play well together. Restoring old data can lead to desynchronized, "broken" sessions. Because these cases exist, clients MUST offer a way to manually replace broken sessions. It is advisable to have a session replacement option per recipient/per chat, if applicable. Otherwise, at least an application-global session reset MUST be available.</p>
+  <p>When a client receives the first message for a given ratchet key with a counter of 53 or higher, it MUST send a heartbeat message. Heartbeat messages are empty OMEMO messages as per <link url='#usecases-messagesend'>Sending a message</link>. These heartbeat messages cause the ratchet to forward, thus consequent messages will have the counter restarted from 0.</p>
   <p>When a client receives a message from a device id that is not on the device list, it SHOULD try to retrieve that user's devices node directly to ensure their local cached version of the devices list is up-to-date.</p>
   <p>When the user of a client deactivates OMEMO for an account or globally, the client SHOULD delete the corresponding bundles and device ids from the PEP nodes. That way other clients should stop encrypting for that account.</p>
 </section1>
@@ -651,7 +672,7 @@
   <section2 topic='Server side requirements' anchor='server-side'>
     <p>While OMEMO uses a Pubsub Service (&xep0060;) on the user’s account it has more requirments than those defined in &xep0163;. The requirements are:</p>
     <ul>
-      <li>The pubsub service MUST persist node items.</li>
+      <li>The pubsub service MUST persist node items, i.e., the <link url='https://xmpp.org/extensions/xep-0060.html#features'>feature 'persistent-items'</link> is announced by the service.</li>
       <li>The pubsub service MUST support publishing options as defined in <link url='https://xmpp.org/extensions/xep-0060.html#publisher-publish-options'><cite>XEP-0060</cite> §7.1.5</link>.</li>
       <li>The pubsub service MUST support 'max' as a value for the 'pubsub#persist_items' node configuration.</li>
       <li>The pubsub service MUST support the 'open' access model for node configuration and 'pubsub#access_model' as a publish option.</li>
@@ -659,8 +680,9 @@
   </section2>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
-  <p>Clients MUST NOT use a newly built session to transmit data without user intervention. If a client were to opportunistically start using sessions for sending without asking the user whether to trust a device first, an attacker could publish a fake device for this user, which would then receive copies of all messages sent by/to this user. A client MAY use such "not (yet) trusted" sessions for decryption of received messages, but in that case it SHOULD indicate the untrusted nature of such messages to the user.</p>
-  <p>When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex-string, QR code, or other unique representation, such that it can be compared by the user. To ensure interoperability between clients and older versions of OMEMO, the fingerprint SHOULD be chosen to be the public part of the IdentityKey in its byte-encoded Curve25519 form (see the notes on XEdDSA and the byte-encoding of public keys in the <link url="#protocol-key_exchange">X3DH protocol section</link> for details). When displaying the fingerprint as a hex-string, one way to make it easier to compare the fingerprint is to split the hex-string into 8 substrings of 8 chars each, then coloring each 8-char group using &xep0392;. Lowercase letters are recommended when displaying the fingerprint as a hex-string.</p>
+  <p>Clients MUST NOT use a newly built session to transmit data without user intervention. If a client were to opportunistically start using sessions for sending without asking the user whether to trust a device first, an attacker could publish a fake device for this user, which would then receive copies of all messages sent by/to this user. A client MAY use such "not (yet) trusted" sessions for decryption of received messages, but in that case it SHOULD indicate the untrusted nature of such messages to the user. This rule does not apply to empty OMEMO messages (as per <link url='#usecases-messagesend'>Sending a message</link>) that are used purely to transfer key material, e.g. as part of heartbeat messages or automatic key exchange completion.</p>
+  <p>When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex-string, QR code, or other unique representation, such that it can be compared by the user. To ensure interoperability between clients and older versions of OMEMO, the fingerprint SHOULD be chosen to be the public part of the IdentityKey in its byte-encoded Curve25519 form (see the notes on XEdDSA and the byte-encoding of public keys in the <link url="#protocol-key_exchange">X3DH protocol section</link> for details). When displaying the fingerprint as a hex-string, the RECOMMENDED way to make it easier to compare the fingerprint is to split the lowercase hex-string into 8 substrings of 8 chars each, then coloring each group of 8 lowercase hex chars using &xep0392;.</p>
+  <p>Clients MUST NOT react to decryption errors by initiating new sessions automatically and without user interaction. An exception to this rule is specified for clients that support automatic session healing as per XEP-XXXX. TODO: Refer to the omemo-session-healing XEP as soon as it is accepted.</p>
   <p>While it is RECOMMENDED that clients postpone private key deletion until after message catch-up, the X3DH standard mandates that clients should not use duplicate-PreKey sessions for sending, so clients MAY delete such keys immediately for security reasons. For additional information on potential security impacts of this decision, refer to <note>Menezes, Alfred, and Berkant Ustaoglu. "On reusing ephemeral keys in Diffie-Hellman key agreement protocols." International Journal of Applied Cryptography 2, no. 2 (2010): 154-158.</note>.</p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -688,7 +710,7 @@
         <xs:complexType>
             <xs:all>
                 <xs:element ref='header'/>
-                <xs:element ref='payload'/>
+                <xs:element ref='payload' minOccurs='0' maxOccurs='1'/>
             </xs:all>
         </xs:complexType>
     </xs:element>
@@ -793,8 +815,8 @@ message OMEMOMessage {
 }
 
 message OMEMOAuthenticatedMessage {
-    required bytes        mac     = 1;
-    required OMEMOMessage message = 2;
+    required bytes mac     = 1;
+    required bytes message = 2; // Byte-encoding of an OMEMOMessage
 }
 
 message OMEMOKeyExchange {
