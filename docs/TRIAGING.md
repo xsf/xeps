@@ -90,10 +90,10 @@ If the PR is not touching a XEP, this guide does not apply.
     sense (an example is updating multiple XEPs which belong together, such
     as the MIX family).
 
-4. Is the XEP **not** in Experimental state?
+4. Is the XEP **not** in Experimental or Deferred state?
 
-    Changes to Non—Experimental XEPs need approval by the approving body as
-    defined in the XEP file itself.
+    Changes to Non—Experimental or non-Deferred XEPs need approval by the
+    approving body as defined in the XEP file itself.
 
     1. Add the [Needs Council]/[Needs Board] label. To know which, check the
        `<approver/>` of the XEPs. If the touched XEPs have different approvers
@@ -111,10 +111,10 @@ If the PR is not touching a XEP, this guide does not apply.
        (second) version number part, add the [Needs Version Block] label and a
        comment explaining the situation for the next Editor (the Author does
        not need to do anything here).
-    5. Stop.
+    6. Stop.
 
-5. Is the XEP in Experimental state and the PR opener is not an author of the
-   XEP?
+5. Is the XEP in Experimental or Deferred state and the PR opener is not an
+   author of the XEP?
 
     Changes to Experimental XEPs are approved by the XEP Authors themselves.
     If the PR touches multiple XEPs and the XEP Authors do not overlap, ask
@@ -137,7 +137,9 @@ If the PR is not touching a XEP, this guide does not apply.
            for each author in either the XEP or in xep.ent.
         4. Stop.
 
-    4. Otherwise, mark the PR as [Ready to Merge], linking the XEP Author’s
+    4. If the XEP is in Deferred state and the changes are not purely editorial,
+       add a note to move the XEP to Experimental state.
+    5. Otherwise, mark the PR as [Ready to Merge], linking the XEP Author’s
        approval for documentation purposes.
 
 6. Mark the PR as [Ready to Merge].
