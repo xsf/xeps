@@ -125,7 +125,10 @@ If the PR is not touching a XEP, this guide does not apply.
     2. If the PR adds a revision block and does not bump the minor-level
        (second) version number part, add the [Needs Version Block] label and a
        comment explaining the situation for the Processing Editor.
-    3. If the issue has not been discussed on the standards list *or* if
+    3. If the XEP is in Deferred state and the changes are not purely editorial,
+       add a note to move the XEP to Experimental state and mark the PR as
+       [Needs Editor Action].
+    4. If the issue has not been discussed on the standards list *or* if
        the XEP Author has not been involved in the discussion *or* the
        XEP Author has not explicitly ACKed the PR:
 
@@ -137,11 +140,8 @@ If the PR is not touching a XEP, this guide does not apply.
            for each author in either the XEP or in xep.ent.
         4. Stop.
 
-    4. If the XEP is in Deferred state and the changes are not purely editorial,
-       add a note to move the XEP to Experimental state and mark the PR as
-       [Needs Editor Action].
-    5. Mark the PR as [Ready to Merge], linking the XEP Author’s approval for
-       documentation purposes.
+    5. Otherwise, mark the PR as [Ready to Merge], linking the XEP Author’s
+       approval for documentation purposes.
 
 6. Mark the PR as [Ready to Merge].
 
