@@ -140,8 +140,8 @@ If the PR is not touching a XEP, this guide does not apply.
     4. If the XEP is in Deferred state and the changes are not purely editorial,
        add a note to move the XEP to Experimental state and mark the PR as
        [Needs Editor Action].
-    5. Otherwise, mark the PR as [Ready to Merge], linking the XEP Author’s
-       approval for documentation purposes.
+    5. Mark the PR as [Ready to Merge], linking the XEP Author’s approval for
+       documentation purposes.
 
 6. Mark the PR as [Ready to Merge].
 
