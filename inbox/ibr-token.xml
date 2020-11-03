@@ -1,0 +1,193 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Pre-Authenticated In-Band Registration</title>
+  <abstract>This document extends the In-Band-Registration protocol to use
+    invitation tokens, e.g. for registering accounts on non-public
+    servers.
+  </abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0077</spec>
+    <spec>XEP-0147</spec>
+    <spec>XEP-0379</spec>
+    <spec>XEP-0401</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>ibr-token</shortname>
+  <author>
+    <firstname>Georg</firstname>
+    <surname>Lukas</surname>
+  </author>
+  <revision>
+    <version>0.1.0</version>
+    <date>2020-10-28</date>
+    <initials>gl</initials>
+    <remark>First version based on XEP-0401.</remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>There are two typical mechanisms to register an account on an XMPP server:</p>
+  <ul>
+    <li>Out-of-band account creation, after which the account JID and password
+      need to be manually entered into an XMPP client, and</li>
+    <li>&xep0077; (IBR) where an account is created and fully configured right
+      from the XMPP client.</li>
+  </ul>
+  <p>The IBR mechanism is much more convenient for users, but also opens up
+    the server to abuse, e.g. due to the mass-registration of spam bot
+    accounts. Captchas, while heavily impacting well-intentioned users, are
+    not a reliable mechanism to prevent abuse.  This specification allows to
+    restrict the IBR mechanism by requiring a registration token, e.g. for
+    giving users access to a private server, without exposing their password
+    to the server administrator.</p>
+  <p>This specification is part of a series of documents aiming at improving
+    user onboarding:</p>
+  <ul>
+    <li>&xep0379; to automatically accept roster subscriptions based on a
+      token.</li>
+    <li>&xep0401; to generate tokens that can be used for authenticating IBR.</li>
+  </ul>
+  <p>While this specification is designed to work together with &xep0401;, it
+    can be used with invitation tokens obtained by any other mechanism. XMPP
+    URIs can then be used out-of-band to deliver the invitation to a new user.</p>
+  <p>A client that obtains such an XMPP URI should allow the user to register
+    an XMPP account with the server that generated the URI.</p>
+</section1>
+
+<section1 topic='Use Cases'>
+  <p>A client that implements this specification needs to understand the
+    &xep0147; specification, to make use of the <tt>register</tt> query
+    action and the <tt>preauth</tt> parameter. Three URI formats
+    are defined.</p>
+  <section2 topic="Registration with pre-defined account name">
+    <p>An invitation to register an account can contain a specific XMPP
+      address (with a pre-defined user account name) to be registered. A
+      client should populate the address field in the IBR dialog with this
+      address and disallow changing the address.</p>
+    <code caption="Registration URI with pre-defined account name">xmpp:juliet@example.com?register;preauth=TOKEN</code>
+  </section2>
+
+  <section2 topic="Registration on a server">
+    <p>An invitation to register an account can contain just the server domain
+      to register on. A client should populate the address field in the IBR
+      dialog with this domain and allow entering the desired account name.</p>
+    <code caption="Registration URI without account name">xmpp:example.com?register;preauth=TOKEN</code>
+  </section2>
+
+  <section2 topic="Contact Invitation with IBR">
+    <p>A contact invitation with a registration token (&xep0379;) might
+      indicate that the token can also be used to register an account on that
+      server (<tt>ibr=y</tt>). If the receiving client already has an account
+      configured, it may skip account registration and simply add the contact
+      as defined in <cite>XEP-0379</cite>. The client may also register a new
+      account on the domain of the proposed contact, allowing the user to
+      enter the desired account name.</p>
+    <code caption="Contact URI with Pre-Authenticated IBR support">xmpp:romeo@example.com?roster;preauth=TOKEN;ibr=y</code>
+  </section2>
+</section1>
+
+<section1 topic='Discovery' anchor='discover'>
+  <p>While a registration URI is an indication that the respective server
+    supports Pre-Authenticated IBR, a URI might be manipulated and is not
+    guaranteed to be reliable.</p>
+  <p>Therefore, when performing the account creation, the client needs to
+    ensure that the server supports the Pre-Authenticated IBR protocol, as denoted by
+    the <strong>&lt;register xmlns='urn:xmpp:invite'></strong>
+    stream feature:</p>
+  <example caption="Stream features of a server that accepts invitations"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:xmpp:sasl:0'>
+    <mechanism>EXTERNAL</mechanism>
+    <mechanism>SCRAM-SHA-1-PLUS</mechanism>
+    <mechanism>SCRAM-SHA-1</mechanism>
+    <mechanism>PLAIN</mechanism>
+  </mechanisms>
+  <register xmlns='urn:xmpp:invite'/>
+  <register xmlns='http://jabber.org/features/iq-register'/>
+</stream:features>
+]]></example>
+</section1>
+<section1 topic='Pre-Authenticated In-Band Registration' anchor='preauth-ibr'>
+  <p>In order to allow invited users to register on a server, the
+    registration processs as defined in &xep0077; needs to be extended. The
+    invited user's client needs to connect to the server and check that the
+    invitation stream feature
+    (<strong>&lt;register xmlns='urn:xmpp:invite'></strong>) is present.
+    After that, the client initiates the registration flow by sending the
+    preauth token to the server:</p>
+  <example caption="Client initiates pre-authenticated IBR"><![CDATA[
+<iq type='set' to='example.com' id='pa1'>
+<preauth xmlns='urn:xmpp:pars:0' token='TOKEN' />
+</iq>
+]]></example>
+  <p>Upon receiving the preauth request, the server must validate that the
+    token is acceptable for account registration. However, single-use tokens
+    MUST NOT be considered used until the actual registration has succeeded.
+  </p>
+  <p>In addition, if the token has an expiration time, it MUST only be
+    checked at this point. Subsequent actions performed by the client during
+    the current session that require a valid token MUST NOT be rejected due
+    to token expiry.
+  </p>
+  <p>If the token is acceptable, the server responds with success, and
+    indicates the client may now proceed with account registration:
+  </p>
+  <example caption="Server accepts invitation token"><![CDATA[
+<iq type='result' from='example.com' id='pa1' />
+]]></example>
+  <p>If the token provided by the client was unknown, invalid or expired, the
+    server should return an appropriate error to the client:</p>
+  <example caption="Server rejects invitation token"><![CDATA[
+<iq type="error" from="example.com" id="pa1">
+<error type='cancel'>
+  <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  <text>The provided token is invalid or expired</text>
+</error>
+</iq>
+]]></example>
+  <p>In the success case, the client proceeds with registration as defined in
+    &xep0077;. If the token is rejected by the server, the client still MAY
+    attempt to perform IBR if the server allows that.</p>
+</section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <p>If a username was specified when creating an invitation token, the
+    server SHOULD NOT create an account on the server until the invitee
+    actually registers it with the corresponding token.
+    The server MUST reserve the username at least until the corresponding
+    token expires.</p>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <section2 topic='XMPP Server Suggestion for Invitees'>
+    <p>If the invitee opens an invitation URI with <strong>ibr=y</strong> and
+      chooses to create a new account, the client SHOULD pre-fill the
+      inviter JID's domain part as the new account's domain. The client MAY
+      provide a mechanism to enter or choose a different server, though.</p>
+  </section2>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>See security considerations in &xep0379;.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <p>This document only makes use of the XMPP URI elements defined in
+      &xep0401;</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>REQUIRED for protocol specifications.</p>
+</section1>
+</xep>
