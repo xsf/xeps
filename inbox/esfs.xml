@@ -1,0 +1,160 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!--
+Note to editor: Remove xep-sfs entity declared below and change all references from &xep-sfs; to respective &xepXXXX; to refeence sfs when moving to experimental.
+-->
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY xep-sfs "<span class='ref'><link url='./sfs.html'>Stateless file sharing (XEP-xxxx)</link></span> <note>XEP-xxxx: Stateless file sharing &lt;<link url='./sfs.html'>https://xmpp.org/extensions/inbox/sfs.html</link>&gt;.</note>" >
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Encryption for stateless file sharing</title>
+  <abstract>This specification provides a protocol for sharing encrypted files using the stateless file sharing protocol (XEP-xxxx).</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>XEP-xxxx</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>esfs</shortname>
+  &larma;
+  <revision>
+    <version>0.0.1</version>
+    <date>2020-11-10</date>
+    <initials>lmw</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>
+    End-to-end encrypted messaging is a popular feature within the community.
+    Various protocols like &xep0373; or &xep0384; have been proposed to allow sending encrypted messages.
+    &xep0343; and &xep0391; specify protocols for establishing an encrypted transport using Jingle to share files using &xep0234;.
+  </p>
+  <p>
+    &xep-sfs; describes a protocol that can be used to share files, previously uploaded using &xep0363;, but lacks means of encrypting files.
+    This leaves files uploaded using &xep0363; without any standardized means of encrypting them.
+  </p>
+  <p>This XEP describes a protocol building on top of &xep-sfs; to allow encrypting files.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Make use of existing protocols for end-to-end encryption (&xep0373; and &xep0420;)</li>
+    <li>Reuse existing protocols for the actual transport of the data</li>
+    <li>Allow caching and forwarding without being required to decrypt the file</li>
+    <li>Backwards compatibility with existing, widely-deployed protocols<note>There is a widely-deployed protocol for encrypted file sharing known as "OMEMO media sharing" or "aesgcm-links" that was never accepted as a XEP. While backwards compatibility with such non-standard is not a maxime of the XSF, it was still considered during the design of this protocol.</note></li>
+  </ul>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <p>
+    This protocol is only meaningful for end-to-end encrypted file sharing when transported as end-to-end encrypted XML, like it's possible using &xep0420;.
+    However, usage without such end-to-end encryption still has its usecase, as it allows sharing files through untrusted intermediaries for as long as the intermediary XMPP servers, if any, are trusted.
+  </p>
+  <p class='box'>Note: To make the examples in this document more readable, no end-to-end encryption is used.</p>
+  <section2 topic='Sharing a file' anchor='file-sharing'>
+    <p>
+      Before sharing the file, the sending entity MUST create random symmetric private key and initialization vector (IV) as required by the selected encryption cipher (see <link url='#ciphers'>Ciphers</link>). The file is then encrypted using selected encryption cipher and the generated key and IV. After this it can be uploaded using &xep0363; or prepared for any other means of file sharing.
+    </p>
+    <p>
+      The file is then shared using the protocol described in &xep-sfs;.
+      The <tt>&lt;file/&gt;</tt> metadata element still refers to the original file, i.e. it describes the original file name, size and hashes. The <tt>&lt;size/&gt;</tt> element and one or multiple <tt>&lt;hash/&gt;</tt> elements are REQUIRED when sending encrypted files.
+    </p>
+    <p>
+      For the encrypted file, a source is added as an <tt>&lt;encrypted/&gt;</tt> element to the <tt>&lt;sources/&gt;</tt>. It carries an attribute <tt>cipher</tt> with the namespace of the encryption cipher being used. The <tt>&lt;encrypted/&gt;</tt> element contains a <tt>&lt;key/&gt;</tt> and an <tt>&lt;iv/&gt;</tt> element, containing both values as Base64-encoded strings. The <tt>&lt;encrypted/&gt;</tt> element MAY also include <tt>&lt;hash/&gt;</tt> elements as described in &xep0300;, referring to the hash of the encrypted file. At last, the <tt>&lt;encrypted/&gt;</tt> element also includes another <tt>&lt;sources/&gt;</tt> element as described in &xep-sfs;, specifying sources to obtain the encrypted file.
+      The outer <tt>&lt;sources/&gt;</tt> may contain additional sources that directly allow for end-to-end encrypted file transfers, for example &xep0234; using &xep0391;.
+    </p>
+    <example caption='Sharing summit.jpg with juliet@shakespeare.lit using encryption'><![CDATA[
+<message to='juliet@shakespeare.lit' from='romeo@montague.lit/resource' id='sharing-a-file'>
+  <file-sharing xmlns='urn:xmpp:sfs:0'>
+    <file xmlns='urn:xmpp:file:metadata:0'>
+      <media-type>image/jpeg</media-type>
+      <name>summit.jpg</name>
+      <size>3032449</size>
+      <dimension>4096x2160</dimension>
+      <hash xmlns='urn:xmpp:hashes:2' algo='sha3-256'>2XarmwTlNxDAMkvymloX3S5+VbylNrJt/l5QyPa+YoU=</hash>
+      <hash xmlns='urn:xmpp:hashes:2' algo='id-blake2b256'>2AfMGH8O7UNPTvUVAM9aK13mpCY=</hash>
+      <desc>Photo from the summit.</desc>
+      <thumbnail xmlns='urn:xmpp:thumbs:1' uri='cid:sha1+ffd7c8d28e9c5e82afea41f97108c6b4@bob.xmpp.org' media-type='image/png' width='128' height='96'/>
+    </file>
+    <sources>
+      <encrypted xmlns='urn:xmpp:esfs:0' cipher='urn:xmpp:ciphers:aes-256-gcm-nopadding:0'>
+        <key>SuRJ2agVm/pQbJQlPq/B23Xt1YOOJCcEGJA5HrcYOGQ=</key>
+        <iv>T8RDMBaiqn6Ci4Nw</iv>
+        <hash xmlns='urn:xmpp:hashes:2' algo='sha3-256'>BgKI2gp2kNCRsARNvhFmw5kFf9BBo2pTbV2D8XHTMWI=</hash>
+        <hash xmlns='urn:xmpp:hashes:2' algo='id-blake2b256'>id4cnqqy9/ssfCkM4vYSkiXXrlE=</hash>
+        <sources xmlns='urn:xmpp:sfs:0'>
+          <url-data xmlns='http://jabber.org/protocol/url-data' target='https://download.montague.lit/4a771ac1-f0b2-4a4a-9700-f2a26fa2bb67/encrypted.jpg' />
+        </sources>
+      </encrypted>
+      <jinglepub xmlns='urn:xmpp:jinglepub:1' from='romeo@montague.lit/resource' id='9559976B-3FBF-4E7E-B457-2DAA225972BB'>
+        <description xmlns='urn:xmpp:jingle:apps:file-transfer:5' />
+      </jinglepub>
+    </sources>
+  </file-sharing>
+</message>
+]]></example>
+  </section2>
+  <section2 topic='Receiving a file' anchor='file-receive'>
+    <p>On receive of a message including a <tt>&lt;file-sharing/&gt;</tt> element, that has an <tt>&lt;encrypted/&gt;</tt> element in its sources, normal processing as described in &xep-sfs; applies.</p>
+    <p>
+      When the receiving entity tries to obtain the file from the source described by the <tt>&lt;encrypted/&gt;</tt> element, it will try to obtain any of its inner sources instead.
+      On success, it decrypts the obtained file using the encryption cipher, private key and IV provided.
+      If the resulting file is larger than the number of bytes specified in the <tt>&lt;size/&gt;</tt> metadata element, the additional bytes are cut off.
+    </p>
+  </section2>
+  <section2 topic='Attaching a source' anchor='attach-source'>
+    <p>
+      The protocol to attach a source described in &xep-sfs; can also be used to attach encrypted sources.
+      After receiving a file using encrypted means, it is RECOMMENDED to only attach additional sources that support encryption.
+    </p>
+  </section2>
+</section1>
+<section1 topic='Ciphers' anchor='ciphers'>
+  <p class='box'>Note The following table was copied from &xep0391;.</p>
+  <p>In order to encrypt the file, the sending entity must transmit a cipher key to the responder. There are multiple options available:</p>
+  <table caption='Available ciphers, configurations and their namespaces'>
+    <tr>
+      <th>Namespace</th>
+      <th>Type</th>
+      <th>Length (bits)</th>
+      <th>Parameters</th>
+    </tr>
+    <tr>
+      <td>urn:xmpp:ciphers:aes-128-gcm-nopadding:0</td>
+      <td>AES</td>
+      <td>Key: 128, IV: 96</td>
+      <td>GCM/NoPadding</td>
+    </tr>
+    <tr>
+      <td>urn:xmpp:ciphers:aes-256-gcm-nopadding:0</td>
+      <td>AES</td>
+      <td>Key: 256, IV: 96</td>
+      <td>GCM/NoPadding</td>
+    </tr>
+  </table>
+  <p>For compatibility reasons, it is RECOMMENDED to append the GCM authentication tag to the uploaded file when using any AES cipher with GCM. The GCM authentication tag is not needed when using the protocol described in this document as a hash of the resulting file is transported independently.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Yes.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='ns'>
+    <p>The &REGISTRAR; includes 'urn:xmpp:esfs:0' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+    <ul>
+      <li>urn:xmpp:esfs:0</li>
+    </ul>
+  </section2>
+</section1>
+</xep>
