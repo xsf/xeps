@@ -57,7 +57,7 @@ If the PR is not touching a XEP, this guide does not apply.
        comment to let the Processing Editor know (adding the
        [Needs Editor Action] label) or ask the Author to correct the problem.
     3. Add the [ProtoXEP] and [Ready to Merge] labels.
-    4. Make sure the title of the PR is `XEP-XXXX: Title of the new XEP`.
+    4. Make sure the title of the PR is `ProtoXEP: Title of the new XEP`.
     5. Stop.
 
 2. Sanity checks
