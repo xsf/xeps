@@ -70,6 +70,11 @@ def accept_xep(number, last_version,
         f.write(xep_text)
         f.flush()
 
+    subprocess.check_call(["make", "build/xeplist.xml"])
+
+    with open("xep.ent", "ab") as f:
+        f.write(subprocess.check_output(["python3", "tools/makeent.py", str(number)]))
+
 
 def isodate(s):
     return datetime.strptime(s, "%Y-%m-%d")
@@ -199,7 +204,7 @@ def main():
             "git", "reset", "HEAD", ".",
         ])
         subprocess.check_call([
-            "git", "add", new_filename.parts[-1],
+            "git", "add", new_filename.parts[-1], "xep.ent",
         ])
         if args.ask:
             flags = ["-ve"]
