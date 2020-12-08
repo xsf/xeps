@@ -1,0 +1,342 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+<!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>Stanza Multiplexing</title>
+    <abstract>
+      This spec provides a mechanism for multiplexing multiple virtual hosts over
+      a single XMPP session.
+    </abstract>
+      &LEGALNOTICE;
+    <number>xxxx</number>
+    <status>ProtoXEP</status>
+    <type>Standards Track</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XMPP Core</spec>
+    </dependencies>
+    <supersedes>
+      <spec>XEP-0220</spec>
+    </supersedes>
+    <supersededby/>
+    <shortname>mux</shortname>
+      &sam;
+    <revision>
+      <version>0.0.1</version>
+      <date>2020-12-03</date>
+      <initials>ssw</initials>
+      <remark><p>First draft.</p></remark>
+    </revision>
+  </header>
+  <section1 topic='Introduction' anchor='intro'>
+    <p>
+      The ability to multiplex multiple virtual hosts over a single XMPP session
+      (historically known as "piggybacking") was originally defined in &rfc3920;
+      and later pulled out into &xep0220; for use with &rfc6120;.
+      With the advent of cheap or free TLS certificates the use of dialback
+      began falling off on the public XMPP network as more secure authentication
+      mechanisms such as SASL EXTERNAL began to become more common.
+      However, multiplexing is still a useful technique in constrained
+      environments regardless of the authentication mechanism being used.
+    </p>
+    <p>
+      Multiplexing is also useful for reusing connections for additional
+      services associated with a domain but hosted at a subdomain.
+      For example, both the "montague.example" and the "capulet.example" may be
+      hosted by the same XMPP server which may also host &xep0369; services at
+      "chat.montague.example" and "rooms.capulet.example" respectively.
+      Without multiplexing this would require eight TCP connections for a
+      bidirectional exchange of stanzas between two sending domains and two
+      target domains.
+      However, with multiplexing this can be reduced to two connections, or, at
+      the operator's discretion, more than two for operational reasons.
+      If multiplexing is not used, the number of server-to-server connections
+      needed to exchange stanzas between virtual hosting providers or
+      multi-service XMPP servers can increase signficantly.
+      This can lead to the number of connections exceeding the maximum number of
+      connections allowed from a single address as explained in &xep0205;.
+    </p>
+    <p>
+      This specification defines new mechanisms for advertising and negotiating
+      multiple hosts over a single session.
+      Furthermore it advances the state of the art over the multiplexing
+      solution defined in &xep0220; by working on both client-to-server (c2s)
+      and server-to-server (s2s) sessions.
+    </p>
+  </section1>
+  <section1 topic='Advertising Support' anchor='advertising'>
+    <p>
+      If a server supports receiving multiplexed streams it SHOULD inform the
+      connecting entity when returning stream features during the negotiation
+      process.
+      Two mechanisms exist for authenticating domains that can be multiplexed
+      over a connection: domains may be authenticated using the TLS certificate
+      (and client certificate if applicable), and domains may be authorized
+      using the connection authorization mechanism described later in this
+      document.
+    </p>
+    <p>
+      To advertise support for multiplexing all domains present in a TLS
+      certificate the server includes a &lt;mux/&gt; element qualified by the
+      'urn:xmpp:mux:0' namespace in the stream features list.
+      This feature MUST be advertised only after TLS has been negotiated (either
+      by opportunistic TLS using the STARTTLS feature or by implicit TLS when
+      establishing the TCP socket) an before authentication using SASL EXTERNAL
+      has been performed.
+      This feature is not mandatory to negotiate.
+    </p>
+    <example caption='Server advertises support for mux using SASL EXTERNAL'><![CDATA[
+<stream:features>
+  <mux xmlns='urn:xmpp:mux:0'/>
+  <mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>
+    <mechanism>EXTERNAL</mechanism>
+  </mechanisms>
+</stream:features>]]></example>
+  <p>
+    The mux feature may also be advertised after authentication with SASL
+    EXTERNAL.
+    If advertised after authentication the feature MUST include a list of
+    supported hosts wrapped in &lt;host/&gt; elements.
+  </p>
+  <example caption='Server advertises support for connection authorization'><![CDATA[
+<stream:features>
+  <mux xmlns='urn:xmpp:mux:0'>
+    <host>capulet.example</host>
+    <host>montague.example</host>
+    <host>chat.montague.example</host>
+    <host>rooms.capulet.example</host>
+  </mux>
+  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/>
+</stream:features>]]></example>
+</section1>
+<section1 topic='Authentication with SASL EXTERNAL' anchor='authn'>
+  <p>
+    If the initiating entity wishes to indicate that it intends to use
+    multiplexing with SASL EXTERNAL it MUST respond to the empty &lt;mux/&gt;
+    element by sending another empty &lt;mux/&gt; element qualified by the
+    'urn:xmpp:mux:0' namespace in reply.
+    No stream restart is necessary.
+  </p>
+  <p>
+    After indicating support for multiplexing by negotiating the mux stream
+    feature, authentication can proceed.
+    When using SASL EXTERNAL this is done by validating the certificate as
+    detailed in &xep0178; except that every domain that is present in the
+    certificate is now eligible for multiplexing without further negotiation.
+    Further stream features (such as resource binding) still use the JID from
+    the original connection (or from the authorization identity).
+  </p>
+  <p>
+    If a bidirectional s2s connection has been negotiated for this session using
+    &xep0288;, negotiation of the mux stream feature also implies that the
+    receiving entity SHOULD multiplex stanzas sent back to the initiating entity
+    for all domains in the verified client certificate.
+    If bidi is not negotiated then mux will need to be negotiated again when the
+    original receiving entity establishes a connection with the original
+    initiating entity.
+  </p>
+</section1>
+<section1 topic='Connection Authorization' anchor='authz'>
+  <p>
+    Often it is not desirable to have one certificate containing every XMPP
+    address or host managed by the server, or the use of SASL EXTERNAL may be
+    impossible.
+    In these cases the initiating entity may request authorization to
+    send stanzas over an existing connection.
+  </p>
+  <p>
+    If the initiating entity has an authenticated connection to a server and
+    wishes to send stanzas to another server that was listed in the original
+    servers post-auth &lt;mux/&gt; stream feature it MAY establish an XMPP
+    connection with the new server and verify that new server also lists the
+    original server in its post-auth mux stream feature.
+    If it does the initiating entity replies with a &lt;mux/&gt; element
+    qualified by the 'urn:xmpp:mux:0' namespace with a shared secret as the
+    payload and the host being selected included in the 'host' attribute.
+    The old server then sends an IQ over its existing connection with the
+    initiating entity containing the same mux element and secret, thereby
+    confirming its relationship to the new server.
+    If the client verifies that the secrets match it sends an empty IQ of type
+    "result" in response to indicate success, otherwise the IQ response should
+    be a "not-acceptable" stanza error (see &rfc6120; §8.3.3.9).
+  </p>
+  <p>
+    For example, if the server montague.example wishes to establish a
+    multiplexed connection with capulet.example and rooms.capulet.example the
+    flow would look like this:
+  </p>
+  <code><![CDATA[
+montague.example        capulet.example
+----------------        ---------------
+       |                          |
+       |  [if necessary,          |
+       |   perform DNS lookup     |
+       |   on Target Domain,      |
+       |   open TCP connection,   |
+       |   and establish stream]  |
+       | -----------------------> |             rooms.capulet.example
+       |                          |             ---------------------
+       |  [if necessary,          |                       |
+       |   perform DNS lookup,    |                       |
+       |   on Sender Domain,      |                       |
+       |   open TCP connection,   |                       |
+       |   and establish stream]  |                       |
+       | -----------------------------------------------> |
+       |                          |                       |
+       |  send mux secret         |                       |
+       | -----------------------------------------------> |
+       |                          |                       |
+       |       send mux secret IQ |                       |
+       | <----------------------- |                       |
+       |                          |                       |
+       | send IQ response         |                       |
+       | -----------------------> |                       |
+       |                          |                       |
+       |                          |      close connection |
+       | <----------------------------------------------- |]]></code>
+  <p>
+    The XML for this exchange would look like the following:
+  </p>
+  <example caption='Initial connection between montague.example and capulet.example'><![CDATA[
+<!--
+  Elided: a stream is negotiated between montague.example and capulet.example.
+  After authentication is complete capulet.example advertises support for mux:
+-->
+<stream:features>
+  <mux xmlns='urn:xmpp:mux:0'>
+    <host>rooms.capulet.example</host>
+  </mux>
+</stream:features>
+
+<!--
+  Negotiation proceeds and the mux stream feature is not selected. After
+  negotiation is complete montague.example tries to establish a connection with
+  rooms.capulet example and sends it a secret. The server responds with the same
+  secret:
+-->
+<iq to="montague.example" from="capulet.example" type="set" id="1285152">
+  <mux xmlns='urn:xmpp:mux:0'>secret</mux>
+</iq>
+
+<-- The server at montague.example indicates that the secret was verified. -->
+<iq to="capulet.example" from="montague.example" type="result" id="1285152"/>
+]]></example>
+
+  <example caption='Secondary connection between montague.example and rooms.capulet.example'><![CDATA[
+<!--
+  Elided: a stream is negotiated between montague.example and
+  rooms.capulet.example. After authentication is complete rooms.capulet.example
+  advertises support for mux:
+-->
+<stream:features>
+  <mux xmlns='urn:xmpp:mux:0'>
+    <host>capulet.example</host>
+  </mux>
+</stream:features>
+
+<!--
+  The server at montague.example indicates that it wishes to authorize its
+  existing connection with capulet.example:
+-->
+<mux xmlns='urn:xmpp:mux:0' host='capulet.example'>
+  secret
+</mux>
+
+<!--
+  The server at rooms.capulet.example closes the connection gracefully
+  if mux was established and begins using the connection between
+  montague.example and capulet.example.
+-->
+</stream:stream>
+]]></example>
+  <p>
+    The format of the secret is not specified however, see the Security
+    Considerations section of this document for some suggestions.
+  </p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>
+    Some clients may send stanzas with no "from" attribute specified and rely on
+    the server to add the attribute before routing the stanza to its final
+    destination.
+    If multiplexing is used the lack of a from attribute indicates that the
+    client is acting on behalf of the origin JID for the connection, just like
+    normal, so clients MUST set the from attribute on any stanzas sent on behalf
+    of any multiplexed host.
+  </p>
+  <p>
+    The format of mux secrets is undefined in this document, however, they MUST
+    be unpredictable.
+    Only the initiating entity should attribute any meaning (if indeed there is
+    any) to the format of mux secrets.
+    In particular the receiving entity MUST NOT rely on a specific format for
+    the secret.
+  </p>
+  <p>
+    One suggestion for generating mux secrets is to generate a key that signs
+    information about the stream.
+    The format defined in &xep0185; is appropriate for this.
+    If the mux secret is a signature it must protect against reuse by at least
+    include a random secret generated with a cryptographically secure random
+    number source, the origin JID, the JID of the server initially receiving the
+    mux secret, and the stream ID for the stream the key will be authenticating
+    (this is not the same stream as the receiving entity's JID).
+    It is also RECOMMENDED that an expiration time be included in the key after
+    which it is no longer valid.
+  </p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:mux:0</li>
+    </ul>
+    <p>
+      Upon advancement of this specification from a status of Experimental to a
+      status of Draft, the &REGISTRAR; shall add the foregoing namespace to the
+      registries located at &STREAMFEATURES;, as described in Section 4 of
+      &xep0053;.
+    </p>
+    <code caption='Jabber/XMPP Protocol Stream Features Registry Submission'><![CDATA[
+<feature>
+  <ns>urn:xmpp:mux:0</ns>
+  <name>mux</name>
+  <element>mux</element>
+  <desc>Indicate support for connection multiplexing and transmit secret keys to a peer.</desc>
+  <doc>Editor to add document reference if accepted</doc>
+  <status>provisional</status>
+</feature>]]></code>
+  <p>
+    The &REGISTRAR; shall also add the foregoing namespace to the Jabber/XMPP
+    Protocol Namespaces Registry located at &NAMESPACES;.
+    Upon advancement of this specification from a status of Experimental to a
+    status of Draft, the &REGISTRAR; shall remove the provisional status from
+    this registry entry.
+  </p>
+  <code caption='Jabber/XMPP Protocol Namespaces Registry Submission'><![CDATA[
+<ns>
+  <name>urn:xmpp:mux:0</name>
+  <doc>Editor to add document reference if accepted</doc>
+  <status>provisional</status>
+</ns>]]></code>
+  </section2>
+  <section2 topic='Namespace Versioning' anchor='registrar-versioning'>
+    &NSVER;
+  </section2>
+</section1>
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>
+    Thanks to Jeremie Miller, Peter Saint-Andre, and Philipp Hancke for writing
+    &xep0220; from which some of the text and techniques used in this document
+    were borrowed.
+  </p>
+</section1>
+</xep>
