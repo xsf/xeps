@@ -191,7 +191,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <!-- making things mobile-friendly... -->
         <meta>
           <xsl:attribute name='name'><xsl:text>viewport</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'>width=device-width; initial-scale=1.0; maximum-scale=2.0</xsl:attribute>
+          <xsl:attribute name='content'>width=device-width, initial-scale=1.0, maximum-scale=2.0</xsl:attribute>
         </meta>
         <!-- BEGIN META TAGS FOR DUBLIN CORE -->
         <meta>
