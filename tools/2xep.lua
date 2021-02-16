@@ -1,16 +1,13 @@
--- This is a sample custom writer for pandoc.  It produces output
--- that is very similar to that of pandoc's HTML writer.
--- There is one new feature: code blocks marked with class 'dot'
--- are piped through graphviz and images are included in the HTML
--- output using 'data:' URLs.
+-- XEP output format for pandoc
 --
--- Invoke with: pandoc -t sample.lua
+-- Based on the pandoc sample.lua HTML writer
 --
--- Note:  you need not have lua installed on your system to use this
--- custom writer.  However, if you do have lua installed, you can
--- use it to test changes to the script.  'lua sample.lua' will
--- produce informative error messages if your code contains
--- syntax errors.
+-- Invoke with: pandoc -t 2xep.lua
+--
+-- Based on `data/sample.lua` from pandoc.
+--
+-- Modifications released under the MIT license.
+-- Copyright (C) 2021 Kim Alvefur
 
 -- luacheck: globals Blocksep Doc Space SoftBreak Str LineBreak Emph Strong Subscript Superscript SmallCaps Strikeout
 -- luacheck: globals Link Image Code InlineMath DisplayMath SingleQuoted DoubleQuoted Note Span RawInline Cite Plain

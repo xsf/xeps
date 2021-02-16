@@ -1,6 +1,12 @@
 #!/usr/bin/env lua5.3
 -- XEP to Markdown converter
 --
+-- Copyright (C) 2021 Kim Alvefur
+--
+-- This file is released under the MIT license.
+--
+-- Invoke with:
+-- xmllint --nonet --noent --loaddtd "$@" | lua5.3 -lluarocks.loader xep2md.lua
 
 -- Inlined util.events from Prosody, you may wanna skip ahead ~160 lines
 -- or so to the main script.
