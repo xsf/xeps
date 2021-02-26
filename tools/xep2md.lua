@@ -343,9 +343,6 @@ events.add_handler("header/", function (event)
 		if meta.title and meta.number then
 			meta.title = "XEP-"..meta.number..": "..meta.title;
 		end
-		if meta.author and #meta.author == 1 then
-			meta.author = meta.author[1];
-		end
 		local have_yaml, yaml = pcall(require, "lyaml");
 		if have_yaml and yaml.dump then
 			output(yaml.dump({meta}));
