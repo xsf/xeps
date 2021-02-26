@@ -260,7 +260,9 @@ do
 	end
 
 	events.add_handler("author/", function (event)
-		if author.email then
+		if author.email and author.jid then
+			author = string.format("%s %s <%s> <xmpp:%s>", author.firstname, author.surname, author.email, author.jid);
+		elseif author.email then
 			author = string.format("%s %s <%s>", author.firstname, author.surname, author.email);
 		else
 			author = string.format("%s %s", author.firstname, author.surname);
