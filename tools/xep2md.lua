@@ -172,6 +172,7 @@ end);
 local lxp = require "lxp";
 local lom = require "lxp.lom";
 local events = require"util.events".new();
+local have_yaml, yaml = pcall(require, "lyaml");
 
 local handler = {};
 local stack = {};
@@ -350,7 +351,6 @@ events.add_handler("header/", function (event)
 		if meta.title and meta.number then
 			meta.title = "XEP-"..meta.number..": "..meta.title;
 		end
-		local have_yaml, yaml = pcall(require, "lyaml");
 		if have_yaml and yaml.dump then
 			output(yaml.dump({meta}));
 		else
@@ -612,6 +612,9 @@ local function chunks(file, size)
 	end
 end
 
+if not have_yaml then
+	io.stderr:write("lua-yaml missing, header metadata will be incomplete\n");
+end
 for chunk in chunks(io.stdin, 4096) do
 	local ok, err, line, col = parser:parse(chunk);
 	if not ok then
