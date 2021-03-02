@@ -240,8 +240,13 @@ events.add_handler("#text", function (event)
 	return true;
 end);
 
-local metafields = "title abstract number status lastcall type sig shortname"
-for field in metafields:gmatch("%S+") do
+local header_schema = [[
+	(title , abstract , legal , number , status , lastcall* ,
+	interim* , type , sig , approver* , dependencies , supersedes ,
+	supersededby , shortname , schemaloc* , registry? , discuss? ,
+	expires? , author+ , revision+ , councilnote?)
+]];
+for field in header_schema:gmatch("%w+") do
 	events.add_handler(field.."#text", function (event)
 		meta[field] = event.text:match("%S.*%S");
 		return true;
@@ -326,7 +331,7 @@ events.add_handler("date#text", function (event)
 	if meta and not meta.date then
 		meta.date = event.text;
 	end
-end);
+end, 1);
 
 events.add_handler("spec#text", function (event)
 	if not meta then return end
@@ -357,7 +362,9 @@ events.add_handler("header/", function (event)
 			else
 				print("% ");
 			end
-			print("% "..meta.date);
+			if meta.date then
+				print("% "..meta.date);
+			end
 		end
 	end
 	return true;
