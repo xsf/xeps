@@ -69,7 +69,7 @@ function Doc(body, metadata, variables)
 			if field == "legal" then
 				add("&LEGALNOTICE;");
 				goto next;
-			elseif field == "supersedes" or field == "supersededby" then
+			elseif field == "supersedes" or field == "supersededby" or field == "dependencies" then
 				add(("<%s/>"):format(field));
 				goto next;
 			elseif r ~= "*" and r ~= "?" then
