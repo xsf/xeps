@@ -139,6 +139,7 @@ end
 -- Comments indicate the types of other variables.
 
 function Str(s)
+  if string.match(s, "^&[%w%-.]+;$") then return s; end
   return escape(s)
 end
 
