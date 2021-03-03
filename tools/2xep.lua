@@ -73,7 +73,8 @@ function Doc(body, metadata, variables)
 				add(("<%s/>"):format(field));
 				goto next;
 			elseif r ~= "*" and r ~= "?" then
-				error(string.format("Missing required metadata field '%s'", field));
+				io.stderr:write(string.format("Missing REQUIRED metadata field '%s'\n", field));
+				goto next;
 			else
 				io.stderr:write(string.format("Missing optional metadata field '%s'\n", field));
 				goto next;
