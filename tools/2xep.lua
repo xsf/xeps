@@ -69,11 +69,12 @@ function Doc(body, metadata, variables)
 			if field == "legal" then
 				add("&LEGALNOTICE;");
 				goto next;
-			elseif field == "supersedes" or field == "supersededby" then
+			elseif field == "supersedes" or field == "supersededby" or field == "dependencies" then
 				add(("<%s/>"):format(field));
 				goto next;
 			elseif r ~= "*" and r ~= "?" then
-				error(string.format("Missing required metadata field '%s'", field));
+				io.stderr:write(string.format("Missing REQUIRED metadata field '%s'\n", field));
+				goto next;
 			else
 				io.stderr:write(string.format("Missing optional metadata field '%s'\n", field));
 				goto next;
@@ -138,6 +139,7 @@ end
 -- Comments indicate the types of other variables.
 
 function Str(s)
+  if string.match(s, "^&[%w%-.]+;$") then return s; end
   return escape(s)
 end
 
