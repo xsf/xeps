@@ -225,7 +225,7 @@ end
 
 -- Oh god oh god we're all gonna die!
 local function escape_text(event)
-	event.text = event.text:gsub("['&<>\"]", "\\%1"):gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ");
+	event.text = event.text:gsub("['&<>\"]", "\\%1");
 end
 events.add_handler("#text", escape_text, 1000);
 
