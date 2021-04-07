@@ -1015,6 +1015,26 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
     </figure>
   </xsl:template>
 
+  <xsl:template match='cve'>
+    <figure class='cve'>
+      <figcaption>CVE-<xsl:value-of select='@id'/>
+	(<a><xsl:attribute name='href'>https://nvd.nist.gov/vuln/detail/CVE-<xsl:value-of select='@id'/></xsl:attribute>NIST</a>,
+	<a><xsl:attribute name='href'>https://cve.mitre.org/cgi-bin/cvename.cgi?name=<xsl:value-of select='@id'/></xsl:attribute>Mitre</a>)
+      </figcaption>
+      <xsl:choose>
+	<xsl:when test="@url != ''">
+	  <a>
+	    <xsl:attribute name='href'><xsl:value-of select='@url'/></xsl:attribute>
+	    <xsl:apply-templates/>
+	  </a>
+	</xsl:when>
+	<xsl:otherwise>
+	  <xsl:apply-templates/>
+	</xsl:otherwise>
+      </xsl:choose>
+    </figure>
+  </xsl:template>
+
   <xsl:template match='img'>
     <img>
       <xsl:attribute name='alt'><xsl:value-of select='@alt'/></xsl:attribute>
