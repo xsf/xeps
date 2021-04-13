@@ -506,10 +506,10 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
 <!-- If we had XSL 2.0 we could use year-from-date() and lower-case() below. -->
 @report{<xsl:value-of select='$lowercased-surname-firstauthor'/><xsl:value-of select='$year-of-first-history-entry'/><xsl:value-of select='$bibtex-citekey-postfix'/>,
   title = {<xsl:value-of select='/xep/header/title'/>},
+  author = {<xsl:for-each select='/xep/header/author'><xsl:value-of select='surname'/><xsl:text>, </xsl:text><xsl:value-of select='firstname'/><xsl:if test="not(position() = last())"> and </xsl:if></xsl:for-each>},
   version = {<xsl:value-of select='/xep/header/revision[position()=1]/version'/>},
   type = {XEP},
   number = {<xsl:value-of select='/xep/header/number'/>},
-  author = {<xsl:for-each select='/xep/header/author'><xsl:value-of select='surname'/><xsl:text>, </xsl:text><xsl:value-of select='firstname'/><xsl:if test="not(position() = last())"> and </xsl:if></xsl:for-each>},
   institution = {XMPP Standards Foundation},
   url = {https://xmpp.org/extensions/xep-<xsl:value-of select='/xep/header/number'/>.html},
   date = {<xsl:value-of select='/xep/header/revision[position()=last()]/date'/>/<xsl:value-of select='/xep/header/revision[position()=1]/date'/>},
