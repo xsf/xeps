@@ -508,7 +508,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   title = {<xsl:value-of select='/xep/header/title'/>},
   version = {<xsl:value-of select='/xep/header/revision[position()=1]/version'/>},
   type = {XEP},
-  number = <xsl:value-of select='/xep/header/number'/>
+  number = {<xsl:value-of select='/xep/header/number'/>},
   author = {<xsl:for-each select='/xep/header/author'><xsl:value-of select='firstname'/><xsl:text> </xsl:text><xsl:value-of select='surname'/><xsl:if test="not(position() = last())"> and </xsl:if></xsl:for-each>
 },
   institution = {XMPP Standards Foundation},
