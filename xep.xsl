@@ -481,6 +481,40 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
             <xsl:apply-templates select='/xep/header/revision'/>
           </ol>
         <p>END</p>
+        <h3 id='appendix-biblatex'>Appendix I: Bib(La)TeX Entry</h3>
+        <xsl:variable name="lowercase" select="'abcdefghijklmnopqrstuvwxyz'" />
+        <xsl:variable name="uppercase" select="'ABCDEFGHIJKLMNOPQRSTUVWXYZ'" />
+        <xsl:variable name="lowercased-surname-firstauthor">
+          <xsl:value-of select='translate(/xep/header/author[position()=1]/surname, $uppercase, $lowercase)'/>
+        </xsl:variable>
+        <xsl:variable name="year-of-first-history-entry">
+          <xsl:value-of select='substring(/xep/header/revision[position()=last()]/date,1,4)'/>
+        </xsl:variable>
+        <!-- Use the XEPs shortname as citekey postfix if one was
+             assigned, otherwise the XEP number -->
+        <xsl:variable name="bibtex-citekey-postfix">
+          <xsl:choose>
+            <xsl:when test='/xep/header/shortname = "NOT_YET_ASSIGNED"'>
+              xep<xsl:value-of select='/xep/header/number'/>
+            </xsl:when>
+            <xsl:otherwise>
+              <xsl:value-of select='/xep/header/shortname'/>
+            </xsl:otherwise>
+          </xsl:choose>
+        </xsl:variable>
+        <pre>
+<!-- If we had XSL 2.0 we could use year-from-date() and lower-case() below. -->
+@report{<xsl:value-of select='$lowercased-surname-firstauthor'/><xsl:value-of select='$year-of-first-history-entry'/><xsl:value-of select='$bibtex-citekey-postfix'/>,
+  title = {<xsl:value-of select='/xep/header/title'/>},
+  version = {<xsl:value-of select='/xep/header/revision[position()=1]/version'/>},
+  type = {XEP},
+  number = {<xsl:value-of select='/xep/header/number'/>},
+  author = {<xsl:for-each select='/xep/header/author'><xsl:value-of select='firstname'/><xsl:text> </xsl:text><xsl:value-of select='surname'/><xsl:if test="not(position() = last())"> and </xsl:if></xsl:for-each>
+},
+  institution = {XMPP Standards Foundation},
+  url = {https://xmpp.org/extensions/xep-<xsl:value-of select='/xep/header/number'/>.html},
+  date = {<xsl:value-of select='/xep/header/revision[position()=last()]/date'/>/<xsl:value-of select='/xep/header/revision[position()=1]/date'/>},
+}</pre>
       </body>
     </html>
   </xsl:template>
@@ -513,6 +547,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
       <li><a href="#appendix-conformance">Requirements Conformance</a></li>
       <li><a href="#appendix-notes">Notes</a></li>
       <li><a href="#appendix-revs">Revision History</a></li>
+      <li><a href="#appendix-biblatex">Bib(La)Tex Entry</a></li>
     </ol>
   </xsl:template>
 
