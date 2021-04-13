@@ -498,7 +498,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
               xep<xsl:value-of select='/xep/header/number'/>
             </xsl:when>
             <xsl:otherwise>
-              <xsl:value-of select='/xep/header/shortname'/>
+              <xsl:value-of select='translate(/xep/header/shortname, $uppercase, $lowercase)'/>
             </xsl:otherwise>
           </xsl:choose>
         </xsl:variable>
