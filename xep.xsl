@@ -495,7 +495,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <xsl:variable name="bibtex-citekey-postfix">
           <xsl:choose>
             <xsl:when test='/xep/header/shortname = "NOT_YET_ASSIGNED"'>
-              xep<xsl:value-of select='/xep/header/number'/>
+              <xsl:text>xep</xsl:text><xsl:value-of select='/xep/header/number'/>
             </xsl:when>
             <xsl:otherwise>
               <xsl:value-of select='translate(/xep/header/shortname, $uppercase, $lowercase)'/>
