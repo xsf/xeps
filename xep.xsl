@@ -480,7 +480,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
           <ol class="revision-history">
             <xsl:apply-templates select='/xep/header/revision'/>
           </ol>
-        <p>END</p>
         <h3 id='appendix-biblatex'>Appendix I: Bib(La)TeX Entry</h3>
         <xsl:variable name="lowercase" select="'abcdefghijklmnopqrstuvwxyz'" />
         <xsl:variable name="uppercase" select="'ABCDEFGHIJKLMNOPQRSTUVWXYZ'" />
@@ -514,6 +513,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   url = {https://xmpp.org/extensions/xep-<xsl:value-of select='/xep/header/number'/>.html},
   date = {<xsl:value-of select='/xep/header/revision[position()=last()]/date'/>/<xsl:value-of select='/xep/header/revision[position()=1]/date'/>},
 }</pre>
+        <p>END</p>
       </body>
     </html>
   </xsl:template>
