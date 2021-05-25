@@ -456,7 +456,15 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <p class='indent'>Errata can be sent to &lt;<a href='mailto:editor@xmpp.org'>editor@xmpp.org</a>&gt;.</p>
         <!-- CONFORMANCE TERMS-->
         <h3 id='appendix-conformance'>Appendix F: Requirements Conformance<xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='"appendix-conformance"'/></xsl:call-template></h3>
-        <p class='indent'>The following requirements keywords as used in this document are to be interpreted as described in <a href='http://www.ietf.org/rfc/rfc2119.txt'>RFC 2119</a>: "MUST", "SHALL", "REQUIRED"; "MUST NOT", "SHALL NOT"; "SHOULD", "RECOMMENDED"; "SHOULD NOT", "NOT RECOMMENDED"; "MAY", "OPTIONAL".</p>
+        <p class='indent'>
+          The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+          "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+          "MAY", and "OPTIONAL" in this document are to be interpreted as
+          described in <a href="https://tools.ietf.org/rfc/bcp/bcp14.txt">BCP 14</a>
+          [<a href="http://www.ietf.org/rfc/rfc2119.txt">RFC2119</a>]
+          [<a href="https://tools.ietf.org/rfc/rfc8174.txt">RFC8174</a>] when,
+          and only when, they appear in all capitals, as shown here.
+        </p>
         <!-- NOTES -->
         <h3 id='appendix-notes'>Appendix G: Notes<xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='"appendix-notes"'/></xsl:call-template></h3>
           <div class='indent'>
