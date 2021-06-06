@@ -1,0 +1,194 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Pre-auth Registration Key Generation and Validation</title>
+  <abstract>
+    This specification updates XEP-0401 and XEP-0445 by specifying a shared
+    format for the pre-authenticated registration token.
+  </abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0401</spec>
+    <spec>XEP-0445</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>preauth-token</shortname>
+  &sam;
+  <revision>
+    <version>0.0.1</version>
+    <date>2021-06-06</date>
+    <initials>ssw</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>
+    Both &xep0401; and &xep0445; specify a mechanism for requesting a token from
+    a server that can be exchanged for registration at a later date.
+    However, neither XEP defines the format of this token, or a recommended
+    algorithm for generating it.
+    This means that each server may choose a unique format and that any token
+    issuing entity must either only support a specific servers token format, or
+    must connect to the server with an admin account so that it can ask the
+    server for tokens.
+  </p>
+  <p>
+    This specification rectifies this by specifying a server-agnostic format for
+    pre-auth tokens and an algorithm for generating them.
+    This enables third-party trusted services that share a private key to
+    sign a token that can later be verified by the server to register a user.
+  </p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>
+      Tokens issued by a third-party authorization server MUST be verifiable by
+      any authentication server supporting this specification.
+    </li>
+    <li>
+      Generated tokens MUST be URL safe.
+    </li>
+    <li>
+      <p>
+        The algorithm for generating tokens SHOULD allow verification of the
+        following inputs:
+      </p>
+      <ul>
+        <li>an optional username,</li>
+        <li>a list of hostnames for which the user can register,</li>
+        <li>and an optional expiration time.</li>
+      </ul>
+    </li>
+  </ul>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di>
+      <dt>Authentication server</dt>
+      <dd>
+        The server authenticating the user using IBR or SASL, normally the XMPP
+        server.
+      </dd>
+    </di>
+    <di>
+      <dt>Authorization server</dt>
+      <dd>
+        A server issuing a token authorizing the user to register.
+        This may be the XMPP server, or another entity that shares its private
+        key.
+      </dd>
+    </di>
+    <di>
+      <dt>IBR</dt>
+      <dd>
+        In-band Registration, as defined by either &xep0077; or &xep0389;
+      </dd>
+    </di>
+    <di>
+      <dt>Key</dt>
+      <dd>
+        A shared secret that is used to sign and validate tokens.
+      </dd>
+    </di>
+  </dl>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <ul>
+    <li>
+      As the admin of a social media network I want to allow my users to 
+      self-provision accounts on our instant messaging platform without
+      involving the XMPP admin or requiring that the provisioning service speak
+      with the XMPP server.
+    </li>
+    <li>
+      As the admin of an XMPP server I want to generate tokens that can be
+      redeemed for an account at a later date even though the XMPP server is
+      temporarily down for maintenance.
+    </li>
+    <li>
+      As the representative of a chat network attending a conference, I want to
+      be able to print invitations to sign up for an account at our server even
+      though the conference WiFi is spotty and I may not be able to remain
+      connected to the server.
+      Furthermore, I want to use a different private key than the one used by
+      user invites so that I can see how many users from the conference
+      registered.
+    </li>
+  </ul>
+</section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <p>
+    The following algorithm is used to generate tokens where "," is a separator
+    and not part of any actual input and <tt>$key</tt> is the shared secret key.
+    All uses of base64 are the Raw URL encoding (with no padding characters)
+    defined in &rfc4648;
+    HMAC-SHA256 is a Keyed-Hash Message Authentication Code (see &nistfips198a;)
+    using the SHA256 hashing algorithm (see &nistfips180-2;).
+  </p>
+  <code>
+// Current time rounded up and converted to milliseconds.
+expiration = ($currentTime + 1e6 -1) / 1e6
+jids       = {
+               JID1, ':',
+               JID2, ':',
+               JID3, ':',
+               …
+               JIDFinal
+             }
+signature  = HMAC-SHA256
+             (
+               $key,
+               $jids, ':',
+               $expiration
+             )
+token      = {
+               base64-raw-url($signature), ':',
+               base64-raw-url($jids), ':',
+               $expiration,
+             }
+  </code>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>
+    If the shared key is longer than the block size it will be hashed by some
+    HMAC implementations, otherwise it is left unhashed.
+    This is not represented in the algorithm above, but if it is not done the
+    user must determine whether the input key needs hashing themselves.
+    Input keys shorter than the block size are not hashed.
+  </p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>
+    The secret key SHOULD be at least half the length of the SHA256 output (ie.
+    16 bytes).
+    No key stretching is performed by this algorithm, so the user should take
+    care to pick a long key.
+  </p>
+  <p>
+    Creation of the secret key MUST NOT require communication between the
+    authentication server, the authorization server, or a third party such as a
+    database.
+  </p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This document requires no action from the &REGISTRAR;</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>This document does not define an XML namespace requiring a schema.</p>
+</section1>
+</xep>
