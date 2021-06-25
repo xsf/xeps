@@ -172,7 +172,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   <xsl:template match='/'>
     <xsl:text disable-output-escaping='yes'>&lt;!DOCTYPE html&gt;
 </xsl:text>
-    <html>
+    <html lang='en'>
       <head>
         <title>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></title>
         <style type='text/css'>
