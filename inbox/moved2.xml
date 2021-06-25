@@ -1,0 +1,403 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Moved 2.0</title>
+  <abstract>This specification details a way for a user to notify their contacts about an account move.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>XEP-0163</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  &mwild;
+  <revision>
+    <version>0.0.1</version>
+    <date>2021-06-05</date>
+    <initials>mw</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>This document introduces a way for a user to notify contacts of a change to their JID, e.g. if they move to a new server.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>This document aims to satisfy the following requirements:</p>
+  <ul>
+    <li>Users should be able to notify their contacts of a change of address.</li>
+    <li>Contacts should be able to verify that such a notification is legitimate, to prevent malicious actors from spoofing notifications.</li>
+    <li>It should be possible for a contact's server to automatically update the contact's roster for seamless migrations.</li>
+    <li>In the absence of a contact's support for this protocol, it should fall back to a simple manual subscription approval.</li>
+  </ul>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di>
+      <dt>Moved notification</dt>
+      <dd>An XML &lt;moved/&gt; element sent to a contact to inform them that
+          the user is moving to a new address.
+      </dd>
+    </di>
+    <di>
+      <dt>Moved statement</dt>
+      <dd>An XML &lt;moved/&gt; element published by the user on their old
+          account. It is used by contacts to verify that moved notifications
+          are genuine.
+      </dd>
+    </di>
+  </dl>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <p>We start with the situation where the user, let's call them Juliet, has two accounts -
+     her original account <tt>juliet@im.example.net</tt> and a shiny new account on her personal
+     domain, <tt>juliet@capulet.example</tt>.</p>
+  <p>Juliet would like to migrate all her data and contacts to her new account, with minimal
+     disruption.</p>
+  <section2 topic='User publishes moved statement' anchor='publish-statement'>
+    <p>Before notifying contacts of the move, Juliet must connect to her old
+       account and publish a "statement" that the account is no longer in
+       use. This statement includes the address of her new account.
+    </p>
+    <p>The statement should be posted to a PEP node with the name 'urn:xmpp:moved:1'. The
+       payload should be a &lt;moved/&gt; element in the 'urn:xmpp:moved:1' namespace. This
+       element should in turn contain a single &lt;new-jid/&gt; element with the user's new JID
+       as its text content.</p>
+
+    <example caption='Juliet&apos;s client publishes a moved statement on her old account'><![CDATA[
+<iq from='juliet@im.example.net/VR0sAGae'
+    type='set'
+    id='pub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:moved:1'>
+      <item id='current'>
+        <moved xmlns='urn:xmpp:moved:1'>
+          <new-jid>juliet@capulet.example</new-jid>
+        </moved>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+]]></example>
+  </section2>
+  <section2 topic='User notifies contacts of move' anchor='publish-notification'>
+    <p>After publishing a moved statement on her old account, Juliet proceeds
+       to notify her contacts about the move.</p>
+
+    <p>Juliet connects to her new account, and sends a subscription request to
+       each of her contacts. These subscription requests MUST contain a &lt;moved/&gt;
+       element in the 'urn:xmpp:moved:1' namespace. This element contains a single
+       &lt;old-jid/&gt; element with the old JID as its text content.&gt;</p>
+
+    <example caption='Juliet sends a subscription request to Romeo from her new account'><![CDATA[
+<presence type='subscribe' to='romeo@montague.example' id='sub1'>
+  <moved xmlns='urn:xmpp:moved:1'>
+    <old-jid>juliet@im.example.net</old-jid>
+  </moved>
+</presence>
+]]></example>
+  </section2>
+
+  <section2 topic='Contact receives subscription request with moved notification' anchor='receive-notification-client'>
+    <p>Juliet's contact, Romeo, receives the subscription request from Juliet's
+       new JID. At this point Romeo has not verified that the new account
+       actually belongs to Juliet, and MUST perform such verification before
+       acting on the request any differently to usual.</p>
+
+    <p>If the value of &lt;old-jid/&gt; is not in the roster with an approved
+       incoming subscription ('from' or 'both'), the &lt;moved/&gt; element
+       MUST be ignored entirely.</p>
+
+    <p>To verify the request, Romeo makes a request to the JID specified in
+       &lt;old-jid/&gt; (which MUST be a bare JID) to fetch a published move
+       statement.</p>
+
+    <example caption='Romeo requests a moved statement from Juliet&apos;s old account'><![CDATA[
+<iq type='get'
+    from='romeo@capulet.example/laptop'
+    to='juliet@im.example.net'
+    id='83hKgF'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:moved:1'>
+      <item id='current'/>
+    </items>
+  </pubsub>
+</iq>
+]]></example>
+
+    <p>On success, Juliet's server will return the moved statement that Juliet published.</p>
+
+    <example caption='Juliet&apos;s old server returns the published moved statement to Romeo'><![CDATA[
+<iq type='result'
+    from='juliet@im.example.net'
+    to='romeo@capulet.example/laptop'
+    id='83hKgF'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:moved:1'>
+      <item id='current'>
+        <moved xmlns='urn:xmpp:moved:1'>
+          <new-jid>juliet@capulet.example</new-jid>
+        </moved>
+      </item>
+    </items>
+  </pubsub>
+</iq>
+]]></example>
+
+    <p>Romeo MUST now verify that the received subscription request was from
+       the same bare JID contained in the &lt;new-jid/&gt; element in the moved
+       statement. If the JIDs do not match, or if there was an error fetching
+       the moved statement (except for "gone" - see note below), the
+       &lt;moved/&gt; element in the incoming subscription request MUST be
+       ignored entirely.</p>
+
+    <p class="box">
+      <strong>Note:</strong> As a special case, if the attempt to retrieve the
+      moved statement results in an error with the &lt;gone/&gt; condition as
+      defined in RFC 6120, and that &lt;gone/&gt; element contains a valid
+      XMPP URI (e.g. <tt>xmpp:user@example.com</tt>), then the error response
+      MUST be handled equivalent to a &lt;moved/&gt; statement containing a
+      &lt;new-jid/&gt; element with the JID provided in the URI (e.g.
+      <tt>user@example.com</tt>).
+    </p>
+    
+
+    <p>Upon successful verification, Romeo's client may present an appropriate
+       user interface, informing about Juliet's change of address, and a prompt
+       to accept the subscription request from the new address. On the user's
+       approval of such a subscription request, the client will typically want
+       to also send a subscription request to the contact's new JID to establish
+       a mutual subscription.</p>
+
+    <p>Due to the potential for races between multiple clients connected to
+       the same account, it is NOT RECOMMENDED for a client to automatically
+       act upon migration notifications, but instead await manual interaction
+       from the user. As with any inbound subscription request it SHOULD pay
+       attention to roster pushes related to the contact, and update the UI
+       appropriately if the new contact address is authorized from another
+       device.</p>
+  </section2>
+
+  <section2 topic='Server-side processing of inbound moved notification' anchor='receive-notification-server'>
+    <p>It is not required for Romeo's server to support this specification.
+       However if Romeo's server does understand this extension, it SHOULD
+       handle the inbound subscription request on behalf of Romeo's clients.
+       This improves the user experience for Romeo, especially when he has
+       multiple devices.</p>
+
+    <p>Broadly the server should follow exactly the same process as a client
+       would. Specifically:
+    </p>
+    <ol>
+       <li>Receive subscription request with 'moved' payload.</li>
+       <li>Verify that the old JID has an approved subscription to the user (i.e. a subscription of 'both' or 'from').</li>
+       <li>Request moved statement from the old account JID.</li>
+       <li>Verify that the new JID in the moved statement matches the 'from' of the subscription request.</li>
+    </ol>
+
+    <example caption='Romeo&apos;s server requests a moved statement from Juliet&apos;s old account'><![CDATA[
+<iq type='get'
+    from='romeo@capulet.example'
+    to='juliet@im.example.net'
+    id='83hKgF'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:moved:1'>
+      <item id='current'/>
+    </items>
+  </pubsub>
+</iq>
+]]></example>
+
+    <example caption='Juliet&apos;s old server returns the published moved statement to Romeo&apos;s server'><![CDATA[
+<iq type='result'
+    from='juliet@im.example.net'
+    to='romeo@capulet.example/laptop'
+    id='83hKgF'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:moved:1'>
+      <item id='current'>
+        <moved xmlns='urn:xmpp:moved:1'>
+          <new-jid>juliet@capulet.example</new-jid>
+        </moved>
+      </item>
+    </items>
+  </pubsub>
+</iq>
+]]></example>
+
+    <p>If verification fails (e.g. due to a missing or incorrect moved
+       statement), the server MUST ignore the &lt;moved/&gt; element in the
+       subscription request, and process the stanza as a normal subscription
+       request. It MUST NOT strip the &lt;moved/&gt; element before forwarding,
+       even if verification fails.</p>
+
+    <p>Upon successful verification, the server MUST NOT forward the stanza to
+       Romeo's clients, but instead MUST create a roster entry for the new JID
+       with a subscription of 'from' (sending out the appropriate roster push),
+       and then auto-reply to the subscription request with a presence of type
+       'subscribed'.</p>
+
+    <example caption='Romeo&apos;s server notifies Romeo about the new roster entry'><![CDATA[
+<iq id='a78b4q6ha463'
+    to='romeo@montague.example/orchard'
+    type='set'>
+  <query xmlns='jabber:iq:roster'>
+    <item jid='juliet@capulet.example''
+          subscription='from'/>
+  </query>
+</iq>
+]]></example>
+
+    <p>After authorizing the new JID, the server should revoke the presence
+       subscription of the old account.</p>
+
+    <example caption='Romeo&apos;s server notifies Juliet&apos;s old account about unsubscription'><![CDATA[
+<presence to='juliet@im.example.net' type='unsubscribed'/>
+]]></example>
+
+    <example caption='Romeo&apos;s server notifies Romeo&apos;s clients about the old roster entry'><![CDATA[
+<iq id='a78b4q6ha463'
+    to='romeo@montague.example/orchard'
+    type='set'>
+  <query xmlns='jabber:iq:roster'>
+    <item jid='juliet@im.example.net''
+          subscription='to'/>
+  </query>
+</iq>
+]]></example>
+
+    <p>Finally, if the old JID was in the user's roster with a subscription of 'both', the
+       server MUST also send a presence of type 'subscribe' to the new JID in
+       order to seek establishment of a mutual subscription.</p>
+
+    <example caption='Romeo&apos;s server sends subscription request to Juliet&apos;s new JID'><![CDATA[
+<presence type='subscribe' id='uc51xs63' from='romeo@montague.example' to='juliet@capulet.example'/>
+]]></example>
+
+  </section2>
+    
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <section2 topic='Lifetime of moved statement' anchor='impl-lifetime'>
+    <p>The moved statement is required for contacts to automatically verify
+       the authenticity of moved notifications. After publishing a moved
+       statement, the user should keep the statement published and the account
+       active for long enough for contacts to switch to the user's new account.</p>
+    <p>It is not necessary to remain connected to the old account during the
+       transition period. However the account must not be deleted, and the
+       server must be available.</p>
+    <p>In the event that the move statement is unpublished, the account is deleted,
+       or the server becomes unavailable, any contacts that have not yet transitioned
+       to the user's new JID will be unable to verify the migration. Those contacts
+       will have to manually approve the subscription from the user's new address.</p>
+    <p>Migration progress of contacts is obervable through subscription revocations to
+       the old account, and subscription approvals to the new account.</p>
+  </section2>
+  <section2 topic='Alternative verification methods' anchor='impl-alt-verify'>
+    <p>Future revisions of this document, or alternative documents, may define
+       alternative verification methods. Such methods SHOULD be communicated via
+       child elements of &lt;moved/&gt; in an appropriate namespace. As is usual
+       throughout XMPP, entities MUST ignore unknown child elements of
+       &lt;moved/&gt; in unrecognised namespaces.</p>
+  </section2>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <section2 topic='User considerations' anchor='security-user'>
+    <p>The following are considerations for the user (exemplified by Juliet in this document):</p>
+    <ul>
+      <li>A malicious client or other entity with access to the user's account
+          can perform a migration, potentially against the user's will and/or
+          without their knowledge. Although this is a concern, any malicious
+          actor with access to a user's account can abuse that access in many
+          ways. Servers that support granting restricted access to accounts
+          should consider blocking attempts to publish to the
+          'urn:xmpp:moved:1' PEP node from restricted entities.</li>
+      <li>To avoid leaking the user's new JID to non-contacts, the PEP node
+          containing the moved statement SHOULD be configured to use the
+          "presence" access model (this is the default access model defined
+          by PEP).</li>
+    </ul>
+  </section2>
+  <section2 topic='Contact considerations' anchor='security-contact'>
+    <p>The following are considerations for the contact (exemplified by Romeo in this document), and the contact's server:</p>
+    <ul>
+      <li>A presence subscription with a &lt;moved/&gt; is trivial for a
+          malicious third-party to spoof. The verification methods discussed
+          in this document MUST be followed to prevent accepting rogue
+          subscription requests.</li>
+      <li>It is important to verify that the original JID of the migrating
+          user was already authorized to view presence before processing a
+          migration.</li>
+      <li>After successfully processing a migration, the original account
+          should have its presence subscription revoked. This ensures that
+          each JID may only be migrated once. Without this precaution the
+          migration mechanism can be abused to introduce unlimited arbitrary
+          JIDs to contacts' rosters. This precaution also ensures, if the
+          old account ends up owned by a new entity, that they will not
+          unexpectedly inherit a presence subscription.</li>
+    </ul>
+  </section2>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>None.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This specification defines the following XML namespace:</p>
+  <ul>
+    <li>urn:xmpp:moved:1</li>
+  </ul>
+</section1>
+
+<section1 topic='Design Considerations' anchor='design'>
+  <section2 topic='Verification methods' anchor='design-verification'>
+    <p>There are two general approaches for verification - network-based
+       verification, or cryptographic verification. Network-based verification
+       (as described in this document) requests a verification statement from
+       the user's old account. Cryptographic verification would check a move
+       notification against a previously-established cryptographic identify of
+       the user.</p>
+    <p>Network-based verification:</p>
+    <ul>
+      <li>Pro: Simple and easy to implement</li>
+      <li>Con: depends on the original server being available and supporting PEP</li>
+    </ul>
+    <p>Cryptographic verification:</p>
+    <ul>
+      <li>Pro: Can work even if the original server goes offline or begins blocking
+          migration attempts.</li>
+      <li>Con: More complex implementation.</li>
+      <li>Con: Requires user and contacts to manage/track cryptographic keys and
+          identies. It may be possible to piggyback on top of an existing cryptographic
+          layer, e.g. OMEMO. However this would eliminate the server-side assistance,
+          and OMEMO support is not universal among clients.</li>
+    </ul>
+  
+    <p>Ultimately this document defines a network-based verification method, but
+       leaves an obvious path to extend the protocol with alternative verification
+       methods (either in an update to this document, or defined by other
+       documents).</p>
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <p>TODO.</p>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acks'>
+        <p>Many thanks to Kim Alvefur, Maxime Buquet and Jonas Schäfer for their input and feedback on this specification.</p>
+</section1>
+</xep>
