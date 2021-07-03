@@ -90,8 +90,8 @@
       out-of-band link (URI) which allows Juliet to:</p>
     <ol>
       <li>Download an XMPP client (if needed).</li>
-      <li>Register an account on Romeo's server with a user name defined by
-	Romeo and a password not known to Romeo.</li>
+      <li>Register an account on Romeo's server (with a user name pre-defined
+	by Romeo or chosen by Juliet, and a password not known to Romeo).</li>
       <li>Establish a mutual presence subscription between Romeo and Juliet.</li>
     </ol>
   </section2>
@@ -136,8 +136,21 @@
 </iq>
 ]]></example>
   <p>When performing the account creation, Juliet's client needs to ensure
-    that the server supports the extended IBR protocol with a &lt;preauth&gt;
-    token: TODO</p>
+    that the server supports the extended IBR protocol, as denoted by the
+    <strong>&lt;register xmlns='urn:xmpp:invite'></strong>
+    stream feature:</p>
+  <example caption="Stream features of a server that accepts invitations"><![CDATA[
+<stream:features>
+  <mechanisms xmlns='urn:xmpp:sasl:0'>
+    <mechanism>EXTERNAL</mechanism>
+    <mechanism>SCRAM-SHA-1-PLUS</mechanism>
+    <mechanism>SCRAM-SHA-1</mechanism>
+    <mechanism>PLAIN</mechanism>
+  </mechanisms>
+  <register xmlns='urn:xmpp:invite'/>
+  <register xmlns='http://jabber.org/features/iq-register'/>
+</stream:features>
+]]></example>
 </section1>
 <section1 topic='Glossary' anchor='glossary'>
   <p>OPTIONAL.</p>
@@ -336,87 +349,45 @@
   <section2 topic='Pre-Authenticated In-Band Registration' anchor='preauth-ibr'>
     <p>In order to allow invited users to register on a server, the
       registration processs as defined in &xep0077; needs to be extended. The
-      invited user's client MUST add a &lt;preauth&gt; element in the 'TODO'
-      namespace to the 'jabber:iq:register' query in order to inform the
-      server that it wants to perform Pre-Authenticated IBR:</p>
-    <example caption="Retrieving registration fields"><![CDATA[
-<iq type='get' id='reg1' to='example.com'>
-  <query xmlns='jabber:iq:register'>
-    <preauth xmlns='urn:xmpp:invite:1'/>
-  </query>
+      invited user's client needs to connect to the server and check that the
+      invitation stream feature
+      (<strong>&lt;register xmlns='urn:xmpp:invite'></strong>) is present.
+      After that, the client initiates the registration flow by sending the
+      preauth token to the server:</p>
+    <example caption="Client initiates pre-authenticated IBR"><![CDATA[
+<iq type='set' to='example.com' id='pa1'>
+  <preauth xmlns='urn:xmpp:pars:0' token='TOKEN' />
 </iq>
 ]]></example>
-    <p>If the server supports and is ready to perform Pre-Authenticated IBR,
-      it MUST add a &lt;token&gt; element to the response (TODO: 'token' or
-      'preauth'?):</p>
-    <example caption="Receiving registration form"><![CDATA[
-<iq type='result' to='romeo@example.com' from='example.com' id='reg1'>
-  <query xmlns='jabber:iq:register'>
-    <x xmlns='jabber:x:data' type='form'>
-      <field type='hidden' var='FORM_TYPE'>
-        <value>urn:xmpp:invite:1</value>
-      </field>
-      <field type='text-single' label='Username' var='username'>
-        <required/>
-      </field>
-      <field type='text-private' label='Password' var='password'>
-        <required/>
-      </field>
-      <field type='text-single' label='Invite token' var='token'>
-        <required/>
-      </field>
-    </x>
-  </query>
-</iq>
+    <p>Upon receiving the preauth request, the server must validate that the
+      token is acceptable for account registration. However, single-use tokens
+      MUST NOT be considered used until the actual registration has succeeded.
+    </p>
+    <p>In addition, if the token has an expiration time, it MUST only be
+      checked at this point. Subsequent actions performed by the client during
+      the current session that require a valid token MUST NOT be rejected due
+      to token expiry.
+    </p>
+    <p>If the token is acceptable, the server responds with success, and
+      indicates the client may now proceed with account registration:
+    </p>
+    <example caption="Server accepts invitation token"><![CDATA[
+<iq type='result' from='example.com' id='pa1' />
 ]]></example>
-    <example caption='Receiving registration form with error (invalid token)'><![CDATA[
-<iq type='error' from='example.com' id='reg1'>
-  <query xmlns='jabber:iq:register'>
-    <x xmlns='jabber:x:data' type='form'>
-      <field type='hidden' var='FORM_TYPE'>
-        <value>urn:xmpp:invite:1</value>
-      </field>
-      <field type='text-single' var='username'>
-        <value>juliet<value/>
-      </field>
-      <field type='text-private' var='password'>
-        <value>m1cro$oft<value/>
-      </field>
-      <field type='text-single' var='token'>
-        <value>BADTOKEN<value/>
-      </field>
-    </x>
-  </query>
-  <error type='modify'>
-    <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-    <invalid-token xmlns='urn:xmpp:invite:1'/>
-  </error>
-</iq>
-]]></example>
-    <example caption='Receiving registration form with error (token expired)'><![CDATA[
-<iq type='error' from='example.com' id='reg1'>
-  <query xmlns='jabber:iq:register'>
-    <x xmlns='jabber:x:data' type='form'>
-      <field type='hidden' var='FORM_TYPE'>
-        <value>urn:xmpp:invite:1</value>
-      </field>
-      <field type='text-single' var='username'>
-        <value>juliet<value/>
-      </field>
-      <field type='text-private' var='password'>
-        <value>m1cro$oft<value/>
-      </field>
-      <field type='text-single' var='token'>
-        <value>OLDTOKEN<value/>
-      </field>
-    </x>
-  </query>
+    <p>If the token provided by the client was unknown, invalid or expired, the
+      server should return an appropriate error to the client:</p>
+    <example caption="Server rejects invitation token"><![CDATA[
+<iq type="error" from="example.com" id="pa1">
   <error type='cancel'>
-    <not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
-    <token-expired xmlns='urn:xmpp:invite:1'/>
+    <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <text>The provided token is invalid or expired</text>
   </error>
 </iq>
 ]]></example>
+    <p>In the success case, the client proceeds with registration as defined in
+      &xep0077;. If the token is rejected by the server, the client still MAY
+      attempt to perform IBR if the server allows that.</p>
+
     <p>After the invitee has successfully registered on the inviter's server
       and roster subscription is enabled for account creation, the server MUST
       use roster pushes as defined in &rfc6121; §2.1.6 in order to inform the
