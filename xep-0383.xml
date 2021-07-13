@@ -12,7 +12,7 @@
   </abstract>
   &LEGALNOTICE;
   <number>0383</number>
-  <status>Deferred</status>
+  <status>Experimental</status>
   <type>Standards Track</type>
   <sig>Standards</sig>
   <approver>Council</approver>
@@ -24,6 +24,12 @@
   <supersededby/>
   <shortname>burner</shortname>
   &sam;
+  <revision>
+    <version>0.2.0</version>
+    <date>2021-07-10</date>
+    <initials>ssw</initials>
+    <remark><p>Improve security considerations and add listing JIDs.</p></remark>
+  </revision>
   <revision>
     <version>0.1.1</version>
     <date>2017-01-28</date>
@@ -99,7 +105,28 @@
     </li>
   </ul>
 </section1>
-<section1 topic='Business Rules' anchor='rules'>
+<section1 topic='Determining Support' anchor='support'>
+  <p>
+    Services that support issuing burner JIDs MUST advertise the fact in
+    responses to &xep0030; "disco#info" requests by returning an identity of
+    "authz/ephemeral".
+  </p>
+  <example caption='Service responds to disco#info query'><![CDATA[
+<iq type='result'
+    from='muc.example.net'
+    to='caiusmarcius@example.net/corioli'
+    id='k3hs5174'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity type='im' name='MyServer' category='server'/>
+    <identity type='pep' name='MyServer' category='pubsub'/>
+    <identity type='ephemeral' category='authz'/>
+    …
+    <feature var='http://jabber.org/protocol/disco#info'/>
+    <feature var='http://jabber.org/protocol/disco#items'/>
+    <feature var='http://jabber.org/protocol/muc'/>
+    …]]></example>
+</section1>
+<section1 topic='Requesting a JID' anchor='rules'>
   <p>
     The user requests an ephemeral identity from the server or another XMPP
     service by sending an IQ containing an "identity" payload qualified by the
@@ -139,25 +166,50 @@
     burner JIDs cannot be used.
   </p>
 </section1>
-<section1 topic='Determining Support' anchor='support'>
+<section1 topic='Listing JIDs' anchor='listing'>
   <p>
-    Services that support issuing burner JIDs MUST advertise the fact in
-    responses to &xep0030; "disco#info" requests by returning an identity of
-    "authz/ephemeral":
+    Services MAY choose to support listing burner JIDs by responding to
+    "disco#items" requests on the "urn:xmpp:burner:0" node.
+    Such services must advertise a feature of "urn:xmpp:burner:0" in response to
+    disco#info requests.
   </p>
-  <example caption='Service responds to disco#info query'><![CDATA[
+  <example caption='Service responds to disco#info query indicating listing support'><![CDATA[
 <iq type='result'
     from='muc.example.net'
     to='caiusmarcius@example.net/corioli'
     id='k3hs5174'>
   <query xmlns='http://jabber.org/protocol/disco#info'>
-    <identity type='im' name='MyServer' category='server'/>
-    <identity type='pep' name='MyServer' category='pubsub'/>
     <identity type='ephemeral' category='authz'/>
-    …
     <feature var='http://jabber.org/protocol/disco#info'/>
     <feature var='http://jabber.org/protocol/disco#items'/>
     <feature var='http://jabber.org/protocol/muc'/>
+    <feature var='urn:xmpp:burner:0'/>
+    …]]></example>
+  <p>
+    This implies that services may choose to only support listing burner JIDs or
+    requesting burner JIDs by advertising the feature or the identity,
+    respectively.
+    Most services will likely wish to advertise both.
+  </p>
+  <p>
+    The result of a disco#items request is a list of "item" elements with a
+    "jid" attribute containing the burner JID.
+    Burner JIDs that expire MAY include an "expires" attribute containing a
+    timestamp in the UTC timezone conforming to the datetime profile specified
+    in &xep0082;.
+    Note that the lack of an "expires" attribute does not indicate that the
+    JID never expires, just that the expiry date is unknown.
+    Burner JIDs are ephemeral and services MAY remove them at any time.
+  </p>
+  <example caption='Service responds to disco#items query'><![CDATA[
+<iq type='result'
+    from='muc.example.net'
+    to='caiusmarcius@example.net/corioli'
+    id='k3hs5174'>
+  <query xmlns='http://jabber.org/protocol/disco#items'>
+    <item jid='burner1@muc.example.net'/>
+    <item jid='burner2@muc.example.net'/>
+    <item jid='burner3@muc.example.net' expires='1969-07-21T02:56:15Z'/>
     …]]></example>
 </section1>
 <section1 topic='Implementation Notes' anchor='impl'>
@@ -182,8 +234,9 @@
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
   <p>
-    To prevent burner JIDs from being abused for spamming, implementations MAY
-    rate limit all burner JIDs in use by an authn identity as a single unit.
+    To prevent burner JIDs from being abused for spamming, implementations
+    SHOULD rate limit all burner JIDs in use by an authn identity as a single
+    unit.
     However, be advised that this may provide a third party that can monitor
     traffic patterns with the ability to determine what burner JIDs belong to
     the same user.
@@ -192,11 +245,13 @@
   </p>
   <p>
     If TLS channel binding information is encoded in the local part of the
-    burner JID it is RECOMMENDED that the tls-unique channel binding value be
-    used as defined by &rfc5929; &sect;3.
+    burner JID and the TLS version in use is 1.3 or greater, it is RECOMMENDED
+    that the tls-exporter channel binding value defined in &cbtls13; be used.
+    For versions of TLS less than 1.3, tls-unique SHOULD be used as defined
+    by &rfc5929; &sect;3.
     Note that unless the master-secret fix from &rfc7627; has been implemented
-    channel binding information does not include enough context to successfully
-    verify the binding when resuming a TLS session.
+    tls-unique channel binding information does not include enough context to
+    successfully verify the binding when resuming a TLS session.
   </p>
   <p>
     Implementations that choose to encode information in the localpart of burner
@@ -208,6 +263,37 @@
   <p>This docment requires no interaction with the &IANA;.</p>
 </section1>
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespace:</p>
+    <ul>
+      <li>urn:xmpp:burner:0</li>
+    </ul>
+    <p>
+      Upon advancement of this specification from a status of Experimental to a
+      status of Draft, the &REGISTRAR; shall add the foregoing namespace to the
+      registry located at &DISCOFEATURES; as described in Section 4 of
+      &xep0053;.
+    </p>
+    <code caption='Service Discovery Features Registry Submission'><![CDATA[
+<var>
+  <name>urn:xmpp:burner:0</name>
+  <desc>Support for listing authorization identities and for issuing burner JIDs when paired with an appropriate identity.</desc>
+  <doc>&xep0383;</doc>
+</var>]]></code>
+    <p>
+      The &REGISTRAR; shall also add the foregoing namespace to the Jabber/XMPP
+      Protocol Namespaces Registry located at &NAMESPACES;.
+      Upon advancement of this specification from a status of Experimental to a
+      status of Draft, the &REGISTRAR; shall remove the provisional status from
+      this registry entry.
+    </p>
+    <code caption='Jabber/XMPP Protocol Namespaces Registry Submission'><![CDATA[
+<ns>
+  <name>urn:xmpp:burner:0</name>
+  <doc>&xep0383;</doc>
+  <status>provisional</status>
+</ns>]]></code>
+  </section2>
   <section2 topic='Service Discovery Category/Type' anchor='registrar-disco'>
     <p>
       Upon advancement of this proposal from experimental to draft status the
@@ -250,7 +336,10 @@
   </section2>
 </section1>
 <section1 topic='XML Schema' anchor='schema'>
-  <p>TODO.</p>
+  <p>
+    An XML Schema will be added before this document reaches the status of
+    "draft".
+  </p>
 </section1>
 <section1 topic='Acknowledgements' anchor='ack'>
   <p>The author wishes to thank Philipp Hancke for his feedback.</p>
