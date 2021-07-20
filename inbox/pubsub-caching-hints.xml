@@ -1,0 +1,318 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Pubsub Caching Hints</title>
+  <abstract>This specification provides a way to get caching information from a Pubsub node</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0060</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>pubsub-caching</shortname>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2021-07-19</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>XMPP Pubsub as described in &xep0060; is a very powerful and versatile tool, which is used for numerous XMPP features. For many reasons, notably speed improvement and resources optimisation, XMPP clients may want to cache internally Pubsub nodes and keep cache synchronised with cached pubsub service. Unfortunately the flexibility of Pubsub makes the choice of a good caching strategy complicated and non optimal. This XEP standardize a way for the Pubsub service to give extra information to fix this situation.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>Caching information must be using base XEP-0060 Pubsub features and be easy to obtain for the client, and easy to add for the pubsub service. The desired goals are:</p>
+  <ul>
+	  <li>use existing XEP-0060 features to get the data</li>
+	  <li>avoid duplication of data in cache</li>
+	  <li>know if cache can be shared between users</li>
+	  <li>know if a data can be re-used in a "discovery" feature</li>
+	  <li>know if items are silently removed or modified</li>
+	  <li>know if data synchronisation notifications (new items, deletion) are always sent</li>
+  </ul>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <ul>
+    <li><strong>Dynamic Items</strong> — items which may vary according to parameters like requesting user or time of the day</li>
+    <li><strong>Static Items</strong> — items which don't change dynamically. This is the most common case.</li>
+    <li><strong>Consistent Set</strong> — set of items inside a node is a same whatever allowed user is requesting it.</li>
+    <li><strong>Stable Items</strong> — items are added in order (to the end of the queue).</li>
+    <li><strong>Silently</strong> — in this context, silently means that a modification happens to an item without sending notification to subscribers.</li>
+  </ul>
+</section1>
+
+<section1 topic='Caching Hints Discovery' anchor='metadata'>
+	<p>Pubsub Caching Hints are using the Pubsub node metadata as described in <link url="https://xmpp.org/extensions/xep-0060.html#entity-metadata">Discover Node Metadata</link> section of &xep0060;</p>
+  <p>Hints are advertised using well known fields in Pubsub metadata disco extension. If a Pubsub service implements this XEP, and if it also manages a &xep0163; service, the fields described here MUST be present for both Pubsub and PEP nodes.</p>
+  
+</section1>
+
+<section1 topic="Node Persistence" anchor="persistence">
+	<p>To properly cache a node, a client must known if they are kept in storage or not. To advertise that fact, a Pubsub node compliant with this standard MUST use a field named <tt>{urn:xmpp:pubsub-caching:0}persistence</tt> of type <tt>list-single</tt> and whose value can be one of:</p>
+	<ul>
+		<li><strong>persistent</strong> — items are kept in persistent storage</li>
+		<li><strong>semi-persistent</strong> — items are kept in temporary storage (e.g. memory storage), and may disappear without notification (e.g. the server is restarted)</li>
+		<li><strong>transient</strong> — items are not stored, and are only sent to subscribers once published (but they can't be retrieve with a Pubsub Get)</li>
+		<li><strong>transient-with-last-item</strong> — only last item is kept in cache and can be retrieved by a Pubsub Get</li>
+	</ul>
+</section1>
+
+<section1 topic="Max Items and Item Expire" anchor="max_items">
+	<p>It may be necessary to cache a node, to know how many items the Pubsub Service is keeping before silently deleting them, or when they do expire. This is done by advertising it using the <tt>pubsub#max_items</tt> and <tt>pubsub#item_expire</tt> fields of type <tt>integer-or-max</tt> (this type is defined in <link url="https://xmpp.org/extensions/xep-0060.html#usecase.xdata">XEP-0060</link>).</p>
+	<p>Both fields are mentioned in XEP-0060, but as a reminder:</p>
+	<ul>
+		<li><strong><tt>pubsub#max_items</tt></strong> — indicates the maximum number of items that are kept in a node. Above this number items are silently removed. <tt>max</tt> indicate that server limit is used (if this limit is known, a Pubsub implementation SHOULD indicated it explicitly).</li>
+		<li><strong><tt>pubsub#item_expire</tt></strong> — indicates the number of seconds before an item is silently removed. <tt>max</tt> is used if there is not limit</li>
+	</ul>
+	
+</section1>
+
+<section1 topic='Consistent Items: items are always identical for all users' anchor='consistent_items'>
+  <p>Pubsub is most often used to let allowed users store and retrieve unmodified items. However, nothing in &xep0060; prevents a Pubsub service to return dynamic items with identical IDs depending on factors like the JID of the requestor, time of the day, or something else. For instance, a weather service could return local prevision for following day using item identifier like "tomorrow_forecast", or a machine learning algorithm could return favorite Shakespeare books to a user using "favorite" item id, in which case romeo@montaigu.lit would probably have different results than juliet@capulet.lit</p>
+  <p>For obvious reason those items are hard to impossible to cache. Pubsub services SHOULD avoid using dynamic items, unless there is a really good reason for it.</p>
+  <p>If a Pubsub service implements Caching Hints and if items are static (i.e. items with the same ID are identical whatever user is requesting them, time of day it is, or any other variable parameter), then it MUST advertise this fact by using the field named <tt>{urn:xmpp:pubsub-caching:0}consistent-items</tt> of type <tt>boolean</tt> with the value of <tt>true</tt>.</p>
+
+<p>Note that overwriting an items as specified in <link url="https://xmpp.org/extensions/xep-0060.html#publisher-publish-success">XEP-0060 Publish an Item to a Node</link> is a normal Pubsub use case which SHOULD result in proper notifications being sent to subscribers, if the item is not otherwise different, this is considered as static item and MUST result in a value of true for the <tt>{urn:xmpp:pubsub-caching:0}consistent-items</tt> field.</p>
+
+<p>Respectively, if a Pubsub node delivers one or more dynamic items, it MUST avertise the fact by using the value of <tt>false</tt> for the same field.</p>
+
+</section1>
+
+<section1 topic="Consistent Set: All Users Have the Same Series of Items" anchor="consistent">
+	<p>A Pubsub service may have a feature to restrict individual items from a node to some entities (e.g. to have some items only visible to family, friends or coworkers). In this case, we say that the node has inconsistent items set, and this implies that cache must not be shared between users (as some users may have access to some items that other don't).</p>
+	<p>If a Pubsub node is always returning the same items ids to all allowed users, it MUST advertise this fact by using the value <tt>true</tt> for the <tt>boolean</tt> field <tt>{urn:xmpp:pubsub-caching:0}consistent-set</tt>.</p>
+	
+	<p>On the other hand, if a Pubsub node may return different items according to the requesting entities (assuming that entities are allowed at the node level), it MUST advertise this fact by using the value <tt>false</tt> for the same field.</p>
+</section1>
+
+<section1 topic="Stable Items: Items Won't Appear Out of Order" anchor="stable">
+	<p>Normally, items are managed like a queue in a node, i.e. new items are appended to one ends, and existing items can only be deleted (or overwritten, in which case an item with the same ID is appended to the end). However, it may be necessary for a Pubsub service to include items out of order (i.e. not appending it at the end), for instance when a Pubsub service is a bridge to a third party protocol which receives items out of order.</p>
+	<p>Unstable items doesn't change the fact that node can be shared between users or node, but it may have an impact on client implementation, as the caching implementation may have items in a different order, and items may be missed, thus this fact is valuable to know for a client willing to cache the node. Note that unstable items SHOULD be avoided by a Pubsub service whenever it's possible.</p>
+	<p>If items are always appended to the end of the queue, the Pubsub node MUST advertise this fact using the <tt>{urn:xmpp:pubsub-caching:0}stable-items</tt> field of type <tt>boolean</tt> with a value of <tt>true</tt>.</p>
+	<p>On the other hand, if items order can't be guaranteed, the Pubsub node MUST advertise this fact by using the value of <tt>false</tt> for the same field</p>
+</section1>
+
+<section1 topic="Always Notify" anchor="always_notify">
+	<p>To synchronize correctly a Pubsub node, an XMPP client must be aware of any modification that happen to its items or to the node itself. This is possible thanks to the <link url="https://xmpp.org/extensions/xep-0060.html#subscriber">subscription mechanism</link> of &xep0060;. However, notification can be skipped, notably <link url="https://xmpp.org/extensions/xep-0060.html#publisher-delete">item retraction</link> notification must be explicitly requested by the client, and thus may be missing, resulting in cache becoming out of sync with the Pubsub service</p>
+	<p>To avoid that, the Pubsub service may enforce notifications for all modifying events to a node or its items, even if they are not explicitly requested by the user doing the modification.</p>
+	<p>If a node always sends notification, including &lt;retact&gt; notifications even if <em>notify</em> attribute is not set, then it must advertise this fact using the field named <tt>{urn:xmpp:pubsub-caching:0}alway-notify</tt> of type <tt>boolean</tt> with the value of <tt>true</tt>. If notifications may be omitted, then the same field must be used with the value of <tt>false</tt>.</p>
+	<p>A Pubsub service allowing a node to have notifications always sent SHOULD allow the node owners to activate or deactivate this feature through <link url="https://xmpp.org/extensions/xep-0060.html#owner-configure">node configuration</link>, using the well-known field with the same name of <tt>{urn:xmpp:pubsub-caching:0}always-notify</tt> and the same type of <tt>boolean</tt>. It's up to the implementation to determine if the default value should be <tt>true</tt> or <tt>false</tt>.</p>
+</section1>
+
+<section1 topic='Public Node' anchor='public'>
+	<p>If the node is public, i.e. if it as an <link url="https://xmpp.org/extensions/xep-0060.html#accessmodels">open access model</link> that means that a client can safely share the cache between users (providing that the <link url="#consistent_items">consistent items</link> and <link url="#consistent_items">consistent set</link> fields are also both <tt>true</tt>).</p>
+	<p>If a Pubsub node is public, it MUST advertise this fact by exposing it in its metadata using the field named <tt>pubsub#access_model</tt> of type <tt>list-single</tt> with a value of <tt>open</tt></p>
+	<p>If the node has an other access model, it is up to the Pubsub implementation to advertise publicly or not this data in the node metadata. It may be a privacy concern to expose any other access model than <tt>open</tt></p>
+</section1>
+
+<section1 topic='The Node can be used for Suggestions' anchor='suggestions'>
+	<p>An XMPP client may have a feature to suggest new Pubsub nodes to users (for network exploration, and let users find rapidly interesting content). If the discovery feature is not restricted to some users somehow, this SHOULD be done using only <link url="public">public nodes</link>. But even for a public node, the node owner may no be willing to have they node suggested to random users.</p>
+	<p>To avoid using inappropriately a public node for suggestion, a Pubsub node MUST announce if the node is usable for suggestion or node by using the field named <tt>{urn:xmpp:pubsub-caching:0}allowed-for-suggestions</tt> of type <tt>boolean</tt>. It is up to the Pubsub implementation to decide how this field is set, but it SHOULD have a default value of <tt>false</tt> and it should be modifiable by node owner through <link url="https://xmpp.org/extensions/xep-0060.html#owner-configure">node configuration</link>, using the well-known field with the same name of <tt>{urn:xmpp:pubsub-caching:0}allowed-for-suggestions</tt> and the same type of <tt>boolean</tt>.</p>
+	<p>A client MUST NOT use a node with <tt>{urn:xmpp:pubsub-caching:0}allowed-for-suggestions</tt> set to <tt>false</tt> for suggestions</p>
+</section1>
+
+<section1 topic="Purging a Node" anchor="purge">
+	<p>&xep0060; wording about <link url="https://xmpp.org/extensions/xep-0060.html#owner-purge">purging all node items</link> is not clear about the last item, and it may or may not be kept.</p>
+	<p>To make it explicit, a client implementing this specification MUST use the field named <tt>{urn:xmpp:pubsub-caching:0}purge-keep-last-item</tt> of type <tt>boolean</tt> with the value of <tt>true</tt> if the last item is NOT retracted when a node purge is performed. On the opposite, the value of <tt>true</tt> MUST be used if ALL items are retracted when a node purge is performed, actually leaving the node empty, with no item at all.</p>
+</section1>
+
+<section1 topic="Summary" anchor="summary">
+	<p>Here a is a table summarizing all fields to announce when implementing this XEP. All fields but <tt>pubsub#access_model</tt> are mandatory if a Pubsub service advertise support for this XEP.</p>
+	<table caption="Caching Hints Summary">
+		<tr>
+			<th>name</th>
+			<th>field</th>
+			<th>type</th>
+			<th>meaning</th>
+			<th>comment</th>
+		</tr>
+		<tr>
+			<td>Max Items</td>
+			<td>pubsub#max_items</td>
+			<td>integer-or-max</td>
+			<td>How many items are kept in storage</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Item Expire</td>
+			<td>pubsub#item_expire</td>
+			<td>integer-or-max</td>
+			<td>How many seconds items are kept</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Node Persistence</td>
+			<td>{urn:xmpp:pubsub-caching:0}persistence</td>
+			<td>list-single</td>
+			<td>Items are kept in persistent storage</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Consistent Items</td>
+			<td>{urn:xmpp:pubsub-caching:0}consistent-items</td>
+			<td>boolean</td>
+			<td>Items are static</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Consistent Set</td>
+			<td>{urn:xmpp:pubsub-caching:0}consistent-set</td>
+			<td>boolean</td>
+			<td>All users have the same items</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Stable Items</td>
+			<td>{urn:xmpp:pubsub-caching:0}stable-items</td>
+			<td>boolean</td>
+			<td>Items are not added out of order</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Always Notify</td>
+			<td>{urn:xmpp:pubsub-caching:0}always-notify</td>
+			<td>boolean</td>
+			<td>Modifying Notifications are Always sent to subscribers, even if not explicitly requested by publisher.</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td>Public Node</td>
+			<td>pubsub#access_model</td>
+			<td>list-single</td>
+			<td>Items can be retrieved by anybody</td>
+			<td>if value is not <tt>open</tt>, it may be omitted</td>
+		</tr>
+		<tr>
+			<td>Allowed for Suggestions</td>
+			<td>{urn:xmpp:pubsub-caching:0}allowed-for-suggestions</td>
+			<td>boolean</td>
+			<td>Node and its items can be suggested to random users</td>
+			<td>SHOULD be settable by node owner, and MUST default to <tt>false</tt></td>
+		</tr>
+		<tr>
+			<td>Purge Keep Last Item</td>
+			<td>{urn:xmpp:pubsub-caching:0}purge-keep-last-item</td>
+			<td>boolean</td>
+			<td>Last item is always kept when a node purge is performed</td>
+			<td></td>
+		</tr>
+	</table>
+</section1>
+
+<section1 topic="Example" anchor="example">
+	<p>Here is an example of Pubsub metadata advertised by a node on a service implementing this XEP. This example is a "happy path", i.e. features announced here are cache friendly.</p>
+    <example caption='Entity queries a node for information'><![CDATA[
+<iq type='get'
+    from='francisco@denmark.lit/barracks'
+    to='pubsub.shakespeare.lit'
+    id='meta1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+         node='princely_musings'/>
+</iq>
+]]></example>
+	<example caption="Entities Receive Pubsub Node Metadata with Caching Hints"><![CDATA[
+<iq type='result'
+    from='pubsub.shakespeare.lit'
+    to='francisco@denmark.lit/barracks'
+    id='caching_hints'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+         node='princely_musings'>
+    <identity category='pubsub' type='leaf'/>
+    <feature var='http://jabber.org/protocol/pubsub'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='pubsub#title' label='A short name for the node' type='text-single'>
+        <value>Princely Musings (Atom)</value>
+      </field>
+      <field var='pubsub#max_items' label='How many items are kept in storage' type='text-single'>
+        <value>max</value>
+      </field>
+      <field var='pubsub#item_expire' label='How many seconds items are kept' type='text-single'>
+        <value>max</value>
+      </field>
+      <field var='{urn:xmpp:pubsub-caching:0}persistence' label='How items are stored' type='text-single'>
+        <value>persistent</value>
+      </field>
+      <field var='{urn:xmpp:pubsub-caching:0}consistent-items' label='Are items static' type='boolean'>
+        <value>true</value>
+      </field>
+      <field var='{urn:xmpp:pubsub-caching:0}consistent-set' label='Are items set consistent' type='boolean'>
+        <value>true</value>
+      </field>
+      <field var='{urn:xmpp:pubsub-caching:0}stable-items' label='Are items stable' type='boolean'>
+        <value>true</value>
+      </field>
+      <field var='{urn:xmpp:pubsub-caching:0}always-notify' label='Are notifications always sent' type='boolean'>
+        <value>true</value>
+      </field>
+      <field var='pubsub#access_model' label='Access model' type='list-single'>
+        <value>open</value>
+      </field>
+      <field var='{urn:xmpp:pubsub-caching:0}allowed-for-suggestions' label='Can node be used for suggestions' type='boolean'>
+        <value>true</value>
+      </field>
+      <field var='{urn:xmpp:pubsub-caching:0}purge-keep-last-item' label='Is last item kept when a node purge is performed' type='boolean'>
+        <value>false</value>
+      </field>
+    </x>
+  </query>
+</iq>
+		]]></example>
+</section1>
+
+<section1 topic='discovering support' anchor='disco'>
+  <p>If a server supports the "Pubsub Caching Hints" protocol, it must advertize it by including the "urn:xmpp:pubsub-caching:0" discovery feature &NSNOTE; in response to a &xep0030; information request:</p>
+  <example caption="service discovery information request"><![CDATA[
+<iq from='example.org'
+    id='disco1'
+    to='example.com'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+  <example caption="service discovery information response"><![CDATA[
+<iq from='example.com'
+    id='disco1'
+    to='example.org'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    …
+    <feature var='urn:xmpp:pubsub-caching:0'/>
+    …
+  </query>
+</iq>
+]]></example>
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>As order of insertion and overwriting of items may be relevant to the client, it is recommended for caching-friendly Pubsub service to implement &xep0413;, thus client can cache items using an order by date of creation.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>TODO</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>TODO</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>TODO</p>
+</section1>
+</xep>
