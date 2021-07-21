@@ -16,8 +16,6 @@
   <approver>Council</approver>
   <dependencies>
     <spec>XMPP Core</spec>
-    <spec>XEP-0060</spec>
-    <spec>XEP-0313</spec>
   </dependencies>
   <supersedes/>
   <supersededby/>
@@ -28,6 +26,23 @@
     <email>goffi@goffi.org</email>
     <jid>goffi@jabber.fr</jid>
   </author>
+  <revision>
+    <version>0.2</version>
+    <date>2021-08-21</date>
+    <initials>jp</initials>
+    <remark>
+        <p>Add a way to discover on which protocols Order-By applies</p>
+        <p>Remove references to SQL (except in implementation notes)</p>
+        <p>Specify that order-by operate on the whole item set and inside a RSM result set</p>
+        <p>Explicitly says that creation and modification dates are set by Pubsub service itself</p>
+        <p>Specify that Clark notation should be used for extensions</p>
+        <p>Add a full example with Pubsub and RSM</p>
+        <p>Add hint for SQL based implementations</p>
+        <p>removed XEP-0060 and XEP-0313 as dependencies, they are mentioned as use cases, but are not mandatory</p>
+        <p>better wording following feedback</p>
+        <p>Namespace bump</p>
+    </remark>
+  </revision>
   <revision>
     <version>0.1.1</version>
     <date>2019-08-20</date>
@@ -49,8 +64,8 @@
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
-  <p>&xep0060; §6.5.7 allows to retrieve the "most recent items" and &xep0313; state in §3.1 that archives are ordered in "chronological order". While this order is straighforward in general use cases, it is sometimes desirable to use a different order, for instance while using &xep0277;: a spelling mistake correction should not bring an old blog post to the top of retrieved items.</p>
-  <p>This specification allows to explicitly change business logic to retrieve the items in a different order, in a similar way as the "ORDER BY" clause in SQL.</p>
+  <p>&xep0060; §6.5.7 allows to retrieve the "most recent items" and &xep0313; state in §3.1 that archives are ordered in "chronological order". While this order is straightforward in general use cases, it is sometimes desirable to use a different order, for instance while using &xep0277;: a spelling mistake correction should not bring an old blog post to the top of retrieved items.</p>
+  <p>This specification allows to explicitly change business logic to retrieve the items in a different order.</p>
 </section1>
 <section1 topic='Requirements' anchor='reqs'>
   <ul>
@@ -64,13 +79,14 @@
   <ul>
     <li><strong>Date of creation</strong> — date when the item has been published <strong>ONLY if the item has a new id</strong> (i.e. an id which was not already present in the node at the time of publication). If an item reuses an existing id, it overwrites the original item <strong>and the date of creation stays the date of creation of the original item</strong>.</li>
     <li><strong>Date of modification</strong> — date when the item has been overwritten by a new item of the same id. If the item has never been overwritten, it is equal to the date of creation defined above.</li>
+    <li><strong>Order Field</strong> — data used in the <tt>by</tt> attribute (e.g. <tt>creation</tt> or <tt>modification</tt>)</li>
   </ul>
 </section1>
 
 <section1 topic='Use Cases' anchor='usecases'>
   <section2 topic='Retrieve Items By Date of Creation' anchor='creation'>
     <p>Juliet wants to retrieve plays of her favorite writer, William Shakespeare. She wants to retrieve the 3 most recent ones by date of creation.</p>
-    <p>To do so, her client do a regular Pubsub request, but adds the &lt;order&gt; element as a children of the &lt;pubsub&gt; element with the <em>"urn:xmpp:order-by:0"</em> namespace and with a 'by' attribute equal to "creation".</p>
+    <p>To do so, her client do a regular Pubsub request, but adds the &lt;order&gt; element as a children of the &lt;pubsub&gt; element with the <tt>"urn:xmpp:order-by:1"</tt> namespace, a <tt>by</tt> attribute equal to <tt>creation</tt> and a <tt>desc</tt> attribute equal to <tt>true</tt>.</p>
     <example caption='Retrieving items ordered by date of creation'><![CDATA[
 <iq type='get'
     from='juliet@capulet.lit/balcony'
@@ -78,7 +94,7 @@
     id=''>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <items node='plays' max_items='3'/>
-    <order xmlns='urn:xmpp:order-by:0' by='creation'/>
+    <order xmlns='urn:xmpp:order-by:1' by='creation' desc='true'/>
   </pubsub>
 </iq>
   ]]></example>
@@ -128,7 +144,7 @@
   </pubsub>
 </iq>
 ]]></example>
-    <p>To check that everything is alright, she requests again the last 3 items, but this time by date of modification. To do so, the client proceeds the same way as for date of creation, except that it uses the value "modification" for the 'by' attribute.</p>
+    <p>To check that everything is alright, she requests again the last 3 items, but this time by date of modification. To do so, the client proceeds the same way as for date of creation, except that it uses the value <tt>modification</tt> for the <tt>by</tt> attribute.</p>
     <example caption='Retrieving items ordered by date of modification'><![CDATA[
 <iq type='get'
     from='juliet@capulet.lit/balcony'
@@ -136,7 +152,7 @@
     id='orderby3'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <items node='plays' max_items='3'/>
-    <order xmlns='urn:xmpp:order-by:0' by='modification'/>
+    <order xmlns='urn:xmpp:order-by:1' by='modification' desc='true'/>
   </pubsub>
 </iq>
   ]]></example>
@@ -173,23 +189,205 @@
       <example caption="MAM Pubsub Query with Ordering"><![CDATA[
 <iq to='pubsub.shakespeare.lit' type='set' id='orderby4'>
   <query xmlns='urn:xmpp:mam:2' queryid='123' node='plays'>
-    <order xmlns='urn:xmpp:order-by:0' by='creation'/>
+    <order xmlns='urn:xmpp:order-by:1' by='creation'/>
   </query>
 </iq>
 ]]></example>
     <p>This way, filters can be used with a specific ordering.</p>
   </section2>
   <section2 topic='Reversing the Order' anchor='reverse'>
-    <p>The ordering can be reversed by using the mechanisms already provided by &xep0059;.</p>
+      <p>By default, ordering MUST be done in ascending order. This can be reversed by using the <tt>desc</tt> boolean attribute, which MAY have a value of either <tt>true</tt> or <tt>1</tt>.</p>
+  </section2>
+  <section2 topic="Using Order-By with RSM" anchor="use_with_rsm">
+      <p>This section provides a full example of using Order-By with Pubsub and RSM. For readability, we'll use a node with 4 items that will have following IDs (in order of their creation) <tt>A</tt>, <tt>B</tt>, <tt>C</tt> and <tt>D</tt>.
+      Items <tt>C</tt> has been overwritten after <tt>D</tt> creation, and item <tt>A</tt> has been overwritten even later. Thus, when <em>ascending</em> <tt>creation</tt> order is requested, items are in order <tt>A, B, C, D</tt>. When <em>ascending</em> <tt>modification</tt> order is requested, items are in order <tt>B, D, C, A</tt>.<br/>
+      Let's see how this work when Juliet wants to retrieve all items in ascending modification order with RSM using a page size of 2 items:
+  </p>
+
+<example caption='Juliet Retrieves First Page of Items with RSM'><![CDATA[
+<iq id="rsm_1" type="get" from="juliet@capulet.lit/123">
+    <pubsub xmlns="http://jabber.org/protocol/pubsub">
+        <items node="balcony"/>
+        <order xmlns="urn:xmpp:order-by:0" by="modification"/>
+        <set xmlns="http://jabber.org/protocol/rsm">
+            <max>2</max>
+        </set>
+    </pubsub>
+</iq>
+]]></example>
+
+<example caption='Pubsub Returns First Page'><![CDATA[
+<iq from="ordered_pubsub@capulet.lit" id="rsm_1" to="juliet@capulet.lit/123" type="result">
+    <pubsub xmlns="http://jabber.org/protocol/pubsub">
+        <items node="balcony">
+            <item id="B" publisher="romeo@montaigu.lit/456">
+                <payload xmlns="http://somenamespace.example.com">
+                        item B
+                </payload>
+            </item>
+            <item id="D" publisher="romeo@montaigu.lit/456">
+                <payload xmlns="http://somenamespace.example.com">
+                        item D
+                </payload>
+            </item>
+        </items>
+        <set xmlns="http://jabber.org/protocol/rsm">
+            <first index="0">B</first>
+            <last>D</last>
+            <count>4</count>
+        </set>
+    </pubsub>
+</iq>
+]]></example>
+
+<p>
+    Now Juliet wants to get the second and last page to complete her collection. She does this as usual with RSM, by using the value advertised in <em>&lt;last&gt;</em> element in a <em>&lt;after&gt;</em> element.      
+</p>
+<p><strong>NOTE:</strong> in this example the value used in <em>&lt;last&gt;</em> element is the item ID, but as specified in &xep0059;, an implementation MAY use whatever makes sense to it, the requesting client MUST treat this as an opaque value.</p>
+
+<example caption='Juliet Retrieves the Second (and Last) Page of Items'><![CDATA[
+<iq id="rsm_2" type="get" from="juliet@capulet.lit/123">
+    <pubsub xmlns="http://jabber.org/protocol/pubsub">
+        <items node="balcony"/>
+        <order xmlns="urn:xmpp:order-by:0" by="modification"/>
+        <set xmlns="http://jabber.org/protocol/rsm">
+            <max>2</max>
+            <after>D</after>
+        </set>
+    </pubsub>
+</iq>
+]]></example>
+
+<example caption='Pubsub Service Returns Second Page'><![CDATA[
+<iq from="ordered_pubsub@capulet.lit" id="rsm_2" to="juliet@capulet.lit/123" type="result">
+    <pubsub xmlns="http://jabber.org/protocol/pubsub">
+        <items node="balcony">
+            <item id="C" publisher="romeo@montaigu.lit/456">
+                <payload xmlns="http://somenamespace.example.com">
+                        item C
+                </payload>
+            </item>
+            <item id="A" publisher="romeo@montaigu.lit/456">
+                <payload xmlns="http://somenamespace.example.com">
+                        item A
+                </payload>
+            </item>
+        </items>
+        <set xmlns="http://jabber.org/protocol/rsm">
+            <first index="2">C</first>
+            <last>A</last>
+            <count>4</count>
+        </set>
+    </pubsub>
+</iq>
+]]></example>
+
+<p>
+    Juliets wonders which are the 2 last items created. To discover this, she request again the node, but this time with a <tt>creation</tt> order field, and in descending order:
+</p>
+
+<example caption='Juliet Retrieves Last Created Items'><![CDATA[
+<iq id="rsm_3" type="get" from="juliet@capulet.lit/123">
+    <pubsub xmlns="http://jabber.org/protocol/pubsub">
+        <items node="balcony"/>
+        <order xmlns="urn:xmpp:order-by:0" by="creation" desc='true'/>
+        <set xmlns="http://jabber.org/protocol/rsm">
+            <max>2</max>
+        </set>
+    </pubsub>
+</iq>
+]]></example>
+
+<example caption='Pubsub Service Returns Last Created Items'><![CDATA[
+<iq from="ordered_pubsub@capulet.lit" id="rsm_3" to="juliet@capulet.lit/123" type="result">
+    <pubsub xmlns="http://jabber.org/protocol/pubsub">
+        <items node="balcony">
+            <item id="D" publisher="romeo@montaigu.lit/456">
+                <payload xmlns="http://somenamespace.example.com">
+                        item D
+                </payload>
+            </item>
+            <item id="C" publisher="romeo@montaigu.lit/456">
+                <payload xmlns="http://somenamespace.example.com">
+                        item C
+                </payload>
+            </item>
+        </items>
+        <set xmlns="http://jabber.org/protocol/rsm">
+            <first index="0">D</first>
+            <last>C</last>
+            <count>4</count>
+        </set>
+    </pubsub>
+</iq>
+]]></example>
+
+<p>Now she knows that last created item is <tt>D</tt>, and the one created before is <tt>C</tt>.</p>
+<p>Please note that items are in descending order in the whole result set but also inside the RSM page (thus the first item here is <tt>D</tt>), and that in this order, this request returns the first page, so index is <tt>0</tt> here.</p>
+<p>If Juliet wanted to retrieve the second page of items by descending order of creation, she would do like this:</p>
+
+<example caption='Juliet Retrieves Second Page of Last Created Items'><![CDATA[
+<iq id="rsm_4" type="get" from="juliet@capulet.lit/123">
+    <pubsub xmlns="http://jabber.org/protocol/pubsub">
+        <items node="balcony"/>
+        <order xmlns="urn:xmpp:order-by:0" by="creation" desc="true"/>
+        <set xmlns="http://jabber.org/protocol/rsm">
+            <max>2</max>
+            <after>C</after>
+        </set>
+    </pubsub>
+</iq>
+]]></example>
+
+<example caption='Pubsub Service Returns Second Page of Items Orderded by Descending Creation Date'><![CDATA[
+<iq from="ordered_pubsub@capulet.lit" id="rsm_4" to="juliet@capulet.lit/123" type="result">
+    <pubsub xmlns="http://jabber.org/protocol/pubsub">
+        <items node="balcony">
+            <item id="B" publisher="romeo@montaigu.lit/456">
+                <payload xmlns="http://somenamespace.example.com">
+                        item B
+                </payload>
+            </item>
+            <item id="A" publisher="romeo@montaigu.lit/456">
+                <payload xmlns="http://somenamespace.example.com">
+                        item A
+                </payload>
+            </item>
+        </items>
+        <set xmlns="http://jabber.org/protocol/rsm">
+            <first index="2">B</first>
+            <last>A</last>
+            <count>4</count>
+        </set>
+    </pubsub>
+</iq>
+]]></example>
+
   </section2>
   <section2 topic='Extending this Specification' anchor='extending'>
-    <p>This specification can be extended by further XEPs, proposing other kind of ordering in the 'by' attribute (e.g. ordering by filename for a file sharing service). But this is beyond the scope of this XEP, and a client should not assume that other ordering than "creation" and "modification" are available without negociation.</p>
-    <p>In a similar way, the semantic described here could be reused in other use cases as for Pubsub or MAM, but this would need to be detailed in a separate specification.</p>
+      <p>This specification can be extended by further XEPs, proposing other kind of ordering in the 'by' attribute (e.g. ordering by filename for a file sharing service). But this is beyond the scope of this XEP, and a client should not assume that other ordering than "creation" and "modification" are available without further negotiation. Any new ordering specified in a other XEP SHOULD use the Clark notation to avoid any collision (i.e.: <tt>{some_namespace}some_ordering</tt>).</p>
   </section2>
+</section1>
+<section1 topic="General Considerations" anchor="general">
+    <p>It is important to note the following points:</p>
+    <ul>
+        <li>Order-By affect the order of the whole archive, <strong>AND</strong> the order of the items inside a RSM result set (i.e. inside a page).</li>
+        <li>The order of <tt>creation</tt> or <tt>modification</tt> is the one set by the Pubsub service itself. Some Pubsub based features like &xep0277; let users specify a creation and modification date ; using them would need item parsing and is NOT what <tt>creation</tt> and <tt>modification</tt> is referring to here. A future XEP extending this one could allow to order by user-specified creation or modification date, but this is beyond the scope of this XEP.</li>
+        <li>The semantic described here can be reused in other use cases as for Pubsub or MAM. If it is the case, the support MUST be advertised using discovery and the namespace covered, as explained in <link url="#disco">Discovering Support</link> below.</li>
+        <li>It may be hard to impossible for an implementation to be compliant with features specified at <link url="https://xmpp.org/extensions/xep-0059.html#forwards">Paging Forwards Through a Result Set</link> in &xep0059;. Notably for some order fields, it may be really difficult to not return duplicate items or to no omit items from pages. People interacting with this XEP must be aware of that, and services implementing this XEP SHOULD try to comply with those features, but MAY not if proven too difficult (those features are not required in RSM anyway as the term <em>MAY</em> is used).</li>
+    </ul>
 </section1>
 
 <section1 topic='Discovering Support' anchor='disco'>
-  <p>If a server supports the "order by" protocol, it MUST advertize it including the "urn:xmpp:order-by:0" discovery feature &NSNOTE; in response to a &xep0030; information request:</p>
+    <p>If a server supports the "order by" protocol, it MUST advertize it including the "urn:xmpp:order-by:1" discovery feature &NSNOTE; in response to a &xep0030; information request.<br/>In addition to the general feature support, an entity MUST indicated on which protocols Order-By can be used, by using the notation <tt>urn:xmpp:order-by:1@<em>other_namespace</em></tt>, i.e. a concatenation of:</p>
+    <ul>
+        <li>this XEP namespace: <strong>urn:xmpp:order-by:1</strong></li>
+        <li>@</li>
+        <li>namespace where Order-By is applied</li>
+    </ul>
+    <p>So if Order-By is implemented for &xep0060;, the service MUST advertise <tt>urn:xmpp:order-by:1@http://jabber.org/protocol/pubsub</tt>. If Order-By is implemented for &xep0313;, it is <tt>urn:xmpp:order-by:1@urn:xmpp:mam:2</tt>.<br/>
+            In the following example, the server <tt>example.org</tt> advertizes Order-By support, and indicates that it is implemented for Pubsub and MAM:</p>
+  
   <example caption="Service Discovery information request"><![CDATA[
 <iq from='example.org'
     id='disco1'
@@ -205,7 +403,9 @@
     type='result'>
   <query xmlns='http://jabber.org/protocol/disco#info'>
     …
-    <feature var='urn:xmpp:order-by:0'/>
+    <feature var='urn:xmpp:order-by:1'/>
+    <feature var='urn:xmpp:order-by:1@http://jabber.org/protocol/pubsub'/>
+    <feature var='urn:xmpp:order-by:1@urn:xmpp:mam:2'/>
     …
   </query>
 </iq>
@@ -213,12 +413,26 @@
 </section1>
 
 <section1 topic='Business Rules' anchor='rules'>
-  <p>Several ordering elements may be used, this allows to solve next levels of ordering in case of conflicts. In this case, the first ordering (i.e. the top most &lt;order&gt; element) is the main one, the second &lt;order&gt; element is used in case of conflicts, then the next one if a new conflict happens and so on.</p>
-  <p>In case of conflicts, if no new &lt;order&gt; element is specified, the item order is not guaranted and is up to the implementation.</p>
+  <p>Several ordering elements may be used, this allows to solve next levels of ordering in case of equality. In this case, the first ordering (i.e. the top most &lt;order&gt; element) is the main one, the second &lt;order&gt; element is used in case of equality, then the next one if a new equality happens and so on.</p>
+  <p>In case of equality, if no new &lt;order&gt; element is specified, the item order is not guaranteed and is up to the implementation (the implementation MUST keep this order consistent across requests though).</p>
 </section1>
 
 <section1 topic='Implementation Notes' anchor='impl'>
-  <p>For implementations based on SQL databases, the "ORDER BY" clause can be used to easily implement this specification. Other kind of databases should have similar mechanisms.</p>
+    <p>It may be difficult to find a correct value for &lt;first&gt; and &lt;last&gt; elements of RSM. Indeed, internal ID of items can't be suited for all orderings. For Pubsub service using a SQL database as backend, item ID (XMPP or internal) could be used with a window function such as <tt>row_number</tt> (supported by major database engines such as PostgreSQL, MariaDB/MySQL or SQLite) over the requested ordering. For instance, on a hypothetical table where items are requested by ascending <tt>creation</tt> then <tt>modification</tt> dates after the value <tt>ABC</tt> (which correspond to XMPP item ID in our case), a request similar to this could be used:</p>
+    <example caption="SQL Query to Handle &lt;after&gt; value"><![CDATA[
+WITH cte_1 AS 
+ (SELECT items.id AS id, row_number() OVER (ORDER BY created ASC, modified ASC) - 1 AS item_index 
+    FROM items 
+    WHERE items.node_id = 123)
+ SELECT cte_1.item_index, items.id, items.payload 
+    FROM items JOIN cte_1 ON items.id = cte_1.id 
+    WHERE cte_1.item_index > (SELECT cte_1.item_index 
+        FROM cte_1 
+        WHERE cte_1.id = "ABC")
+    ORDER BY cte_1.item_index ASC
+    LIMIT 10;
+]]></example>
+<p>In this example, <tt>row_number</tt> is decreased by 1 to match RSM index (<tt>row_number</tt> starts at 1 while RSM index starts at 0), thus the <tt>item_index</tt> column can be used directly to fill RSM metadata. A Common Table Expression has been used for better readability.</p>
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
@@ -234,7 +448,7 @@
   <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
     <p>This specification defines the following XML namespace:</p>
     <ul>
-      <li>'urn:xmpp:order-by:0'</li>
+      <li>'urn:xmpp:order-by:1'</li>
     </ul>
   </section2>
   <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
@@ -247,8 +461,8 @@
 
 <xs:schema
     xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='urn:xmpp:order-by:0'
-    xmlns='urn:xmpp:order-by:0'
+    targetNamespace='urn:xmpp:order-by:1'
+    xmlns='urn:xmpp:order-by:1'
     elementFormDefault='qualified'>
 
   <xs:element name='order' maxOccurs='unbounded'>
@@ -260,4 +474,9 @@
 </xs:schema>
 ]]></code>
 </section1>
+
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>Thanks to Philipp Hörist, Evgeny xramtsov, Jonas Schäfer¸ and Holger Weiß for their feedback.</p>
+</section1>
+
 </xep>
