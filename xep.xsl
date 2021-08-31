@@ -71,13 +71,13 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         </xsl:choose>
       </xsl:if>
       <xsl:if test='$thestatus = "Draft"'>
-        <xsl:text>NOTICE: The protocol defined herein is a </xsl:text><strong>Draft Standard</strong><xsl:text> of the XMPP Standards Foundation. Implementations are encouraged and the protocol is appropriate for deployment in production systems, but some changes to the protocol are possible before it becomes a Final Standard.</xsl:text>
+        <xsl:text>NOTICE: The protocol defined herein is a </xsl:text><strong>Stable Standard</strong><xsl:text> of the XMPP Standards Foundation. Implementations are encouraged and the protocol is appropriate for deployment in production systems, but some changes to the protocol are possible before it becomes a Final Standard.</xsl:text>
       </xsl:if>
       <xsl:if test='$thestatus = "Experimental" and $thetype = "Historical"'>
         <xsl:text>NOTICE: This Historical document attempts to provide canonical documentation of a protocol that is in use within the Jabber/XMPP community. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. This document is not a standards-track specification within the XMPP Standards Foundation's standards process; however, it might be converted to standards-track in the future or might be obsoleted by a more modern protocol.</xsl:text>
       </xsl:if>
       <xsl:if test='$thestatus = "Experimental" and $thetype = "Informational"'>
-        <xsl:text>WARNING: This Informational document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. Implementation of the best practice or protocol profile described herein is encouraged in exploratory implementations, although production systems are advised to carefully consider whether it is appropriate to deploy implementations of this protocol before it advances to a status of Draft.</xsl:text>
+        <xsl:text>WARNING: This Informational document is Experimental. Publication as an XMPP Extension Protocol does not imply approval of this proposal by the XMPP Standards Foundation. Implementation of the best practice or protocol profile described herein is encouraged in exploratory implementations, although production systems are advised to carefully consider whether it is appropriate to deploy implementations of this protocol before it advances to a status of Stable.</xsl:text>
       </xsl:if>
       <xsl:if test='$thestatus = "Experimental" and $thetype = "Procedural"'>
         <xsl:text>NOTICE: This Procedural document proposes that the process or activity defined herein shall be followed by the XMPP Standards Foundation (XSF). However, this process or activity has not yet been approved by the XMPP Council and/or the XSF Board of Directors and is therefore not currently in force.</xsl:text>
@@ -141,7 +141,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
         <xsl:if test='$thestatus = "Retracted"'><li class='current inserted'>Retracted</li></xsl:if>
         <li><xsl:if test='$thestatus = "Proposed"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Proposed</li>
         <xsl:if test='$thestatus = "Rejected"'><li class='current inserted'>Rejected</li></xsl:if>
-        <li><xsl:if test='$thestatus = "Draft"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Draft</li>
+        <li><xsl:if test='$thestatus = "Draft"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Stable</li>
         <li><xsl:if test='$thestatus = "Final"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Final</li>
         <xsl:if test='$thestatus = "Deprecated" or $thestatus = "Obsolete"'>
           <li><xsl:if test='$thestatus = "Deprecated"'><xsl:attribute name='class'>current</xsl:attribute></xsl:if>Deprecated</li>
