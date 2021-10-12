@@ -122,7 +122,7 @@ changed back to Experimental."""+STALENOTE
 
 
 SUBJECT_NONPROTO_TEMPLATE = \
-    "{action.value}: XEP-{info[number]:04d} ({info[title]})"
+    "{action.display_name}: XEP-{info[number]:04d} ({info[title]})"
 
 
 def dummy_info(number):

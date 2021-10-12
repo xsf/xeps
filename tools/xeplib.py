@@ -59,6 +59,12 @@ class Action(enum.Enum):
             Status.REJECTED: cls.REJECT,
         }[status]
 
+    @property
+    def display_name(self):
+        if self == self.DRAFT:
+            return "STABLE"
+        return self.value
+
 
 def load_xepinfo(el):
     accepted = el.get("accepted").lower() == "true"
