@@ -1,0 +1,361 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>PubSub Namespaces</title>
+  <abstract>This extension defines a new PubSub node attribute to specify the type of payload.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XEP-0004</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0060</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>pubsub-ns</shortname>
+  <author>
+    <firstname>Timothée</firstname>
+    <surname>Jaussoin</surname>
+    <email>edhelas@movim.eu</email>
+    <jid>edhelas@movim.eu</jid>
+  </author>
+  <author>
+    <firstname>Maxime</firstname>
+    <surname>Buquet</surname>
+    <email>pep@bouah.net</email>
+    <jid>pep@bouah.net</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2021-12-25</date>
+    <initials>mb</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>The introduction of PubSub brought a lot of new extensions that are now extensively used across the whole XMPP network. However PubSub never specified a way to clearly identify which extension is actually used on a specific node.</p>
+  <p>This extension defines a new <tt>namespace</tt> attribute on a node helping clients and servers implementations to know exactly what kind of data is in a node and how it should be used, i.e., server doing validation, or clients adapting their UI/UX to the type of data.</p>
+  <p>Having access to this data also enables a new range of features to base on top of this extension, such as filtering, restrictions, etc.</p>
+  <p>PubSub Namespace introduces a new PubSub Node metadata (as defined in <link url="https://xmpp.org/extensions/xep-0060.html#entity-metadata">Discover Entity Metadata</link>) called <tt>urn:xmpp:pubsub-ns:0#namespace</tt>.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Identity which PubSub based extension is used in a node.</li>
+    <li>Restrict the usage of extensions on a PubSub service.</li>
+    <li>Allow filtering of nodes by namespaces on PubSub services.</li>
+  </ul>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di>
+      <dt>PubSub namespace</dt>
+      <dd>Identifier used to specify a set of rules and schemas that applies to a specify PubSub node</dd>
+    </di>
+    <di>
+      <dt>PubSub service</dt>
+      <dd>An entity serving PubSub nodes (e.g., a component, an account with PEP).</dd>
+    </di>
+  </dl>
+</section1>
+<section1 topic='Discovering Support' anchor='support'>
+  <p>If a server supports the "Pubsub Namespaces" protocol, it MUST advertise the "urn:xmpp:pubsub-ns:0" feature (see Protocol Namespaces regarding issuance of one or more permanent namespaces) in response to a Service Discovery (XEP-0030) information request.</p>
+  <example caption='Service Discovery information request.'><![CDATA[<iq from='hamlet@denmark.lit/elsinore'
+    id='disco1'
+    to='news.capulet.lit'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption='Service Discovery information response.'><![CDATA[<iq from='news.capulet.lit'
+    id='disco1'
+    to='hamlet@denmark.list/elsinore'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    …
+    <feature var='urn:xmpp:pubsub-ns:0'/>
+    <feature var='urn:xmpp:pubsub-ns:restrict:0'/>
+    <feature var='urn:xmpp:pubsub-ns:filter:0'/>
+    …
+  </query>
+</iq>]]></example>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='On PubSub Services' anchor='on-services'>
+    <p>When a Pubsub service enables Pubsub namespaces all the node creation and configuration on this service MUST have a configured <tt>urn:xmpp:pubsub-ns:0#namespace</tt> with the namespace declared in the corresponding specification.</p>
+    <section3 topic='Configuring a node with an undefined namespace' anchor='undefined-namespace'>
+      <p>Existing clients and libraries that are not implementing PubSub Namespaces will not provide the <tt>urn:xmpp:pubsub-ns:0#namespace</tt> attribute when creating or configuring a PubSub node.</p>
+      <p>Therefore, if the server supports Pubsub Namespaces and if the client is creating a node where the nodeid is contained in the list of nodes available in the Pubsub Namespaces Registrar, the server MUST then set the corresponding namespace referring to the nodeid.</p>
+      <p>If a node is created or configured with an empty namespace and the server doesn't find any correspondence in the Registrar, it MUST then return an error of type <tt>modify</tt> containing a <tt>bad-request</tt> element in the <tt>urn:ietf:params:xml:ns:xmpp-stanzas</tt> namespace, alongside a <tt>namespace-required</tt> element of namespace <tt>urn:xmpp:pubsub-ns:errors:0</tt>.</p>
+    <example caption="Error returned when a server isn't capable of finding the corresponding namespace."><![CDATA[<iq type='error'
+    from='coven@chat.shakespeare.lit'
+    to='hag66@shakespeare.lit/pda'
+    id='config'>
+  <error type='modify'>
+    <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <namespace-required xmlns='urn:xmpp:pubsub-ns:errors:0' />
+  </error>
+</iq>]]></example>
+    </section3>
+    <section3 topic='Getting used namespaces from a service' anchor='used-namespaces'>
+      <p>Services MUST expose the list of currently used namespaces in the result of a disco#info in a <tt>jabber:x:data</tt> form with a FORM_TYPE of value <tt>urn:xmpp:pubsub-ns:0</tt> and a <tt>used-namespaces</tt> text-multi type field containing the various namespaces.</p>
+      <example caption='Disco result of a service using namespaces.'><![CDATA[<iq from='coven@chat.shakespeare.lit'
+    id='disco0'
+    to='hag66@shakespeare.lit/pda'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:pubsub-ns:0'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:pubsub-ns:0</value>
+      </field>
+
+       <field type='text-multi' var='used-namespaces' label='Used Namespaces'>
+
+        <value>urn:xmpp:microblog:0</value>
+        <value>urn:xmpp:bookmark:0</value>
+        <value>urn:xmpp:bookmark:1</value>
+      </field>
+      ...
+    </x>
+  </query>
+</iq>]]></example>
+    </section3>
+    <section3 topic='Restrict the list of allowed namespaces on a service' anchor='restrict-namespaces'>
+      <p>The server can define, per service, a list of namespaces to allow or block. The service will then expose the <tt>urn:xmpp:pubsub-ns:restrict:0</tt> feature in its disco#info, and return a <tt>jabber:x:data</tt> form with a FORM_TYPE of value <tt>urn:xmpp:pubsub-ns:0</tt> and an <tt>allowed-namespaces</tt> or <tt>blocked-namespaces</tt> text-multi type field containing the various namespaces.</p>
+    <ul>
+      <li>If a list of allowed namespaces is defined, only those namespaces are authorized by the server to be used when a node is created on it.</li>
+      <li>If a list of blocked namespaces is defined, all the namespaces are authorized except those in the list.</li>
+      <li>If both allowed and blocked lists are defined, only the allowed list is considered.</li>
+    </ul>
+    <p>The resulting list of blocked or allowed namespaces is available by doing a disco#info on the service.</p>
+    <example caption='Disco result from a service configured with an allowed-namespaces list.'><![CDATA[<iq from='coven@chat.shakespeare.lit'
+    id='disco0'
+    to='hag66@shakespeare.lit/pda'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:pubsub-ns:0'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:pubsub-ns:0</value>
+      </field>
+
+       <field type='text-multi' var='allowed-namespaces' label='Allowed Namespaces'>
+
+        <value>urn:xmpp:microblog:0</value>
+        <value>urn:xmpp:bookmark:0</value>
+        <value>urn:xmpp:bookmark:1</value>
+      </field>
+      ...
+    </x>
+  </query>
+</iq>]]></example>
+      <p>This will be returned alongside used namespaces results, in the same <tt>jabber:x:data</tt> form.</p>
+      <example caption='disco result from a service configured with an blocked-namespaces list.'><![CDATA[<iq from='news.capulet.lit'
+    id='disco1'
+    to='hag66@shakespeare.lit/pda'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:pubsub-ns:0'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:pubsub-ns:0</value>
+      </field>
+      <field type='text-multi' var='blocked-namespaces' label='Blocked Namespaces'>
+        <value>urn:xmpp:stickers:0</value>
+        <value>urn:xmpp:bookmark:1</value>
+        <value>http://jabber.org/protocol/geoloc</value>
+      </field>
+      ...
+    </x>
+  </query>
+</iq>]]></example>
+      <p><strong>TODO</strong>: iq/set interface to service for clients (perms implementation-defined) to set allowed / blocked namespaces? Which would justify the additional disco feature.</p>
+    </section3>
+  </section2>
+  <section2 topic='On PubSub Nodes' anchor='pubsub-nodes'>
+    <section3 topic='Setting the namespace of a node' anchor='setting-namespace'>
+      <p>When a client sets the namespace of a node, during its creation (<link url='https://xmpp.org/extensions/xep-0060.html#owner-create-and-configure'>Create and Configure a Node</link>), configuration (<link url='https://xmpp.org/extensions/xep-0060.html#owner-configure'>Configure a Node</link>) or when publishing an item with a <link url='https://xmpp.org/extensions/xep-0060.html#publisher-publish-options'>publish-options</link>, the server MUST check the filled namespace against the blocked/allowed list defined on the service (See <link url='#restrict-namespaces'>Restrict the list of allowed namespaces on a service</link>).</p>
+      <example caption='Setting a namespace when creating a node.'><![CDATA[<iq type='set'
+    from='hamlet@denmark.lit/elsinore'
+    to='news.capulet.lit'
+    id='create'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <create node='foobar'/>
+    <configure>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#node_config</value>
+        </field>
+        <field var='urn:xmpp:pubsub-ns:0#namespace'>
+          <value>urn:example:foo:0</value>
+        </field>
+      </x>
+    </configure>
+  </pubsub>
+</iq>]]></example>
+      <p>If the set namespace is forbidden by the service, it MUST return an error of type <tt>modify</tt> containing a <tt>bad-request</tt> element in the <tt>urn:ietf:params:xml:ns:xmpp-stanzas</tt> namespace, alongside a <tt>restricted-value</tt> element of namespace <tt>urn:xmpp:pubsub-ns:errors:0</tt>.</p>
+      <example caption="Error returned when setting a namespace that isn't in the allowed list."><![CDATA[<iq type='error'
+    from='coven@chat.shakespeare.lit'
+    to='hag66@shakespeare.lit/pda'
+    id='config'>
+  <error type='modify'>
+    <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <restricted-value xmlns='urn:xmpp:pubsub-ns:errors:0' />
+  </error>
+</iq>]]></example>
+    </section3>
+    <section3 topic='Getting the namespace from a node' anchor='get-namespace'>
+      <p>The node namespace is exposed as <tt>urn:xmpp:pubsub-ns:0#namespace</tt> in the node metadata (see <link url='https://xmpp.org/extensions/xep-0060.html#entity-metadata'>Discover Node Metadata</link>).</p>
+      <example caption='Result of a disco#info on a namespaced node'><![CDATA[<iq type='result'
+    from='coven@chat.shakespeare.lit'
+    to='francisco@denmark.lit/barracks'
+    id='meta'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+         node='urn:xmpp:microblog:0'>
+    <identity category='pubsub' type='leaf'/>
+    <feature var='http://jabber.org/protocol/pubsub'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>http://jabber.org/protocol/pubsub#meta-data</value>
+      </field>
+      <field var='urn:xmpp:pubsub-ns:0#namespace' label='Pubsub namespace' type='text-single'>
+        <value>urn:xmpp:microblog:0</value>
+      </field>
+      ...
+    </x>
+  </query>
+</iq>]]></example>
+    </section3>
+  </section2>
+  <section2 topic='Filtering' anchor='filtering'>
+    <p>While requesting disco#items on a PubSub service, a client might want to only get nodes that are contained in certain namespaces. The client will then add a <tt>filter</tt> child of namespace <tt>urn:xmpp:pubsub-ns:0</tt> to the query element, containing a <tt>jabber:x:data</tt> form with FORM_TYPE of value <tt>urn:xmpp:pubsub-ns:0</tt> and an <tt>allowed-namespaces</tt> or <tt>blocked-namespaces</tt> text-multi type field containing the various namespaces it wants to filter.</p>
+    <p>In the same way as <link url='#restrict-namespaces'>Restrict the list of allowed namespaces on a service</link>, the <tt>blocked-namespaces</tt> value is ignored if both allowed and blocked fields are specified.</p>
+    <example caption='Filtering by namespaces while discovering items on a PubSub service.'><![CDATA[<iq type='get' from='hamlet@denmark.lit/elsinore' to='news.capulet.lit'>
+  <query xmlns='http://jabber.org/protocol/disco#items>
+    <filter xmlns='urn:xmpp:pubsub-ns:0'>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>urn:xmpp:pubsub-ns:0</value>
+        </field>
+        <field type='text-multi' var='allowed-namespaces'>
+          <value>urn:xmpp:microblog:0</value>
+          <value>urn:xmpp:bookmark:0</value>
+          <value>urn:xmpp:bookmark:1</value>
+        </field>
+      </x>
+    </filter>
+  </query>
+</iq>]]></example>
+    <p>The server will then return a list of nodes contained in the specified <tt>allowed-namespaces</tt> field, or a list of nodes excluding nodes contained in <tt>blocked-namespaces</tt>.</p>
+    <p>Filtering can be combined with <cite>XEP-0059</cite> by adding the &lt;set/&gt; element alongside in the query, as a sibling.</p>
+    <example caption='Requesting paginated results filtered by namespace.'><![CDATA[<iq type='get' from='hamlet@denmark.lit/elsinore' to='news.capulet.lit' id='disco'>
+  <query xmlns='http://jabber.org/protocol/disco#items'>
+    <filter xmlns='urn:xmpp:pubsub-ns:0'>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>urn:xmpp:pubsub-ns:0</value>
+        </field>
+        <field type='text-multi' var='allowed-namespaces'>
+          <value>urn:xmpp:microblog:0</value>
+          <value>urn:xmpp:bookmark:0</value>
+          <value>urn:xmpp:bookmark:1</value>
+        </field>
+      </x>
+    </filter>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <max>20</max>
+    </set>
+  </query>
+</iq>]]></example>
+  </section2>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>TODO</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>None.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='PubSub Namespaces Registry' anchor='pubsub-ns-registry'>
+    <p>The XMPP Registrar maintains a registry of values for PubSub Namespaces as defined in this XEP. See &lt;<link url='https://xmpp.org/registrar/pubsub-namespaces.html'>https://xmpp.org/registrar/pubsub-namespaces.html</link>&gt;.</p>
+    <section3 topic='Process' anchor='registry-process'>
+      <p>In order to submit new values to this registry, the registrant shall define an XML fragment of the following form and either include it in the relevant XMPP Extension Protocol or send it to the email address &lt;<link url='mailto:registrar@xmpp.org'>registrar@xmpp.org</link>&gt;:</p>
+      <code><![CDATA[<namespace>
+  <name>the name of the namespace (all lower-case)</name>
+  <desc>a natural-language description of the namespace</desc>
+  <doc>the document (e.g., XEP) in which this namespace is specified</doc>
+    <node>the PubSub node name attached to this namespace (optional)</node>
+</namespace>]]></code>
+      <p>The registrant may register more than one namespace at a time, each contained in a separate <tt>&lt;namespace/&gt;</tt> element.</p>
+    </section3>
+  </section2>
+</section1>
+<section1 topic='Design Considerations' anchor='design'>
+  <!-- Use this section to describe other approaches which have been considered
+  during the design of this protocol and why they have been rejected. Having
+  the result and a summary of long or complicated discussions in the document
+  itself instead of list or chat archives serves future readers. -->
+  <p>People seem not to want to use <tt>pubsub#type</tt> for this but why?!</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <section2 topic='urn:xmpp:pubsub-ns:0' anchor='schema-pubsub-ns'>
+    <code><![CDATA[<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    xmlns:xdata='jabber:x:data'
+    targetNamespace='urn:xmpp:pubsub-ns:0'
+    xmlns='urn:xmpp:pubsub-ns:0'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      XEP-XXXX: http://xmpp.org/extensions/xep-xxxx.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name='filter'>
+    <xs:complexType>
+      <xs:choice xmlns:xdata='jabber:x:data'>
+        <xs:element ref='xdata:x'/>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>]]></code>
+  </section2>
+  <section2 topic='urn:xmpp:pubsub-ns:errors:0' anchor='schema-pubsub-ns-errors'>
+    <code><![CDATA[<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:pubsub-ns:errors:0'
+    xmlns='urn:xmpp:pubsub-ns:errors:0'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      XEP-XXXX: http://xmpp.org/extensions/xep-xxxx.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name='namespace-required' type='empty'/>
+  <xs:element name='restricted-value' type='empty'/>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>]]></code>
+  </section2>
+</section1>
+</xep>
