@@ -262,7 +262,10 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
           <dd>&#169; 1999 &#x2013; 2021 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</dd>
           <dt>Status</dt>
           <dd>
-            <p><xsl:value-of select='/xep/header/status'/></p>
+            <p><xsl:choose>
+              <xsl:when test='string(/xep/header/status) = "Draft"'>Stable</xsl:when>
+              <xsl:otherwise><xsl:value-of select='/xep/header/status'/></xsl:otherwise>
+            </xsl:choose></p>
             <xsl:call-template name='status-notice'>
               <xsl:with-param name='thestatus' select='/xep/header/status'/>
               <xsl:with-param name='thetype' select='/xep/header/type'/>
