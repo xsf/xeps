@@ -643,7 +643,21 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   <xsl:template match='spec'>
     <xsl:param name='speccount' select='""'/>
     <xsl:variable name='specpos' select='position()'/>
-    <xsl:value-of select='.'/>
+    <xsl:variable name='spec' select='translate(string(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")'/>
+    <xsl:choose>
+      <xsl:when test='starts-with($spec, "xep-")'><a>
+        <xsl:attribute name="href"><xsl:value-of select="$spec"/>.html</xsl:attribute>
+        <xsl:value-of select='.'/>
+      </a></xsl:when>
+      <xsl:when test='starts-with($spec, "rfc ")'>
+        <xsl:variable name='rfcno' select='substring-after($spec, "rfc ")'/>
+        <a>
+          <xsl:attribute name="href">https://datatracker.ietf.org/doc/html/rfc<xsl:value-of select="$rfcno"/></xsl:attribute>
+          <xsl:value-of select='.'/>
+        </a>
+      </xsl:when>
+      <xsl:otherwise><xsl:value-of select='.'/></xsl:otherwise>
+    </xsl:choose>
     <xsl:if test='$specpos &lt; $speccount'>
       <xsl:text>, </xsl:text>
     </xsl:if>
