@@ -6,12 +6,16 @@
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 <xep>
 <header>
-  <title>Jingle Message Initiation</title>
-  <abstract>This specification provides a way for the initiator of a Jingle session to propose sending an invitation in an XMPP message stanza, thus taking advantage of message delivery semantics instead of sending IQ stanzas to all of the responder's online resources or choosing a particular online resource.</abstract>
+  <title>Call Invite Message</title>
+  <abstract>
+    This specification provides a way for an initiator or participant of a Call
+    to send an invitation in an XMPP message stanza, thus taking advantage
+    of message delivery semantics instead of sending IQ stanzas to all of the
+    invitee's online resources or choosing a particular online resource.
+  </abstract>
   &LEGALNOTICE;
   <number>0353</number>
   <status>Experimental</status>
-  <lastcall>2019-08-13</lastcall>
   <type>Standards Track</type>
   <sig>Standards</sig>
   <approver>Council</approver>
@@ -23,7 +27,7 @@
   </dependencies>
   <supersedes/>
   <supersededby/>
-  <shortname>jingle-message</shortname>
+  <shortname>call-message</shortname>
   &fippo;
   &stpeter;
   <author>
@@ -32,6 +36,7 @@
     <email>thilo+xmpp@eightysoft.de</email>
     <jid>thilo.molitor@juforum.de</jid>
   </author>
+  &larma;
   <revision>
     <version>0.4.0</version>
     <date>2021-11-27</date>
@@ -83,25 +88,62 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>&xep0166; uses &IQ; stanzas for all interactions between the parties to a jingle session. When sending an invitation the initiator needs to either pick one of the responder's resources (e.g., based on &xep0115; information) or send the invitation to all of the responder's resources that support Jingle. The first method is prone to error (e.g., in cases where more than one resource supports Jingle) and the second method requires sending a separate invitation to each resource. Neither of these is ideal. Although &xep0276; proposed a way to overcome the problem, it too has issues (e.g., dependency on a presence service and the need to reveal all supported XMPP features) and in any case has not been widely implemented.</p>
-  <p>This document proposes an alternative solution: exchanging a &MESSAGE; stanza before sending the Jingle invitation in an &IQ; stanza. (Indeed, in the early discussions leading up to the Jingle protocol the authors considered using &MESSAGE; stanzas instead of &IQ; stanzas, but chose the latter for their deterministic handling semantics.) This method effectively results in a kind of decloaking for Jingle purposes.</p><p>&xep0280; and &xep0313; (including &xep0334;) make sure all devices (offline or not) know about the jingle session, its start timestamp and even its end timestamp and the state in between.</p>
+  <p>
+    Previously, two-party and group calls were established by either directly
+    initiating a &xep0166; session or by sending links in message bodies to
+    external services.
+  </p>
+  <p>
+    &xep0166; uses &IQ; stanzas for all interactions between the parties to a
+    jingle session. When sending an invitation the initiator needs to either
+    pick one of the invitee's resources (e.g., based on &xep0115; information)
+    or send the invitation to all of the invitee's resources that support
+    Jingle. The first method is prone to error (e.g., in cases where more than
+    one resource supports Jingle) and the second method requires sending a
+    separate invitation to each resource. Neither of these is ideal.
+    Although &xep0276; proposed a way to overcome the problem, it too has issues
+    (e.g., dependency on a presence service and the need to reveal all supported
+    XMPP features) and in any case has not been widely implemented.
+  </p>
+  <p>
+    This document proposes an alternative solution: exchanging a &MESSAGE;
+    stanza before sending the Jingle invitation in an &IQ; stanza. (Indeed, in
+    the early discussions leading up to the Jingle protocol the authors
+    considered using &MESSAGE; stanzas instead of &IQ; stanzas, but chose the
+    latter for their deterministic handling semantics.) This method effectively
+    results in a kind of decloaking for Jingle purposes.
+  </p>
+  <p>
+    For calls joined via URIs handled outside the XMPP protocol, this document
+    proposes a way to have the invitation understood as a call invite (resulting
+    in appropriate ringing of devices) and to reflect participation status via
+    XMPP messages. To be flexible for new protocols, the protocol proposed here
+    creates entry points that allow and are meant for extensibility.
+  </p>
+  <p>
+    &xep0280; and &xep0313; (including &xep0334;) make sure all devices
+    (offline or not) know about the jingle session, its start timestamp and even
+    its end timestamp and the state in between.
+  </p>
 </section1>
 <section1 topic='Requirements' anchor='reqs'>
   <p>This protocol was designed with the following requirements in mind:</p>
   <ul>
-    <li>Allow responder to choose the resource or device on which to take the call.</li>
+    <li>Allow invitee to choose the resource or device on which to take the call.</li>
     <li>Result in "ring-on-all-devices" behavior.</li>
     <li>Not rely on presence stanzas.</li>
     <li>Make use of "forking" semantics for message stanzas.</li>
-    <li>Allow indication of session content.</li>
+    <li>Allow indication of call type (audio-only or video).</li>
     <li>Work with push notifications.</li>
     <li>Work with offline devices</li>
     <li>Work with devices that use negative resource priorities</li>
     <li>Allow all devices of the involved users to display start and end timestamps of the call</li>
+    <li>Independent of actual transport method (i.e. not exclusively using &xep0166;).</li>
+    <li>Support inviting to multi-party calls.</li>
   </ul>
 </section1>
 <section1 topic='Discovering support' anchor='disco'>
-  <p>If a client implements Jingle Message Initiation, it MUST specify the 'urn:xmpp:jingle-message:1' feature in its service discovery information features as specified in &xep0030; and the Entity Capabilities profile specified in &xep0115;.</p>
+  <p>If a client implements Call Invite Messages, it MUST specify the 'urn:xmpp:call-message:1' feature in its service discovery information features as specified in &xep0030; and the Entity Capabilities profile specified in &xep0115;.</p>
     <example caption='Romeo&apos;s client requests information about a chat partner&apos;s client'><![CDATA[
 <iq type='get'
     from='romeo@montague.example/orchard'
@@ -109,14 +151,14 @@
     id='disco#info-1'>
   <query xmlns='http://jabber.org/protocol/disco#info'/>
 </iq>]]></example>
-    <example caption='Juliet&apos;s client advertises support for Jingle Message Initiation'><![CDATA[
+    <example caption='Juliet&apos;s client advertises support for Call Invite Messages'><![CDATA[
 <iq type='result'
     to='romeo@montague.example/orchard'
     from='juliet@capulet.example/phone'
     id='disco#info-1'>
   <query xmlns='http://jabber.org/protocol/disco#info'>
 ...
-    <feature var='urn:xmpp:jingle-message:1'/>
+    <feature var='urn:xmpp:call-message:1'/>
 ...
   </query>
 </iq>]]></example>
@@ -124,22 +166,65 @@
   <p>A client supporting this spec MUST always send &lt;propose/&gt; elements etc. even if it can not determine if the receiver supports this spec.</p>
 </section1>
 <section1 topic='Use Cases' anchor='usecases'>
-  <p>All &MESSAGE; stanzas exchanged by this protocol MUST be of type="chat" and contain &xep0334; &lt;store/&gt; hints.</p>
-  <section2 topic='Indicating Intent to Start a Session' anchor='intent'>
-    <p>In order to prepare for sending a Jingle invitation, the initiator (e.g., Romeo) sends a &MESSAGE; stanza containing a &lt;propose/&gt; element qualified by the 'urn:xmpp:jingle-message:1' namespace. The &lt;propose/&gt; element MUST possess an 'id' attribute sufficiently random (e.g. uuid) that will be used for the session invitation of &xep0166; and MUST contain one &lt;description/&gt; element for each media type associated with the intended session.</p>
-    <example caption="Initiator Sends Intent Message"><![CDATA[
+  <p>
+    All &MESSAGE; stanzas exchanged by this protocol MUST be of type="chat" when
+    sent in a direct message or of type="groupchat" when sent to a group chat
+    and contain &xep0334; &lt;store/&gt; hints.
+  </p>
+  <section2 topic='Invite to a Call' anchor='intent'>
+    <p>
+      In order to invite to join a call, the inviter (e.g., Romeo) sends
+      a &MESSAGE; stanza containing a &lt;propose&gt; element qualified by the
+      'urn:xmpp:call-message:1' namespace. The &lt;propose&gt; element MUST
+      possess an sufficiently random (e.g. uuid) 'id' attribute that will be
+      used to reference this call invitation later, MAY possess a 'video'
+      attribute (defaulting to 'false') to indicate if this call is intended to
+      be joined with participants sending video, MAY possess an 'audio'
+      attribute (defaulting to 'true') to indicate if this call is intended to
+      be joined by participants with audio enabled and a 'multi' attribute
+      (defaulting to 'false') indicating if this Call invites to participate in
+      a multi-party call.
+    </p>
+    <p>
+      Furthermore, the &lt;propose&gt; element should contain one or multiple
+      elements for each session type supported. The order of such elements
+      indicates the preference of the inviter. If the call can be joined using
+      a &xep0166; session, this is indicated using a &lt;jingle&gt; element,
+      which MUST possess a 'sid' attribute to indicate the session ID that will
+      be used and MAY possess a 'initiator' attribute to indicate the full JID
+      of the initiator for the Jingle session. If the call can be joined by
+      opening or invoking an external URI, this is indicated using an &lt;external&gt;
+      element which MUST possess a 'uri' attribute containing the URI to be
+      launched or opened and MAY possess a 'title' attribute with a
+      human-readable title of the URI.
+    </p>
+    <example caption="Inviter Sends Intent Message"><![CDATA[
 <message from='romeo@montague.example/orchard'
          to='juliet@capulet.example'
          type='chat'>
-  <propose xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'>
-    <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'/>
+  <propose xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea' audio='true' video='false' multi='false'>
+    <jingle sid='a73sjjvkla37jfea' from='romeo@montague.example/orchard' />
   </propose>
   <store xmlns="urn:xmpp:hints"/>
 </message>
 ]]></example>
-    <p>The server of the responder (e.g., Juliet) distributes this message stanza to all of Juliet's available resources (and to push resources as appropriate) thanks to &xep0280; and &xep0313;. Those devices might start ringing as a result.</p>
-    <p>Consistent with the recommendation for one-to-one chat sessions in Section 5.1 of &rfc6121;, the initiator SHOULD also send directed presence to the responder if the two entities do not already share presence information; including Entity Capabilities (XEP-0115) information in this directed presence stanza enables the responder to know the availability of the initiator (e.g., in case the message is actually delivered quite a bit later because it is saved to &xep0313; storage) and also to know the XMPP features supported by the initiator.</p>
-    <example caption="Initiator Sends Directed Presence"><![CDATA[
+    <p>
+      The server of the invitee (e.g., Juliet) distributes this message stanza
+      to all of Juliet's available resources (and to push resources as
+      appropriate) thanks to &xep0280; and &xep0313;. Those devices might start
+      ringing as a result.
+    </p>
+    <p>
+      Consistent with the recommendation for one-to-one chat sessions in
+      Section 5.1 of &rfc6121;, the inviter SHOULD also send directed presence
+      to the invitee if the two entities do not already share presence
+      information; including Entity Capabilities (XEP-0115) information in this
+      directed presence stanza enables the invitee to know the availability of
+      the inviter (e.g., in case the message is actually delivered quite a bit
+      later because it is saved to &xep0313; storage) and also to know the XMPP
+      features supported by the inviter.
+    </p>
+    <example caption="Inviter Sends Directed Presence"><![CDATA[
 <presence to='romeo@montague.example/orchard'
           from='juliet@capulet.example'>
   <c xmlns='http://jabber.org/protocol/caps'
@@ -149,37 +234,87 @@
 </presence>
 ]]></example>
   </section2>
-  <section2 topic='Disavowing Intent to Start a Session' anchor='retract'>
-    <p>It can happen that the initiator might want to disavow intent to send a session invitation (e.g., because the initiator has accepted another session). The initiator can do so by sending a message stanza containing a &lt;retract/&gt; element specifying the same session ID.</p>
-    <p>The &lt;retract/&gt; element MUST contain a &lt;reason/&gt; element as defined in &xep0166; section 7.4. This SHOULD use a condition of &lt;cancel/&gt;, but implementations MAY use other conditions if deemed more appropriate (see <link url="#security">Security Considerations</link> below for details and rationale).</p>
-    <example caption="Initiator Sends Stop Message"><![CDATA[
+  <section2 topic='Disavowing Call Invitation' anchor='retract'>
+    <p>
+      It can happen that the inviter might want to disavow the call invitation
+      (e.g., because the inviter has joined another call). The inviter can do so
+      by sending a message stanza containing a &lt;retract/&gt; element
+      specifying the same ID.
+    </p>
+    <p>
+      The &lt;retract/&gt; element MUST contain a &lt;reason&gt; element as
+      defined in <link url="#reason">Reason element</link>. This SHOULD use a
+      condition of &lt;cancel/&gt;.
+    </p>
+    <example caption="Inviter Sends Retract Message"><![CDATA[
 <message from='romeo@montague.example/orchard'
          to='juliet@capulet.example'
          type='chat'>
-  <retract xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'>
-    <reason xmlns="urn:xmpp:jingle:1">
-      <cancel/>
-      <text>Retracted</text>
-    </reason>
+  <retract xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea'>
+    <reason><cancel/></reason>
   </retract>
   <store xmlns="urn:xmpp:hints"/>
 </message>
 ]]></example>
-    <p>In conjunction with &xep0313; upon ending the catchup phase the responder SHOULD consider all sessions for which it received a &lt;propose/&gt; but no &lt;retract/&gt; or &lt;finish/&gt; message to be still active and allow the user to <link url="#accept">accept the intent to start a session</link>.</p>
+    <p>
+      In conjunction with &xep0313; upon ending the catchup phase the invitee
+      SHOULD consider all sessions for which it received a &lt;propose/&gt; but
+      no &lt;retract/&gt; or &lt;finish/&gt; message to be still active and
+      allow the user to <link url="#accept">accept the intent to start a
+      session</link>.
+    </p>
   </section2>
-  <section2 topic='Accepting Intent to Start a Session' anchor='accept'>
-  <p>Upon receiving the intent message, the responder's various devices will "ring" and the responder will answer the call on a particular device. Here we assume that since this is an audio-only call, Juliet chooses to take the call on the device associated with her "phone" resource.</p>
-  <p>Her "phone" resource informs all of her resources and all of the initiator's resources about accepting the call by sending a message to the bare JID of the initiator containing an &lt;accept/&gt; element specifying the session ID of the original &lt;propose/&gt; message.</p>
+  <section2 topic='Accepting Invite to Join a Call' anchor='accept'>
+  <p>
+    Upon receiving the invite message, the invitee's various devices will "ring"
+    and the invitee will answer the call on a particular device. Here we assume
+    that since this is an audio-only call, Juliet chooses to take the call on
+    the device associated with her "phone" resource.
+  </p>
+  <p>
+    Her "phone" resource informs all resources that received the invite message
+    about accepting the call by sending a message to the bare JID of the
+    initiator (for direct messages) or the room (for group chats) containing an
+    &lt;accept/&gt; element specifying the ID of the original &lt;propose/&gt;
+    message.
+  </p>
+  <p>
+    The &lt;accept&gt; element MUST reflect the element of the session type
+    used by Juliet to accept the call. If a Jingle session is accepted, the
+    invitee MAY add a 'responder' attribute to the reflected &lt;jingle&gt;
+    element to indicate the full Jid of the responder for the Jingle session.
+  </p>
+  <p>
+    If the session is established using an external URI or other methods,
+    clients might be unable to discover when a session ends. If a client is
+    unable to indicate the ending of its participation in the call, it MUST
+    add an attribute 'passive' with value 'true' to the &lt;accept&gt; element.
+    As this typically implies degraded user experience, this should be avoided
+    when possible.
+  </p>
   <example caption="One of Responder's Resources Accepts the Call"><![CDATA[
 <message from='juliet@capulet.example/phone'
          to='romeo@montague.example'
          type='chat'>
-  <accept xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'/>
+  <accept xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea'>
+    <jingle sid='a73sjjvkla37jfea' />
+  </accept>
   <store xmlns="urn:xmpp:hints"/>
 </message>
 ]]></example>
-  <p>Juliet's server broadcasts this accept message to all of her resources (as described in &xep0280;), which stop ringing, and to all of Romeo's resources (as described in &rfc6121;). Romeo's resources that did not send the &lt;propose/&gt; can use this &MESSAGE; stanza to update their UI or choose to ignore this &MESSAGE; stanza altogether.</p>
-  <p>Next, the device from which Juliet accepted the call sends directed presence to Romeo for the reasons described above.</p>
+  <p>
+    Juliet's server broadcasts this accept message to all of her resources (as
+    described in &xep0280; or, e.g. &xep0045;, respectively), which stop ringing, and
+    to all of Romeo's resources (as described in &rfc6121;) or group chat
+    members respectively. Romeo's resources or group chat members that did not
+    send the &lt;propose&gt; can use this &MESSAGE; stanza to update their UI
+    or choose to ignore this &MESSAGE; stanza altogether.
+  </p>
+  <p>
+    Next, consistent with the recommendation for one-to-one chat sessions in
+    Section 5.1 of &rfc6121;, the device from which Juliet accepted the call
+    sends directed presence to Romeo for the reasons described above.
+  </p>
     <example caption="Responder Sends Directed Presence"><![CDATA[
 <presence from='juliet@capulet.example/phone'
           to='romeo@montague.example/orchard'>
@@ -189,27 +324,48 @@
      ver='QgayPKawpkPSDYmwT/WM94uAlu0='/>
 </presence>
 ]]></example>
+  <p>
+    In case the &lt;accept&gt; element contained an &lt;external&gt; element,
+    Juliet SHOULD proceed to launch or open the URI specified in its 'uri'
+    attribute.
+  </p>
   </section2>
-  <section2 topic='Rejecting Intent to Start a Session' anchor='reject'>
-  <p>Instead of accepting the call, the responder might want to decline the call and tell all of her devices to stop ringing (e.g., perhaps because Romeo is getting to be a bit of a nuisance). She does this by rejecting the call on one of her devices and having that device tell all of the other devices to stop ringing by sending a &MESSAGE; stanza containing a &lt;reject/&gt; element specifying the session ID of the original &lt;propose/&gt; message to the bare JID of Romeo.</p>
-  <p>The &lt;reject/&gt; element MUST contain a &lt;reason/&gt; element as defined in &xep0166; section 7.4. The &lt;reason/&gt; element SHOULD use a condition of &lt;busy/&gt;, but implementations MAY use other conditions if deemed more appropriate (see <link url="#security">Security Considerations</link> below for details and rationale).</p>
-  <p>In Tie-Breaking scenarios it MUST also contain a &lt;tie-break/&gt; element as defined in <link url="#tie-break-1">Tie Breaking</link>.</p>
-  <example caption="One of Responder's Resources Rejects the Call"><![CDATA[
+  <section2 topic='Rejecting Invitation to join a Call' anchor='reject'>
+  <p>
+    Instead of accepting the call, the invitee might want to decline the call
+    and tell all of her devices to stop ringing (e.g., perhaps because Romeo is
+    getting to be a bit of a nuisance). She does this by rejecting the call on
+    one of her devices and having that device tell all of the other devices to
+    stop ringing by sending a &MESSAGE; stanza containing a &lt;reject/&gt;
+    element specifying the ID of the original &lt;propose&gt; message to the
+    bare JID of Romeo or the group chat room respectively.
+  </p>
+  <p>
+    The &lt;reject/&gt; element MUST contain a &lt;reason&gt; element as defined
+    in <link url="#reason">Reason element</link>. The &lt;reason&gt; element
+    SHOULD use a condition of &lt;busy/&gt;, except in tie-breaking scenarios
+    as defined in <link url="#tie-break-1">Tie Breaking</link>.
+  </p>
+  <example caption="One of Invitee's Resources Rejects the Call"><![CDATA[
 <message from='juliet@capulet.example/phone'
          to='romeo@montague.example'
          type='chat'>
-  <reject xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'>
-    <reason xmlns="urn:xmpp:jingle:1">
-      <busy/>
-      <text>Busy</text>
-    </reason>
+  <reject xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea'>
+    <reason><busy/></reason>
   </reject>
   <store xmlns="urn:xmpp:hints"/>
 </message>
 ]]></example>
   </section2>
   <section2 topic='Initiating the Jingle Session' anchor='initiate'>
-    <p>Now Romeo actually initiates the session (segue to Jingle itself).</p>
+    <p>
+      Now, in case a call is accepted with a &lt;jingle&gt; element, Romeo
+      actually initiates the session (segue to Jingle itself). If the Juliet's
+      &lt;jingle&gt; element included a `responder` attribute, Romeo will use
+      the therein specified full JID for the Jingle session. Romeo MUST verify
+      that the full JID specified is within control of Juliet (e.g. is of the
+      same bare JID).
+    </p>
     <example caption="Initiation"><![CDATA[
 <iq from='romeo@montague.example/orchard'
     id='ih28sx61'
@@ -260,48 +416,123 @@
 ]]></example>
   </section2>
   <section2 topic='Finishing a Started Session' anchor='finish'>
-    <p>This protocol in conjunction with &xep0280; and &xep0313; allows all devices of both involved parties to get synchronized about session start, rejection etc. To synchronize the ending of the session, both parties MUST send a message stanza containing a &lt;finish/&gt; element specifying the same session ID as in <link url='#accept'>Accept</link> to the bare jid of the other party.</p>
-    <p>Letting both involved parties send the &lt;finish/&gt; element makes sure we have the correct state in MAM archives etc. even if one client suddenly looses connectivity/power. It even makes possible for a client to determine if the call is still deemed "running" by the other party if it manages to recover from connectivity loss &mdash; before the other party runs into a timeout and sends a &lt;finish/&gt; &mdash; to recover the session or formally terminate the call (by ending the Jingle session and sending a &lt;finish/&gt; message itself). See <link url="#tie-break-2">Tie Breaking</link> for more infos on this and similar scenarios.</p>
-    <p>The &lt;finish/&gt; element MUST contain a &lt;reason/&gt; element as defined in &xep0166; section 7.4. This SHOULD use a condition of &lt;success/&gt;, but implementations MAY use other conditions if deemed more appropriate (see <link url="#security">Security Considerations</link> below for details and rationale).</p>
-    <example caption="Initiator Sends Finish Message"><![CDATA[
+    <p>
+      This protocol in conjunction with &xep0280; and &xep0313; or appropriate
+      groupchat protocols (like &xep0045;) allows all devices of all involved
+      parties to get synchronized about session start, rejection etc. To
+      synchronize the ending of the session, all parties MUST send a message
+      stanza containing a &lt;finish/&gt; element specifying the same ID as in
+      <link url='#accept'>Accept</link> to the bare Jid of the other party or
+      the room, respectively.
+    </p>
+    <p>
+      Letting both involved parties in two-party sessions send the &lt;finish/&gt;
+      element makes sure we have the correct state in MAM archives etc. even if
+      one client suddenly looses connectivity/power. It even makes possible for
+      a client to determine if the call is still deemed "running" by the other
+      party if it manages to recover from connectivity loss &mdash; before the
+      other party runs into a timeout and sends a &lt;finish/&gt; &mdash; to
+      recover the session or formally terminate the call (by ending the Jingle
+      session and sending a &lt;finish/&gt; message itself). See
+      <link url="#tie-break-2">Tie Breaking</link> for more infos on this and
+      similar scenarios.
+    </p>
+    <p>
+      The &lt;finish/&gt; element MUST contain a &lt;reason&gt; element as
+      defined in <link url="#reason">Reason element</link>. This SHOULD use a
+      condition of &lt;success/&gt;, except in tie-breaking scenarios
+      as defined in <link url="#tie-break-2">Tie Breaking</link>.
+    </p>
+    <example caption="Inviter Sends Finish Message"><![CDATA[
 <message from='romeo@montague.example/orchard'
          to='juliet@capulet.example'
          type='chat'>
-  <finish xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'>
-    <reason xmlns="urn:xmpp:jingle:1">
-      <success/>
-      <text>Success</text>
-    </reason>
+  <finish xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea'>
+    <reason><success/></reason>
   </finish
   <store xmlns="urn:xmpp:hints"/>
 </message>
 ]]></example>
-    <example caption="Responder Sends Finish Message"><![CDATA[
+    <example caption="Invitee Sends Finish Message"><![CDATA[
 <message from='juliet@capulet.example/phone'
          to='romeo@montague.example'
          type='chat'>
-  <finish xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'>
-    <reason xmlns="urn:xmpp:jingle:1">
-      <success/>
-      <text>Success</text>
-    </reason>
+  <finish xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea'>
+    <reason><success/></reason>
   </finish>
   <store xmlns="urn:xmpp:hints"/>
 </message>
 ]]></example>
   </section2>
+  <section2 topic="Reason element" anchor="reason">
+    <p>
+      The structure of the &lt;reason&gt; element is as follows.
+    </p>
+    <ul>
+      <li>
+        The &lt;reason&gt; element MUST contain an element that provides
+        machine-readable information about the condition that prompted the
+        action.
+      </li>
+      <li>
+        The &lt;reason&gt; element MAY contain further elements qualified by
+        some other namespace that provides more detailed machine-readable or
+        human-readable information about the reason for the action.
+      </li>
+    </ul>
+    <p>
+      The defined conditions are described in the following table.
+    </p>
+    <table caption="Defined Conditions">
+      <tr><th>Element</th><th>Description</th><th>Suggested for</th></tr>
+      <tr><td>&lt;busy/&gt;</td><td>The invitee is busy and cannot accept a call.</td><td>&lt;reject&gt;</td></tr>
+      <tr><td>&lt;cancel/&gt;</td><td>The inviter wishes to formally cancel the call invitation.</td><td>&lt;retract&gt;</td></tr>
+      <tr><td>&lt;decline/&gt;</td><td>The invitee wishes to formally decline the call invitation.</td><td></td></tr>
+      <tr><td>&lt;gone/&gt;</td><td>The party is going offline or is no longer available.</td><td></td></tr>
+      <tr><td>&lt;success/&gt;</td><td>The call finished as planned.</td><td>&lt;finish&gt;</td></tr>
+      <tr><td>&lt;tie-break/&gt;</td><td>The call invitation is rejected or cancelled or the call finished to break a tie.</td><td>(see <link url="#tie-breaking">Tie Breaking</link>)</td></tr>
+      <tr><td>&lt;timeout/&gt;</td><td>The call invitation has not been answered so the inviter is timing out the invitation.</td><td></td></tr>
+    </table>
+    <p>
+      Implementations SHOULD use the suggested conditions for each message type,
+      but MAY use other conditions if deemed more appropriate (see
+      <link url="#security">Security Considerations</link> below for details and
+      rationale).
+    </p>
+  </section2>
 </section1>
 <section1 topic="Tie Breaking" anchor="tie-breaking">
-  <p>It is possible that a &lt;propose/&gt; message can be sent at the same time by both parties or a new session started while one is already running. Implementations of this specification MUST implement the following solutions to solve this. (This is loosely based upon section 7.2.16 of &xep0166;.)</p>
+  <p>
+    It is possible that a &lt;propose/&gt; message can be sent at the same time
+    by both parties or a new session started while one is already running. In
+    case of two-party calls (when the 'multi' attribute of both &lt;propose&gt;
+    element is not set to 'true'), implementations of this specification MUST
+    implement the following solutions to solve this. (This is loosely based upon
+    section 7.2.16 of &xep0166;.)
+  </p>
   <section2 topic='No existing session' anchor='tie-break-1'>
-    <p>In this case (e.g. no party answered the &lt;propose/&gt; message yet) the lower of the two session IDs MUST overrule the other action, where by "lower" is meant the session ID that is sorted first using "i;octet" collation as specified in Section 9.3 of &rfc4790; (in the unlikely event that the random session IDs are the same, the action sent by the lower of the JabberIDs MUST overrule the other action). The party that receives the &lt;propose/&gt; action with the lower of the two session IDs MUST respond with an &lt;accept/&gt; or &lt;reject/&gt; mesage like it would normally do for a &lt;propose/&gt; message, and the party that receives the &lt;propose/&gt; action with the higher of the two session IDs MUST return a &lt;reject/&gt; message to the other party with a &lt;tie-break/&gt; child element alongside of a &lt;reason/&gt; element carrying the condition &lt;expired/&gt;.</p>
+    <p>
+      In this case (e.g. no party answered the &lt;propose/&gt; message yet)
+      the lower of the two session IDs MUST overrule the other action, where by
+      "lower" is meant the session ID that is sorted first using "i;octet"
+      collation as specified in Section 9.3 of &rfc4790; (in the unlikely event
+      that the random session IDs are the same, the action sent by the lower of
+      the JabberIDs MUST overrule the other action). The party that receives the
+      &lt;propose/&gt; action with the lower of the two session IDs MUST respond
+      with an &lt;accept/&gt; or &lt;reject/&gt; message like it would normally
+      do for a &lt;propose/&gt; message, and the party that receives the &lt;propose/&gt;
+      action with the higher of the two session IDs MUST return a &lt;reject/&gt;
+      message to the other party with a &lt;migrated/&gt; child element whose
+      to-attribute is set to the lower session ID and a &lt;reason/&gt; element
+      carrying the condition &lt;tie-break/&gt;.
+    </p>
       <example caption="Tie break in propose state"><![CDATA[
 <!-- lower session ID -->
 <message from='romeo@montague.example/orchard'
          to='juliet@capulet.example'
          type='chat'>
-  <propose xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'>
-    <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'/>
+  <propose xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea'>
+    <jingle sid='a73sjjvkla37jfea' />
   </propose>
   <store xmlns="urn:xmpp:hints"/>
 </message>
@@ -310,8 +541,8 @@
 <message from='juliet@capulet.example/phone'
          to='romeo@montague.example'
          type='chat'>
-  <propose xmlns='urn:xmpp:jingle-message:1' id='b73sjjvkla37jfea'>
-    <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'/>
+  <propose xmlns='urn:xmpp:call-message:1' id='b73sjjvkla37jfea'>
+    <jingle sid='b73sjjvkla37jfea' />
   </propose>
   <store xmlns="urn:xmpp:hints"/>
 </message>
@@ -320,12 +551,9 @@
 <message from='romeo@montague.example/orchard'
          to='juliet@capulet.example'
          type='chat'>
-  <reject xmlns='urn:xmpp:jingle-message:1' id='b73sjjvkla37jfea'>
-    <reason xmlns="urn:xmpp:jingle:1">
-      <expired/>
-      <text>Tie-Break</text>
-    </reason>
-    <tie-break/>
+  <reject xmlns='urn:xmpp:call-message:1' id='b73sjjvkla37jfea'>
+    <reason><tie-break/></reason>
+    <migrated to='a73sjjvkla37jfea'/>
   </reject>
   <store xmlns="urn:xmpp:hints"/>
 </message>
@@ -334,22 +562,30 @@
 <message from='juliet@capulet.example/phone'
          to='romeo@montague.example'
          type='chat'>
-  <accept xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'/>
+  <accept xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea'>
+    <jingle sid='a73sjjvkla37jfea' />
+  </accept>
   <store xmlns="urn:xmpp:hints"/>
 </message>
 ]]></example>
   </section2>
   <section2 topic='Existing session' anchor='tie-break-2'>
     <p>If (from the perspective of the responder of the new session) there is already a session to the bare-jid of the initiator active (e.g. call already accepted but no &lt;finish/&gt; element received by the responder so far), the old session MUST be deemed an orphan and terminated by the responder of the new session in favor of the new one. The responder MUST transparently accept the new session and finish the old one, because it can be assumed that this new session is a transparent continuation of the old one.</p>
-    <p>She does so by first accepting the new session (sending an &lt;accept/&gt; message like she would do normally) and then sending a &lt;finish/&gt; message including a child element whose to-attribute refers to the old Jingle session id and including a &lt;reason/&gt; condition of &lt;expired/&gt;.</p>
+    <p>
+      She does so by first accepting the new session (sending an &lt;accept/&gt;
+      message like she would do normally) and then sending a &lt;finish/&gt;
+      message including a &lt;migrated/&gt; child element whose to-attribute
+      refers to the old Jingle session id and including a &lt;reason/&gt;
+      condition of &lt;tie-break/&gt;.
+    </p>
     <p>That makes it possible for the initiator of the new session to transparently switch devices (e.g. migrate the call to a new device) or resume an alreay running session after a sudden connectivity/power loss.</p>
     <example caption="Tie break in accept state"><![CDATA[
 <!-- old session gets proposed... -->
 <message from='romeo@montague.example/orchard'
          to='juliet@capulet.example'
          type='chat'>
-  <propose xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'>
-    <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'/>
+  <propose xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea'>
+    <jingle sid='a73sjjvkla37jfea' />
   </propose>
   <store xmlns="urn:xmpp:hints"/>
 </message>
@@ -358,7 +594,9 @@
 <message from='juliet@capulet.example/phone'
          to='romeo@montague.example'
          type='chat'>
-  <accept xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'/>
+  <accept xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea'>
+    <jingle sid='a73sjjvkla37jfea' />
+  </accept>
   <store xmlns="urn:xmpp:hints"/>
 </message>
 
@@ -368,8 +606,8 @@
 <message from='juliet@capulet.example/tablet'
          to='romeo@montague.example'
          type='chat'>
-  <propose xmlns='urn:xmpp:jingle-message:1' id='x64sjjvkla37baka'>
-    <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'/>
+  <propose xmlns='urn:xmpp:call-message:1' id='x64sjjvkla37baka'>
+    <jingle sid='x64sjjvkla37baka' />
   </propose>
   <store xmlns="urn:xmpp:hints"/>
 </message>
@@ -378,7 +616,7 @@
 <message from='romeo@montague.example/orchard'
          to='juliet@capulet.example'
          type='chat'>
-  <accept xmlns='urn:xmpp:jingle-message:1' id='x64sjjvkla37baka'/>
+  <accept xmlns='urn:xmpp:call-message:1' id='x64sjjvkla37baka'/>
   <store xmlns="urn:xmpp:hints"/>
 </message>
 
@@ -387,11 +625,8 @@
 <message from='romeo@montague.example/orchard'
          to='juliet@capulet.example'
          type='chat'>
-  <finish xmlns='urn:xmpp:jingle-message:1' id='a73sjjvkla37jfea'>
-    <reason xmlns="urn:xmpp:jingle:1">
-      <expired/>
-      <text>Session migrated</text>
-    </reason>
+  <finish xmlns='urn:xmpp:call-message:1' id='a73sjjvkla37jfea'>
+    <reason><tie-break/></reason>
     <migrated to='x64sjjvkla37baka'/>
   </finish>
   <store xmlns="urn:xmpp:hints"/>
@@ -403,7 +638,7 @@
 <message from='romeo@montague.example/orchard'
          to='juliet@capulet.example'
          type='chat'>
-  <finish xmlns='urn:xmpp:jingle-message:1' id='x64sjjvkla37baka'/>
+  <finish xmlns='urn:xmpp:call-message:1' id='x64sjjvkla37baka'/>
   <store xmlns="urn:xmpp:hints"/>
 </message>
 
@@ -411,7 +646,7 @@
 <message from='juliet@capulet.example/tablet'
          to='romeo@montague.example'
          type='chat'>
-  <finish xmlns='urn:xmpp:jingle-message:1' id='x64sjjvkla37baka'/>
+  <finish xmlns='urn:xmpp:call-message:1' id='x64sjjvkla37baka'/>
   <store xmlns="urn:xmpp:hints"/>
 </message>
 
@@ -419,10 +654,28 @@
   </section2>
 </section1>
 <section1 topic='Business Rules' anchor="business-rules">
-  <p>Participants MUST use &xep0280; and &xep0313; to make sure all devices of initiator and responder receive all messages exchanged by this protocol.
-  Without &xep0280; implementations would need to send copies of outgoing messages to their own bare jid, to inform their own devices about an event (like it was done with the &lt;accept/&gt; message in the old urn:xmpp:jingle:jingle-message:0 specification).</p>
-  <p>In a &xep0313; (or &xep0198;) catchup scenario client developers MAY choose to not show an "incoming call" UI upon receiving a &lt;propose/&gt; message because they could receive another message for the same Jingle session id later in the catchup process invalidating the &lt;propose/&gt; received before. Showing the "incoming call" UI as soon as receiving an &lt;accept/&gt; might comprise bad UX.</p>
-  <p>In the rare case of missing &lt;finish/&gt; elements from both initiator and responder, sessions SHOULD be considered terminated after an appropriate timeframe (for example 24 hours) and indicated so in the UI.</p>
+  <p>
+    Participants MUST use &xep0280; and &xep0313; when supporting call invites
+    in direct messages to make sure all devices of initiator and responder
+    receive all messages exchanged by this protocol.
+    Without &xep0280; implementations would need to send copies of outgoing
+    messages to their own bare jid, to inform their own devices about an event
+    (like it was done with the &lt;accept/&gt; message in the old
+    urn:xmpp:jingle:jingle-message:0 specification).
+  </p>
+  <p>
+    In a &xep0313; (or &xep0198; or &xep0045;) catchup scenario, client
+    developers MAY choose to not show an "incoming call" UI upon receiving a
+    &lt;propose/&gt; message because they could receive another message for the
+    same Jingle session id later in the catchup process invalidating the &lt;propose/&gt;
+    received before. Showing the "incoming call" UI as soon as receiving an &lt;propose/&gt;
+    might comprise bad UX.
+  </p>
+  <p>
+    In case of missing &lt;finish/&gt; elements from both inviter and
+    invitee, sessions SHOULD be considered terminated after an appropriate
+    timeframe (for example 24 hours) and indicated so in the UI.
+  </p>
   <p>All 'id' attributes used must be sufficiently random (e.g. use an uuid) to make sure they do not collide.</p>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
@@ -439,7 +692,7 @@
   <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
     <p>This specification defines the following XML namespace:</p>
     <ul>
-      <li>urn:xmpp:jingle:jingle-message:1</li>
+      <li>urn:xmpp:jingle:call-message:1</li>
     </ul>
     <p>The &REGISTRAR; includes the foregoing namespace to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
   </section2>
@@ -454,29 +707,36 @@
 <xs:schema
     xmlns:xs='http://www.w3.org/2001/XMLSchema'
     xmlns:xml='http://www.w3.org/XML/1998/namespace'
-    targetNamespace='urn:xmpp:jingle-message:1'
-    xmlns='urn:xmpp:jingle-message:1'
+    targetNamespace='urn:xmpp:call-message:1'
+    xmlns='urn:xmpp:call-message:1'
     elementFormDefault='qualified'>
 
   <xs:element name='propose'>
     <xs:complexType>
-      <xs:sequence>
-        <xs:any namespace='##other' minOccurs='1' maxOccurs='unbounded'/>
-      </xs:sequence>
+      <xs:choice>
+        <xs:element name='jingle' type='jingleSessionElementType' minOccurs='0' maxOccurs='1'/>
+        <xs:element name='external' type='externalSessionElementType' minOccurs='0' maxOccurs='unbounded'/>
+        <xs:any namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:choice>
       <xs:attribute name='id' type='xs:string' use='required'/>
+      <xs:attribute name='audio' type='xs:boolean' default='true'/>
+      <xs:attribute name='video' type='xs:boolean' default='false'/>
+      <xs:attribute name='multi' type='xs:boolean' default='false'/>
     </xs:complexType>
   </xs:element>
 
   <xs:element name='accept'>
     <xs:complexType>
-      <xs:simpleContent>
-        <xs:extension base='empty'>
-          <xs:attribute name='id' type='xs:string' use='required'/>
-        </xs:extension>
-      </xs:simpleContent>
+      <xs:choice>
+        <xs:element name='jingle' type='jingleSessionElementType'/>
+        <xs:element name='external' type='externalSessionElementType'/>
+        <xs:any namespace='##other'/>
+      </xs:choice>
+      <xs:attribute name='id' type='xs:string' use='required'/>
+      <xs:attribute name='passive' type='xs:boolean' default='false'/>
     </xs:complexType>
   </xs:element>
-  
+
   <xs:element name='finish'>
     <xs:complexType>
       <xs:sequence>
@@ -491,7 +751,7 @@
     <xs:complexType>
       <xs:sequence>
         <xs:element name='reason' type='reasonElementType' minOccurs='1' maxOccurs='1'/>
-        <xs:element name='tie-break' type='empty' minOccurs='0' maxOccurs='1'>
+        <xs:element name='migrated' type='migratedElementType' minOccurs='0' maxOccurs='1'/>
       </xs:sequence>
       <xs:attribute name='id' type='xs:string' use='required'/>
     </xs:complexType>
@@ -501,45 +761,57 @@
     <xs:complexType>
       <xs:sequence>
         <xs:element name='reason' type='reasonElementType' minOccurs='1' maxOccurs='1'/>
+        <xs:element name='migrated' type='migratedElementType' minOccurs='0' maxOccurs='1'/>
       </xs:sequence>
       <xs:attribute name='id' type='xs:string' use='required'/>
     </xs:complexType>
   </xs:element>
 
+  <xs:complexType name='jingleSessionElementType'>
+    <xs:sequence>
+      <xs:any namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+    </xs:sequence>
+    <xs:attribute name='sid' type='xs:string'/>
+    <xs:attribute name='initiator' type='xs:string'/>
+    <xs:attribute name='responder' type='xs:string'/>
+  </xs:complexType>
+
+  <xs:complexType name='externalSessionElementType'>
+    <xs:sequence>
+      <xs:any namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+    </xs:sequence>
+    <xs:attribute name='uri' type='xs:anyURI' use='required'/>
+    <xs:attribute name='title' type='xs:string'/>
+  </xs:complexType>
+
   <xs:complexType name='migratedElementType'>
-    <xs:simpleContent>
-      <xs:extension base='empty'>
-        <xs:attribute name='to' type='xs:string' use='required'/>
-      </xs:extension>
-    </xs:simpleContent>
+    <xs:sequence>
+      <xs:any namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
+    </xs:sequence>
+    <xs:attribute name='to' type='xs:string' use='required'/>
   </xs:complexType>
 
   <xs:complexType name='reasonElementType'>
     <xs:sequence>
-      <xs:choice>
-        <xs:element name='alternative-session' 
-                    type='alternativeSessionElementType'/>
-        <xs:element name='busy' type='empty'/>
-        <xs:element name='cancel' type='empty'/>
-        <xs:element name='connectivity-error' type='empty'/>
-        <xs:element name='decline' type='empty'/>
-        <xs:element name='expired' type='empty'/>
-        <xs:element name='failed-application' type='empty'/>
-        <xs:element name='failed-transport' type='empty'/>
-        <xs:element name='general-error' type='empty'/>
-        <xs:element name='gone' type='empty'/>
-        <xs:element name='incompatible-parameters' type='empty'/>
-        <xs:element name='media-error' type='empty'/>
-        <xs:element name='security-error' type='empty'/>
-        <xs:element name='success' type='empty'/>
-        <xs:element name='timeout' type='empty'/>
-        <xs:element name='unsupported-applications' type='empty'/>
-        <xs:element name='unsupported-transports' type='empty'/>
+      <xs:choice minOccurs='1' maxOccurs='1'>
+        <xs:element name='busy' type='empty' />
+        <xs:element name='cancel' type='empty' />
+        <xs:element name='decline' type='empty' />
+        <xs:element name='expired' type='empty' />
+        <xs:element name='gone' type='empty' />
+        <xs:element name='success' type='empty' />
+        <xs:element name='tie-break' type='empty' />
+        <xs:element name='timeout' type='empty' />
       </xs:choice>
-      <xs:element name='text' type='xs:string' minOccurs='0' maxOccurs='1'/>
-      <xs:any namespace='##other' minOccurs='0' maxOccurs='1'/>
+      <xs:any namespace='##other' minOccurs='0' maxOccurs='unbounded'/>
     </xs:sequence>
   </xs:complexType>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
 </xs:schema>
 ]]></code>
 </section1>
