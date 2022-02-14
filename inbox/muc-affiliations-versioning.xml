@@ -1,0 +1,204 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+  <!ENTITY mav0 'urn:xmpp:muc:affiliations:0'>
+  <!ENTITY muc 'http://jabber.org/protocol/muc'>
+  <!ENTITY muc-user 'http://jabber.org/protocol/muc#user'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>MUC Affiliations Versioning</title>
+  <abstract>This specification provides a way to reduce the amount of queries necessary to stay up-to-date with affiliations in a MUC room.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0045</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  &pep.;
+  &larma;
+  <revision>
+    <version>0.0.1</version>
+    <date>2022-02-12</date>
+    <initials>pep</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>Affiliations are a way in &xep0045; to handle permissions (ownership, membership, etc.). Currently, an observer gets the data in presence of online participants at the time of join, of new participants when they join, or when affiliation is changed. This observer has to send in one query per category (owner, admin, member, outcast) if they want to get a full view.</p>
+  <p>Caching this data can be tricky, as any member removed when the observer is offline is not likely to be caught until the 4 queries are run again. Having multiple queries can also produce race conditions where an occupant is moved out of a group (e.g., owners) to another group (e.g., members) while an observer queries, and they end up not seeing this occupant at all, or twice, or not in the correct group.</p>
+  <p>Affiliations have become more and more used lately, for example in so-called private groupchats, that is, a non-public, non-anonymous (visible JIDs), members-only room. Having to run all queries is particularly annoying in these private rooms where some implementations prefer to display all participants instead of online participants only, and where the affiliations list is used to know whom to encrypt to in an e2ee context.</p>
+  <p>This specification sets a versioning mechanism in place, allowing an observer in a room to get the latest changes from a known version, and to reduce the amount of round-trips to handle affiliations.</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Reduce the number of round-trips necessary to get the list of affiliations.</li>
+    <li>Allow an implementation to request a diff of affiliations since a known version.</li>
+  </ul>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di>
+      <dt>Full response</dt>
+      <dd>A response including the complete affiliation list.</dd>
+    </di>
+    <di>
+      <dt>Boostrap request</dt>
+      <dd>A request asking for a full reponse.</dd>
+    </di>
+  </dl>
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>A server implementing this specification MUST advertise the <tt>&mav0;</tt> as a &xep0030; feature on the &xep0045; room JID itself.</p>
+</section1>
+
+<section1 topic='Usage Flow' anchor='usage'>
+  <section2 topic='Client request' anchor='request'>
+    <p>When sending a join presence to a &xep0045; room, a client may include a <tt>since</tt> attribute in the <tt>&mav0;</tt> namespace on the <tt>&lt;x xmlns='&muc;'&gt;</tt> element. This attribute, a unique and opaque string, indicates the last affiliation version sent by the server that the client has seen, and cached. Sending an empty <tt>since</tt> attribute is a called bootstrap request, which asks the server for a full response.</p>
+
+    <p>This <tt>since</tt> attribute MUST NOT be broadcasted by the server to other participants. A room not stripping the attribute may disclose information about an occupant to other participants, even though this information is not intended for them.</p>
+
+    <example caption='Bootstrap request to get the full list.'><![CDATA[
+<presence to='news@chat.commons.example' from='louise@commons.example/desktop'>
+  <x xmlns=']]>&muc;<![CDATA['
+     xmlns:mav=']]>&mav0;<![CDATA['
+     mav:since='' />
+</presence>]]></example>
+    <example caption='Request since specific version.'><![CDATA[
+<presence to='news@chat.commons.example' from='rosa@commons.example/toaster'>
+  <x xmlns=']]>&muc;<![CDATA['
+     xmlns:mav=']]>&mav0;<![CDATA['
+     mav:since='9pacabr2q1' />
+</presence>]]></example>
+  </section2>
+
+  <section2 topic='Server Response' anchor='response'>
+    <section3 topic='On Join' anchor='self'>
+      <p>Returning the list of affiliation changes is done as a <tt>&MESSAGE;</tt> stanza inside the <tt>&lt;x xmlns='&muc-user;'&gt;</tt> element to which <tt>since</tt> and/or <tt>until</tt> attributes of namespace <tt>&mav0;</tt> MAY be added. Each affiliation is to be sent as an <tt>&lt;item&gt;</tt> element in the same namespace as its x parent, and MUST at least contain a <tt>jid</tt> attribute and an <tt>affiliation</tt> attribute, similarly to what is specified in <link url='https://xmpp.org/extensions/xep-0045.html#affil'>MUC Affiliations</link>.</p>
+      <p>The <tt>since</tt> attribute is used to reflect the version sent by the client and is the starting point of the diff that will be computed. The <tt>until</tt> attribute is the latest version the server has. When these attributes are present they MUST contain a valid version string (unique and opaque).</p>
+      <p>The reponse MUST be sent during the join process before any <tt>&PRESENCE;</tt> is sent to the joining user.</p>
+      <p>If a client sends a version that the server doesn't know, (e.g., because it only stores the last N versions, or the client made a mistake), the response MUST be a full response, with the <tt>since</tt> attribute not present, and the <tt>until</tt> attribute filled with the latest version.</p>
+      <p>If both attributes have the same value, meaning a client already has the latest version, the x element MUST be empty, only containing the two filled attributes.</p>
+      <p>There can be no empty diff but there can be empty full reponses (no affiliations).</p>
+
+      <example caption="Room full response for a version that it didn't know."><![CDATA[
+<message from='news@chat.commons.example'
+         to='louise@commons.example/desktop'>
+  <x xmlns=']]>&muc-user;<![CDATA['
+     xmlns:mav=']]>&mav0;<![CDATA['
+     mav:until='ruz41312vw'>
+    <item jid='louise@commons.example' affiliation='owner' />
+    <item jid='peter@commons.example' affiliation='owner' />
+    <item jid='rosa@commons.example' affiliation='owner' />
+  </x>
+</message>]]></example>
+      <example caption='Room versioned response.'><![CDATA[
+<message from='news@chat.commons.example'
+         to='louise@commons.example/desktop'>
+  <x xmlns=']]>&muc-user;<![CDATA['
+     xmlns:mav=']]>&mav0;<![CDATA['
+     mav:since='9pacabr2q1'
+     mav:until='ruz41312vw'>
+    <item jid='vladimir@commons.example' affiliation='none' />
+    <item jid='rosa@commons.example' affiliation='owner' />
+  </x>
+</message>]]></example>
+      <example caption='Room full response with no affiliation'><![CDATA[
+<message from='news@chat.commons.example'
+         to='louise@commons.example/desktop'>
+  <x xmlns=']]>&muc-user;<![CDATA['
+     xmlns:mav=']]>&mav0;<![CDATA['
+     mav:until='ruz41312vw'/>
+</message>]]></example>
+    </section3>
+
+    <section3 topic='Affiliation Changes' anchor='changes'>
+      <p>A new unique (to the room) version string MUST be generated for every affiliation change and included in the broadcast of this change.</p>
+      <p>When broadcasting an affiliation change (as a &PRESENCE; or &MESSAGE;), on the <tt>&lt;x xmlns='&muc-user;'&gt;</tt>, a MUC room MUST add the <tt>since</tt> attribute in the <tt>&mav0;</tt> namespace, containing the original version string (before the affiliation change), and the new version string (after the affiliation change) in the <tt>until</tt> attribute (of the same namespace).</p>
+    <p>Affiliation changes broadcasted to room occupants as &MESSAGE; defined as a MAY in &xep0045;, for example in <link url='https://xmpp.org/extensions/xep-0045.html#grantowner'>Granting Owner Status</link>, <link url='https://xmpp.org/extensions/xep-0045.html#grantadmin'>Granting Admin Status</link>, or <link url='https://xmpp.org/extensions/xep-0045.html#revokeadmin'>Revoking Admin Status</link>, MUST be supported by the MUC room when implementing this specification.</p>
+
+      <example caption='Room broadcasts an affiliation change for a user not in the room.'><![CDATA[
+<message from='news@chat.commons.example'
+         to='louise@commons.example/desktop'>
+  <x xmlns=']]>&muc-user;<![CDATA['
+     xmlns:mav=']]>&mav0;<![CDATA['
+     mav:since='9pacabr2q1'
+     mav:until='ruz41312vw'>
+    <item jid='peter@commons.example/mobile' affiliation='none' role='none'/>
+  </x>
+</message>]]></example>
+    </section3>
+
+    <section3 topic='Error Cases' anchor='errors'>
+      <p>Permissions are handled as with affiliation iq queries in &xep0045;, the same rules should be applied by the server when deciding who can use this protocol.</p>
+      <p>Some notes regarding permissions can be find in &xep0045;, for example in <link url='https://xmpp.org/extensions/xep-0045.html#affil-priv'>Affiliations</link>, or <link url="https://xmpp.org/extensions/xep-0045.html#modifymember">Modifying the member list</link>.</p>
+      <p>An <tt>auth forbidden</tt> error MUST be returned in a <tt>&MESSAGE;</tt> stanza if an observer doesn't have the necessary permissions to request affiliations.</p>
+
+      <example caption="This observer isn't allowed to query affiliations in the room"><![CDATA[
+<message from='news@chat.commons.example'
+         to='vladimir@commons.example/web'
+         id='foo' type='error'>
+  <error by='news@chat.commons.example' type='auth'>
+    <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</message>]]></example>
+    </section3>
+  </section2>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>An observer has to join the MUC room to use the protocol as the <tt>since</tt> element must be included in the join presence. This makes this specification less prone to vulnerabilities that may have happened with protocols such as MAM in the past (i.e., scraping information without being joined).</p>
+  <p>A server should be careful not to disclose past affiliation states. If an observer requests a version of which they weren't a part of, a server MUST return an error as specified in <link url='#errors'>Error Cases</link>.</p>
+  <p>When caching server responses, a client should make sure to associate the received version string to the room JID and not have a global cache for affiliation versions to prevent any cache poisoning issues.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with the &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>The XMPP Registrar includes the <tt>&mav0;</tt> namespace in its registry of protocol namespaces at <link url='https://xmpp.org/registrar/namespaces.html'>https://xmpp.org/registrar/namespaces.html</link>.</p>
+</section1>
+
+<section1 topic='Design Considerations' anchor='design'>
+  <p>This specification is based on the design of roster versioning, with the difference of since and until attributes, to ensure clients stay in sync because unlike roster versioning this may be running over c2s, <strong>and</strong> s2s which may break.</p>
+  <p>The <tt>&lt;x xmlns='http://jabber.org/protocol/muc[#user]/&gt;</tt> elements are not defined extensible in the &xep0045; specification, but as this is a negociated change there shouldn't be any issue.</p>
+  <p><strong>TODO? RSM.</strong> Pagination may have been useful for large rooms, when receiving a full response. Versioning will reduce the amount of bandwidth used for further queries though.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+  xmlns:xs='http://www.w3.org/2001/XMLSchema'
+  targetNamespace='urn:xmpp:muc:affiliations:0'
+  xmlns='urn:xmpp:muc:affiliations:0'
+  elementFormDefault='qualified'>
+
+  <xs:annotations>
+    <xs:documentation>
+      The protocol documented by this schema is defined
+      in XEP-xxxx: https://xmpp.org/extensions/xep-xxxx.html.
+    </xs:documentation>
+  </xs:annotations>
+
+  <!-- TODO: How do I schematize standalone attributes? -->
+  </xs:element>
+</xs:schema>]]></code>
+</section1>
+<section1 topic='Acknowledgements' anchor='registrar'>
+  <p>Thanks to Emmanuel Gil Peyrot and Matthew Wild for the valuable feedback.</p>
+</section1>
+</xep>
