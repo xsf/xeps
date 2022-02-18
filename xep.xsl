@@ -271,6 +271,28 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
               <xsl:with-param name='thetype' select='/xep/header/type'/>
             </xsl:call-template>
           </dd>
+          <xsl:variable name='supersedes.count' select='count(/xep/header/supersedes/spec)'/>
+          <xsl:choose>
+            <xsl:when test='$supersedes.count &gt; 0'>
+              <dt>Supersedes</dt>
+              <dd>
+                <xsl:apply-templates select='/xep/header/supersedes/spec'>
+                  <xsl:with-param name='speccount' select='$supersedes.count'/>
+                </xsl:apply-templates>
+              </dd>
+            </xsl:when>
+          </xsl:choose>
+            <xsl:variable name='supersededby.count' select='count(/xep/header/supersededby/spec)'/>
+          <xsl:choose>
+            <xsl:when test='$supersededby.count &gt; 0'>
+              <dt>Superseded By</dt>
+              <dd>
+                <xsl:apply-templates select='/xep/header/supersededby/spec'>
+                  <xsl:with-param name='speccount' select='$supersededby.count'/>
+                </xsl:apply-templates>
+              </dd>
+            </xsl:when>
+          </xsl:choose>
           <dt>Type</dt>
           <dd><xsl:value-of select='/xep/header/type'/></dd>
           <dt>Version</dt>
