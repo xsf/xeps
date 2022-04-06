@@ -10,7 +10,7 @@
   <abstract>This specification provides a way for XMPP entities to have a privileged access to some other entities data</abstract>
   &LEGALNOTICE;
   <number>0356</number>
-  <status>Deferred</status>
+  <status>Experimental</status>
   <type>Standards Track</type>
   <sig>Standards</sig>
   <approver>Council</approver>
@@ -26,6 +26,19 @@
     <email>goffi@goffi.org</email>
     <jid>goffi@jabber.fr</jid>
   </author>
+  <revision>
+    <version>0.4</version>
+    <date>2022-04-01</date>
+    <initials>jp</initials>
+    <remark>
+      <ul>
+        <li>Add "iq" privilege (necessary to implement XEPs such as &xep0376;).</li>
+        <li>Roster pushes are now transmitted to privileged entity with "roster" permission of "get" or "both". This can be disabled.</li>
+        <li>Reformulate to specify than only initial stanza and "unavailable" &PRESENCE; stanzas are transmitted with "presence" pemission.</li>
+        <li>Namespace bump.</li>
+      </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.3</version>
     <date>2017-09-11</date>
@@ -105,7 +118,7 @@
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
-    <p>XMPP components are used for long through &xep0114;, but are quite limited: they have a restricted access to other entities data, similar to what a client can do. This is sufficient for components like gateways, but very limiting for more complex components like a PubSub service. The goal of this XEP is to allow a component or any entity to have a "privileged" status, and access some other entity data with the same privileges than the entity itself, that means manage an entity roster on its behalf, send &MESSAGE; or receive &PRESENCE; stanzas in the name of the server.</p>
+    <p>XMPP components are used for long through &xep0114;, but are quite limited: they have a restricted access to other entities data, similar to what a client can do. This is sufficient for components like gateways, but very limiting for more complex components like a PubSub service. The goal of this XEP is to allow a component or any entity to have a "privileged" status, and access some other entity data with the same privileges than the entity itself, that means manage an entity roster on its behalf, send &MESSAGE;, &IQ; or receive &PRESENCE; stanzas in the name of the server.</p>
     <p>Privileged entities have numerous advantages, including:</p>
         <ul>
             <li>a step forward in decentralization: it is possible for an entity to do tasks which were before reserved to server itself. For example, a privileged pubsub component can offer access model based on publisher's roster</li>
@@ -121,8 +134,9 @@
 <section1 topic='Requirements' anchor='reqs'>
     <p>A privileged entity must be able to do what a PEP service can do and to access roster, so it must be able to (according to configuration):</p>
         <ul>
-            <li>get and modify the roster of any entity managed by the server</li>
+            <li>get and modify the roster of any entity managed by the server, and optionally get roster pushes</li>
             <li>send a &MESSAGE; stanza on behalf of the server</li>
+            <li>send a &IQ; stanza on behalf of a server user</li>
             <li>access &PRESENCE; informations for entities in a managed entity's roster (and for managed entity itself)</li>
         </ul>
     <p>The privilege mechanism MUST be totally transparent for the managed entities.</p>
@@ -145,15 +159,23 @@
                 <li><strong>set</strong> — the entity is allowed to send &IQ; stanzas of type <em>'set'</em> for namespace 'jabber:iq:roster'.</li>
                 <li><strong>both</strong> — the entity is allowed to send &IQ; stanzas of type <em>'get'</em> and <em>'set'</em> for namespace 'jabber:iq:roster'.</li>
             </ul>
+            <p>Roster access MAY have an optional "push" argument which can be set to "true" or "false" and SHOULD default to "true" if roster permission access type is either "get" or "both", and to "false" otherwise.</p>
+
+            <p>If set to "true", the server will send roster pushes as explained <link url="#roster_pushes">below.</link>. If set to "false", the server MUST NOT send roster pushes. The "false" value is mostly there to save resources if the managing entity knows that it doesn't need to be notified of roster updates. Roster pushes MUST NOT be sent if roster permission type is either "none" or "set".</p>
     </section2>
 
     <section2 topic='Server Advertises Entity Of Allowed Permission' anchor='advertise_roster'>
-        <p>Once a privileged entity is authenticated and stream is started, the server send it a &MESSAGE; stanza with a &lt;privilege/&gt; elements which MUST have the namespace 'urn:xmpp:privilege:1'. This element contains &lt;perm/&gt; elements which MUST contain a 'access' attribute of the value "roster" and a 'type' attribute which must correspond to the type configured as specified in <link url='#server_roster'>"Server Allows Roster Access" section</link></p>
+      <p>Once a privileged entity is authenticated and stream is started, the server send it a &MESSAGE; stanza with a &lt;privilege/&gt; elements which MUST have the namespace 'urn:xmpp:privilege:2'.</p>
+
+      <p>This element contains &lt;perm/&gt; elements which MUST contain a 'access' attribute of the value "roster" and a 'type' attribute which must correspond to the type configured as specified in <link url='#server_roster'>"Server Allows Roster Access" section</link>.</p>
+
+      <p>The &lt;perm&gt; element MAY contain a 'push' attribute with a value of either "true" or "false" according to configuration. If the 'push' attribute is omitted, it defaults to "true" if "roster" permission is "get" or "both", otherwise it's set to "false". If 'push' is "true", roster pushes MUST be transmitted, if 'push' is "false" they MUST NOT be transmitted.</p>
+
             <example caption='Server Advertises Roster Privilege'><![CDATA[
 <message from='capulet.net' to='pubub.capulet.lit' id='12345'>
-    <privilege xmlns='urn:xmpp:privilege:1'>
-        <perm access='roster' type='both'/>
-    </privilege>
+  <privilege xmlns='urn:xmpp:privilege:2'>
+    <perm access='roster' type='both' push='true'/>
+  </privilege>
 </message>
 ]]></example>
 <p>Here <em>pubsub.capulet.lit</em> is allowed to do <em>get</em> and <em>set</em> operations on all entities managed by capulet.lit</p>
@@ -167,24 +189,42 @@
     to='juliet@example.com'
     type='get'
     id='roster1'>
-        <query xmlns='jabber:iq:roster'/>
+      <query xmlns='jabber:iq:roster'/>
 </iq>
 ]]></example>
 
         <p>The server then answers normally, as it would have done to the managed entity:</p>
-            <example caption='Server Answers To Privileged Entity'><![CDATA[
+        <example caption='Server Answers To Privileged Entity'><![CDATA[
 <iq id='roster1'
-    from='juliet@example.com'
-    to='pubsub.capulet.net'
-    type='result'>
-    <query xmlns='jabber:iq:roster' ver='ver7'>
-        <item jid='nurse@example.com'/>
-        <item jid='romeo@example.net'/>
-    </query>
+  from='juliet@example.com'
+  to='pubsub.capulet.net'
+  type='result'>
+  <query xmlns='jabber:iq:roster' ver='ver7'>
+    <item jid='nurse@example.com'/>
+    <item jid='romeo@example.net'/>
+  </query>
 </iq>
 ]]></example>
 
     </section2>
+
+    <section2 topic="Server Sends Roster Pushes" anchor="roster_pushes">
+
+      <p>If "push" attribute is unset or set to "true" and roster permission type is either "get" or "both", the server MUST send roster pushes when there is a newly created, updated or deleted roster item for roster of any managed entity. A roster push is built as explained in &xmppim; with a 'from' attribute explicitely set to the bare jid of the managed entity.</p>
+
+        <example caption='Server Send Roster Push of Juliet to Privileged Entity'><![CDATA[
+<iq id='roster_push_1'
+  from='juliet@capulet.lit'
+  to='pubsub.capulet.lit'
+  type='set'>
+  <query xmlns='jabber:iq:roster'>
+    <item jid='nurse@example.com'/>
+  </query>
+</iq>
+]]></example>
+
+    </section2>
+
 </section1>
 
 <section1 topic='Message Permission' anchor='message'>
@@ -194,7 +234,7 @@
                 <li><strong>none</strong> — the entity is not allowed to send &MESSAGE; stanza in the name of the server. This is usually the default value.</li>
                 <li><strong>outgoing</strong> — the entity is allowed to send &MESSAGE; stanzas in the name of the server, according to following restrictions.</li>
             </ul>
-            <p>A privileged entity can then send message on the behalf either of the server or of a bare JID of an entity managed by the server (i.e. a bare jid with the same domain as the server), using &xep0297;. The &lt;forwarded/&gt; element MUST be a child of a &lt;privilege/&gt; element with a namespace of <em>'urn:xmpp:privilege:1'</em>, with the following restriction:</p>
+            <p>A privileged entity can then send message on the behalf either of the server or of a bare JID of an entity managed by the server (i.e. a bare jid with the same domain as the server), using &xep0297;. The &lt;forwarded/&gt; element MUST be a child of a &lt;privilege/&gt; element with a namespace of <em>'urn:xmpp:privilege:2'</em>, with the following restriction:</p>
         <ol>
             <li>forwarded &MESSAGE; 'from' attribute MUST be a bare JID from the server, no resource is allowed</li>
         </ol>
@@ -205,8 +245,8 @@
         <p>Server advertises "message" permission in the same way as for "roster" permission, except that 'access' attribute has the value of "message", and the 'type' attribute as a value of 'outgoing':</p>
         <example caption='Server Advertises Roster And Message Privileges'><![CDATA[
 <message from='capulet.net' to='pubub.capulet.lit' id='54321'>
-    <privilege xmlns='urn:xmpp:privilege:1'>
-        <perm access='roster' type='both'/>
+    <privilege xmlns='urn:xmpp:privilege:2'>
+        <perm access='roster' type='both' push='true'/>
         <perm access='message' type='outgoing'/>
     </privilege>
 </message>
@@ -217,56 +257,198 @@
         <p>Now that <em>pubsub.capulet.lit</em> is allowed, it can send messages using &lt;forwarded/&gt; elements.</p>
         <example caption='privileged entity send a notificaction message'><![CDATA[
 <message from='pubsub.capulet.lit' to='capulet.lit' id='notif1'>
-    <privilege xmlns='urn:xmpp:privilege:1'>
-        <forwarded xmlns='urn:xmpp:forward:0'>
-            <message from='juliet@capulet.lit'
-                id='foo'
-                to='romeo@montague.lit/orchard'
-                xmlns='jabber:client'>
-                <event xmlns='http://jabber.org/protocol/pubsub#event'>
-                    <items node='http://jabber.org/protocol/tune'>
-                        <item>
-                            <tune xmlns='http://jabber.org/protocol/tune'>
-                                <artist>Gerald Finzi</artist>
-                                <length>255</length>
-                                <source>Music for "Love's Labors Lost" (Suite for small orchestra)</source>
-                                <title>Introduction (Allegro vigoroso)</title>
-                                <track>1</track>
-                            </tune>
-                        </item>
-                    </items>
-                </event>
-                <delay xmlns='urn:xmpp:delay' stamp='2014-11-25T14:34:32Z'/>
-            </message>
-        </forwarded>
-    </privilege>
+  <privilege xmlns='urn:xmpp:privilege:2'>
+    <forwarded xmlns='urn:xmpp:forward:0'>
+      <message from='juliet@capulet.lit'
+        id='foo'
+        to='romeo@montague.lit/orchard'
+        xmlns='jabber:client'>
+        <event xmlns='http://jabber.org/protocol/pubsub#event'>
+          <items node='http://jabber.org/protocol/tune'>
+            <item>
+              <tune xmlns='http://jabber.org/protocol/tune'>
+                <artist>Gerald Finzi</artist>
+                <length>255</length>
+                <source>Music for "Love's Labors Lost" (Suite for small orchestra)</source>
+                <title>Introduction (Allegro vigoroso)</title>
+                <track>1</track>
+              </tune>
+            </item>
+          </items>
+        </event>
+        <delay xmlns='urn:xmpp:delay' stamp='2014-11-25T14:34:32Z'/>
+      </message>
+    </forwarded>
+  </privilege>
 </message>
 ]]></example>
         <p>The server sees that forwarded message 'from' attribute (<em>juliet@capulet.lit</em>) is a bare JID of the server, and that outgoing message permission was granted; it can now send the notification:</p>
         <example caption='server sends the notification as if it was originating from him'><![CDATA[
 <message from='juliet@capulet.lit'
-    id='bar'
-    to='romeo@montague.lit/orchard'>
-    <event xmlns='http://jabber.org/protocol/pubsub#event'>
-        <items node='http://jabber.org/protocol/tune'>
-            <item>
-                <tune xmlns='http://jabber.org/protocol/tune'>
-                    <artist>Gerald Finzi</artist>
-                    <length>255</length>
-                    <source>Music for "Love's Labors Lost" (Suite for small orchestra)</source>
-                    <title>Introduction (Allegro vigoroso)</title>
-                    <track>1</track>
-                </tune>
-            </item>
-        </items>
-    </event>
-    <delay xmlns='urn:xmpp:delay' stamp='2014-11-25T14:34:32Z'/>
+  id='bar'
+  to='romeo@montague.lit/orchard'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='http://jabber.org/protocol/tune'>
+      <item>
+        <tune xmlns='http://jabber.org/protocol/tune'>
+          <artist>Gerald Finzi</artist>
+          <length>255</length>
+          <source>Music for "Love's Labors Lost" (Suite for small orchestra)</source>
+          <title>Introduction (Allegro vigoroso)</title>
+          <track>1</track>
+        </tune>
+      </item>
+    </items>
+  </event>
+  <delay xmlns='urn:xmpp:delay' stamp='2014-11-25T14:34:32Z'/>
 </message>
 ]]></example>
     </section2>
 </section1>
 
+<section1 topic='IQ permission' anchor='iq'>
+
+    <section2 topic='IQ Stanzas on Behalf of a Server User' anchor='iq_stanzas'>
+      <p>It may be necessary for a component to send &IQ; stanzas on behalf of a server user. This is, for instance, the case for a pubsub component willing to implement &xep0376;.</p>
+
+      <p>To do this, an "iq" permission must be granted in server configuration.</p>
+        <p>To grant an "iq" permission, authorised namespaces must be specified and associated to a value indicating the type of &IQ; request which are allowed. The value is similar to the roster access type, there are 4 values possible:</p>
+            <ul>
+                <li><strong>none</strong> — the entity is not allowed to send &IQ; stanzas for this namespace.</li>
+                <li><strong>get</strong> — the entity is allowed to send &IQ; stanzas of type <em>'get'</em> for this namespace.</li>
+                <li><strong>set</strong> — the entity is allowed to send &IQ; stanzas of type <em>'set'</em> for this namespace.</li>
+                <li><strong>both</strong> — the entity is allowed to send &IQ; stanzas of type <em>'get'</em> and <em>'set'</em> for this namespace.</li>
+            </ul>
+    </section2>
+
+    <section2 topic='Avertising Permission' anchor='advertise_iq'>
+      <p>Server adversites "iq" permission by using a &lt;perm&gt; element with an 'access' attribute of the value "iq" and wihout 'type' attribute. This element MAY contain any number of &lt;namespace&gt; elements with a 'ns' attribute of the value of the granted namespace, and a 'type' attribute with one of the value indicated in <link url="#iq_stanzas">previous section</link></p>
+      <example caption="Server Advertises IQ Privilege"><![CDATA[
+<message from='capulet.net' to='pubub.capulet.lit' id='iq_perm_1'>
+  <privilege xmlns='urn:xmpp:privilege:2'>
+    <perm access='iq'>
+      <namespace ns='http://jabber.org/protocol/pubsub' type='set' />
+    </perm>
+  </privilege>
+</message>
+        ]]></example>
+      <p>Here <em>pubsub.capulet.lit</em> is allowed to send &IQ; stanza of type <em>set</em> with the namespace 'http://jabber.org/protocol/pubsub' on behalf of any entity managed by capulet.lit</p>
+    </section2>
+
+    <section2 topic='Sending IQ Stanzas' anchor='sending_iq'>
+      <p>Sending an &IQ; stanza on behalf of a user is done by following those steps:</p>
+      <ul>
+        <li>generate the &IQ; stanza which much be sent on behalf of the user, we call it "encapsulated &IQ; stanza". The 'type' attribute and the namespace of the payload element must match the "iq" permission granted by the server. This &IQ; stanza MUST have a namespace of "jabber:client"</li>
+        <li>the encapsulated &IQ; stanza MUST either have no 'from' attribute, or a 'from' attribute set to the bare jid of the entity on behalf of who the privileged entity is doing the request</li>
+        <li>encapsulate the &IQ; request in a &lt;privileged_iq&gt; element with a namespace of 'urn:xmpp:privilege:2'</li>
+        <li>use the &lt;privileged_iq&gt; element as payload of a top-level &IQ; request adressed to the bare JID of the managed entity</li>
+        <li>use the same type for top-level &IQ; request as for the encapsulated &IQ; request</li>
+      </ul>
+
+      <p>The server MUST refuse the request with a &forbidden; error if any of the following condition happens:</p>
+      <ul>
+        <li>the 'to' attribute of the top-level &IQ; stanza is not a bare JID of a managed entity</li>
+        <li>the requesting entity has not the permission granted for the namespace used in payload of the encapsulated &IQ; stanza</li>
+        <li>the requesting entity has not the permission granted for the type of &IQ; request used in the encapsulated &IQ; stanza for the namespace used in its payload</li>
+        <li>the namespace of the encapsulated &IQ; stanza is not "jabber:client"</li>
+        <li>the 'from' attribute of the encapsulated &IQ; stanza exists and is set to a JID which doesn't match the 'to' attribute of the top-level &IQ; stanza.</li>
+        <li>the 'type' attribute of the top-level &IQ; stanza does not match the 'type' attribute of the encapsulated &IQ; stanza</li>
+      </ul>
+      <p>Once the server gets the &IQ; response, it sends it back to privileged entity using a &xep0297; &lt;forward&gt; element encapsulated in a &lt;privilege&gt; element with a namespace of 'urn:xmpp'.</p>
+      <p>In following example, the pubsub component <em>pubsub.capulet.lit</em> handles &xep0376;. After getting a pubsub subscribe request, from Juliet to subscribe to Romeo's blog, it forward it to Romeo's server:</p>
+      <example caption='Privileged Entity Send an &IQ; Stanza on Behalf of Juliet'><![CDATA[
+      <iq
+        from='pubsub.capulet.lit'
+        to='juliet@capulet.lit'
+        type='set'
+        id='priv_iq_1'>
+      <privileged_iq xmlns='urn:xmpp:privilege:2'>
+        <iq
+          xmlns='jabber:client'
+          type='set'
+          to='romeo@montaigu.lit'
+          id='sub_1'>
+          <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+            <subscribe
+              node='urn:xmpp:microblog:0'
+              jid='juliet@capulet.lit'/>
+          </pubsub>
+      </iq>
+    </privileged_iq>
+  </iq>
+      ]]></example>
+    <p>When receiving this stanza, the server does a couple of things:</p>
+    <ul>
+      <li>It checks that top-level &IQ; stanza is addressed to the bare JID of a managed entity: it's the case for <em>juliet@capulet.lit</em>.</li>
+    	<li>It decapsulate the encapsulated &IQ; stanza, check that it's namespace is 'jabber:client' and that its 'type' attribute has the same value as the top-level &IQ; stanza. It's "set" in both case, so it's good.</li>
+    	<li>It gets the payload of the encapsulated &IQ; stanza, and checks that <em>pubsub.capulet.lit</em> is authorised to send priviled &IQ; for its namespace with the given &IQ; type. Here the payload has a namespace of 'http://jabber.org/protocol/pubsub' and the &IQ; a type of "set", this combination is authorised for <em>pubsub.capulet.lit</em>, it's good.</li>
+    	<li>It checks that the encapsulated &IQ; stanza either has no 'from' attribute or has a 'from' attribute mathing the bare JID set in 'to' attribute of the top-level &IQ; stanza. Here no 'from' attribute is set, it's good.</li>
+      <li>It sets the 'from' attribute of the encapsulated &IQ; stanza to same value as the 'to' attribute of the top-level &IQ; stanza (i.e. the bare JID of the managed entity).</li>
+    	<li>Once everything is checked, it can then send the encapsulated &IQ; as if it were sent by Juliet herself (the only difference is that the 'from' attribute has no resource while it would have the resource of Juliet's client if she was sending it herself).</li>
+    </ul>
+
+    <example caption='Server Send the Encapsulated &IQ; Stanza'><![CDATA[
+<iq
+  xmlns='jabber:client'
+  type='set'
+  from='juliet@capulet.lit'
+  to='romeo@montaigu.lit'
+  id='sub_1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscribe
+      node='urn:xmpp:microblog:0'
+      jid='juliet@capulet.lit'/>
+  </pubsub>
+</iq>
+    ]]></example>
+
+    <p>The server will then get the response with a type of either "result" or "error" as specified in &xmppcore;. It sends it back to <em>pubsub.capulet.lit</em> using a &xep0297; &lt;forward&gt; element:</p>
+
+    <example caption='Server Gets the &IQ; Response and Forward it to Privileged Entity'><![CDATA[
+<iq type='result'
+    from='romeo@montaigu.lit'
+    to='juliet@capulet.lit'
+    id='sub_1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscription
+        node='urn:xmpp:microblog:0'
+        jid='juliet@capulet.lit'
+        subid='some_id'
+        subscription='subscribed'/>
+  </pubsub>
+</iq>
+
+<iq
+  type='result'
+  from='juliet@capulet.lit'
+  to='pubsub.capulet.lit'
+  id='priv_iq_1'>
+  <privilege xmlns="urn:xmpp:privilege:2">
+    <forwarded xmlns='urn:xmpp:forward:0'>
+      <iq type='result'
+        from='romeo@montaigu.lit'
+        to='juliet@capulet.lit'
+        id='sub_1'>
+        <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+          <subscription
+            node='urn:xmpp:microblog:0'
+            jid='juliet@capulet.lit'
+            subid='some_id'
+            subscription='subscribed'/>
+        </pubsub>
+      </iq>
+    </forwarded>
+  </privilege>
+</iq>
+]]></example>
+
+<p><em>pubsub.capulet.lit</em> has now subscribed to Romeo's blog on behalf of Juliet.</p>
+
+</section2>
+</section1>
+
 <section1 topic='Presence Permission' anchor='presence'>
+
     <section2 topic='Managed Entity Presence' anchor='managed_ent_presence'>
         <p>It can be often desirable for a privileged entity to have presence information of the managed entities (e.g. to know when to send them notificiations). As privileges must be transparent for the managed entity, this presence has to be sent by the server without modifying managed entity roster.</p>
         <p>This is allowed in server configuration in the same way as for <em>roster</em> and <em>message</em> permissions. The "presence" type can have the following values:</p>
@@ -276,7 +458,7 @@
                 <li><strong>roster</strong> — the entity is allowed to receive presence informations of managed entity contacts, see <link url='#roster_presence'>Roster Presence section</link>.</li>
             </ul>
             <p>If the privilege is granted, the server MUST use a directed presence from the full jid of the managed entity, to the privileged entity, as specified in &rfc6121; section 4.6, on the behalf of managed entity each time its presence information change.</p>
-            <p>Only presences with no 'type' attribute or with a 'type' attribute with the value "unavailable" are transmitted to the privileged entity, the server MUST NOT transmit &PRESENCE; stanza of any other type.</p>
+            <p>Only initial &PRESENCE; stanzas and &PRESENCE; stanzas with a 'type' attribute with the value "unavailable" are transmitted to the privileged entity, the server MUST NOT transmit any other &PRESENCE; stanza.</p>
     </section2>
 
     <section2 topic='Advertising Permission' anchor='advertise_managed_presence'>
@@ -285,22 +467,22 @@
 
     <section2 topic="Server Send presence informations" anchor='server_send_presence'>
         <p>Once the "presence" permission is granted, the server send presence informations:</p>
-<example caption='server receives new presence from Juliet'><![CDATA[
+<example caption='Server Receives Initial &PRESENCE; from Juliet'><![CDATA[
 <presence from='juliet@capulet.lit/balcony'
-          id='presence1'
-          xml:lang='en'>
-    <show>chat</show>
-    <status>Staying on the balcony</status>
+  id='presence1'
+  xml:lang='en'>
+  <show>chat</show>
+  <status>Staying on the balcony</status>
 </presence>
 ]]></example>
 
 <example caption='server redirects presence to privileged entity'><![CDATA[
 <presence from='juliet@capulet.lit/balcony'
-          to='pubsub.capulet.lit'
-          id='presence1'
-          xml:lang='en'>
-    <show>chat</show>
-    <status>Staying on the balcony</status>
+  to='pubsub.capulet.lit'
+  id='presence1'
+  xml:lang='en'>
+  <show>chat</show>
+  <status>Staying on the balcony</status>
 </presence>
 ]]></example>
 
@@ -319,11 +501,14 @@
         <p>Server advertises roster "presence" permission in the same way as for other permissions, except that the 'access' attribute has the value of "presence", and the 'type' attribute has a value of "roster"</p>
         <example caption='Server Advertises Roster, Message, Managed Entity Presence and Roster Presence Privileges'><![CDATA[
 <message from='capulet.net' to='pubub.capulet.lit' id='54321'>
-    <privilege xmlns='urn:xmpp:privilege:1'>
-        <perm access='roster' type='both'/>
-        <perm access='message'/>
-        <perm access='presence' type='roster'/>
-    </privilege>
+  <privilege xmlns='urn:xmpp:privilege:2'>
+    <perm access='roster' type='both' push='true'/>
+    <perm access='message' type='none'/>
+    <perm access='iq'>
+      <namespace ns='http://jabber.org/protocol/pubsub' type='set' />
+    </perm>
+    <perm access='presence' type='roster'/>
+  </privilege>
 </message>
 ]]></example>
 <p>Note the presence of <em>roster</em> permission request.</p>
@@ -353,6 +538,7 @@
     <ol>
         <li>Privileged entitiy has access to sensitive data, and can act as the server itself, permissions should be granted carefuly, only if you absolutely trust the entity.</li>
         <li><link url='#roster_presence'>Roster presence</link> is particulary sensitive, because presence informations of whole rosters are shared.</li>
+        <li><link url='#iq_stanzas'>IQ permission</link> namespaces and types must be granted carefuly, as they allow component to act on behalf of any user of the server.</li>
         <li>Generaly, the server MUST NOT allow the privileged entity to do anything that the managed entity could not do.</li>
     </ol>
 </section1>
@@ -363,9 +549,9 @@
 
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
   <section2 topic='Protocol Namespaces' anchor='ns'>
-    <p>The &REGISTRAR; includes 'urn:xmpp:privilege:1' in its registry of protocol namespaces (see &NAMESPACES;).</p>
+    <p>The &REGISTRAR; includes 'urn:xmpp:privilege:2' in its registry of protocol namespaces (see &NAMESPACES;).</p>
     <ul>
-      <li>urn:xmpp:privilege:1</li>
+      <li>urn:xmpp:privilege:2</li>
     </ul>
   </section2>
   <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
@@ -378,39 +564,57 @@
 <?xml version='1.0' encoding='UTF-8'?>
 
 <xs:schema
-    xmlns:xs='http://www.w3.org/2001/XMLSchema'
-    targetNamespace='urn:xmpp:privilege:1'
-    xmlns='urn:xmpp:privilege:1'
-    elementFormDefault='qualified'>
+  xmlns:xs='http://www.w3.org/2001/XMLSchema'
+  targetNamespace='urn:xmpp:privilege:2'
+  xmlns='urn:xmpp:privilege:2'
+  elementFormDefault='qualified'>
 
   <xs:element name='privilege'>
-      <xs:complexType>
-          <xs:element name='perm'
-                      maxOccurs='unbounded'>
-              <xs:complexType>
-                  <xs:attribute name='access' use='required' type='xs:string'/>
-                      <xs:simpleType base='xs:NMTOKEN'>
-                          <xs:enumeration value='roster'/>
-                          <xs:enumeration value='message'/>
-                          <xs:enumeration value='presence'/>
-                      </xs:simpleType>
-                  <xs:attribute name='type' use='required'>
-                      <xs:simpleType base='xs:NMTOKEN'>
-                          <xs:enumeration value='none'/>
-                          <xs:enumeration value='get'/>
-                          <xs:enumeration value='set'/>
-                          <xs:enumeration value='both'/>
-                          <xs:enumeration value='outgoing'/>
-                          <xs:enumeration value='managed_entity'/>
-                          <xs:enumeration value='roster'/>
-                      </xs:simpleType>
-                  </xs:attribute>
-              </xs:complexType>
+    <xs:complexType>
+      <xs:element name='perm'
+        maxOccurs='unbounded'>
+        <xs:complexType>
+          <xs:attribute name='access' use='required' type='xs:string'/>
+          <xs:simpleType base='xs:NMTOKEN'>
+            <xs:enumeration value='roster'/>
+            <xs:enumeration value='message'/>
+            <xs:enumeration value='presence'/>
+          </xs:simpleType>
+          <xs:attribute name='type' use='optional'>
+            <xs:simpleType base='xs:NMTOKEN'>
+              <xs:enumeration value='none'/>
+              <xs:enumeration value='get'/>
+              <xs:enumeration value='set'/>
+              <xs:enumeration value='both'/>
+              <xs:enumeration value='outgoing'/>
+              <xs:enumeration value='managed_entity'/>
+              <xs:enumeration value='roster'/>
+            </xs:simpleType>
+          </xs:attribute>
+          <xs:attribute name='push' type='xs:boolean' use='optional' default='true' />
+          <xs:element name='namespace'
+            maxOccurs='unbounded'
+            use='optional'>
+            <xs:complexType>
+              <xs:attribute name='ns' use='required' type='xs:string'/>
+              <xs:attribute name='type' use='required'>
+                <xs:simpleType base='xs:NMTOKEN'>
+                  <xs:enumeration value='none'/>
+                  <xs:enumeration value='get'/>
+                  <xs:enumeration value='set'/>
+                  <xs:enumeration value='both'/>
+                </xs:simpleType>
+              </xs:attribute>
+            </xs:complexType>
           </xs:element>
-      </xs:complexType>
-</xs:element>
+        </xs:complexType>
+      </xs:element>
+    </xs:complexType>
+  </xs:element>
 
-</xs:schema>
+  <xs:element name='privileged_iq' />
+
+  </xs:schema>
 ]]></code>
 </section1>
 
