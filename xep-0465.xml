@@ -1,0 +1,207 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Pubsub Public Subscriptions</title>
+  <abstract>This specification provides a way to make subscriptions to a node public</abstract>
+  &LEGALNOTICE;
+  <number>0465</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0376</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>pps</shortname>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.1.0</version>
+    <date>2022-05-17</date>
+    <initials>XEP Editor (jsc)</initials>
+    <remark>Accepted by vote of Council on 2022-04-13.</remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2022-03-30</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+    <p>&xep0060; as its name states has a mechanism to subscribe to a node. Only the owner of the node can retrieve the list of subscribers</p>
+    <p>It may be interesting for users to share publicly the nodes they have subscribed to, or who is subscribed to theirs: it's a quick way to discover center of interest of a user, or to discover new accounts/nodes related to a specific center of interest. This kind of feature is common in modern social networks and often named "following" and "followers". This XEP proposes a solution to implement this feature in XMPP while respecting privacy of users.</p>
+    <p>There is currently a XEP partially covering this problem with &xep0330;. This XEP has the advantage to be usable with a generic Pubsub service, but it has 2 flaws:</p>
+    <ul>
+        <li>it's only covering half of the problem: we get the pubsub nodes to which an entity is subscribed, but we don't know who is subscribed to a node</li>
+        <li>clients need to keep the 'urn:xmpp:pubsub:subscription' node synchronized with subscriptions: if a subscription is removed from a node, it may stay present by mistake in 'urn:xmpp:pubsub:subscription' node.</li>
+    </ul>
+    <p>This XEP fixes both issues.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The design goal of this XEP are:</p>
+  <ul>
+      <li>let a user discover to which node an other user is publicly subscribed</li>
+      <li>let a user discover who is publicly subscribed to a node</li>
+      <li>take care of privacy: a user must declare a subscription public on purpose</li>
+      <li>keep public subscription synchronized with nodes subscriptions</li>
+  </ul>
+  <p>This XEP uses &xep0376; as only way to subscribe to a node and unsubscribe from a node, as it is necessary to keep track of subscriptions.</p>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+    <p>In this documentation, <strong>PAM service</strong> refers to a PEP service implementing &xep0376;.</p>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+    <section2 topic="Public Subscription" anchor="public_subscription">
+        <p>Romeo wants to subscribe to the blog of his cousin Benvolio and he wants to make it public, so other peoples can discover Benvolio blog more easily.</p>
+        <p>He does that as usual by sending a subscription request as explained in <link url="https://xmpp.org/extensions/xep-0376.html#subs">XEP-0376 §Subscribing</link> but he adds a &lt;public&gt; element with the 'urn:xmpp:pps:0' namespace:</p>
+        <example caption="Romeo Makes a Public Subscription to Benvolio Blog"><![CDATA[ 
+<iq type='set' id='sub1'>
+  <pam xmln='urn:xmpp:pam:0' jid='benvolio@montague.lit'>
+    <subscribe xmlns='http://jabber.org/protocol/pubsub'
+        node='urn:xmpp:microblog:0'
+        jid='romeo@montague.lit'>
+        <public xmlns='urn:xmpp:pps:0'/>
+    </subscribe>
+  </pam>
+</iq>
+    ]]></example>
+<p>Romeo also wants to follow the blog of this girl that he met at the ball, however, he doesn't want yet to make it public for political reasons. He then does the subscription as usual and <strong>does not</strong> include the &lt;public&gt; element:</p>
+        <example caption="Romeo Makes a Non Public Subscription to Juliet Blog"><![CDATA[ 
+<iq type='set' id='sub2'>
+  <pam xmln='urn:xmpp:pam:0' jid='juliet@capulet.lit'>
+    <subscribe xmlns='http://jabber.org/protocol/pubsub'
+        node='urn:xmpp:microblog:0'
+        jid='romeo@montague.lit'/>
+  </pam>
+</iq>
+    ]]></example>
+    </section2>
+
+    <section2 topic="Retrieving Public Subscriptions" anchor="retrieving_subs">
+        <p>Mercutio is a friend of Romeo and he wants to know which nodes Romeo is subscribed to, as it may be a way to discover new and interesting peoples. To do this, Romeo's PAM service manages a special node named 'urn:xmpp:pps:subscriptions:0'. This node is created and managed by the PAM service itself, it can be subscribed to and unsubscribed from as an usual PubSub node, and it contains an item for each public subscription that has been made by node owner (Romeo in our example). Each items payload is a &lt;subscription&gt; element with the 'urn:xmpp:pps:0' namespace containing a 'node' attribute with the name of the subscribed node, and a 'jid' attribute with the JID of the pubsub service containing the subscribed node.</p>
+
+        <p>The node owner can't add or retract items directly on the node: if Romeo wants to add or public subscription, it does this by doing a public subscription as explained in <link url="public_subscription">Public Subscription</link>, and if he wants to retract a public subscription, he can do as explained in the <link url="#retracting_public_subs">next section</link>. &xep0059; and &xep0442; apply normally if they are implemented.</p>
+
+        <example caption="Mercutio Get Public Subscriptions of Romeo"><![CDATA[ 
+<iq type='get'
+    from='mercutio@escalus.lit/play.456'
+    to='romeo@montague.lit'
+    id='get_pub_sub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:pps:subscriptions:0'/>
+  </pubsub>
+</iq>
+    ]]></example>
+        <example caption="Romeo's PAM Service Replies With Public Subscriptions"><![CDATA[ 
+<iq type='result'
+    from='romeo@montague.lit'
+    to='mercutio@escalus.lit/play.456'
+    id='get_pub_sub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:pps:subscriptions:0'>
+      <item id='abcd'>
+          <subscription xmlns='urn:xmpp:pps:0' node='urn:xmpp:microblog:0' jid='benvolio@montague.lit' />
+      </item>
+    </items>
+  </pubsub>
+</iq>
+    ]]></example>
+    </section2>
+
+    <section2 topic="Retracting Public Subscriptions" anchor="retracting_public_subs">
+        <p>Romeo can retract a public subscription in 2 ways:</p>
+        <ul>
+            <li>by unsubscribing entirely from the node as explained in <link url="https://xmpp.org/extensions/xep-0376.html#unsub">XEP-0376 §Unsubscribing</link>. In this case the PAM service remove the node from public subscriptions (it won't appear anymore if somebody <link url="#retrieving_subs">retrieves subscriptions</link>) and unsubscribe from the node.</li>
+            <li>by subscribing again to the node <strong>without</strong> the &lt;public&gt; element, as explained in <link url="XEP-0376 §Subscribing">https://xmpp.org/extensions/xep-0376.html#subs</link>. In this case the PAM service remove the node from public subscriptions, and forward the request to the pubsub service (so the pubsub service also knows that the subscription is not public anymore).</li>
+        </ul>
+    </section2>
+
+    <section2 topic="Retrieving Public Subscribers to a node" anchor="retrieving_public_subscribers">
+        <p>If Mercutio wants to know who is publicly subscribing to Romeo's blog, he request the PAM Service by using a special node managed by the service in a similar way as 'urn:xmpp:pps:0' node from <link url="retrieving_subs">Retrieving Public Subscriptions section</link> (i.e. a node which can be subscribed to normally, but whose items can't be publised or retracted directly). This node is named by prefixing the name of the target node with 'urn:xmpp:pps:subscribers:0/'. So to check who is subscribed to Romeo's blog, Mercutio must request 'urn:xmpp:pps:subscribers:0/urn:xmpp:microblog:0' node. The service will answer with items whose payload is a &lt;subscriber&gt; element with the 'urn:xmpp:pps:0' namespace, and a 'jid' attribute whose value is the JID of the public subscriber:</p>
+        <example caption="Mercutio Get Public Subscribers of Romeo's blog"><![CDATA[ 
+<iq type='get'
+    from='mercutio@escalus.lit/play.456'
+    to='romeo@montague.lit'
+    id='get_pub_sub2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+      <items node='urn:xmpp:pps:subscribers:0/urn:xmpp:microblog:0'/>
+  </pubsub>
+</iq>
+    ]]></example>
+        <example caption="Romeo's PAM Service Replies With Public Subscribers"><![CDATA[ 
+<iq type='result'
+    from='romeo@montague.lit'
+    to='mercutio@escalus.lit/play.456'
+    id='get_pub_sub2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node=''urn:xmpp:pps:subscribers:0/urn:xmpp:microblog:0>
+      <item id='defg'>
+          <subscriber xmlns='urn:xmpp:pps:0' jid='benvolio@montague.lit' />
+      </item>
+    </items>
+  </pubsub>
+</iq>
+    ]]></example>
+<p><strong>note:</strong>Public subscribers is not restricted to PAM service, if a generic pubsub service implements this XEP, it MUST also returns the public subscribers when the special node is requested.</p>
+    </section2>
+
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <p>If a user wants to create, purge or delete a special node used in this XEP, or if they want to manually publish or retract items, the service MUST return a &forbidden; error to the user.</p>
+</section1>
+
+<section1 topic='discovering support' anchor='disco'>
+    <p>If a PEP or Pubsub service supports the "Pubsub Public Subscriptions" protocol, it must advertize it by including the "urn:xmpp:pps:0" discovery feature &NSNOTE; in response to a &xep0030; information request:</p>
+  <example caption="service discovery information request"><![CDATA[
+<iq from='example.org'
+    id='disco1'
+    to='example.com'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+  <example caption="service discovery information response"><![CDATA[
+<iq from='example.com'
+    id='disco1'
+    to='example.org'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    …
+    <feature var='urn:xmpp:pps:0'/>
+    …
+  </query>
+</iq>
+]]></example>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+    <p>Publishing publicly subscriptions of a user has pricacy implications: those public subscriptions may be used by someone to get a user interests or to know they network of contacts.</p>
+    <p>It may be used by bad actors for many reasons like advertising, or it may even be life threating in some countries/situation as it may be used to known political opinion, religion, sexual orientation, etc. A client SHOULD make the subscription public only if there is no doubt that this is what the user wants, by using an opt-in system, and SHOULD display a well visible warning about the consequences of making a subscription public.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>TODO</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>TODO</p>
+</section1>
+</xep>
