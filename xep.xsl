@@ -333,7 +333,11 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
           <dt>Status</dt>
           <dd><a>
             <xsl:attribute name='href'><xsl:text>https://xmpp.org/extensions/xep-0001.html#states-</xsl:text><xsl:value-of select='/xep/header/status'/></xsl:attribute>
-            <xsl:value-of select='/xep/header/status'/>
+            <xsl:choose>
+              <xsl:when test='string(/xep/header/status) = "Draft"'>Stable</xsl:when>
+              <xsl:otherwise><xsl:value-of select='/xep/header/status'/></xsl:otherwise>
+              <xsl:value-of select='/xep/header/status'/>
+            </xsl:choose>
           </a></dd>
           <dt>Type</dt>
           <dd><a>
