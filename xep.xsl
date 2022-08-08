@@ -704,7 +704,17 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
     <li>
       <xsl:variable name='anchor'>revision-history-v<xsl:value-of select='version'/></xsl:variable>
       <xsl:attribute name='id'><xsl:value-of select='$anchor'/></xsl:attribute>
-      <div class='revision-head'>Version <xsl:value-of select='version'/><xsl:text> </xsl:text>(<xsl:value-of select='date'/>)<xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='$anchor'/></xsl:call-template></div>
+      <div class='revision-head'>Version <a>
+        <xsl:attribute name='href'>
+          <xsl:text>https://xmpp.org/extensions/attic/xep-</xsl:text>
+          <xsl:value-of select='/xep/header/number'/>
+          <xsl:text>-</xsl:text>
+          <xsl:value-of select='version'/>
+          <xsl:text>.html</xsl:text>
+        </xsl:attribute>
+        <xsl:value-of select='version'/>
+      </a>
+      <xsl:text> </xsl:text>(<xsl:value-of select='date'/>)<xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='$anchor'/></xsl:call-template></div>
       <xsl:apply-templates select='remark'/>
       <div class='revision-author'><xsl:value-of select='initials'/></div>
     </li>
