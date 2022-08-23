@@ -1,0 +1,340 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Pubsub Attachments</title>
+  <abstract>This specification provides a way to attach elements to a pubsub item.</abstract>
+  &LEGALNOTICE;
+  <number>0470</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>XEP-0060</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>pubsub-attachments</shortname>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.1.0</version>
+    <date>2022-08-23</date>
+    <initials>XEP Editor (jsc)</initials>
+    <remark>Accepted by vote of Council on 2022-07-27.</remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2022-07-11</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+    <p>It is nowadays common to attach informations to messages or other items in various social networks: famous example are "like" (or "favourite") and "reactions" features.</p>
+    <p>While there are ways to attach informations to &MESSAGE; stanzas with extensions such as &xep0422; or &xep0444;, this is not the case for pubsub items</p>
+    <p>Some software use comments as a work-around for &xep0277;, by posting a single "♥" character to notify a "like". This has the advantage to work out of the box even if no specific implementation is done to manage this, but this has a couple of disadvantages:</p>
+    <ul>
+        <li>it only works with &xep0277;, it is not possible to like other kind of items;</li>
+        <li>it's polluting comments with an information which should be separated;</li>
+        <li>it doesn't handle uniqueness: a "like" should be doable only once per entity, but by using comments one can like thousand of times, and it's the receiving client which must ignore duplicates;</li>
+        <li>it doesn't scale: if thousand of people like a blog post, all comments must be retrieved and counted;</li>
+        <li>it's mixing metadata and content intended for human user;</li>
+        <li>this behaviour is found in the wild, but not standardized anywhere;</li>
+    </ul>
+    <p>This XEP proposes an alternative and generic solution, which can work with any kind of pubsub item.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The design goal of this XEP are:</p>
+  <ul>
+      <li>work with any kind of pubsub item, not only &xep0277;</li>
+      <li>handle uniqueness of attachment per JID</li>
+      <li>have an extensible mechanism for future use</li>
+      <li>re-use pubsub subscription and access control mechanism</li>
+      <li>suitable to implement feature similar to commonly seen "like/favourite" and "reaction".</li>
+      <li>optionally have a way to "group" or "summarize" informations: get a summary of all attachment without needing to retrieve each of them individually.</li>
+  </ul>
+  <p>To facilitate the bootstrapping of this XEP, it is also designed to work in a basic way with generic pubsub service. However, some implementation work is necessary to offer the full potential of the XEP (and notably to be able to scale).</p>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+    <ul>
+        <li><strong>like/favourite</strong>: a common way to indicate interest in item</li>
+        <li><strong>reaction</strong>: attaching one or more emoji(s) to an item</li>
+        <li><strong>attachment node</strong>: node where attached data of an item are published</li>
+        <li><strong>summary node</strong>: node managed by pubsub service which keep a summary of all attachment of target items</li>
+        <li><strong>target item</strong>: item to which metadata is attached</li>
+        <li><strong>target node</strong>: pubsub node where target items are published</li>
+        <li><strong>attachment item</strong>: item of the attachment node containing attachments by a specific JID</li>
+        <li><strong>summary item</strong>: item of the summary node linked to a target item</li>
+        <li><strong>attachment</strong>: child element of the &lt;attachments&gt; element, describing a metadata attached to a target item</li>
+    </ul>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+    <section2 topic="Basic Usage" anchor="basic">
+        <p>Romeo wants to indicate to Juliet that he has noticed her post about the balcony restoration. This &xep0277; item has been published on the PEP service of Juliet at service juliet@capulet.lit on the node 'urn:xmpp:microblog:0' and the item has the ID 'balcony-restoration-afd1'.</p>
+	<p>To do so he publishes the following item to the suitable attachment node:</p>
+  <example caption="Romeo Indicates To Juliet That He Has Noticed Her Publication"><![CDATA[
+  <iq from='romeo@montague.lit/123'
+    id='attachment_1'
+    to='juliet@capulet.lit'
+    type='set'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:pubsub-attachments:0/xmpp:juliet@capulet.lit?;node=urn%3Axmpp%3Amicroblog%3A0;item=balcony-restoration-afd1'>
+      <item id='romeo@montague.lit'>
+        <attachments>
+          <noticed timestamp="2022-07-11T12:07:24Z" />
+        </attachments>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+  ]]></example>
+<p>Few seconds later, Romeo reacts with some emojis, it does that with the following item, and his client takes care of keeping the &lt;noticed&gt; element above:</p>
+  <example caption="Romeo Add Reactions To Juliet Publication"><![CDATA[
+  <iq from='romeo@montague.lit/123'
+    id='attachment_2'
+    to='juliet@capulet.lit'
+    type='set'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:pubsub-attachments:0/xmpp:juliet@capulet.lit?;node=urn%3Axmpp%3Amicroblog%3A0;item=balcony-restoration-afd1'>
+      <item id='romeo@montague.lit'>
+        <attachments>
+          <noticed timestamp="2022-07-11T12:07:24Z" />
+          <reaction timestamp="2022-07-11T12:07:48Z">👷🔨</reaction>
+        </attachments>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+  ]]></example>
+      <section3 topic="Explanations">
+        <p>To attach metadata to a pubsub item, an "attachment node" MAY be created, either by the publisher of the target item, or by the pubsub service if it is fully-compliant with this XEP (see below).
+          This node name is generated by merging the following strings:</p>
+          <ul>
+            <li>the namespace '<strong>urn:xmpp:pubsub-attachments:0</strong>'</li>
+            <li>a slash "<strong>/</strong>"</li>
+            <li>the <strong>XMPP URI</strong> of the target item as explained at <link url="https://xmpp.org/extensions/xep-0060.html#impl-ur">XEP-0060 § Pubsub URIs</link></li>
+          </ul>
+        <p>Thus, in the example above, the node name to use for the item "balcony-restoration-afd1" of the node "urn:xmpp:microblog:0" located at PEP service "juliet@capulet.lit" is: "urn:xmpp:pubsub-attachments:0/xmpp:juliet@capulet.lit?;node=urn%3Axmpp%3Amicroblog%3A0;item=balcony-restoration-afd1"</p>
+        <p>This node SHOULD have the same access model than the target node.</p>
+        <p>To publish to this node, an entity MUST use its own bare JID for the ID of the item. It is both to keep the uniqueness of the item per JID and to make the retrieval of attachment for a particular entity easy.</p>
+        <p>The entity willing to publish attachment tries directly to publish to the above mentioned node. If the node doesn't exist (and is not created on the fly by the pubsub service, see below), the pubsub service SHOULD answer with &lt;item-not-found&gt; error as explained in <link url="https://xmpp.org/extensions/xep-0060.html#publisher-publish-error-node">XEP-0060 §7.1.3.3 Node Does Not Exist</link>. If the node doesn't not exist, that means that it's not possible to attach metadata to the target item, the entity willing to publish the attachment MUST NOT try to create the node itself (that would result in wrong ownership of the node).</p>
+        <p>An attachment payload is build with a top level &lt;attachments&gt; element which has zero, one or more child elements. This specification defines 2 child elements, &lt;noticed&gt; and &lt;reaction&gt;, but future XEPs may add their own elements qualified by their own namespaces to extend the functionalities. Each child element MAY have an optional 'timestamp' attribute indicating when the element has been attached. The value of this attribute is a DateTime as specified in &xep0082;.</p>
+        <p>Because there is one item per JID; to update, add or remove attachments an entity simply re-publish an item on the same node with its bare JID as ID. It is the responsibility of the publishing entity to republish all previously existing attachments (except those who need to be removed). If an XMPP client doesn't know a specific attachment, it MUST keep it and republish it when updating attachments.</p>
+        <p>All attachments of a specific JID can be deleted at once by retracting the item as specified at <link url="https://xmpp.org/extensions/xep-0060.html#publisher-delete">XEP-0060 §7.2 Delete an Item from a Node</link>. A client SHOULD not retract an attachment item if there are attachments it doesn't know, instead it SHOULD publish a new attachment item without the attachments which must be removed, and with the unknown attachments left in place.</p>
+      </section3> 
+    </section2>
+
+    <section2 topic="Full-Compliance" anchor="full-compliance">
+      <p>Previous section describes the basic usage of pubsub attachments, which works with generic pubsub service. However, even if it works out of the box, it relies on the goodwill of entities: an attacker or simply a bugged implementation could publish an item with wrong ID or somebody else bare JID, an item publisher client could miss the creation of attachment node, or give it bad access model, access model between attachment node and target node can become out of sync, etc.</p>
+      <p>To avoid these flaws, a pubsub service SHOULD implement the features described in this and following sections. If a pubsub service does so, it is said to be fully-compliant with pubsub attachments, and then and only then it can advertises the feature with &xep0030;</p>
+      <p>To be fully compliant, a PEP or pubsub service MUST implement the following features, which are explained in details below:</p>
+      <ul>
+        <li>auto-create attachment node, and keep its publish_model and access_model synchronized</li>
+        <li>forbid manual creation of attachment or summary node</li>
+        <li>check validity of items published to attachment node, and notably the item ID</li>
+        <li>create and maintain a summary node</li>
+        <li>handle &lt;noticed&gt; and &lt;reaction&gt; attachments</li>
+      </ul>
+    </section2>
+
+    <section2 topic="Automatic Node Creation" anchor="auto-create">
+      <p>When an attachments item is published to a fully-compliant pubsub service, and if the attachment node doesn't exist, the service MUST create automatically the node as explained at <link url="https://xmpp.org/extensions/xep-0060.html#publisher-publish-autocreate">XEP-0060 §7.1.4 Automatic Node Creation</link>, except that instead of applying the default configuration, it MUST apply the same access_model and publish_model as for the target node. The service MAY also copy other configuration options if they differ from default, it is up to the implementation to decide which other options are relevant to copy.</p>
+      <p>If the &IQ; stanza of the publishing client includes publishing options as explained in <link url="https://xmpp.org/extensions/xep-0060.html#publisher-publish-options">XEP-0060 § 7.1.5 Publishing Options</link>, they are ignored.</p>
+      <p>If later the target node configuration is updated and either access_model or pubsub_model are modified, the fully-compliant service MUST also update the attachment node pubsub_model and access_model accordingly.</p>
+    </section2>
+
+    <section2 topic="Manual Node Creation Rejection" anchor="node-creation-rejection">
+      <p>If any user, including owner of target node or publisher of target item, tries to create manually an attachment node or a summary node, a fully-compliant service MUST reject it by returning a &notallowed; error.</p>
+      <p>A client can see if a node creation is necessary by using &xep0030;: the presence of 'urn:xmpp:pubsub-attachments:0' feature in <em>disco#info</em> means that the service is fully-compliant, and that manual node creation MUST NOT be done.</p>
+    </section2>
+
+    <section2 topic="Checking Validity of Attachments Items" anchor="validity-check">
+      <p>When an entity publish an items with attachments to an attachment node, a fully-compliant service MUST check that the item is valid by</p>
+      <ol>
+        <li>Verifying that the item ID is equal to the bare jid of the item publisher</li>
+        <li>Verifying that the root element of the payload is an &lt;attachments&gt; element qualified by the 'urn:xmpp:pubsub-attachments:0' namespace</li>
+      </ol>
+      <p>If any of these points are not met, the service MUST reject the item by returning a &badrequest; error.</p>
+      <p>In addition to those 2 mandatory checks, a pubsub service MAY add implementation specific checks.</p>
+    </section2>
+
+    <section2 topic="Summary Node" anchor="summary-node">
+      <p>As soon as a first attachment is received, a fully-compliant pubsub service MUST create a "summary node". A summary node is a node maintained by the service which group all attachments of a kind, allowing client to have a good overview of the data without needing to retrieve individually all items of the attachment nodes of all target items.</p>
+      <p>A summary node has the same access_model as the attachment node, but nobody is allowed to publish directly to it. The summary node is linked to the target node, and its name is made by joining the following element:</p>
+      <ol>
+        <li>the '<strong>urn:xmpp:pubsub-attachments:summary:0</strong>' prefix</li>
+        <li>a slash "<strong>/</strong>"</li>
+        <li>the <strong>name of the target node</strong></li>
+      </ol>
+      <p>Thus in the initial example, for the blog of Juliet, the summary node name would be 'urn:xmpp:pubsub-attachments:summary:0/urn:xmpp:microblog:0' and it would be located at the PEP service juliet@capulet.lit.</p>
+      <p>For each item of the target node which has attachments, the summary node MUST contain an item which MUST have the same ID. This item contain a &lt;summary&gt; element qualified with the namespace 'urn:xmpp:pubsub-attachments:summary:0'. This item has elements with names matching attachments elements names, and a summary data which depend of the attachment. This specifications explain below how to summarize &lt;noticed&gt; and &lt;reaction&gt; attachments, it is the up to other XEPs specifying other features to explain how to summarize their own attachments. If a service doesn't know how to summarize an attachment, it SHOULD ignore it.</p>
+      <p>If a target item has no attachment at all, or if all attachments have been removed, the node MAY either return an &lt;item-not-found&gt; error, or an empty &lt;summary&gt; element, whatever is simpler for the service implementation.</p>
+      <p>Summary node subscriptions are working as for normal pubsub nodes: when a new attachment is published, resulting in the corresponding summary item updated, an event is sent with the new item to every subscribers.</p>
+  <example caption="Romeo Check Summary of Attachments of Juliet Blog"><![CDATA[
+  <iq from='romeo@montague.lit/123'
+    id='attachment_3'
+    to='juliet@capulet.lit'
+    type='get'>
+    <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+      <items node='urn:xmpp:pubsub-attachments:summary:0/urn:xmpp:microblog:0' />
+    </pubsub>
+  </iq>
+  ]]></example>
+  <example caption="Fully-Compliant Pubsub Service Returns Summary Items"><![CDATA[
+  <iq from='juliet@capulet.lit'
+    id='attachment_3'
+    to='romeo@montague.lit/123'
+    type='result'>
+    <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+      <items node='urn:xmpp:pubsub-attachments:summary:0/urn:xmpp:microblog:0'>
+        <item id='balcony-restoration-afd1'>
+          <summary xmlns='urn:xmpp:pubsub-attachments:summary:0'>
+            <noticed count="5" />
+            <reaction >
+              <multiple count="2">👷</multiple>
+                🔨🔧🚧
+            </reaction>
+          </summary>
+        </item>
+        <!-- ... -->
+      </items>
+    </pubsub>
+  </iq>
+  ]]></example>
+    </section2>
+
+    <section2 topic="Noticed Attachment" anchor="noticed">
+      <section3 topic='Foreword: "noticed" instead of "like" or "favourite"' anchor='noticed-foreword'>
+        <p>The &lt;noticed&gt; feature described here is similar to what is most often known as "like", and sometime "favourite". It has been decided to use "noticed" word to highlight a different spirit from its ancestors.</p>
+        <p>The "like" feature has been invented in mid 2000s on commercial social network. Over the years, this functionality has proven to be a borderline toxic problem. Among known issues, we can mention:</p>
+        <ul>
+          <li>It may cause addictive behaviour, people feeling need to get more "likes".</li>
+          <li>In contrast, the lack of like on a publication may lead to feelings of depression.</li>
+          <li>It is used as a marketing tool, to spy user tastes and interests. It can even be used to discover political orientation, sexual preferences or religious beliefs, which can be dangerous in some countries/locations.</li>
+          <li>It tend to diminish the quality of contents, by favoring metrics over contents themselves.</li>
+          <li>In some social networks, more likes means more visibility and having a better image, resulting in some people/organizations/companies buying fake likes.</li>
+          <li>The word "like" is ill-suited to bad news or dramatics events, when someone simply wants to show their support or empathy.</li>
+        </ul>
+        <p>For all these reasons, it has been decided to use the word "noticed" which reflect better the way it is used by some people (notably observed on some social network built on top of the ActivityPub protocol): it is then used as way to say "I have seen" or "I've taken that into account".</p>
+        <p>However, and for compatibly reason with other protocols (especially to have the tools to make gateways), the summary feature of &lt;noticed&gt; attachment does count the number of elements. After reading this note, it is up to the various implementations to decide whether to show this number prominently, inconspicuously, or not at all.</p>
+      </section3>
+      <section3 topic="Attachment Overview" anchor="noticed_overview">
+        <p>&lt;noticed&gt; element is attached by an entity to say that they have seen or taken into account something. On the client UI side, it is often published when user push a simple button or icon, and the attachment is often visible with the same icon displayed on the noticed item. If an icon is used, it is recommended to use something as neutral as possible, thus a heart icon SHOULD NOT be used to avoid misunderstanding between various implementations (also see <link url="#noticed-foreword">foreword</link> above). As for any attachment, an optional "timestamp" attribute MAY be set with a value of latest publication DateTime as specified in &xep0082;.</p>
+
+
+      </section3>
+      <section3 topic="Summarizing" anchor="noticed_summarizing">
+        <p>To summarize &lt;noticed&gt; attachments, a fully-compliant pubsub service just sum-up the total number of &lt;noticed&gt; elements found for the item, and put this number in "count" attribute of the summary  &lt;noticed&gt; element. In the example below, an item has been noticed 25 times.</p>
+
+  <example caption="Example of Noticed Attachment Summary"><![CDATA[
+  <iq from='pubsub.example.net'
+    id='attachment_4'
+    to='juliet@capulet.lit/123'
+    type='result'>
+    <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+      <items node='urn:xmpp:pubsub-attachments:summary:0/urn:xmpp:example:0'>
+        <item id='ball-event-ab1e'>
+          <summary xmlns='urn:xmpp:pubsub-attachments:summary:0'>
+            <noticed count="25" />
+          </summary>
+        </item>
+      </items>
+    </pubsub>
+  </iq>
+  ]]></example>
+      </section3>
+
+    </section2>
+
+    <section2 topic="Reaction Attachment" anchor="reaction">
+      <section3 topic="Attachment Overview" anchor="reaction_overview">
+        <p>&lt;reaction&gt; element lets an entity attach various emojis to an item. Emojis are simply put in the content of a &lt;reaction&gt; element, and a client MUST ensure that any given emoji only appears once at most. A for any attachment, a "timestamp" attribute may be set with the DateTime of latest publication.</p>
+
+
+      </section3>
+      <section3 topic="Summarizing" anchor="reaction_summarizing">
+        <p>To summarize &lt;reaction&gt; attachments, a fully-compliant pubsub service counts how many times each emoji is attached, ignoring duplicate from the same JID if any. If an emoji only appears once, it is simply put in the content of the &lt;reaction&gt;, however if it appears several times, it must be put in a &lt;multiple&gt; child element which MUST have a "count" attribute with the number of times that the emoji appears as value.</p>
+        <p>In following example, all emojis are attached only once to the item, except the woman dancing one which appears 22 times and the ballet shoes one which appears twice.</p>
+
+  <example caption="Example of reaction Attachment Summary"><![CDATA[
+  <iq from='pubsub.example.net'
+    id='attachment_5'
+    to='juliet@capulet.lit/123'
+    type='result'>
+    <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+      <items node='urn:xmpp:pubsub-attachments:summary:0/urn:xmpp:example:0'>
+        <item id='ball-event-ab1e'>
+          <summary xmlns='urn:xmpp:pubsub-attachments:summary:0'>
+            <reaction >
+              <multiple count="22">💃</multiple>
+              <multiple count="2">🩰</multiple>
+                🎉🥳🎈
+            </reaction>
+          </summary>
+        </item>
+      </items>
+    </pubsub>
+  </iq>
+  ]]></example>
+      </section3>
+
+    </section2>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>Similarly to "like" in commercial software, the "noticed" attachment can be used to analyse user's tastes, political view, religious beliefs, sexual orientation, etc. It is recommended that implementers post a prominent notice warning users of potential abuses.</li>
+    <li>Emoji pictures may differ widely on various platforms where they are displayed. This has already led to misunderstanding of reactions, as a slightly different picture can be interpreted in a completely different way from what the reaction author meant. Here again, a prominent notice in implementations warning user is recommended.</li>
+  </ul>
+</section1>
+
+<section1 topic='discovering support' anchor='disco'>
+  <p>If and only if a PEP or pubsub service is fully-compliant with the "Pubsub Attachments" protocol (as explained in <link url="full-compliance">Full-Compliance section</link>), it MUST advertise that fact by including the "urn:xmpp:pubsub-attachments:0" discovery feature in response to a &xep0030; information request:</p>
+  <example caption="service discovery information request"><![CDATA[
+<iq from='example.org'
+    id='disco1'
+    to='example.com'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+  <example caption="service discovery information response"><![CDATA[
+<iq from='example.com'
+    id='disco1'
+    to='example.org'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    …
+    <feature var='urn:xmpp:pubsub-attachments:0'/>
+    …
+  </query>
+</iq>
+]]></example>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>TODO</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>TODO</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>TODO</p>
+</section1>
+</xep>
