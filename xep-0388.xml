@@ -15,11 +15,31 @@
   <sig>Standards</sig>
   <dependencies>
     <spec>XMPP Core</spec>
+    <spec>rfc5802</spec>
+    <spec>XEP-0440</spec>
   </dependencies>
   <supersedes/>
   <supersededby/>
   <shortname>sasl2</shortname>
   &dcridland;
+  <author>
+    <firstname>Thilo</firstname>
+    <surname>Molitor</surname>
+    <email>thilo+xmpp@eightysoft.de</email>
+    <jid>thilo.molitor@juforum.de</jid>
+  </author>
+  <revision>
+    <version>0.4.0</version>
+    <date>2022-09-10</date>
+    <initials>tm</initials>
+    <remark>
+      <ul>
+        <li>Make SCRAM hashes upgradable</li>
+        <li>Bump namespace</li>
+        <li>Add dependency on &xep0440; and &rfc5802;</li>
+      </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.3.0</version>
     <date>2018-10-01</date>
@@ -85,35 +105,84 @@
     <li>Extensibility</li>
     <li>Support for second factor</li>
     <li>Support for mandatory password changes</li>
+    <li>Support for algorithm upgrades</li>
   </ul>
-  <p>The new SASL profile documented herein is primarily a syntactic change to allow extensibility, combined with removal of the (largely) redundant stream restart, and additional results beyond total success or abject failure.</p>
+  <p>The new SASL profile documented herein is primarily a syntactic change to allow extensibility, combined with removal of the (largely) redundant stream restart, and additional results beyond total success or abject failure, as well as an upgrade path for different SCRAM hashes.</p>
   <section2 topic="Terminology">
     <p>Although initiating entities, in general, use SASL, and receiving entities offer it, the SASL specification and common parlance both use "Client " and "Server"; this specification uses Client and Server and assumes C2S links. This is not intended to preclude use of this SASL profile on S2S links. The term "SASL2" is used to mean the new SASL profile specified in this document; however the same RFC 4422 definition of SASL (and SASL profiles) applies.</p>
     <p>Examples often use hypothetical SASL mechanisms and sub-extensions; this specification does not intend to make a position on any particular SASL mechanism, and the Mandatory To Implement mechanisms are unaffected.</p>
+    <p>But please keep in mind, that &rfc6120; § 13.8.3 states in it's security warning that "[...] A server SHOULD NOT offer TLS plus SASL PLAIN unless it is unable to offer some variant of SASL SCRAM [...]". See <link url="#security">Security Considerations</link> for more details.</p>
   </section2>
 </section1>
 
 <section1 topic='Overview' anchor="overview">
   <section2 topic="Discovering Support" anchor="feature">
-    <p>Servers capable of SASL2 offer a stream feature of &lt;mechanisms/>, qualified by the "urn:xmpp:sasl:1" namespace. This in turn contains one or more &lt;mechanism/> elements in the same namespace, and potentially other elements (for example, the &lt;hostname/> element defined within XEP-0233).</p>
-    <p>Note that SASL2 is impossible for clients to initiate without at least one mechanism being available, and therefore MUST NOT be offered.</p>
+    <p>Clients capable of SASL2 MUST send the desired BARE JID they want to authenticate for in the "from" attribute of the stream-header unless they don't know it (e.g. when using the GSS-API SASL mechanism etc.) according to &rfc6120; section 4.7.1.</p>
+    <p>Servers capable of SASL2 offer a stream feature of &lt;authentication/>, qualified by the "urn:xmpp:sasl:2" namespace. This in turn contains one or more &lt;mechanism/> elements in the same namespace, and potentially other elements (for example, the &lt;hostname/> element defined within &xep0233;). The mechanism elements MUST only offer mechanisms the server can offer for the JID provided by the client in the "from" attribute of the stream-header. If that atrribute does not contain a BARE JID, the server MUST only offer mechanisms it can provide independently of the JID.</p>
+    <p>The &lt;authentication/> element MAY contain a list of &lt;upgrade/> elements each containing a string value of a possible SASL mechanism the client can perform an upgrade task for. The list of mechanisms the client can upgrade the server to MUST not contain any mechanisms having a "-PLUS" suffix, because hash upgrades are independent of channel-binding.</p>
     <p>The feature so advertised, and its child content, SHOULD be stable for the given stream to and from attributes and encryption state, and therefore MAY be cached by clients for later connections.</p>
-    <p>The Service Name used by XMPP is unchanged from RFC 6120.</p>
+    <p>Note that SASL2 is impossible for clients to initiate without at least one mechanism being available, and therefore MUST NOT be offered if not at least one mechanism can be provided.</p>
+    <p>The Service Name used by XMPP is unchanged from &rfc6120;.</p>
+    <p>All servers and clients supporting channel-binding MUST implement &xep0440;.</p>
+    <example caption="Client sending stream header"><![CDATA[
+<?xml version='1.0'?>
+<stream:stream
+  from='user@example.org'
+  to='example.org'
+  version='1.0'
+  xml:lang='en'
+  xmlns='jabber:client'
+  xmlns:stream='http://etherx.jabber.org/streams'>
+]]></example>
+    <example caption="Server responding with stream header and features"><![CDATA[
+<?xml version='1.0'?>
+<stream:stream
+  from='example.org'
+  id='++TR84Sm6A3hnt3Q065SnAbbk3Y='
+  to='user@example.org'
+  version='1.0'
+  xml:lang='en'
+  xmlns='jabber:client'
+  xmlns:stream='http://etherx.jabber.org/streams'>
+<stream:features>
+  <authentication xmlns="urn:xmpp:sasl:2">
+    <mechanism>SCRAM-SHA-1</mechanism>
+    <mechanism>SCRAM-SHA-1-PLUS</mechanism>
+    <upgrade>SCRAM-SHA-256</upgrade>
+  </authentication>
+  <!-- Channel-binding information provided by XEP-0440 -->
+  <sasl-channel-binding xmlns='urn:xmpp:sasl-cb:0'>
+    <channel-binding type='tls-server-end-point'/>
+    <channel-binding type='tls-exporter'/>
+  </sasl-channel-binding>
+</stream:features>
+]]></example>
   </section2>
   <section2 topic="SASL Data Encoding">
     <p>In all cases, both Clients and Servers encode SASL exchanges using Base 64 encoding. This SHOULD NOT include any line wrapping or other whitespace. As the form &lt;element/> is equivalent to &lt;element>&lt;/element>, these both indicate an empty string. Challenges and responses with no data do not occur in SASL, and so require no special handling. To indicate the absence of an initial response, or the absence of success data, the element is simply not included.</p>
   </section2>
-  <section2 topic="Initiation">
-    <p>Clients, upon observing this stream feature, initiate the authentication by the use of the &lt;authenticate/> top-level element, within the same namespace. The nature of this element is to inform the server about properties of the final stream state, as well as initiate authentication itself. To achieve the latter, it has a single mandatory attribute of "mechanism", with a string value of a mechanism name offered by the Server in the stream feature, and an optional child element of &lt;initial-response/>, containing a base64-encoded SASL Initial Response.</p>
-    <p>On subsequent connections, if a Client has previously cache the stream feature, the Client MAY choose to send it before seeing the stream features - sending it "pipelined" with the Stream Open tag for example.</p>
+  <section2 topic="Initiation" anchor="initiation">
+    <p>Clients, upon observing this stream feature, initiate the authentication by the use of the &lt;authenticate/> top-level element within the same namespace. The nature of this element is to inform the server about properties of the final stream state, as well as initiate authentication itself and possibly ask for an upgrade task for the server-supported SASL mechanisms. To achieve this, it has a single mandatory attribute of "mechanism", with a string value of a mechanism name offered by the Server in the stream feature, an optional attribute of "upgrade", with a string value of a mechanism offered by the Server in an &lt;upgrade/> element in the stream feature, and an optional child element of &lt;initial-response/>, containing a base64-encoded SASL Initial Response. If the "mechanism" or "upgrade" attributes contain a string not previously announced by the server in in the stream feature, the server MUST fail the authentication.</p>
+    <p>If the stream's from attribute (if present) does not match the non-empty authorization string, the server MUST fail the authentication.</p>
+    <p>The Client MAY provide a list of &lt;mechanism/> and &lt;channel-binding/> elements containing the string value of the supported SASL mechanisms respective channel-bindings types as a subelement of a &lt;supported/> element in its &lt;authenticate/> element. This has only informational purpose and allows the server to create statistics of the supported SASL mechanisms and channel-binding types of it's clients.</p>
     <example caption="An authentication request"><![CDATA[
-<authenticate xmlns='urn:xmpp:sasl:1' mechanism="BLURDLYBLOOP">
-  <initial-response>Tm9ib2R5IGV2ZXIgZGVjb2RlcyB0aGUgZXhhbXBsZXMu</initial-response>
+<authenticate xmlns='urn:xmpp:sasl:2' mechanism="SCRAM-SHA-1-PLUS" upgrade="SCRAM-SHA-256">
+  <!-- Base64 of: 'p=tls-exporter,,n=user,r=12C4CD5C-E38E-4A98-8F6D-15C38F51CCC6' -->
+  <initial-response>cD10bHMtZXhwb3J0ZXIsLG49dXNlcixyPTEyQzRDRDVDLUUzOEUtNEE5OC04RjZELTE1QzM4RjUxQ0NDNg==</initial-response>
+  <!-- The client provides a list of supported SASL mechanisms and channel-binding types for informational purpose -->
+  <supported>
+    <mechanism>SCRAM-SHA-1</mechanism>
+    <mechanism>SCRAM-SHA-1-PLUS</mechanism>
+    <mechanism>SCRAM-SHA-256</mechanism>
+    <mechanism>SCRAM-SHA-256-PLUS</mechanism>
+    <channel-binding>tls-server-end-point</channel-binding>
+    <channel-binding>tls-exporter</channel-binding>  
+  </supported>
 </authenticate>
 ]]></example>
     <p>In order to provide support for other desired stream states beyond authentication, additional child elements are used. For example, a hypothetical XEP-0198 session resumption element might be included, and/or Resource Binding requests.</p>
-    <example caption="An authentication request with a (hypothetical) bind request"><![CDATA[
-<authenticate xmlns='urn:xmpp:sasl:1' mechanism='BLURDYBLOOP'>
+    <example caption="An authentication request with a (hypothetical) bind request, but without an upgrade attribute"><![CDATA[
+<authenticate xmlns='urn:xmpp:sasl:2' mechanism='BLURDYBLOOP'>
   <initial-response>
     SSBzaG91bGQgbWFrZSB0aGlzIGEgY29tcGV0aXRpb24=
   </initial-response>
@@ -121,54 +190,81 @@
 </authenticate>
 ]]></example>
   </section2>
+  <section2 topic="During Authentication">
+    <p>At any time while authentication is in progress, neither Client nor Server sends any element (including stanzas) or other data except the top-level elements defined herein. Clients MUST NOT send whitespace, and MUST send only &lt;response/> elements as appropriate or an &lt;abort/> element to immediately cause an error. Servers MUST disconnect Clients immediately if any other traffic is received. Servers are similarly REQUIRED to send no whitespace, and only the &lt;response/> and completion elements from the section below.</p>
+  </section2>
   <section2 topic="Challenges and Responses" anchor="challenge">
     <p>Server Challenges MAY then be sent. Each Challenge MUST be responded to by a Client in a Client Response. These are not extensible, and contain the corresponding base64 encoded SASL data:</p>
-    <example caption="A challenge and response exchange"><![CDATA[
+        <example caption="A challenge and response exchange (SCRAM-SHA-1-PLUS)"><![CDATA[
+<!--
+  SCRAM-SHA-1-PLUS challenge issued by the server as defined in RFC 5802.
+  Base64 of: 'r=12C4CD5C-E38E-4A98-8F6D-15C38F51CCC6a09117a6-ac50-4f2f-93f1-93799c2bddf6,s=QSXCR+Q6sek8bf92,i=4096'
+-->
+<challenge xmlns='urn:xmpp:sasl:2'>
+  cj0xMkM0Q0Q1Qy1FMzhFLTRBOTgtOEY2RC0xNUMzOEY1MUNDQzZhMDkxMTdhNi1hYzUwLTRmMmYtOTNmMS05Mzc5OWMyYmRkZjYscz1RU1hDUitRNnNlazhiZjkyLGk9NDA5Ng==
+</challenge>
+
+<!--
+  The client responds with the base64 encoded SCRAM-SHA-1-PLUS client-final-message (password: 'pencil').
+  Base64 of: 'c=cD10bHMtZXhwb3J0ZXIsLMcoQvOdBDePd4OswlmAWV3dg1a1Wh1tYPTBwVid10VU,r=12C4CD5C-E38E-4A98-8F6D-15C38F51CCC6a09117a6-ac50-4f2f-93f1-93799c2bddf6,p=UApo7xo6Pa9J+Vaejfz/dG7BomU='
+  The c-attribute contains the GS2-header and channel-binding data blob (32 bytes) as defined in RFC 5802.
+-->
+<response xmlns='urn:xmpp:sasl:2'>
+  Yz1jRDEwYkhNdFpYaHdiM0owWlhJc0xNY29Rdk9kQkRlUGQ0T3N3bG1BV1YzZGcxYTFXaDF0WVBUQndWaWQxMFZVLHI9MTJDNENENUMtRTM4RS00QTk4LThGNkQtMTVDMzhGNTFDQ0M2YTA5MTE3YTYtYWM1MC00ZjJmLTkzZjEtOTM3OTljMmJkZGY2LHA9VUFwbzd4bzZQYTlKK1ZhZWpmei9kRzdCb21VPQ==
+</response>]]></example>
+
+    <example caption="A challenge and response exchange (hypothetical)"><![CDATA[
 <!-- A server might send: -->
-<challenge xmlns='urn:xmpp:sasl:1'>
+<challenge xmlns='urn:xmpp:sasl:2'>
   U28sIG5leHQgRk9TREVNIC0gMjAxOCwgdGhhdCBpcy4uLg==
 </challenge>
 
 <!-- A client might respond: -->
-<response xmlns='urn:xmpp:sasl:1'>
+<response xmlns='urn:xmpp:sasl:2'>
   Li4uSSdsbCBidXkgYSBiZWVyIGZvciB0aGUgZmlyc3QgcGVyc29uIHdoby4uLg==
 </response>
 ]]></example>
   </section2>
-  <section2 topic="During Authentication">
-    <p>At any time while authentication is in progress, neither Client nor Server sends any element (including stanzas) or other data except the top-level elements defined herein. Clients MUST NOT send whitespace, and MUST send only &lt;response/> elements as appropriate or an &lt;abort/> element to immediately cause an error. Servers MUST disconnect Clients immediately if any other traffic is received. Servers are similarly REQUIRED to send no whitespace, and only the &lt;response/> and completion elements from the section below.</p>
-  </section2>
-  <section2 topic="Completing Authentication">
+  <section2 topic="Completing Authentication" anchor="outcome">
     <p>Authentication may complete in one of three ways. It may complete successfully, in which case the client is authenticated. It may also fail, in which case the client is not authenticated and the stream and session state remain entirely unchanged.</p>
-    <p>Finally, it may have completed successfully, but further interaction is required - for example, a password change or second-factor authentication.</p>
-    <section3 topic="Success">
+    <p>Finally, it may have completed successfully, but further interaction is required - for example, a password change or second-factor authentication. If the client specified an "upgrade" attribute in it's &lt;authenticate/> element, the server MUST send a &lt;continue/> element containing the task the client needs to perform for the upgrade to succeed.</p>
+    <section3 topic="Success" anchor="success">
       <p>If the Client is now authenticated, the Server sends a &lt;success/> element, which contains contains an &lt;authorization-identity/> element containing the negotiated identity - this is a bare JID, unless resource binding has occurred, in which case it is a full JID.</p>
       <p>It MAY contain an &lt;additional-data> element, containing additional data from the exchange (task or SASL mechanism) that has just completed.</p>
-      <example caption="Successful authentication"><![CDATA[
-<success xmlns='urn:xmpp:sasl:1'>
+      <example caption="Successful authentication with SCRAM-SHA-1-PLUS"><![CDATA[
+<success xmlns='urn:xmpp:sasl:2'>
+  <!-- Base64 of: 'v=msVHs/BzIOHDqXeVH7EmmDu9id8=' -->
+  <additional-data>
+    dj1tc1ZIcy9CeklPSERxWGVWSDdFbW1EdTlpZDg9
+  </additional-data>
+  <authorization-identifier>user@example.org</authorization-identifier>
+</success>
+]]></example>
+      <example caption="Successful authentication with BLURDYBLOOP"><![CDATA[
+<success xmlns='urn:xmpp:sasl:2'>
   <additional-data>
     ip/AeIOfZXKBV+fW2smE0GUB3I//nnrrLCYkt0Vj
   </additional-data>
-  <authorization-identifier>juliet@montague.example/Balcony/a987dsh9a87sdh</authorization-identifier>
+  <authorization-identifier>juliet@montague.example</authorization-identifier>
 </success>
 ]]></example>
       <p>Other extension elements MAY also be contained by the &lt;success/> element.</p>
-      <example caption="Successful re-authentication and resumption"><![CDATA[
-<success xmlns='urn:xmpp:sasl:1'>
+      <example caption="Successful re-authentication and resumption using BLURDYBLOOP"><![CDATA[
+<success xmlns='urn:xmpp:sasl:2'>
   <additional-data>
     SGFkIHlvdSBnb2luZywgdGhlcmUsIGRpZG4ndCBJPw==
   </additional-data>
-  <authorization-identifier>juliet@montague.example/Balcony/a987dsh9a87sdh</authorization-identifier>
+  <authorization-identifier>juliet@montague.example</authorization-identifier>
   <sm:resumed xmlns='urn:xmpp:sm:3:example' h='345' previd='124'/>
 </success>
 ]]></example>
       <p>Any security layer negotiated SHALL take effect after the ">" octet of the closing tag (ie, immediately after "&lt;/success>"), if it has not already taken effect at a &lt;continue> - see <link url='#continue'>Continue</link> below.</p>
       <p>The &lt;success> element is immediately followed by a &lt;features> element containing the applicable stream features of the newly authenticated stream. Note that no stream restart occurs.</p>
     </section3>
-    <section3 topic="Failure">
+    <section3 topic="Failure" anchor="failure">
       <p>A &lt;failure/> element is used by the server to terminate the authentication attempt. It MAY contain application-specific error codes, and MAY contain a textual error. It MUST contain one of the SASL error codes from RFC 6120 Section 6.5.</p>
       <example caption="Failure"><![CDATA[
-<failure xmlns='urn:xmpp:sasl:1'>
+<failure xmlns='urn:xmpp:sasl:2'>
   <aborted xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>
   <optional-application-specific xmlns='urn:something:else'/>
   <text>This is a terrible example.</text>
@@ -177,13 +273,13 @@
     </section3>
     <section3 topic="Continue" anchor="continue">
       <p>A &lt;continue/> element is used to indicate that while the SASL exchange was successful, it is insufficient to allow authentication at this time.</p>
-      <p>This can be used to indicate that the Client needs to perform a Second Factor Authentication ("2FA"), or is required to change password.</p>
+      <p>This can be used to indicate that the Client needs to perform a Second Factor Authentication ("2FA"), needs to perform an SCRAM upgrade task as requested by the client, or is required to change password.</p>
       <p>Such tasks are presented within a &lt;tasks> element, which contains a sequence of &lt;task> elements, each containing a name. These tasks are analogous to a SASL mechanism, but have a number of differences - they may never attempt to negotiate a new authorization identifier, nor a new security layer.</p>
       <p>A client MAY choose any one of the offered tasks; if multiple are required a sequence of &lt;continue> exchanges will occur until all mandatory tasks are complete.</p>
       <p>The &lt;continue element therefore always contains a &lt;tasks/> element, as defined above. It MAY contain an &lt;additional-data/> element, as the &lt;success/> element does.</p>
       <p>Finally, it MAY contain a &lt;text/> element, which can contain human-readable data explaining the nature of the step required.</p>
       <example caption="Continue Required"><![CDATA[
-<continue xmlns='urn:xmpp:sasl:1'>
+<continue xmlns='urn:xmpp:sasl:2'>
   <additional-data>
    SSdtIGJvcmVkIG5vdy4=
   </additional-data>
@@ -196,12 +292,99 @@
 ]]></example>
       <p>After the final octet of the first &lt;continue> element, any SASL security layer negotiated in the preceding exchange SHALL be immediately in effect.</p>
       <p>Clients respond with a &lt;next/> element, which has a single mandatory attribute of "task", containing the selected task name, and contains an OPTIONAL base64 encoded initial response contained in an &lt;initial-response> element.</p>
+      <p>Servers MAY request multiple &lt;challenge/>-&lt;response/> exchanges as defined in <link url="#challenge">Challenges and Responses</link> until the task was successfully performed which is indicated either by the server sending a &lt;success/> element, or a new &lt;continue/> element to request the next tasks the client has to perform.</p>
       <example caption="Client Continues"><![CDATA[
-<next xmlns='urn:xmpp:sasl:1' task='TOTP-EXAMPLE'>
+<next xmlns='urn:xmpp:sasl:2' task='TOTP-EXAMPLE'>
   <initial-response>
     SSd2ZSBydW4gb3V0IG9mIGlkZWFzIGhlcmUu
   </initial-response>
-</next-authenticate>
+</next>
+]]></example>
+      <example caption="Server sends success"><![CDATA[
+<success xmlns='urn:xmpp:sasl:2'>
+  <additional-data>
+    SGFkIHlvdSBnb2luZywgdGhlcmUsIGRpZG4ndCBJPw==
+  </additional-data>
+  <authorization-identifier>juliet@montague.example</authorization-identifier>
+</success>]]></example>
+    </section3>
+  </section2>
+  
+  <section2 topic="SASL mechanism upgrade tasks" anchor="upgrade">
+    <p>In order to upgrade the Server's database to include the needed data for new SASL mechanisms, the client indicated the desired SASL mechanism to upgrade in it's &lt;authenticate/> element as specified in <link url="#initiation">Initiation</link>. The server provides a task to perform this upgrade. This task MUST be the only task provided in this &lt;continue/> element and the upgrade task MUST be the last task the server requires for security reasons.
+    This task hash a prefix of "UPGR-" followed by the SASL mechanism name without any "-PLUS" suffix.</p>
+    <p>The client then initiates this upgrade task by providing a corresponding &lt;next/> element providing the task name.
+    Upon receiving the &lt;next/> element for the upgrade, the server provides a &lt;challenge/> element providing the data needed for the client to calculate the needed data. If the SASL mechanism to upgrade the server database to supports it, no password SHOULD be send in clear.
+    The client uses a &lt;response/> element to provide the needed data.</p>
+    <example caption="SASL mechanism upgrade required"><![CDATA[
+<!-- The Server requests the client to perform the upgrade task for BLOOP2 -->
+<continue xmlns='urn:xmpp:sasl:2'>
+  <additional-data>
+   SSdtIGJvcmVkIG5vdy4=
+  </additional-data>
+  <tasks>
+    <task>UPGR-BLOOP2</task>
+  </tasks>
+  <text>This account requires an upgrade to BLOOP2 as requested by the client</text>
+</continue>
+
+<!-- The Client initiates the task -->
+<next xmlns='urn:xmpp:sasl:2' task='UPGR-BLOOP2'/>
+
+<!-- The Server provides the needed data -->
+<challenge xmlns='urn:xmpp:sasl:2'>
+  U28sIG5leHQgRk9TREVNIC0gMjAxOCwgdGhhdCBpcy4uLg==
+</challenge>
+
+<!-- The Client now responds -->
+<response xmlns='urn:xmpp:sasl:2'>
+  Li4uSSdsbCBidXkgYSBiZWVyIGZvciB0aGUgZmlyc3QgcGVyc29uIHdoby4uLg==
+</response>
+
+<!-- The upgrade was performed and the Server finishes authentication -->
+<success xmlns='urn:xmpp:sasl:2'>
+  <authorization-identifier>juliet@montague.example</authorization-identifier>
+</success>
+]]></example>
+
+    <section3 topic="SCRAM upgrade" anchor="scram-upgrade">
+      <p>For upgrades of SCRAM mechanisms as defined in &rfc5802;, the server MUST provide the needed data for the client to calculate the SaltedPassword as defined in this RFC or some RFC updating &rfc5802;, namely the iteration count and salt. To do so the server sends the salt and iteration count as defined in &rfc5802;, omitting all other attributes besides "s" and "i".</p>
+      <p>The client then calculates the SaltedPassword and sends back it's base64 encoded value.</p>
+      <example caption="SCRAM hash upgrade task for SCRAM-SHA-256 after successful SCRAM-SHA-1-PLUS authentication"><![CDATA[
+<!-- The Server provides the SCRAM upgrade task requested by the client in it's <authenticate/> element -->
+<continue xmlns='urn:xmpp:sasl:2'>
+  <!-- Base64 of: 'v=msVHs/BzIOHDqXeVH7EmmDu9id8=' -->
+  <additional-data>
+    dj1tc1ZIcy9CeklPSERxWGVWSDdFbW1EdTlpZDg9
+  </additional-data>
+  <tasks>
+    <task>UPGR-SCRAM-SHA-256</task>
+  </tasks>
+</continue>
+
+<!-- The Client initiates the task -->
+<next xmlns='urn:xmpp:sasl:2' task='UPGR-SCRAM-SHA-256'/>
+
+<!--
+  The server sends the required salt and iteration count encoded as base64 encoded SASL attributes.
+  Base64 of: 's=A_SXCRXQ6sek8bf_Z,i=4096'
+-->
+<challenge xmlns='urn:xmpp:sasl:2'>
+  cz1BX1NYQ1JYUTZzZWs4YmZfWixpPTQwOTY=
+</challenge>
+
+<!-- The client responds with the base64 encoded SaltedPassword. -->
+<response xmlns='urn:xmpp:sasl:2'>
+  BzOnw3Pc5H4bOLlPZ/8JAy6wnTpH05aH21KW2+Xfpaw=
+</response>
+
+<!--
+  Finally, the server sends a success after adding the salted SHA-256 hash to it's database.
+  A SASL2 success always includes the authorization identifier.
+-->
+<success xmlns='urn:xmpp:sasl:2'>
+  <authorization-identifier>user@example.org</authorization-identifier>
+</success>
 ]]></example>
     </section3>
   </section2>
@@ -213,11 +396,11 @@
       <p>The service name SHALL be "xmpp", as defined by RFC 6120.</p>
     </section2>
     <section2 topic="Mechanism negotiation">
-	    <p>Servers list mechanisms during stream features (See <link url="#features">Discovering Support</link>).</p>
+      <p>Servers list mechanisms in the &lt;mechanisms/> list in response to a &lt;request/> by the client. (See <link url="#initiation">Initiation</link>).</p>
     </section2>
     <section2 topic="Message Definitions">
       <section3 topic="Initiation">
-	      <p>Clients initiate using the &lt;authenticate/> top level element (See <link url="#auth">Initiation</link>.</p>
+	      <p>Clients initiate using the &lt;authenticate/> top level element (See <link url="#initiation">Initiation</link>.</p>
       </section3>
       <section3 topic="Server Challenges and Client Responses">
 	      <p>See <link url="#challenge">Challenges and Responses</link>.</p>
@@ -228,21 +411,21 @@
     </section2>
     <section2 topic="Non-Empty Authorization Strings">
       <p>If a Client specifies an authorization string which is non-empty, the identifier is normalized by treating it as a JID, and performing normalization as described in RFC 7622.</p>
-      <p>In general, implementors are advised that a non-empty authorization string MAY be considered an error if the stream's from attribute (if present) does not match.</p>
+      <p>Any non-empty authorization string MUST be considered an error if the stream's from attribute (if present) does not match.</p>
     </section2>
     <section2 topic="Aborting">
-	    <p>Clients MAY abort unilaterally by sending &lt;abort/> as specified in <link url="#abort">Client Aborts</link>.</p>
-    <p>Servers MAY abort unliterally by sending &lt;failure/> with the &lt;aborted/> error code as defined in <link url="#failure">Failure</link>.</p>
+      <p>Clients MAY abort unilaterally at any time before the authentication completed by sending an &lt;abort/> element.</p>
+      <p>Servers MAY abort unliterally by sending &lt;failure/> with the &lt;aborted/> error code as defined in <link url="#failure">Failure</link>.</p>
     </section2>
     <section2 topic="Security Layer Effect">
-	    <p>Security Layers take effect after the SASL mechanism itself (ie, the first negotiation) has completed successfully, after the final octet of the server's &lt;success> or &lt;continue>. See <link url="#success">Success</link> and <link url="#continue">Continue</link>.</p>
+      <p>Security Layers take effect after the SASL mechanism itself (ie, the first negotiation) has completed successfully, after the final octet of the server's &lt;success> or &lt;continue>. See <link url="#success">Success</link> and <link url="#continue">Continue</link>.</p>
     </section2>
     <section2 topic="Security Layer Order">
       <p>Option (a) is used - any SASL Security Layer is applied first to data being sent, and TLS applied last.</p>
     </section2>
     <section2 topic="Multiple Authentication">
       <p>Although the &lt;continue/> concept does use tasks analogous to multiple SASL sequences, only the first SASL mechanism used is considered an authentication, and only the first can negotiate a security layer.</p>
-      <p>In particular, once &lt;success/> has been sent by the server, any further &lt;authenticate/> element MUST result in a stream error.</p>
+      <p>In particular, once &lt;success/> or &lt;continue/> has been sent by the server, any further &lt;authenticate/> element MUST result in a stream error.</p>
     </section2>
   </section1>
 
@@ -256,10 +439,10 @@
   These are identical to SASL1, but within a different namespace.
 -->
 <stream:features>
-  <mechanisms xmlns='urn:xmpp:sasl:1'>
+  <authentication xmlns='urn:xmpp:sasl:2'>
     <mechanism>PLAIN</mechanism>
     <mechanism>SCRAM-SHA-1</mechanism>
-  </mechanisms>
+  </authentication>
 </stream:features>
 
 <!--
@@ -268,17 +451,22 @@
   the main distinction is that initial-response data is held within an element,
   so the "=" special case no longer applies.
 -->
-<authenticate xmlns='urn:xmpp:sasl:1' mechanism='PLAIN'>
+<authenticate xmlns='urn:xmpp:sasl:2' mechanism='PLAIN'>
   <initial-response>AGFsaWNlQGV4YW1wbGUub3JnCjM0NQ==</initial-response>
+  <supported>
+    <mechanism>PLAIN</mechanism>
+    <mechanism>SCRAM-SHA-1</mechanism>
+  </supported>
 </authenticate>
 
 <!--
   This completes in one step, so the Server sends a success.
   A SASL2 success always includes the authorization identifier:
 -->
-<success xmlns='urn:xmpp:sasl:1'>
+<success xmlns='urn:xmpp:sasl:2'>
   <authorization-identifier>alice@example.org</authorization-identifier>
 </success>
+
 <!--
   The server immediately sends a new set of stream features at this point.
   There is no stream restart.
@@ -302,7 +490,7 @@
   Server sends stream features.
 -->
 <stream:features>
-  <mechanisms xmlns='urn:xmpp:sasl:1'>
+  <mechanisms xmlns='urn:xmpp:sasl:2'>
     <mechanism>PLAIN</mechanism>
     <mechanism>CRAM-MD5</mechanism>
   </mechanisms>
@@ -312,28 +500,33 @@
   Client intiates authentication.
   Here, no initial response is needed, so none is sent.
 -->
-<authenticate xmlns='urn:xmpp:sasl:1' mechanism='CRAM-MD5'/>
+<authenticate xmlns='urn:xmpp:sasl:2' mechanism='CRAM-MD5'>
+  <supported>
+    <mechanism>CRAM-MD5</mechanism>
+  </supported>
+</authenticate>
 
 <!--
   CRAM-MD5 starts with a server challenge:
 -->
-<challenge xmlns='urn:xmpp:sasl:1'>
+<challenge xmlns='urn:xmpp:sasl:2'>
   PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+
 </challenge>
 
 <!--
   And the client responds:
 -->
-<response xmlns='urn:xmpp:sasl:1>
+<response xmlns='urn:xmpp:sasl:2>
   dGltIGI5MTNhNjAyYzdlZGE3YTQ5NWI0ZTZlNzMzNGQzODkw
 </response>
 
 <!--
   This completes, so the Server sends a success.
 -->
-<success xmlns='urn:xmpp:sasl:1'>
+<success xmlns='urn:xmpp:sasl:2'>
   <authorization-identifier>tim@example.org</authorization-identifier>
 </success>
+
 <!--
   The server immediately sends a new set of stream features at this point.
   There is no stream restart.
@@ -358,7 +551,7 @@
   Note that whilst megabind is advertised, the unrealistic 2FA mechanism is not.
 -->
 <stream:features>
-  <mechanisms xmlns='urn:xmpp:sasl:1'>
+  <mechanisms xmlns='urn:xmpp:sasl:2'>
     <mechanism>BLURDYBLOOP</mechanism>
   </mechanisms>
   <megabind xmlns='urn:example:megabind'/>
@@ -367,10 +560,13 @@
 <!--
   Client intiates authentication.
 -->
-<authenticate xmlns='urn:xmpp:sasl:1' mechanism='BLURDYBLOOP'>
+<authenticate xmlns='urn:xmpp:sasl:2' mechanism='BLURDYBLOOP'>
   <initial-response>
     SW5pdGlhbCBSZXNwb25zZQ==
   </initial-response>
+  <supported>
+    <mechanism>BLURDYBLOOP</mechanism>
+  </supported>
   <megabind xmlns='urn:example:megabind'>
     <resource>this-one-please</resource>
   </megabind>
@@ -379,26 +575,26 @@
 <!--
   Maybe BLURDYBLOOP does this:
 -->
-<challenge xmlns='urn:xmpp:sasl:1'>
+<challenge xmlns='urn:xmpp:sasl:2'>
   PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+
 </challenge>
 
 <!--
   And the client responds:
 -->
-<response xmlns='urn:xmpp:sasl:1>
+<response xmlns='urn:xmpp:sasl:2>
   dGltIGI5MTNhNjAyYzdlZGE3YTQ5NWI0ZTZlNzMzNGQzODkw
 </response>
 
 <!--
   This completes, so the Server sends a continue, with the
   success data (probably mutual auth) from BLURDYBLOOP.
-  The next task required is the unrealistic 2FA.
+  The next task required is the unrealistic-2FA.
   Note that the session is - probably - bound at this point, but
   the authorization-identifier is not passed to the client until
   the full authentication sequence is completed.
 -->
-<continue xmlns='urn:xmpp:sasl:1'>
+<continue xmlns='urn:xmpp:sasl:2'>
   <additional-data>
     QWRkaXRpb25hbCBEYXRh
   </additional-data>
@@ -408,9 +604,9 @@
 </continue>
 
 <!--
-  The client supports the unrealistic 2FA, so can move onto the next task:
+  The client supports the unrealistic-2FA, so can move onto the next task:
 -->
-<next xmlns='urn:xmpp:sasl:1' task='UNREALISTIC-2FA'>
+<next xmlns='urn:xmpp:sasl:2' task='UNREALISTIC-2FA'>
   <initial-response>
     VW5yZWFsaXN0aWMgMkZBIElS
   </initial-response>
@@ -423,14 +619,14 @@
 <!--
   This 2FA process is both unrealistic and also uses multiple round-trips.
 -->
-<challenge xmlns='urn:xmpp:sasl:1'>
+<challenge xmlns='urn:xmpp:sasl:2'>
   PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+
 </challenge>
 
 <!--
   The client responds here.
 -->
-<response xmlns='urn:xmpp:sasl:1>
+<response xmlns='urn:xmpp:sasl:2>
   dGltIGI5MTNhNjAyYzdlZGE3YTQ5NWI0ZTZlNzMzNGQzODkw
 </response>
 
@@ -440,7 +636,7 @@
   The additional-data element here contains the mutual authentication data for the
   unrealistic 2FA, and doesn't refer back to the BLURDYBLOOP exchange.
 -->
-<success xmlns='urn:xmpp:sasl:1'>
+<success xmlns='urn:xmpp:sasl:2'>
   <additional-data>
     VW5yZWFsaXN0aWMgMkZBIG11dHVhbCBhdXRoIGRhdGE=
   </additional-data>
@@ -462,6 +658,7 @@
   <p>Relative to the SASL profile documented in RFC 6120, this introduces more data unprotected by any security layer negotiated by SASL itself.</p>
   <p>While no actual exchanges are introduced that are unprotected, the nature of this exchange might allow for (for example) a resource binding extension to be introduced.</p>
   <p>SASL security layers are sparingly used in the field, however, so this is thought to be a theoretical, rather than practical, concern.</p>
+  <p>Servers and Clients SHOULD NOT support SASL PLAIN unless needed by the authentication backend. Usage of PLAIN allows for trivial downgrade atacks by Man-In-The-Middle attackers circumventing any possible channel-binding or mutual authentication and even allowing the attacker to gain access to the cleartext password. If possible, PLAIN should be disabled by default on Servers and Clients and only be enabled when configured by the admin respective client user (if at all).</p>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -476,14 +673,15 @@
     <code><![CDATA[
 <?xml version='1.0' encoding='utf-8'?>
 <xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'
-           targetNamespace="urn:xmpp:sasl:1"
-           xmlns="urn:xmpp:sasl:1"
+           targetNamespace="urn:xmpp:sasl:2"
+           xmlns="urn:xmpp:sasl:2"
            elementFormDefault="qualified">
 
-    <xs:element name="mechanisms">
+    <xs:element name="authentication">
         <xs:complexType>
             <xs:sequence>
                 <xs:element name="mechanism" type="SaslMechName" minOccurs="1" maxOccurs="unbounded"/>
+                <xs:element name="upgrade" type="SaslMechName" minOccurs="0" maxOccurs="unbounded"/>
                 <xs:any/>
             </xs:sequence>
         </xs:complexType>
@@ -492,8 +690,17 @@
     <xs:element name="authenticate">
         <xs:complexType>
             <xs:attribute name="mechanism" type="SaslMechName"/>
+            <xs:attribute name="upgrade" type="SaslMechName" minOccurs="0" maxOccurs="1"/>
             <xs:sequence>
-                <xs:element name="initial-response"/>
+                <xs:element name="initial-response" type="SaslData" minOccurs="0" maxOccurs="1"/>
+                <xs:element name="supported" minOccurs="0" maxOccurs="1">
+                  <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="mechanism" type="SaslMechName" minOccurs="1" maxOccurs="unbounded"/>
+                        <xs:element name="channel-binding" type="string" minOccurs="0" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
+                </xs:element>
                 <xs:any/>
             </xs:sequence>
         </xs:complexType>
@@ -518,8 +725,8 @@
     <xs:element name="success">
         <xs:complexType>
             <xs:sequence>
-                <xs:element name="additional-data" type="SaslData"/>
-                <xs:element name="authorization-identifier" type="Jid"/>
+                <xs:element name="additional-data" type="SaslData" minOccurs="0" maxOccurs="1"/>
+                <xs:element name="authorization-identifier" type="Jid" minOccurs="1" maxOccurs="1"/>
             </xs:sequence>
         </xs:complexType>
     </xs:element>
