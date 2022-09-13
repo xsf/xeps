@@ -236,8 +236,9 @@
     <p>Authentication may complete in one of three ways. It may complete successfully, in which case the client is authenticated. It may also fail, in which case the client is not authenticated and the stream and session state remain entirely unchanged.</p>
     <p>Finally, it may have completed successfully, but further interaction is required - for example, a password change or second-factor authentication. If the client specified an "upgrade" attribute in its &lt;authenticate/> element, the server MUST send a &lt;continue/> element containing the task the client needs to perform for the upgrade to succeed.</p>
     <section3 topic="Success" anchor="success">
-      <p>If the Client is now authenticated, the Server sends a &lt;success/> element, which contains contains an &lt;authorization-identity/> element containing the negotiated identity - this is a bare JID, unless resource binding has occurred, in which case it is a full JID.</p>
-      <p>It MAY contain an &lt;additional-data> element, containing additional data from the exchange (task or SASL mechanism) that has just completed.</p>
+      <p>If the Client is now authenticated, the Server sends a &lt;success/> element, which contains an &lt;authorization-identity/> element containing the negotiated identity - this is a bare JID, unless resource binding has occurred, in which case it is a full JID.</p>
+      <p>If the &lt;success/> element it the response to a SASL mechanism exchange, it MAY contain an &lt;additional-data> element, containing additional data from the SASL mechanism that has just completed.</p>
+      <p>If the &lt;success/> element is the response to a task exchange <link url="#continue">initiated by a &lt;continue/> element</link>, it MAY contain any other element defined in a future protocol containing additional data from the task that has just completed</p>
       <p>If the client requested any stream features inline as part of the SASL negotiation, they are processed by the server at this point.</p>
       <example caption="Successful authentication with SCRAM-SHA-1-PLUS"><![CDATA[
 <success xmlns='urn:xmpp:sasl:2'>
@@ -283,6 +284,7 @@
       <p>A &lt;continue/> element is used to indicate that while the SASL exchange was successful, it is insufficient to allow authentication at this time.</p>
       <p>This can be used to indicate that the Client needs to perform a Second Factor Authentication ("2FA"), needs to perform an SCRAM upgrade task as requested by the client, or is required to change password.</p>
       <p>Such tasks are presented within a &lt;tasks> element, which contains a sequence of &lt;task> elements, each containing a name. These tasks are analogous to a SASL mechanism, but have a number of differences - they may never attempt to negotiate a new authorization identifier, nor a new security layer.</p>
+      <p>Like the &lt;success/> element, the &lt;continue/> element MAY contain an &lt;additional-data/> element containing additional data from the SASL mechanism that has completed.</p>
       <p>A client MAY choose any one of the offered tasks; if multiple are required a sequence of &lt;continue> exchanges will occur until all mandatory tasks are complete.</p>
       <p>The &lt;continue element therefore always contains a &lt;tasks/> element, as defined above. It MAY contain an &lt;additional-data/> element, as the &lt;success/> element does.</p>
       <p>Finally, it MAY contain a &lt;text/> element, which can contain human-readable data explaining the nature of the step required.</p>
@@ -299,31 +301,35 @@
 </continue>
 ]]></example>
       <p>After the final octet of the first &lt;continue> element, any SASL security layer negotiated in the preceding exchange SHALL be immediately in effect.</p>
-      <p>Clients respond with a &lt;next/> element, which has a single mandatory attribute of "task", containing the selected task name, and contains an OPTIONAL base64 encoded initial response contained in an &lt;initial-response> element.</p>
-      <p>Servers MAY request multiple &lt;challenge/>-&lt;response/> exchanges as defined in <link url="#challenge">Challenges and Responses</link> until the task was successfully performed which is indicated either by the server sending a &lt;success/> element, or a new &lt;continue/> element to request the next tasks the client has to perform.</p>
+      <p>Clients respond with a &lt;next/> element, which has a single mandatory attribute of "task", containing the selected task name, and MAY contain any other element defined in a future protocol defining this task.</p>
+      <p>The concrete elements exchanged for each task after the &lt;next/> have to be defined in a future protocol defining a concrete task. Each task MUST end either by the server sending a &lt;failure/> element, if the task failed, a &lt;continue/> element, if the task was completed successfully and the server requests the client to perform a new task, or a &lt;success/> element, indicating that the task was completed successfully and no further tasks are needed.</p>
       <example caption="Client Continues"><![CDATA[
 <next xmlns='urn:xmpp:sasl:2' task='TOTP-EXAMPLE'>
-  <initial-response>
-    SSd2ZSBydW4gb3V0IG9mIGlkZWFzIGhlcmUu
-  </initial-response>
+  <totp xmlns="urn:totp:example">
+    <challenge>
+      SSd2ZSBydW4gb3V0IG9mIGlkZWFzIGhlcmUu
+    </challenge>
+  </totp>
 </next>
 ]]></example>
       <example caption="Server sends success"><![CDATA[
 <success xmlns='urn:xmpp:sasl:2'>
-  <additional-data>
-    SGFkIHlvdSBnb2luZywgdGhlcmUsIGRpZG4ndCBJPw==
-  </additional-data>
+  <totp xmlns="urn:totp:example">
+    <response>
+      SGFkIHlvdSBnb2luZywgdGhlcmUsIGRpZG4ndCBJPw==
+    </response>
+  </totp>
   <authorization-identifier>juliet@montague.example</authorization-identifier>
 </success>]]></example>
     </section3>
   </section2>
   
   <section2 topic="SASL mechanism upgrade tasks" anchor="upgrade">
-    <p>In order to upgrade the Server's database to include the needed data for new SASL mechanisms, the client indicated the desired SASL mechanism to upgrade in its &lt;authenticate/> element as specified in <link url="#initiation">Initiation</link>. The server provides a task to perform this upgrade. This task MUST be the only task provided in this &lt;continue/> element and the upgrade task MUST be the last task the server requires for security reasons.
+    <p>In order to upgrade the Server's database to include the needed data for new SASL mechanisms, the client indicated the desired SASL mechanism to upgrade in its &lt;authenticate/> element as specified in <link url="#initiation">Initiation</link>. The server provides a task to perform this upgrade. This task MUST be the only task provided in this &lt;continue/> element and, for security reasons, the upgrade task MUST be the last task the server requires.
     This task has a prefix of "UPGR-" followed by the SASL mechanism name to upgrade to.</p>
     <p>The client then initiates this upgrade task by providing a corresponding &lt;next/> element providing the task name.
-    Upon receiving the &lt;next/> element for the upgrade, the server provides a &lt;challenge/> element providing the data needed for the client to calculate the needed data. If the SASL mechanism to upgrade to supports it, no password SHOULD be send in clear.
-    The client uses a &lt;response/> element to provide the needed data.</p>
+    Upon receiving the &lt;next/> element for the upgrade, the server provides the elements and data needed for the client to calculate the requested data. The concrete elements and exchanges needed for the upgrade task have to be defined in a future protocol.</p>
+    <p>If the SASL mechanism to upgrade to supports it, no password SHOULD be send in clear.</p>
     <example caption="SASL mechanism upgrade required"><![CDATA[
 <!-- The Server requests the client to perform the upgrade task for BLOOP2 -->
 <continue xmlns='urn:xmpp:sasl:2'>
@@ -340,14 +346,16 @@
 <next xmlns='urn:xmpp:sasl:2' task='UPGR-BLOOP2'/>
 
 <!-- The Server provides the needed data -->
-<challenge xmlns='urn:xmpp:sasl:2'>
-  U28sIG5leHQgRk9TREVNIC0gMjAxOCwgdGhhdCBpcy4uLg==
-</challenge>
+<data xmlns='urn:xmpp:bloop2:example'>
+  <data>U28sIG5leHQgRk9TREVNIC0gMjAxOCwgdGhhdCBpcy4uLg==</data>
+  <description>BLOOP2 is cool!</description>
+</data>
 
 <!-- The Client now responds -->
-<response xmlns='urn:xmpp:sasl:2'>
-  Li4uSSdsbCBidXkgYSBiZWVyIGZvciB0aGUgZmlyc3QgcGVyc29uIHdoby4uLg==
-</response>
+<upgrade xmlns='urn:xmpp:bloop2:example'>
+  <response>Li4uSSdsbCBidXkgYSBiZWVyIGZvciB0aGUgZmlyc3QgcGVyc29uIHdoby4uLg==</response>
+  <finalize>42</finalize>
+</upgrade>
 
 <!-- The upgrade was performed and the Server finishes authentication -->
 <success xmlns='urn:xmpp:sasl:2'>
@@ -357,6 +365,7 @@
 
     <section3 topic="SCRAM upgrade" anchor="scram-upgrade">
       <p>For upgrades of SCRAM mechanisms as defined in &rfc5802;, the server has to provide the needed data for the client to calculate the SaltedPassword as defined in this RFC (or some RFC updating it), namely the iteration count and salt. To do so the server sends the salt and iteration count as defined in this RFC, omitting all other attributes besides "s" and "i".</p>
+      <p>All SCRAM upgrade tasks reuses the &lt;challenge/> and &lt;response/> elements <link url="#challenge">already defined in this protocol</link> to exchange the salt, iteration count and the SaltedPassword.</p>
       <p>The client then calculates the SaltedPassword and sends back its base64 encoded value.</p>
       <p>The name of the upgrade task MUST NOT conain the "-PLUS" suffix, because channel-binding is not relevant for upgrade tasks.</p>
       <example caption="SCRAM hash upgrade task for SCRAM-SHA-256 after successful SCRAM-SHA-1-PLUS authentication"><![CDATA[
