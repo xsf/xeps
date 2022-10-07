@@ -6,7 +6,7 @@
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
 <xep>
 <header>
-  <title>Bind 2.0</title>
+  <title>Bind 2</title>
   <abstract>This specification provides a single-request replacement for several activities an XMPP client needs to do at startup.</abstract>
   &LEGALNOTICE;
   <number>0386</number>
@@ -24,6 +24,21 @@
   <supersededby/>
   <shortname>bind2</shortname>
   &ksmithisode;
+  &mwild;
+  <revision>
+    <version>0.4.0</version>
+    <date>2022-10-07</date>
+    <initials>mw</initials>
+    <remark>
+      <p>Various changes, made in parallel with working client and server implementation experience, and SASL2 updates.</p>
+      <p>More tightly define the integration with XEP-0388 and several session feature XEPs: XEP-0198, XEP-0280, XEP-0352.</p>
+      <p>Replace the custom latest-id element with the new metadata element from XEP-0313, which also provides richer information.</p>
+      <p>Drop unread tracking, as this is a deep topic not directly related to resource binding. Instead the details of integration with other extensions have been better defined and demonstrated, to allow such functionality when it is fully defined and exists.</p>
+      <p>Adjust proposed namespace on aesthetic grounds and consistency with SASL2's approach. As this protocol may become part of the new preferred connection flow for a long time to come, it makes no sense to include the redundant and potentially confusing '2' when there is no conflict without it. Similarly, the '.0' has been dropped from the XEP's title, as it isn't really a version number.</p>
+      <p>Allow the client some influence over the resulting resource identifier, and define a standard format for these combined identifiers.</p>
+      <p>Specify that servers should terminate old sessions from a client when it binds a new resource.</p>
+    </remark>
+  </revision>
   <revision>
     <version>0.3.0</version>
     <date>2019-01-31</date>
@@ -44,68 +59,115 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>As XMPP has grown more feature-rich over time, more steps have been introduced that clients are likely to perform at startup, e.g. resource binding, archive synchronisation, enabling Carbons. Some of these introduce race conditions - e.g. if a client synchronises the archive before enabling Carbons, it can miss stanzas sent between these events, or if it enables Carbons before synchronising the archive it can receive duplicate messages. It may also cause duplicate messages by combining archive synchronisation and receipt of offline messages, or by receipt of messages addressed to the full JID between resource binding and archive synchronisation. This document provides a mechanism for atomically performing these operations to avoid these race conditions. It also provides information to a client that is generally useful about the state of the archive.</p>
-  <p>There have been other suggestions of further enhancements to the stream startup process in XEP-0388 (SASL2), and it is expected that in the future some protocol here will be reframed in terms of these facilities, but the core premise of the XEP (that these features are needed, and need enabling together) remains. It may be desirable to make the enabling of features extensible, such that the client can request which features are needed, together, but the current approach should serve as a suitable basis for discussion.</p>
-  <p>The returning of unread message state to the client relies on the archive having these data, which is a topic for another specification.</p>
+  <p>Every session on XMPP generally has a unique routable identifier, known as a "resource". Many details and rules about resources in XMPP can be found in &rfc6120;. This core RFC also describes how to "bind" a resource identifier to a session. This is a key part of session establishment for practically all XMPP clients. This specification describes an alternative protocol for resource binding than the one described in RFC 6120, based on &xep0388;.</p>
+
+  <p>As XMPP has grown more feature-rich over time, more steps have been introduced that clients are likely to perform at startup, e.g. resource binding, archive synchronisation, enabling Carbons. Some of these introduce race conditions - e.g. if a client synchronises the archive before enabling Carbons, it can miss stanzas sent between these events, or if it enables Carbons before synchronising the archive it can receive duplicate messages. It may also cause duplicate messages by combining archive synchronisation and receipt of offline messages, or by receipt of messages addressed to the full JID between resource binding and archive synchronisation. Therefore, this document provides a mechanism for atomically performing these operations to avoid these race conditions. It also allows the server to provide information to a client that is generally useful about the state of the user's account.</p>
 </section1>
+
 <section1 topic='Requirements' anchor='reqs'>
   <ul>
-    <li>Allow MAM synchronisation and Carbons enabling without a race condition leading to missed or duplicated stanzas</li>
-    <li>Avoid offline messages being received by clients using the MAM archive for message retrieval</li>
-    <li>Allow clients to know which messages are unread in the archive, providing a cross-client alternative to offline messages</li>
-    <li>Avoid clients receiving 'live' messages until they have synchronised their state from the server (to avoid double-receipt of messages, one from the archive one live)</li>
+    <li>Reduce round-trips and race conditions by providing a single atomic session establishment operation, with support for common session features such as &xep0280;, &xep0313; and &xep0198;. It should also be extensible to additional protocols as needed.</li>
+    <li>Integrate with SASL2 (XEP-0388) for further round-trip reduction and simpler session establishment.</li>
   </ul>
 </section1>
 <section1 topic='Use Cases' anchor='usecases'>
   <section2 topic='Discovering support'>
-    <p>A client does not advertise support for bind 2.0. If a server supports bind 2.0, it MUST advertise this in the stream features with a feature named 'bind' in the namespace 'urn:xmpp:bind2:0'.</p>
+    <p>If a server supports Bind 2, it MUST advertise this within the SASL2 &lt;inline/> element in the stream features, with a feature named 'bind' in the namespace 'urn:xmpp:bind:0'.</p>
+    <p>Clients do not advertise support for Bind 2.</p>
+    <p>Bind 2 supports inline negotiation of certain features specific to a session. The features supported by the server for such inline negotiation MUST be included in an &lt;inline/> child element within the bind feature element. Each feature is listed as a &lt;feature/> child element with a 'var' attribute indicating the extension's defined service discovery feature name or namespace.</p>
     <example caption='Server advertises support in stream features'><![CDATA[
 <stream:features>
-  <bind xmlns='urn:xmpp:bind2:0'/>
-  <bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/>
-  <sm xmlns='urn:xmpp:sm:3'/>
+  <authentication xmlns='urn:xmpp:sasl:2'>
+    <mechanism>SCRAM-SHA-1</mechanism>
+    <mechanism>SCRAM-SHA-1-PLUS</mechanism>
+    <inline>
+      <bind xmlns='urn:xmpp:bind:0'>
+        <inline>
+          <feature var="urn:xmpp:carbons:2" />
+          <feature var="urn:xmpp:csi:0" />
+          <feature var="urn:xmpp:sm:3" />
+        </inline>
+      </bind>
+      <sm xmlns='urn:xmpp:sm:3'/>
+    </inline>
+  </authentication>
 </stream:features>
 ]]></example>
+
+  <p>Bind 2 is never supported without SASL2, and so servers without support for SASL2 MUST NOT advertise the feature. Servers supporting SASL2 and Bind 2 may continue to offer legacy resource binding to clients.</p>
   </section2>
 
-  <section2 topic='Performing the bind'>
-    <p>After authentication, a client performs a bind 2.0 by sending an element 'bind' in the samespace 'urn:xmpp:bind2:0'. (Note: this gets rid of manual resource binding altogether. For discussion on standards@)</p>
-    <example caption='Client initiates a bind 2.0'><![CDATA[
-<bind xmlns='urn:xmpp:bind2:0'/>
+  <section2 topic='Performing the bind' anchor='bind-request'>
+    <p>To request resource binding, the client MUST include a &lt;bind/> element, qualified by the 'urn:xmpp:bind:0' namespace, in its SASL2 &lt;authenticate/> request.</p>
+    <p>The &lt;bind/> element MAY contain the following child elements:</p>
+    <ul>
+      <li>&lt;tag/>: This element contains a short text string that typically identifies the software the user is using, mostly useful for diagnostic purposes for users, operators and developers. This tag may be visible to other entities on the XMPP network (see <link url='#security'>Security Considerations</link>).</li>
+    </ul>
+    
+    <p>Additionally, the &lt;bind/> element MAY contain one or more child elements in other namespaces, representing features that the client requests to be automatically enabled for its new session.</p>
+
+    <example caption='Client provides a resource bind request'><![CDATA[
+<authenticate xmlns='urn:xmpp:sasl:2' mechanism='SCRAM-SHA-1'>
+  <initial-response>[base64 encoded SASL data]</initial-response>
+  <bind xmlns='urn:xmpp:bind:0'>
+    <tag>AwesomeXMPP</tag>
+  </bind>
+</authenticate>
 ]]></example>
-    <p>When it receives a bind 2.0 on an authenticated not-yet-bound session, the server MUST:</p>
+
+    <example caption='Client provides a resource bind request, additionally requesting some session features'><![CDATA[
+<authenticate xmlns='urn:xmpp:sasl:2' mechanism='SCRAM-SHA-1'>
+  <initial-response>[base64 encoded SASL data]</initial-response>
+  <bind xmlns='urn:xmpp:bind:0'>
+    <tag>AwesomeXMPP</tag>
+    <enable xmlns='urn:xmpp:carbons:2'/>
+    <enable xmlns='urn:xmpp:sm:3'/>
+    <inactive xmlns='urn:xmpp:csi:0'/>
+  </bind>
+</authenticate>
+]]></example>
+
+    <p>If the client included a &lt;bind/> element in its SASL2 &lt;authenticate/> then the server MUST process the bind request after authentication is successful (including any necessary subsequent SASL2 tasks), but before sending the &lt;success/> response. Following the usual rules of SASL2, the bind request MUST NOT be processed (i.e. it should be ignored) if the authentication is not successful.</p>
+    <p class='box'>Note: If the client included a &lt;resume/> element in its SASL2 negotiation, that MUST be processed first by the server. If that resumption is successful, the server MUST skip resource binding (a resumed session already has a resource bound) and MUST entirely ignore the &lt;bind/> request. If resumption of the previous stream fails, the server MUST include the XEP-0198 failure in the response, and then MUST proceed to process the bind request to establish a new session for the client.</p>
+    <p>Upon processing the bind request, the server MUST perform several operations, including:</p>
     <ul>
       <li>Clear the offline messages for this user, if any, without sending them (as they will be provided by MAM).</li>
-      <li>Perform resource binding to a random resource (see 6120)</li>
-      <li>Work out which contacts have unread messages in the user's MAM archive, how many, and what the id of the last read message is</li>
-      <li>Get the id of the newest stanza in the user's MAM archive</li>
-      <li>Silently enable carbons for this session</li>
+      <li>Generate a resource identifier (per the rules below) and bind it to the current stream</li>
+      <li>Get the archive id of the newest stanza in the user's MAM archive</li>
+      <li>Enable any additional features requested by the client for this session</li>
     </ul>
-    <p>After processing the bind stanza, as above, the server MUST respond with an element of type 'bound' in the namespace 'urn:xmpp:bind2:0', as in the below example</p>
-  <example caption='Server responds after processing the bind'><![CDATA[
-<bound xmlns='urn:xmpp:bind2:0'>
-  <jid>nurse@shakespeare.lit/abtet29a9fu</jid>
-  <latest-id>balisoseb</latest-id>
-  <unreads>
-    <unread jid='romeo@shakespeare.lit' read-id='onuheuhoeu', unread-count='3'/>
-    <unread jid='juliet@shakespeare.lit' read-id='koeunhth29', unread-count='43'/>
-  </unreads>
-</bound>
-]]></example>
-    <p>Servers SHOULD support the &lt;unreads> feature, but if they do not then the &lt;unreads> element MUST be elided, to distinguish between an empty element (no unread messages) and a missing feature.</p>
-  </section2>
 
-  <section2 topic='Pipelining'>
-    <p>A server supporting this specification MUST allow the following initial commands to be pipelined:</p>
+    <p>Upon successful binding of a resource, the server SHOULD terminate any earlier sessions from the same client (identified by the &lt;user-agent> 'id' attribute in its SASL2 authentication request).</p>
+
+    <section3 topic='Resource identifier generation' anchor='identifiers'>
+      <p>If the client provided a &lt;tag/> element in its bind request, the text content of that element SHOULD be included as-is in the final resource identifier, subject to the necessary validation for resource identifiers. This tag can help with client identification and debugging. The RECOMMENDED format is to include the client tag as a prefix of the server-generated identifier, separated by a single '/' character: <tt>[client tag]/[server generated identifier]</tt>. For example, <tt>AwesomeXMPP/rQ7Lwut0CcxW6</tt>.</p>
+      <p>Servers MAY choose to assign stable resource identifiers to clients, i.e. ensuring the same client will receive the same resource identifier for every bind request it makes. If a server or deployment provides resource identifier stability, the generated identifier SHOULD remain stable for every bind request with the same &lt;tag/> and SASL2 &lt;user-agent> id. The SASL2 &lt;user-agent> id itself MUST NOT be exposed by the server in the generated resource identifier.</p>
+    </section3>
+    
+    <p>After processing the bind request as described above, the server MUST respond with the SASL &lt;success/> element, including the client's full JID in the &lt;authorization-identity/> element, and a &lt;bound/> element qualified by the 'urn:xmpp:bind:0' namespace, as in the following example:</p>
+  <example caption='Server responds after processing the bind'><![CDATA[
+<success xmlns='urn:xmpp:sasl:2'>
+  <authorization-identity>user@example.com/AwesomeXMPP.4232f4d4</authorization-identity>
+  <bound xmlns='urn:xmpp:bind:0'>
+    <metadata xmlns='urn:xmpp:mam:2'>
+      <start id='YWxwaGEg' timestamp='2008-08-22T21:09:04Z' />
+      <end id='b21lZ2Eg' timestamp='2020-04-20T14:34:21Z' />
+    </metadata>
+  </bound>
+</success>
+]]></example>
+
+    <p>The server SHOULD include a &lt;metadata/> element as defined by XEP-0313, describing the state of the user's message archive at the precise time of resource binding. This helps the client determine what queries it may need to perform to synchronise messages.</p>
+
+    <p>Interactions with certain other extensions are hereby defined in this document:</p>
+
     <ul>
-      <li>Initial client stream header</li>
-      <li>SASL Authentication*</li>
-      <li>Post-authentication stream header</li>
-      <li>Bind 2.0</li>
+      <li>If the client included a XEP-0198 &lt;enable/> element in the requested features, Stream Management should be enabled at this point. The &lt;bound/> response MUST contain the resulting XEP-0198 &lt;enabled/> (or &lt;failed/>) element. For full business rules, syntax  and examples, see XEP-0198.</li>
+      <li>If the client included a XEP-0280 &lt;enable/> element in the requested features, Message Carbons MUST be enabled at this point. As this operation MUST succeed, no response is necessary.</li>
+      <li>If the client included a XEP-0352 &lt;active/> or &lt;inactive/> element, the session must begin in that state.</li>
     </ul>
-    <p>[ * pipelining will clearly not work for multi-stage SASL mechanisms, but the initial stage MUST be capable of being pipelined after the stream header, and the post-authentication stream header MUST be able to be pipelined after the final authentication element]</p>
-    <p>In this way, a client is able to (if using 'xmpps' for avoiding starttls, to be defined elsewhere), on second and subsequent login cache the presence of bind 2.0 in stream features from a previous session, and pipeline the entire stream initialisation process by sending the stream header, followed by auth, followed by a stream header, followed by a bind 2.0 in a single chunk.</p>
-    <p>Note: also enable acks? discuss on standards@</p>
+
+    <p>The &lt;bound/> response MUST also contain any defined responses to other enabled features, if any, though details of these are beyond the scope of this specification.</p>
   </section2>
 </section1>
 <!--<section1 topic='Business Rules' anchor='rules'>
@@ -115,15 +177,21 @@
   <p>OPTIONAL.</p>
 </section1>-->
 <section1 topic='Security Considerations' anchor='security'>
-  <p>This specification is mostly a reworking of existing protocol/features. The additional facility provided here is to provide information on the user's archive; as this facility is provided post-authentication and is only providing the user's data to the user, it doesn't introduce new security considerations.</p>
+  <p>This specification mostly combines existing protocols together. Security considerations defined in those XEPs should be heeded as normal.</p>
+  <p>The additional facility provided here to provide information on the user's archive is provided post-authentication and is only providing the user's data to the user.</p>
+  <p>Implementations must adhere to the security considerations defined in XEP-0388 regarding the inclusion of SASL2 requests and inline feature negotiation in TLS 0-RTT ("early data") extensions. That is, they MUST NOT be sent or processed, except when appropriate mitigations are in place (which are beyond the scope of this document, but may be defined by others).</p>
+  <p>As it forms part of the resource identifier and therefore the full JID of the session, the 'tag' value provided by the client (if any), may be visible to other XMPP entities on the network that the client communicates with or that have access to the user's presence. The simple name of the client can provide value to users, operators and developers diagnosing issues, and it generally will not reveal more information than would be already available through service discovery. Unless they are operating in fully trusted environments, clients MUST NOT use identifiers that might reveal private information about a user or their system (such as hostnames).</p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>None.</p>
 </section1>
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
-  <p>The urn:xmpp:bind2:0 namespace must be registered..</p>
+  <p>The urn:xmpp:bind:0 namespace must be registered..</p>
 </section1>
 <!--<section1 topic='XML Schema' anchor='schema'>
   <p>REQUIRED for protocol specifications.</p>
 </section1>-->
+<section1 topic='Acknowledgements' anchor='acknowledgements'>
+  <p>Thanks to Daniel Gultsch, Philipp Hörist, Thilo Molitor and Andrzej Wójcik for their valuable support with feedback, suggestions and implementations.</p>
+</section1>
 </xep>
