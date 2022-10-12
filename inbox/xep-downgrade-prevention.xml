@@ -1,0 +1,179 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>SASL SCRAM Downgrade Protection</title>
+  <abstract>This specification provides a way to secure the SASL and SASL2 handshakes against method and channel-binding downgrades.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>RFC 5802</spec>
+    <spec>XEP-0388</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>SSDP</shortname>
+  &tmolitor;
+  <revision>
+    <version>0.0.1</version>
+    <date>2022-10-11</date>
+    <initials>tm</initials>
+    <remark>Initial version.</remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>&rfc6120; and &xep0388; define a way to negotiate SASL mechanisms. When used together with SCRAM mechanisms (&rfc5802;) and channel-binding (&xep0440;) the mechanism selection is protected against downgrade attacks by an active MITM tampering with the TLS channel and advertised SASL mechanisms, while the negotiation of the channel-binding types is still not protected against such downgrade attacks.</p>
+  <p>&xep0440; tries to mitigate this by making the "tls-server-end-point" (&rfc5929;) channel-binding mandatory to implement for servers. But that leaves clients not able to implement this type, or any channel-binding at all, vulnerable to downgrades of channel-binding types and SASL mechanisms. Furthermore "tls-server-end-point" provides weaker security guarantees than other channel-bindings like for example "tls-exporter" (defined in &rfc5705; and &rfc9266;).</p>
+  <p>This specification aims to solve this issue by spcifying a downgrade protection for both SASL mechanisms and channel-binding types using an optional SCRAM attribute (see &rfc5802;). This specification can be used for SASL1 (&rfc6120;) and SASL2 (&xep0388;) profiles as well as any other SASL profile.</p>
+  <p>Note: In the long term the author strives to publish this as an RFC rather than a XEP to also make this protection available to other protocols, after gaining implementation experience.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>This protocol was designed with the following requirements in mind:</p>
+  <ul>
+    <li>Allow detection of SASL mechanism downgrades even if no channel-binding is in use.</li>
+    <li>Allow detection of downgrades of channel-binding types.</li>
+    <li>Support all currently defined and future SCRAM mechanisms (&rfc5802; and &rfc7677;)</li>
+  </ul>
+  <p>Note that this specification intentionally leaves out support for SASL PLAIN. If server and client support PLAIN, no protection against SASL method or channel-binding downgrades is possible and the security relies solely on the underlying TLS channel. As explained in § 13.8.3 of &rfc6120;, servers and clients SHOULD NOT support SASL PLAIN unless it is required by the authentication backend.</p>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <p>This specification uses some abbreviations:</p>
+  <ul>
+    <li>SASL1: the XMPP SASL profile specified in &rfc6120;</li>
+    <li>SASL2: the XMPP SASL profile specified in &xep0388;</li>
+  </ul>
+</section1>
+<section1 topic='Protocol' anchor='protocol'>
+  <p>Sections 5.1 and 7 of &rfc5802; allow for arbitrary optional attributes inside SCRAM messages. This specification uses those optional attribute to implement a downgrade protection.</p>
+  <section2 topic="Server Indicates Support" anchor="support">
+    <p>The server uses the optional attribute "d" with the value "ssdp" in its server-first-message to indicate support for this specification.</p>
+    <p>A client supporting this specification but not seeing this attribute advertised by the server MAY abort the authentication. It is RECOMMENDED to wait until the whole SCRAM flow hash been completed to distinguish the case of a server not supporting this specification from a MITM stripping out this optional SCRAM attribute.</p>
+  </section2>
+  <section2 topic="Client Sends Downgrade Protection Hash" anchor="hash">
+    <p>If the server indicated support for this spec in the server-first-message and the client supports it, the client calculates a hash for the server-advertised list of SASL mechanisms and channel-binding types as follows.</p>
+    <p>Note: All sorting operations MUST be performed using "i;octet" collation as specified in Section 9.3 of &rfc4790;.</p>
+    <ol>
+      <li>Initialize an empty ASCII string S</li>
+      <li>Sort all server-advertised SASL mechanisms and append them to string S joined by delimiter "," (%x2C)</li>
+      <li>If the server used &xep0440; to advertise channel-bindings, append "|" (%x7C) to S</li>
+      <li>If the server used &xep0440; to advertise channel-bindings, sort all server-advertised channel-binding types and append them to string S joined by delimiter "," (%x2C)</li>
+      <li>Hash S using the same hash mechanism as used for the SCRAM mechanism currently in use and encode the result using base64</li>
+    </ol>
+    <p>The client then adds the optional attribute "d" with the base64 encoded hash obtained in step 5 to its client-final-message. The client MAY send this attribute even if the server did not advertise support.</p>
+    <p>Note: If the server simultaneously advertises SASL1 and SASL2, only the mechanism list of the SASL protocol the client uses for authentication MUST be considered for hashing.</p>
+  </section2>
+  <section2 topic="Server Verifys The Downgrade Protection Hash" anchor="verification">
+    <p>Upon receiving the client-final-message the server calculates its own base64 encoded hash using the list of SASL mechanisms and channel-binding types it advertised using SASL1 or SASL2 and &xep0440; by applying the same algorithm as defined in <link url="#hash">Client Sends Downgrade Protection Hash</link>.</p>
+    <p>The server then extracts the base64 encoded hash presented by the client in the optional attribute "d" and compares it to its own hash. If the hashes match, the list of SASL mechanisms and channel-binding types has not been changed by an active MITM.</p>
+    <p>If the hashes do not match, the server MUST fail the authentication as specified in &rfc6120; section 6.5 or &xep0388; section 2.6.2 using the "aborted" error-condition. If &xep0388; is used, the application-specific error-condition "downgrade-detected" in the namespace "urn:xmpp:ssdp:0" MUST be added, too. It MAY further include an optional descriptive text to further clarify this error as specified in &xep0388; section 6.2.6 or &rfc6120; section 6.5. If additional SCRAM data is provided, the used SCRAM "server-error-value" MUST be "downgrade-detected".</p>
+    <p>Non-XMPP implementations MAY use a SCRAM "server-error-value" of "downgrade-detected" alongside any protocol specific error-condition.</p>
+  </section2>
+  <section2 topic="Full Example" anchor="example">
+    <p>This sections contains an example based on the ones provided in &xep0388;.</p>
+    <example caption="Full SCRAM-SHA-1-PLUS authentication flow using the optional attribute defined in this spec"><![CDATA[
+<!--
+  Client sending stream header
+-->
+<stream:stream
+  from='user@example.org'
+  to='example.org'
+  version='1.0'
+  xml:lang='en'
+  xmlns='jabber:client'
+  xmlns:stream='http://etherx.jabber.org/streams'>
+
+<!--
+  Server responding with stream header and features
+-->
+<stream:stream
+  from='example.org'
+  id='++TR84Sm6A3hnt3Q065SnAbbk3Y='
+  to='user@example.org'
+  version='1.0'
+  xml:lang='en'
+  xmlns='jabber:client'
+  xmlns:stream='http://etherx.jabber.org/streams'>
+<stream:features>
+  <authentication xmlns='urn:xmpp:sasl:2'>
+    <mechanism>SCRAM-SHA-1</mechanism>
+    <mechanism>SCRAM-SHA-1-PLUS</mechanism>
+    <inline xmlns='urn:xmpp:sasl:2'>
+      <!-- Server indicates that XEP-0198 can be negotiated "inline" -->
+      <enable xmlns='urn:xmpp:sm:3'/>
+      <!-- Server indicates support for XEP-0386 Bind 2 -->
+      <bind xmlns='urn:xmpp:bind2:1'/>
+    </inline>
+  </authentication>
+  <!-- Channel-binding information provided by XEP-0440 -->
+  <sasl-channel-binding xmlns='urn:xmpp:sasl-cb:0'>
+    <channel-binding type='tls-server-end-point'/>
+    <channel-binding type='tls-exporter'/>
+  </sasl-channel-binding>
+</stream:features>
+
+<!--
+  Client initiates authentication using SCRAM-SHA-1-PLUS and channel-binding type "tls-exporter"
+-->
+<authenticate xmlns='urn:xmpp:sasl:2' mechanism='SCRAM-SHA-1-PLUS'>
+  <!-- Base64 of: 'p=tls-exporter,,n=user,r=12C4CD5C-E38E-4A98-8F6D-15C38F51CCC6' -->
+  <initial-response>cD10bHMtZXhwb3J0ZXIsLG49dXNlcixyPTEyQzRDRDVDLUUzOEUtNEE5OC04RjZELTE1QzM4RjUxQ0NDNg==</initial-response>
+  <user-agent id='d4565fa7-4d72-4749-b3d3-740edbf87770'>
+    <software>AwesomeXMPP</software>
+    <device>Kiva's Phone</device>
+  </user-agent>
+</authenticate>
+
+<!--
+  SCRAM-SHA-1-PLUS challenge issued by the server as defined in RFC 5802
+  but including the optional attribute indicating support for this specification.
+  Base64 of: 'r=12C4CD5C-E38E-4A98-8F6D-15C38F51CCC6a09117a6-ac50-4f2f-93f1-93799c2bddf6,s=QSXCR+Q6sek8bf92,i=4096,d=ssdp'
+-->
+<challenge xmlns='urn:xmpp:sasl:2'>
+  cj0xMkM0Q0Q1Qy1FMzhFLTRBOTgtOEY2RC0xNUMzOEY1MUNDQzZhMDkxMTdhNi1hYzUwLTRmMmYtOTNmMS05Mzc5OWMyYmRkZjYscz1RU1hDUitRNnNlazhiZjkyLGk9NDA5NixkPXNzZHA=
+</challenge>
+
+<!--
+  The client responds with the base64 encoded SCRAM-SHA-1-PLUS client-final-message (password: 'pencil')
+  including the base64 encoded SHA-1 hash of the mechanism and channel-binding lists.
+  Attribute "d" contains base64 encoded SHA-1 hash of 'SCRAM-SHA-1,SCRAM-SHA-1-PLUS|tls-exporter,tls-server-end-point'
+  Base64 of: 'c=cD10bHMtZXhwb3J0ZXIsLMcoQvOdBDePd4OswlmAWV3dg1a1Wh1tYPTBwVid10VU,r=12C4CD5C-E38E-4A98-8F6D-15C38F51CCC6a09117a6-ac50-4f2f-93f1-93799c2bddf6,p=UApo7xo6Pa9J+Vaejfz/dG7BomU=,d=dRc3RenuSY9ypgPpERowoaySQZY='
+  The c-attribute contains the GS2-header and channel-binding data blob (32 bytes) as defined in RFC 5802.
+-->
+<response xmlns='urn:xmpp:sasl:2'>
+  Yz1jRDEwYkhNdFpYaHdiM0owWlhJc0xNY29Rdk9kQkRlUGQ0T3N3bG1BV1YzZGcxYTFXaDF0WVBUQndWaWQxMFZVLHI9MTJDNENENUMtRTM4RS00QTk4LThGNkQtMTVDMzhGNTFDQ0M2YTA5MTE3YTYtYWM1MC00ZjJmLTkzZjEtOTM3OTljMmJkZGY2LHA9VUFwbzd4bzZQYTlKK1ZhZWpmei9kRzdCb21VPSxkPWRSYzNSZW51U1k5eXBnUHBFUm93b2F5U1FaWT0=
+</response>
+
+<!--
+  The server accepted this authentication, no tampering with the advertised SASL mechanisms or channel-bindings was detected.
+-->
+<success xmlns='urn:xmpp:sasl:2'>
+  <!-- Base64 of: 'v=sQq8A1dePL5DxWX22Sz4TJMD7t4=' -->
+  <additional-data>
+    dj1zUXE4QTFkZVBMNUR4V1gyMlN6NFRKTUQ3dDQ9
+  </additional-data>
+  <authorization-identifier>user@example.org</authorization-identifier>
+</success>]]></example>
+  </section2>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Using SCRAM attributes makes them part of the HMAC signatures used in the SCRAM protocol flow efficiently protecting them against any MITM attacker not knowing the password used.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This specification does not need any interaction with the &REGISTRAR;.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>This specification does not specify any new XML elements.</p>
+</section1>
+</xep>
