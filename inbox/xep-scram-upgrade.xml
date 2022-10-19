@@ -1,0 +1,128 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>SCRAM Upgrade Tasks</title>
+  <abstract>This specification provides a way to upgrade to newer SCRAM hash algorithms using a SASL2 upgrade task.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>RFC 5802</spec>
+    <spec>XEP-0388</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>sut</shortname>
+  &tmolitor;
+  <revision>
+    <version>0.0.1</version>
+    <date>2022-10-19</date>
+    <initials>tm</initials>
+    <remark>Initial version.</remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>&xep0388; section 3 defines a way to upgrade to newer SASL mechanisms by providing the server with the needed data for that mechanism using upgrade tasks.</p>
+  <p>This specification uses those &xep0388; upgrade tasks to upgrade to newer SCRAM mechanisms using hash methods, which the server does not yet have the required data for.</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <p>This protocol was designed to allow the client to upgrade to newer SCRAM mechanisms.</p>
+</section1>
+
+<section1 topic="Protocol" anchor="protocol">
+  <p>For upgrades of SCRAM mechanisms as defined in &rfc5802;, the server has to provide the needed data for the client to calculate the SaltedPassword as defined in this RFC (or some RFC updating it), namely the iteration count and salt. To do so the server sends a &lt;salt/> element namespaced to "urn:xmpp:scram-upgrade:0" containing the salt and an attribute named "iteration" containing the iteration count as defined in that RFC, omitting the "s=" and "i=" prefix. The &lt;salt/> element is contained within a &lt;task-data/> wrapper element as defined in &xep0388;.</p>
+  <p>The client then calculates the SaltedPassword and sends back its base64 encoded value inside a &lt;hash/> element namespaced to "urn:xmpp:scram-upgrade:0". The &lt;hash/> element is contained within a &lt;task-data/> wrapper element as defined in &xep0388;.</p>
+  <p>The name of the upgrade task MUST NOT conain the "-PLUS" suffix, because channel-binding is not relevant for upgrade tasks.</p>
+  <example caption="SCRAM hash upgrade task for SCRAM-SHA-256 after successful SCRAM-SHA-1-PLUS authentication"><![CDATA[
+<!-- The Server provides the SCRAM upgrade task requested by the client in its <authenticate/> element -->
+<continue xmlns='urn:xmpp:sasl:2'>
+  <!-- Base64 of: 'v=msVHs/BzIOHDqXeVH7EmmDu9id8=' -->
+  <additional-data>
+    dj1tc1ZIcy9CeklPSERxWGVWSDdFbW1EdTlpZDg9
+  </additional-data>
+  <tasks>
+    <task>UPGR-SCRAM-SHA-256</task>
+  </tasks>
+</continue>
+
+<!-- The Client initiates the task -->
+<next xmlns='urn:xmpp:sasl:2' task='UPGR-SCRAM-SHA-256'/>
+
+<!--
+  The server sends the required salt and iteration count.
+-->
+<task-data xmlns='urn:xmpp:sasl:2'>
+  <salt xmlns='urn:xmpp:scram-upgrade:0' iterations='4096'>
+    A_SXCRXQ6sek8bf_Z
+  </salt>
+</task-data>
+
+<!-- The client responds with the base64 encoded SaltedPassword. -->
+<task-data xmlns='urn:xmpp:sasl:2'>
+  <hash xmlns='urn:xmpp:sasl:2'>
+    BzOnw3Pc5H4bOLlPZ/8JAy6wnTpH05aH21KW2+Xfpaw=
+  </hash>
+</task-data>
+
+<!--
+  Finally, the server sends a success after adding the salted SHA-256 hash to its database.
+  A SASL2 success always includes the authorization identifier.
+-->
+<success xmlns='urn:xmpp:sasl:2'>
+  <authorization-identifier>user@example.org</authorization-identifier>
+</success>
+]]></example>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Sending the password hash to the server (after authentication) is only protected by TLS and possibly channel-binding. Clients SHOULD use channel-binding, if available, to make sure no MITM can eavesdrop that hash and subsequently use it for authentication.</p>
+  <p>Note that a client can always choose to not take server-offered upgrades to newer SCRAM hash algorithms if it can not use channel-binding or the connection is otherwise deemed not secure enough.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This specification does not need any interaction with the &REGISTRAR;.</p>
+</section1>
+<section1 topic="XML Schema">
+    <code><![CDATA[
+<?xml version='1.0' encoding='utf-8'?>
+<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'
+           targetNamespace="urn:xmpp:scram-upgrade:0"
+           xmlns="urn:xmpp:scram-upgrade:0"
+           elementFormDefault="qualified">
+
+  <xs:element name="parameters">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="salt" type="base64Data" minOccurs="1" maxOccurs="1"/>
+        <xs:element name="iterations" type="iterationCount" minOccurs="1" maxOccurs="1"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="hash" type="base64Data"/>
+
+  <xs:simpleType name="base64Data">
+      <xs:restriction base="xs:base64Binary"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="iterationCount">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>
+]]></code>
+</section1>
+</xep>
