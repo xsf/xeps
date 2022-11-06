@@ -18,7 +18,7 @@ VALIDATION_RESULT=0
 
 # 1. Check DTD conformance against xep.dtd
 XEP_DTD="xep.dtd"
-if (xmllint --noout --dtdvalid "$XEP_DTD" "$1")
+if xmllint --noout --dtdvalid "$XEP_DTD" "$1"
 then
   echo "[PASS] DTD conformance against xep.dtd"
 else
@@ -32,7 +32,7 @@ HEADER_STATUS=$(xmllint --xpath '/xep/header/status/text()' --nowarning --dtdval
 HEADER_TYPE=$(xmllint --xpath '/xep/header/type/text()' --nowarning --dtdvalid "$XEP_DTD" $1)
 HEADER_APPROVER=$(xmllint --xpath '/xep/header/approver/text()' --nowarning --dtdvalid "$XEP_DTD" $1)
 
-if (echo "$FILE_NAME" | grep -Eq "^xep-[0-9]{4}.xml$")
+if echo "$FILE_NAME" | grep -Eq "^xep-[0-9]{4}.xml$"
 then
   echo "[INFO] The filename ('$FILE_NAME') matches 'xep-[0-9]{4}.xml'."
   # 2. If the filename matches xep-[0-9]{4}.xml, check:
@@ -66,7 +66,7 @@ else
   fi
 
   # 3.3 That the name does not start with xep-[0-9]
-  if (echo "$FILE_NAME" | grep -Eq "^xep-[0-9].*$")
+  if echo "$FILE_NAME" | grep -Eq "^xep-[0-9].*$"
   then
     echo "[FAIL] The filename ('$FILE_NAME') starts with 'xep-[0-9]' (but should not)."
     VALIDATION_RESULT=1;
