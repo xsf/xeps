@@ -10,7 +10,7 @@
 #
 # exit status will be non-zero upon validation failure.
 #
-# requires: bash, xmllint
+# requires: bash, xmllint, sort (supporting the '-V' argument)
 
 set -euo pipefail
 
@@ -31,6 +31,7 @@ header_number=$(xmllint --xpath '/xep/header/number/text()' --nowarning --dtdval
 header_status=$(xmllint --xpath '/xep/header/status/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
 header_type=$(xmllint --xpath '/xep/header/type/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
 header_approver=$(xmllint --xpath '/xep/header/approver/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
+header_revisions=$(xmllint --xpath '/xep/header/revision/version/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
 processing_instructions=$(xmllint --xpath '/processing-instruction("xml-stylesheet")' --nowarning --dtdvalid "$xep_dtd" "$1")
 
 if echo "$file_name" | grep -Eq "^xep-[0-9]{4}.xml$"
@@ -103,7 +104,16 @@ case $header_approver in
 esac
 
 # 7. Check that the version numbers in the revision blocks are descending (from top to bottom in the document)
-echo "[INFO] implementation of validation version numbers in the revision blocks is pending!"
+expected_revision_order=$(echo "$header_revisions" | tr " " "\n" | sort -Vr)
+if [ "$expected_revision_order" = "$header_revisions" ]
+then
+  echo "[PASS] Version numbers in the revision blocks are descending."
+else
+  echo "[FAIL] Version numbers in the revision blocks are not ordered (descending from top to bottom in the document) (but should be)."
+  echo "       Order found : $(echo $header_revisions)" # funky $() nesting to remove newlines.
+  echo "       Expected was: $(echo $expected_revision_order)"
+  validation_result=1
+fi
 
 # 8. If the approver (see above) is Board, enforce that /xep/header/type is not Standards Track.
 if [ "$header_approver" = "Board" ]
