@@ -27,12 +27,15 @@ else
 fi
 
 file_name=$(basename -- "$1")
-header_number=$(xmllint --xpath '/xep/header/number/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
-header_status=$(xmllint --xpath '/xep/header/status/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
-header_type=$(xmllint --xpath '/xep/header/type/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
-header_approver=$(xmllint --xpath '/xep/header/approver/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
-header_revisions=$(xmllint --xpath '/xep/header/revision/version/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
-processing_instructions=$(xmllint --xpath '/processing-instruction("xml-stylesheet")' --nowarning --dtdvalid "$xep_dtd" "$1")
+
+# The test for exit code equalling 10 detects when the XPATH evaluation yields no results. In that case, the execution
+# should not fail immediately, but use an empty value instead (which will likely cause a validation failure further down).
+header_number=$(xmllint --xpath '/xep/header/number/text()' --nowarning --dtdvalid "$xep_dtd" "$1") || test $?=10
+header_status=$(xmllint --xpath '/xep/header/status/text()' --nowarning --dtdvalid "$xep_dtd" "$1") || test $?=10
+header_type=$(xmllint --xpath '/xep/header/type/text()' --nowarning --dtdvalid "$xep_dtd" "$1") || test $?=10
+header_approver=$(xmllint --xpath '/xep/header/approver/text()' --nowarning --dtdvalid "$xep_dtd" "$1") || test $?=10
+header_revisions=$(xmllint --xpath '/xep/header/revision/version/text()' --nowarning --dtdvalid "$xep_dtd" "$1") || test $?=10
+processing_instructions=$(xmllint --xpath '/processing-instruction("xml-stylesheet")' --nowarning --dtdvalid "$xep_dtd" "$1") || test $?=10
 
 if echo "$file_name" | grep -Eq "^xep-[0-9]{4}.xml$"
 then
