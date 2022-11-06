@@ -12,7 +12,7 @@
 #
 # requires: bash, xmllint
 
-set -e
+set -euo pipefail
 
 VALIDATION_RESULT=0
 
