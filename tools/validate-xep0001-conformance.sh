@@ -96,7 +96,7 @@ esac
 
 # FIXME: lots of duplications here. Find a better solution.
 case $file_name in
-  'xep-0001.xml' | 'xep-0002.xml' | 'xep-0019.xml' | 'xep-0053.xml' | 'xep-00143.xml' | 'xep-0182.xml' | 'xep-0345.xml' | 'xep-0381.xml' | 'xep-0429.xml' | 'xep-0458.xml' )
+  'xep-0001.xml' | 'xep-0002.xml' | 'xep-0019.xml' | 'xep-0053.xml' | 'xep-0143.xml' | 'xep-0182.xml' | 'xep-0345.xml' | 'xep-0381.xml' | 'xep-0429.xml' | 'xep-0458.xml' )
     case $header_type in
       Historical | Humorous | Informational | Organizational | 'Standards Track' | 'Procedural' )
         echo "[PASS] XPATH value /xep/header/type/text() ('$header_type') equals a defined type."
