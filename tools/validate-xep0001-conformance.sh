@@ -63,7 +63,7 @@ else
   then
     echo "[PASS] XPATH value /xep/header/number/text() ('$header_status') equals 'XXXX'."
   else
-    echo "[FAIL] XPATH value /xep/header/nimber/text() ('$header_status') does not equal 'XXXX' (but should)."
+    echo "[FAIL] XPATH value /xep/header/number/text() ('$header_status') does not equal 'XXXX' (but should)."
     validation_result=1
   fi
 
@@ -90,7 +90,54 @@ esac
 
 # 5. Check that /xep/header/type/text() (XPath) is defined in XEP-0001
 #    If the XEP number is less than 400, also accept some legacy values. To find which, see which you encounter in the XEP numbers below 400 :-).
-echo "[INFO] implementation of validation of XPATH value /xep/header/type/text() ('$header_type') is pending!"
+
+# FIXME: lots of duplications here. Find a better solution.
+case $file_name in
+  'xep-0001.xml' | 'xep-0002.xml' | 'xep-0019.xml' | 'xep-0053.xml' | 'xep-00143.xml' | 'xep-0182.xml' | 'xep-0345.xml' | 'xep-0381.xml' | 'xep-0429.xml' | 'xep-0458.xml' )
+    case $header_type in
+      Historical | Humorous | Informational | Organizational | 'Standards Track' | 'Procedural' )
+        echo "[PASS] XPATH value /xep/header/type/text() ('$header_type') equals a defined type."
+        ;;
+      *)
+        echo "[FAIL] XPATH value /xep/header/type/text() ('$header_type') does not equals a defined type (but should)."
+        validation_result=1
+        ;;
+    esac
+    ;;
+  'xep-0006.xml' | 'xep-0010.xml' | 'xep-0069.xml' | 'xep-0139.xml' )
+    case $header_type in
+      Historical | Humorous | Informational | Organizational | 'Standards Track' | 'SIG Formation' )
+        echo "[PASS] XPATH value /xep/header/type/text() ('$header_type') equals a defined type."
+        ;;
+      *)
+        echo "[FAIL] XPATH value /xep/header/type/text() ('$header_type') does not equals a defined type (but should)."
+        validation_result=1
+        ;;
+    esac
+    ;;
+  'xep-0007.xml' )
+    case $header_type in
+      Historical | Humorous | Informational | Organizational | 'Standards Track' | 'SIG Proposal' )
+        echo "[PASS] XPATH value /xep/header/type/text() ('$header_type') equals a defined type."
+        ;;
+      *)
+        echo "[FAIL] XPATH value /xep/header/type/text() ('$header_type') does not equals a defined type (but should)."
+        validation_result=1
+        ;;
+    esac
+    ;;
+  * )
+    case $header_type in
+      Historical | Humorous | Informational | Organizational | 'Standards Track' )
+        echo "[PASS] XPATH value /xep/header/type/text() ('$header_type') equals a defined type."
+        ;;
+      *)
+        echo "[FAIL] XPATH value /xep/header/type/text() ('$header_type') does not equals a defined type (but should)."
+        validation_result=1
+        ;;
+    esac
+    ;;
+esac
 
 # 6. Check that /xep/header/approver/text() (XPath) is either Board or Council
 case $header_approver in
