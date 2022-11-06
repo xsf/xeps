@@ -26,11 +26,11 @@ else
   VALIDATION_RESULT=1;
 fi
 
-FILE_NAME="$(basename -- $1)"
-HEADER_NUMBER=$(xmllint --xpath '/xep/header/number/text()' --nowarning --dtdvalid "$XEP_DTD" $1)
-HEADER_STATUS=$(xmllint --xpath '/xep/header/status/text()' --nowarning --dtdvalid "$XEP_DTD" $1)
-HEADER_TYPE=$(xmllint --xpath '/xep/header/type/text()' --nowarning --dtdvalid "$XEP_DTD" $1)
-HEADER_APPROVER=$(xmllint --xpath '/xep/header/approver/text()' --nowarning --dtdvalid "$XEP_DTD" $1)
+FILE_NAME=$(basename -- "$1")
+HEADER_NUMBER=$(xmllint --xpath '/xep/header/number/text()' --nowarning --dtdvalid "$XEP_DTD" "$1")
+HEADER_STATUS=$(xmllint --xpath '/xep/header/status/text()' --nowarning --dtdvalid "$XEP_DTD" "$1")
+HEADER_TYPE=$(xmllint --xpath '/xep/header/type/text()' --nowarning --dtdvalid "$XEP_DTD" "$1")
+HEADER_APPROVER=$(xmllint --xpath '/xep/header/approver/text()' --nowarning --dtdvalid "$XEP_DTD" "$1")
 
 if echo "$FILE_NAME" | grep -Eq "^xep-[0-9]{4}.xml$"
 then
