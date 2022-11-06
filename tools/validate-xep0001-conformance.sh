@@ -31,6 +31,7 @@ header_number=$(xmllint --xpath '/xep/header/number/text()' --nowarning --dtdval
 header_status=$(xmllint --xpath '/xep/header/status/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
 header_type=$(xmllint --xpath '/xep/header/type/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
 header_approver=$(xmllint --xpath '/xep/header/approver/text()' --nowarning --dtdvalid "$xep_dtd" "$1")
+processing_instructions=$(xmllint --xpath '/processing-instruction("xml-stylesheet")' --nowarning --dtdvalid "$xep_dtd" "$1")
 
 if echo "$file_name" | grep -Eq "^xep-[0-9]{4}.xml$"
 then
@@ -42,7 +43,7 @@ then
     echo "[PASS] The number in the filename ('$file_name') equals XPATH value /xep/header/number/text() ('$header_number')."
   else
     echo "[FAIL] The number in the filename ('$file_name') does not equals XPATH value /xep/header/number/text() ('$header_number') (but should)."
-    validation_result=1;
+    validation_result=1
   fi
 else
   echo "[INFO] The filename ('$file_name') does not match 'xep-[0-9]{4}.xml'."
@@ -53,7 +54,7 @@ else
     echo "[PASS] XPATH value /xep/header/status/text() ('$header_status') equals 'ProtoXEP'."
   else
     echo "[FAIL] XPATH value /xep/header/status/text() ('$header_status') does not equal 'ProtoXEP' (but should)."
-    validation_result=1;
+    validation_result=1
   fi
 
   # 3.2 That the /xep/header/number/text() (XPath) is literally XXXX
@@ -62,14 +63,14 @@ else
     echo "[PASS] XPATH value /xep/header/number/text() ('$header_status') equals 'XXXX'."
   else
     echo "[FAIL] XPATH value /xep/header/nimber/text() ('$header_status') does not equal 'XXXX' (but should)."
-    validation_result=1;
+    validation_result=1
   fi
 
   # 3.3 That the name does not start with xep-[0-9]
   if echo "$file_name" | grep -Eq "^xep-[0-9].*$"
   then
     echo "[FAIL] The filename ('$file_name') starts with 'xep-[0-9]' (but should not)."
-    validation_result=1;
+    validation_result=1
   else
     echo "[PASS] The filename ('$file_name') does not start with 'xep-[0-9]'."
   fi
@@ -82,7 +83,7 @@ case $header_status in
     ;;
   *)
     echo "[FAIL] XPATH value /xep/header/status/text() ('$header_status') does not equals a defined status (but should)."
-    validation_result=1;
+    validation_result=1
     ;;
 esac
 
@@ -97,7 +98,7 @@ case $header_approver in
     ;;
   *)
     echo "[FAIL] XPATH value /xep/header/approver/text() ('$header_approver') does not equals 'Board' or 'Council' (but should)."
-    validation_result=1;
+    validation_result=1
     ;;
 esac
 
@@ -110,14 +111,20 @@ then
   if [ "$header_type" = "Standards Track" ]
   then
     echo "[FAIL] XPATH value /xep/header/approver/text() ('$header_approver') is 'Board' but XPATH value /xep/header/type/text() is 'Standards Track' (it should not be)."
-    validation_result=1;
+    validation_result=1
   else
     echo "[PASS] XPATH value /xep/header/approver/text() ('$header_approver') is 'Board' and XPATH value /xep/header/type/text() is not 'Standards Track'."
   fi
 fi
 
 # 9. Check that it uses the xep.xsl XML stylesheet.
-echo "[INFO] implementation of xep.xsl XML stylesheet usage is pending!"
+if echo "$processing_instructions" | grep -Eq "href=['\"]xep.xsl['\"]"
+then
+  echo "[PASS] xep.xsl XML stylesheet is used."
+else
+  echo "[FAIL] xep.xsl XML stylesheet is not used (but should be)."
+  validation_result=1
+fi
 
 # 10. Check that it includes the correct legal notice (either by checking for the entity reference, or by checking the content)
 echo "[INFO] implementation of inclusion of correct legal notice is pending!"
@@ -125,7 +132,7 @@ echo "[INFO] implementation of inclusion of correct legal notice is pending!"
 echo ""
 if [ $validation_result = 0 ]
 then
-  echo "No issues found (but not all checks are implemented).";
+  echo "No issues found (but not all checks are implemented)."
 else
   echo "Issues found!"
 fi
