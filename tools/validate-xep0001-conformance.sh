@@ -183,13 +183,19 @@ else
   validation_result=1
 fi
 
-# 10. Check that it includes the correct legal notice (either by checking for the entity reference, or by checking the content)
-echo "[INFO] implementation of inclusion of correct legal notice is pending!"
+# 10. Check that it includes the correct legal notice (by checking for the entity reference)
+if grep -q "&LEGALNOTICE;" "$1"
+then
+  echo "[PASS] entity reference for the legal notice has been detected."
+else
+  echo "[FAIL] entity reference for the legal notice has not been detected (but it should have been)."
+  validation_result=1
+fi
 
 echo ""
 if [ $validation_result = 0 ]
 then
-  echo "No issues found (but not all checks are implemented)."
+  echo "No issues found."
 else
   echo "Issues found!"
 fi
