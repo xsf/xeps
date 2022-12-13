@@ -476,7 +476,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
           </xsl:when>
           <xsl:otherwise>
             <p class='indent'>The primary venue for discussion of XMPP Extension Protocols is the &lt;<a href="https://mail.jabber.org/mailman/listinfo/standards">standards@xmpp.org</a>&gt; discussion list.</p>
-            <p class='indent'>Discussion on other xmpp.org discussion lists might also be appropriate; see &lt;<a href='https://xmpp.org/about/discuss.shtml'>https://xmpp.org/about/discuss.shtml</a>&gt; for a complete list.</p>
+            <p class='indent'>Discussion on other xmpp.org discussion lists might also be appropriate; see &lt;<a href='https://xmpp.org/community/'>https://xmpp.org/community/</a>&gt; for a complete list.</p>
             <xsl:if test='contains(/xep/header/dependencies,"RFC")'>
               <p class='indent'>Given that this XMPP Extension Protocol normatively references IETF technologies, discussion on the &lt;<a href="https://mail.jabber.org/mailman/listinfo/xsf-ietf">xsf-ietf@xmpp.org</a>&gt; list might also be appropriate.</p>
             </xsl:if>
