@@ -1,0 +1,233 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Pubsub Signing</title>
+  <abstract>Specifies a mechanism to sign pubsub items</abstract>
+  &LEGALNOTICE;
+  <number>0475</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>XEP-0004</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0470</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>pubsub-signing</shortname>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.1.0</version>
+    <date>2022-12-20</date>
+    <initials>XEP Editor (jsc)</initials>
+    <remark>Accepted by vote of Council on 2022-11-30.</remark>
+  </revision>
+  <revision>
+    <version>0.0.2</version>
+    <date>2022-10-20</date>
+    <initials>jp</initials>
+    <remark>
+      <ul>
+        <li>replaced "signatory" term with the more commonly used "signer"</li>
+        <li>added &lt;to/&gt; and &lt;time/&gt; elements (similar to XEP-0373)</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2022-10-17</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>There are few ways to authenticate items published via &xep0060;, and none of them are secure: the <link url='https://xmpp.org/extensions/xep-0060.html#publisher-publish-success-publisher'>publish attribute</link> defined by the pubsub service is not mandatory and can be spoofed by the service itself, and some XEPs such as &xep0277; have their own mechanism (like &lt;author/&gt; qualified by "http://www.w3.org/2005/Atom" namespace) that is even easier to spoof.</p>
+  <p>This specification proposes a framework for attaching cryptographic signatures to pubsub items, allowing strong authentication of item authors. This specification only defines the framework, it is designed to be extended by other specifications to use various cryptographic algorithms.</p>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <ul>
+    <li><strong>wrapper element</strong>: element wrapping the item to sign, and containing extra metadata</li>
+    <li><strong>signed data</strong>: normalized and serialized wrapped element</li>
+    <li><strong>signing profile</strong>: a specialisation of this specification for a specific cryptographic algorithm.</li>
+    <li><strong>signature</strong>: element containing the signature itself (which is detached from the signed data).</li>
+    <li><strong>C14N</strong>: <link url='https://www.w3.org/TR/xml-c14n2/'>Canonical XML (version 2.0 is used in this specification)</link>, a way to normalize XMP to have the same data to sign.</li>
+  </ul>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The design goals of this XEP are:</p>
+  <ul>
+    <li>it must be possible to sign plain text items as well as end-to-end encrypted items;</li>
+    <li>it must be backwards compatible: attaching a signature must work with existing specifications so that clients that do not support pubsub signatures can continue to work as usual;</li>
+    <li>it must be possible to sign an item by several authors;</li>
+    <li>it should be possible to have different signers from the item publisher;</li>
+  </ul>
+</section1>
+<section1 topic='Overview' anchor='overview'>
+  <p>To sign a pubsub item, the signature and the signed data are separated. Signed data is a wrapper element comprising essential data such as signers, and the item to be signed. The wrapper element is then normalized, serialized and signed. The signature and additional data of the wrapper element are then publised as &xep0470;. In case of multiple signers, each signer publish their own signature as an attachment.</p>
+  <p>To verify a signature, the process is similiar: the receiving client builds the same wrapper element, normalize and serialize it, and uses it to validate the given signature(s).</p>
+</section1>
+
+<section1 topic='Signing a Pubsub Item' anchor='signing'>
+  <p>To sign a pubsub item, a &lt;sign-data/&gt; wrapper element qualified by the 'urn:xmpp:pubsub-signature:0' namespace is created. This element MUST contain at least one 'to' element which MUST have a 'jid' attribute whose value is the intended recipient's XMPP address. The XMPP address found in the 'to' element's 'jid' attribute SHOULD be without Resourcepart (i.e., a bare JID).</p>
+  <p>The &lt;sign-data/&gt; element MUST contain exactly one &lt;time/&gt; element. The &lt;time/&gt; element MUST have a 'stamp' attribute which contains the timestamp of the moment when the element is being signed in the DateTime format as specified in &xep0082;</p>
+  <p>The &lt;sign-data/&gt; element MUST contain one or more &lt;signer/&gt; element(s) which MUST possess a 'jid' attribute whose value is the bare JID of the signer.</p>
+  <p>One or more external elements specified by signing profile MAY be added</p>
+  <p>The item to sign MUST be added as a child of the &lt;sign-data/&gt; element. If the wrapped &lt;item/&gt; element possesses a 'publisher' attribute, it MUST be removed when added to the wrapper element. As item ID can be added or modified by the Pubsub/PEP service, if the &lt;item/&gt; has an 'id' attribute, it MUST be removed too when added to the wrapper element, thus the item ID is not part of the signed data.</p>
+  <p>Then the resulting item is put to canonical form by applying <link url='https://www.w3.org/TR/xml-c14n2/'>C14N v2.0</link> specification.</p>
+  <p>The resulting element in canonical form is then serialized and signed.</p>
+  <p>Below is an example of wrapper element:</p>
+    <example caption="Wrapper Element (Before Normalization)"><![CDATA[
+    <sign-data>
+      <to jid='juliet@capulet.lit' />
+      <time stamp='2022-10-16T18:39:03Z' />
+      <signer>juliet@capulet.lit</signer>
+      <item>
+        <entry xmlns='http://www.w3.org/2005/Atom'>
+          <author>
+            <name>Juliet Capulet</name>
+            <uri>xmpp:juliet@capulet.lit</uri>
+          </author>
+          <title type='text'>She is so pretty! </title>
+          <published>2022-10-16T18:39:02Z</published>
+        </entry>
+      </item>
+    </sign-data>
+]]></example>
+<p>The normalized form is as follow:</p>
+
+    <example caption="Wrapper Element (After Normalization)"><![CDATA[<sign-data><to jid="juliet@capulet.lit"></to><time stamp="2022-10-16T18:39:03Z"></time><signer>juliet@capulet.lit</signer><item><entry xmlns="http://www.w3.org/2005/Atom"><author><name>Juliet Capulet</name><uri>xmpp:juliet@capulet.lit</uri></author><title type="text">She is so pretty!</title><published>2022-10-16T18:39:02Z</published></entry></item></sign-data>]]></example>
+
+    <p>The signature is then put as an &xep0470;. The attachment is a &lt;signature/&gt; element qualified by the 'urn:xmpp:pubsub-signing:0' namespace. The attachment MUST contain the same &lt;time/&gt; and &lt;signer/&gt; elements in the same order as in the &lt;sign-data/&gt; element. If any signing profile extra elements have been used in &lt;sign-data/&gt;, they MUST be added too in the same order as in &lt;sign-data/&gt;. Then the signature is added in an element specified in the signing profile specification.</p>
+    <p>Each signer entity MUST publish a &lt;signature/&gt; attachment signed with their own encryption keys.</p>
+    <p>If the pubsub item is encrypted, the signature MUST be done on the plain text version of the item <strong>before</strong> the encryption of the item. The &lt;signature/&gt; attachment SHOULD be encrypted too.</p>
+
+  <example caption="Juliet Publish Her Signature as an Attachment"><![CDATA[
+  <iq from='juliet@capulut.lit/chamber'
+    id='signature_1'
+    to='juliet@capulet.lit'
+    type='set'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:pubsub-attachments:1/xmpp:juliet@capulet.lit?;node=urn%3Axmpp%3Amicroblog%3A0;item=random-thoughts-12bd'>
+      <item id='juliet@capulet.lit'>
+        <attachments>
+          <signature xmlns='urn:xmpp:pubsub-signing:0' timestamp="2022-10-16T18:39:04Z">
+            <time stamp='2022-10-16T18:39:03Z' />
+            <signer>juliet@capulet.lit</signer>
+            <example-signature xmlns='https://example.org/signature'>
+              <!-- SOME PAYLOAD -->
+            </example-signature>
+          </signature>
+        </attachments>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+  ]]></example>
+<section2 topic='rationales' anchor='signing-rationales'>
+  <p>The reason we use &xep0470; instead of directly signing the target item is that we need to be backwards compatible, so we cannot replace the target item with another element, nor is it possible to add a sibling element to item's payload (this would not be compliant with &xep0060; specification). This requires detaching the signature from the &lt;item/&gt; element itself, and &xep0470; are dedicated to attaching data to items, so a viable solution.</p>
+</section2>
+
+<section2 topic='Summarizing' anchor='summarizing'>
+  <p>To summarize signatures as explained in &xep0470; the &lt;signer/&gt; elements are grouped into a &lt;signature/&gt; element qualified by the 'urn:xmpp:pubsub-signing:0' namespace. This allows a client to easily know that an item is signed, and to obtain the IDs of attachments that need to be retrieved to validate signatures.</p>
+
+  <example caption="Juliet Get Summary of Signatures of an Item"><![CDATA[
+  <iq from='juliet@capulet.lit'
+    id='summary_123'
+    to='juliet@capulet.lit/chamber'
+    type='result'>
+    <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+      <items node='urn:xmpp:pubsub-attachments:summary:1/urn:xmpp:microblog:0'>
+        <item id='some-post-with-several-signatures-0adf'>
+          <summary xmlns='urn:xmpp:pubsub-attachments:summary:1'>
+            <!-- … -->
+
+            <signature xmlns='urn:xmpp:pubsub-signing:0' >
+              <signer>juliet@capulet.lit</signer>
+              <signer>romemo@montague.lit</signer>
+            </signature>
+
+            <!-- … -->
+          </summary>
+        </item>
+      </items>
+    </pubsub>
+  </iq>
+  ]]></example>
+</section2>
+
+<section2 topic='Signature Validation' anchor='signature-validation'>
+  <p>Once one or more signatures have been found in an item attachment, a client SHOULD validate them. To do this, it builds a wrapper element with the target item as explained in <link url='#signing'>Signing a Pubsub Item</link>, and validate it with each signature. Validation mechanism depends of the signing profile.</p>
+</section2>
+
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <p>C14N 2.0 defines <link url='https://www.w3.org/TR/xml-c14n2/#sec-Canonicalization-Parameters'>parameters</link> for the algorithm. For this specification, default values MUST be used, i.e. <em>IgnoreComments</em> is true, <em>TrimTextNodes</em> is true, <em>PrefixRewrite</em> is none, and <em>QNameAware</em> is the empty set. In other terms: there must be no comments, text nodes must be trimmed, prefixes are left unchanged, and no nodes must be processed as QName-valued.</p>
+  <p>Once the signature has been validated, it's the original item which MUST be used, as usual, not the normalized form. The original item has attributes missing from the normalized form ('published' and 'id' attribute), and spaces are trimmed, but they may be significant (e.g. in a dataform &lt;value/&gt;).</p>
+  <p>It is essential to use the same &lt;to/&gt;, &lt;time/&gt;, &lt;signer/&gt; and signing profile extra elements in the &lt;signature/&gt; element put in attachment and in wrapper &lt;sign-data/&gt; element used for signed data, as it is necessary for receiving client to re-build the wrapper element and then validate the signature.</p>
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>The client validating signatures should display a message or indicator depending on the validation result:</p>
+  <ul>
+    <li>If one of the signatures doesn't validate, the client SHOULD display a prominent warning message explicitely stating that the signature is not validated and that the message is probably spoofed.</li>
+    <li>If the signature is validated but at least one of the signers's fingerprints is not trusted, the client SHOULD display a warning message stating that the signature is validated but unreliable, and that the message may be forged.</li>
+    <li>If all signatures are validated <strong>and</strong> all signers' fingerprints are trusted, the client SHOULD display an information message or indication that the item is signed by one or more trusted signers.</li>
+  </ul>
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>If a client supports the protocol specified in this XEP, it MUST advertise it by including the "urn:xmpp:pubsub-signing:0" discovery feature in response to a &xep0030; information request:</p>
+
+  <example caption="Service Discovery information request"><![CDATA[
+<iq type='get'
+    from='juliet@example.org/chamber'
+    to='romeo@example.org/orchard'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq type='result'
+    from='romeo@example.org/orchard'
+    to='juliet@example.org/chamber'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:pubsub-signing:0'/>
+    ...
+  </query>
+</iq>]]></example>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Signature is intimely linked to the trust in the fingerprint of the encryption keys. A warning SHOULD be displayed by a client if a signature is valid but the signing entity's fingerprints are not trusted. Trust should be done through an external channel (outside of XMPP), preferably face-to-face.</p>
+  <p>Security considerations of the signing profile applies.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>TODO</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>TODO</p>
+</section1>
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>Thanks to NLnet foundation/NGI0 Discovery for funding.</p>
+</section1>
+</xep>
