@@ -61,10 +61,10 @@ else
     validation_result=1
   fi
 
-  # 3.2 That the /xep/header/number/text() (XPath) is literally XXXX
-  if [ "$header_number" = "XXXX" ]
+  # 3.2 That the /xep/header/number/text() (XPath) is literally XXXX or xxxx
+  if [ "$header_number" = "XXXX" ] || [ "$header_number" = "xxxx" ]
   then
-    echo "[PASS] XPATH value /xep/header/number/text() ('$header_status') equals 'XXXX'."
+    echo "[PASS] XPATH value /xep/header/number/text() ('$header_status') equals 'XXXX' (case insensitive)."
   else
     echo "[FAIL] XPATH value /xep/header/number/text() ('$header_status') does not equal 'XXXX' (but should)."
     validation_result=1
