@@ -115,7 +115,7 @@ function Doc(body, metadata, variables)
 					end
 					add("</remark>");
 				else
-					add(("<%s>%s</%s>"):format(field, tostring(sv), field));
+					add(tostring(sv));
 				end
 				add(string.format("</%s>", field));
 			end
