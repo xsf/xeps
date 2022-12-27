@@ -247,11 +247,21 @@ local header_schema = [[
 	supersededby , shortname , schemaloc* , registry? , discuss? ,
 	expires? , author+ , revision+ , councilnote?)
 ]];
-for field in header_schema:gmatch("%w+") do
-	events.add_handler(field.."#text", function (event)
-		meta[field] = event.text:match("%S.*%S");
-		return true;
-	end);
+for field, mod in header_schema:gmatch("(%w+)([*+?]?)") do
+	if mod == "" or mod == "?" then
+		events.add_handler(field .. "#text", function(event)
+			meta[field] = event.text:match("%S.*%S");
+			return true;
+		end);
+	elseif mod == "*" or mod == "+" then
+		events.add_handler(field .. "#text", function(event)
+			if not meta[field] then
+				meta[field] = {};
+			end
+			table.insert(meta[field], event.text:match("%S.*%S"));
+			return true;
+		end);
+	end
 end
 
 do
