@@ -101,6 +101,12 @@ def extract_xep_metadata(document):
     else:
         last_call = None
 
+    tags = []
+    tags_elem = minidom_find_child(header, "tags")
+    if tags_elem is not None:
+        for child in minidom_children(tags_elem):
+            tags.append(minidom_get_text(child))
+
     return {
         "last_revision": {
             "version": last_revision_version,
@@ -113,6 +119,7 @@ def extract_xep_metadata(document):
         "sig": sig,
         "abstract": abstract,
         "shortname": shortname,
+        "tags": tags,
         "title": title,
         "approver": approver,
         "last_call": last_call,
@@ -136,6 +143,12 @@ def make_metadata_element(number, metadata, accepted, *, protoname=None):
 
     if metadata["shortname"] is not None:
         result.append(text_element("shortname", metadata["shortname"]))
+
+    if metadata["tags"]:
+        tags = etree.Element("tags")
+        for tag in metadata["tags"]:
+            tags.append(text_element("tag", tag))
+        result.append(tags)
 
     if metadata["last_revision"]["version"] is not None:
         last_revision = metadata["last_revision"]
