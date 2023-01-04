@@ -135,9 +135,9 @@ If the PR is not touching a XEP, this guide does not apply.
         1. Make sure the standards@ discussion (if it exists) is linked in the
            PR.
         2. Add the [Needs Author] label.
-        3. Try to make the XEP Author aware of the change. If you do not know
-           a GitHub handle of the XEP Author, use the contact info available
-           for each author in either the XEP or in xep.ent.
+        3. Try to make the XEP Author aware of the change. Do this with an email to
+           the author (use the contact info available for each author in either the
+           XEP or in xep.ent) and cc: standards@.
         4. Stop.
 
     5. Otherwise, mark the PR as [Ready to Merge], linking the XEP Author’s
