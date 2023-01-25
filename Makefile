@@ -97,7 +97,7 @@ $(all_xep_xmls): $(OUTDIR)/%.xml: %.xml $(XMLDEPS)
 $(OUTDIR)/xep.xsl: xep.xsl $(OUTDIR)
 	cp $< $@
 
-$(OUTDIR)/xeplist.xml: $(wildcard *.xml) $(wildcard inbox/*.xml)
+$(OUTDIR)/xeplist.xml: $(wildcard *.xml) $(wildcard inbox/*.xml) $(OUTDIR)
 	./tools/extract-metadata.py > $@
 
 $(EXAMPLESDIR)/%.xml: xep-%.xml $(XMLDEPS) examples.xsl | $(EXAMPLESDIR)
