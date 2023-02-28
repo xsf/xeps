@@ -107,11 +107,10 @@ do
     xep_num="XEP-$(echo "$xep" | grep -Eo '[0-9]{4}')"
     if ! echo "$pr_title" | grep "$xep_num" &>/dev/null
     then
-        echo "error: title did not include '$xep_num'"
-        exit 1
+        echo "warning: title did not include '$xep_num'"
     fi
-    
-    status="$(xpath "$xep" '/xep/header/status/text()')"    
+
+    status="$(xpath "$xep" '/xep/header/status/text()')"
     approvers=""
     if echo "$status" | grep -E '^(Experimental|Deferred)$' &>/dev/null
     then
@@ -121,15 +120,15 @@ do
             echo "tag: needs-editor-action"
             echo "manual: move $xep_num status to Experimental before or with merge"
         fi
-        
+
         approvers="$(xpath "$xep" '/xep/header/author/email/text()' | sort -u)"
     else
         # *not* Experimental or Deferred
         approvers="$(xpath "$xep" '/xep/header/approver/text()' 2>/dev/null || echo 'Unknown')"
     fi
-    
+
     echo "info: $xep_num status '$status' needs approvers: '$(echo "$approvers" | tr '\n' ' ' | xargs)'"
-    
+
     new_all_approvers="$(echo -e "$all_approvers\n$approvers" | sort -u)"
     if [ "$all_approvers" != "$new_all_approvers" ]
     then
@@ -143,7 +142,7 @@ do
         fi
         all_approvers="$new_all_approvers"
     fi
-    
+
     # check revision block added and minor version bump
     versions="$(xpath "$xep" '/xep/header/revision/version/text()')"
     latest_num_versions="$(echo "$versions" | wc -l)"
