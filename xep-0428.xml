@@ -8,13 +8,14 @@
 <xep>
 <header>
   <title>Fallback Indication</title>
-  <abstract>This specification proposes a mechanism by which message bodies can be marked as being purely for fallback
-    purposes, and therefore to be ignored by intermediaries and anything that understands the remainder of the message.</abstract>
+  <abstract>This specification proposes a mechanism by which message bodies or parts thereof can be marked as being for fallback
+    purposes, and therefore to be ignored by anything that understands the original intent of the message.</abstract>
   &LEGALNOTICE;
   <number>0428</number>
-  <status>Deferred</status>
+  <status>Experimental</status>
   <type>Standards Track</type>
   <sig>Standards</sig>
+  <approver>Council</approver>
   <dependencies>
     <spec>XMPP Core</spec>
   </dependencies>
@@ -23,6 +24,19 @@
   <shortname>fallback</shortname>
   &dcridland;
   &larma;
+  <revision>
+    <version>0.2.0</version>
+    <date>2022-07-17</date>
+    <initials>lmw</initials>
+    <remark>
+      <ul>
+        <li>Add 'for' attribute such that entities can discover what the fallback is for.</li>
+        <li>Allow to specify that only one of &SUBJECT; or &BODY; is meant as a fallback.</li>
+        <li>Allow to specify the part of respective text that is meant as fallback where applicable.</li>
+        <li>Don't use encryption example, which should use XEP-0380 instead.</li>
+      </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.1.1</version>
     <date>2020-03-03</date>
@@ -48,17 +62,20 @@
 </header>
 
 <section1 topic='Introduction' anchor='intro'>
-  <p>A common and convenient practise for new extensions is to supply a fallback body. This provides immediate backwards
+  <p>A common and convenient practise for new extensions is to supply a fallback in the body. This provides immediate backwards
     compatibility for naive clients, since - not understanding the new protocol - they will gracefully degrade to displaying
-  the body as an instant message.</p>
+    the body as an instant message.</p>
   <p>By way of example, a recent Reactions proposal suggested including the emoji as a <tt>&lt;body/></tt> element, so
     that existing clients would simply display it as a normal message.</p>
   <p>The downside of this approach is that servers and other intermediaries treat the presence of a <tt>&lt;body/></tt>
-    as being an indicator that a message is indeed an instant message. They will then treat it this way for archival
-    purposes, etc, which might not be appropriate.</p>
-  <p>This specification tackles the problem by providing an element to be used as a hint that the supplied
-    <tt>&lt;body/></tt> and <tt>&lt;subject/></tt> elements are only for fallback purposes, and the message SHOULD be
-    treated as if they were not present for most purposes.</p>
+    as being an indicator that a message is indeed an instant message. They may errornously treat a message this way 
+    for archival purposes, etc, that only has a <tt>&lt;body/></tt> for fallback purposes, which might not be appropriate.</p>
+  <p>This specification tackles the problem by providing an element to be used as a hint that parts or all of the supplied
+    <tt>&lt;body/></tt> and <tt>&lt;subject/></tt> elements are for fallback purposes, and the message may be treated as 
+    if they were not present if the processing entity understands what the message is a fallback for.</p>
+  <p>Additionally, the specification allows for transporting information about which parts of a <tt>&lt;body/></tt> are used
+    for fallback purposes and for which reason, such that supporting clients can hide or dim those parts when displaying them
+    to the user or otherwise treat those parts special as intended or encouraged by other specifications.</p>
 </section1>
 
 <section1 topic='Overview' anchor="overview">
@@ -67,25 +84,41 @@
       of <tt>&ns;</tt>. Note that lack of support will result in the desired fallback behaviour.</p>
   </section2>
   <section2 topic="Fallback Indicator">
-    <p>The fallback indicator is an element <tt>&lt;fallback/></tt> qualified by the <tt>&ns;</tt> namespace. It has no
-      attributes, content, or child elements.</p>
+    <p>The fallback indicator is an element <tt>&lt;fallback/></tt> qualified by the <tt>&ns;</tt> namespace. It has an attribute
+      <tt>for</tt> that indicates the specification that the fallback is meant to replace. This is typically the primary namespace
+      of the respective specification, but may be specified otherwise. The <tt>&lt;fallback/></tt> element may have one or multiple
+      <tt>&lt;body/></tt> or <tt>&lt;subject/></tt> child elements, that indicate the part of the message, that is a fallback. Both
+      of these child elements may have a <tt>start</tt> and <tt>end</tt> attribute which point to the start and end of a fallback 
+      character sequence as defined in &xep0426; in the respective element in the message. If <tt>start</tt> and <tt>end</tt> 
+      attribute are not supplied, the whole respective message element should be assumed to be there for fallback purposes. If
+      the <tt>&lt;fallback/></tt> element does not have any childs, it is assumed to apply to every message <tt>&lt;body/></tt> and
+      <tt>&lt;subject/></tt> present in the message.</p>
+    <p class="box">A previous version of this specification had an example using an encrypted message. It is suggested to use &xep0380; 
+      instead of this specification for that usecase.</p>
     <example><![CDATA[
-<message from="alice@example.org" to="bob@example.net" type="chat">
-  <fallback xmlns="]]>&ns;<![CDATA["/>
-  <encrypted xmlns="urn:example:crypto">Abobql jvyy rire qrpelcg bhe fhcre-frperg zrffntr!</encrypted>
-  <body>This message is encrypted.</body>
+<message to='anna@example.com' id='message-id2' type='groupchat'>
+  <body>
+    > Anna wrote:
+    > Hi, how are you?
+    Great
+  </body>
+  <reply to='anna@example.com' id='message-id1' xmlns='urn:xmpp:reply:0' />
+  <fallback xmlns='urn:xmpp:fallback:0' for='urn:xmpp:reply:0'>
+    <body start='0' end='33' />
+  </fallback>
 </message>
 ]]></example>
-    <p>Receiving the above message, a naive client will naturally display only the <tt>&lt;body/></tt> element text, but
-      a client or server which supports this specification will know this is merely a fallback placeholder, and to ignore
-      (and not display) the content therein.</p>
+    <p>Receiving the above message, a naive client will naturally display the full <tt>&lt;body/></tt> element text, but
+      a client which supports this specification and the specification for <tt>urn:xmpp:reply:0</tt> will know that a part of the
+      message is merely a fallback placeholder, and to ignore (and not display) that part, if it has other ways to convey the
+      intended meaning.</p>
   </section2>
   <section2 topic="Alternatives">
     <ul>
-      <li>&xep0334; was considered, and would probably be ideal - servers often examine these elements and alter
-        behaviour accordingly, but the specification was rejected by Council.</li>
+      <li>&xep0334; was considered to inform intermediaries, and would probably be ideal - servers often examine these elements
+        and alter behaviour accordingly, but the specification was rejected by Council.</li>
       <li>Placing fallback elements within the <tt>&lt;fallback/></tt> element would shift the onus from server to
-      client, but this is likely to be less useful.</li>
+        client, but this is likely to be less useful.</li>
     </ul>
   </section2>
 </section1>
@@ -94,10 +127,20 @@
     <code>
       <![CDATA[
 <?xml version="1.0" encoding="UTF-8"?>
-<xs:schema attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="]]>&ns;<![CDATA[" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:schema attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="]]>&ns;<![CDATA[" xmlns="]]>&ns;<![CDATA[" xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="fallback">
-    <xs:complexType/>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="subject" type="region" minOccurs="0" maxOccurs="unbounded" />
+        <xs:element name="body" type="region" minOccurs="0" maxOccurs="unbounded" />
+      </xs:sequence>
+      <xs:attribute name="for" type="xs:string" />
+    </xs:complexType>
   </xs:element>
+  <xs:complexType name="region">
+    <xs:attribute name="start" type="xs:integer" />
+    <xs:attribute name="end" type="xs:integer" />
+  </xs:complexType>
 </xs:schema>
       ]]>
     </code>
