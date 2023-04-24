@@ -34,7 +34,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 
 <xsl:stylesheet xmlns:xsl='http://www.w3.org/1999/XSL/Transform' version='1.0'>
 
-  <xsl:output method='html' encoding='utf-8' omit-xml-declaration='yes' indent='no'/>
+  <xsl:output method='html' media-type='text/html' encoding='utf-8' omit-xml-declaration='yes' indent='no' doctype-system='about:legacy-compat'/>
 
   <xsl:template name="status-notice">
     <xsl:param name="thestatus"/>
@@ -170,8 +170,6 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   </xsl:template>
 
   <xsl:template match='/'>
-    <xsl:text disable-output-escaping='yes'>&lt;!DOCTYPE html&gt;
-</xsl:text>
     <html lang='en'>
       <head>
         <title>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></title>
@@ -191,7 +189,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <!-- making things mobile-friendly... -->
         <meta>
           <xsl:attribute name='name'><xsl:text>viewport</xsl:text></xsl:attribute>
-          <xsl:attribute name='content'>width=device-width, initial-scale=1.0, maximum-scale=2.0</xsl:attribute>
+          <xsl:attribute name='content'>width=device-width, initial-scale=1.0</xsl:attribute>
         </meta>
         <!-- BEGIN META TAGS FOR DUBLIN CORE -->
         <meta>
