@@ -1,0 +1,269 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+  <!ENTITY ns "urn:xmpp:omemo:1">
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Session Healing for OMEMO</title>
+  <abstract>This specification provides a protocol and rules extension for OMEMO (XEP-0384) to achieve (automatic) session healing.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0384</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <author>
+    <firstname>Tim</firstname>
+    <surname>Henkes</surname>
+    <email>me@syndace.dev</email>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2020-09-06</date>
+    <initials>th</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>&xep0384; consists of the &doubleratchet; encryption scheme and the &x3dh; key agreement protocol, specified by Trevor Perrin and Moxie Marlinspike. Both parts are robust to some potential issues of messaging, like delayed, out-of-order or lost messages. Still, there are cases in which the protocol struggles to uphold its robustness, the most prominent example being backup/restore mechanisms. Due to OMEMO's forward secrecy, restoring old and outdated OMEMO sessions inevitably results in so-called "broken sessions". Broken sessions are sessions, in which the ratchets of two communicating parties have diverged, meaning that no message will ever be successfully transferred using those sessions. The only way to recover from this situation is to discard the broken sessions and replace them with new ones. Doing so in an automated manner needs careful consideration and rules, otherwise clients might become vulnerable to downgrade attacks, where an attacker could effectively downgrade sessions to only use &x3dh; and never arrive at the point where &doubleratchet; takes over and provides its security properties. This specification provides a small protocol extension for &xep0384;, which enables clients to detect broken sessions without being susceptible to downgrade attacks. In conjunction with the rules introduced in this specification, clients will be able to securely recover from certain broken session situations without user interaction. Note that there are still cases, in which automatic session healing is not possible, even when following this specification.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Provide a means for clients to securely perform automated OMEMO session healing.</li>
+    <li>Be fully optional on top of &xep0384;.</li>
+    <li>Work seamlessly, i.e. communication between clients with and without support still works as before without the need of explicit support discovery.</li>
+  </ul>
+</section1>
+<section1 topic='Protocol Extension' anchor='protocol-extension'>
+  <section2 topic='Double Ratchet' anchor='protocol-double_ratchet'>
+    <p>This section extends <link url="https://xmpp.org/extensions/xep-0384.html#protocol-double_ratchet">the corresponding section in XEP-0384</link>.</p>
+    <dl>
+      <di><dt>ratchet initialization</dt><dd>
+        In addition to the ratchet initialization as speecified in &xep0384;, the state is extended with the following values:
+        <ul>
+          <li><strong>DHrc</strong> &#8211; Tracks the Diffie-Hellman ratchet counter of the other party, initialized to 0.</li>
+          <li><strong>DHsc</strong> &#8211; Tracks the own Diffie-Hellman ratchet counter, initialized to 0.</li>
+        </ul>
+      </dd></di>
+      <di><dt>RatchetEncrypt</dt><dd>As specified in the &doubleratchet; specification, with one addition: if <tt>header.n</tt> equals zero, increment <tt>state.DHsc</tt> once.</dd></di>
+    </dl>
+  </section2>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Sending a message' anchor='usecases-messagesend'>
+    <section3 topic='Message structure description' anchor='message-structure-description'>
+      <p>This section extends <link url="https://xmpp.org/extensions/xep-0384.html#message-structure-description">the corresponding section in XEP-0384</link>. Three new attributes are introduced, otherwise the structure is untouched. Clients that don't support this specification should ignore the (for them) unknown attributes, resulting in seamless compatibility. The data needed to fill the new attributes is explained below the updated example.</p>
+      <p>The &lt;keys&gt; element is extended to also have an attribute called 'dhcs_sig' containing the base64 encoded signature of the Diffie-Hellman ratchet counters.</p>
+      <p>The &lt;key&gt; element is extended to also have two attributes called 'dhc' (holding an unsigneed integer) and 'ekid' (holding base64 encoded data).</p>
+      <p>The <link url="https://xmpp.org/extensions/xep-0384.html#example-7">example</link> is updated to include the newly introduced attributes:</p><!-- TODO: Anchor for the example -->
+      <example caption='Sending a message'><![CDATA[
+<message to='juliet@capulet.lit' from='romeo@montague.lit' id='send1'>
+  <encrypted xmlns=']]>&ns;<![CDATA['>
+    <header sid='27183'>
+      <keys jid='juliet@capulet.lit' dhcs_sig='b64/encoded/data'>
+        <key rid='31415' dhc='5' ekid='b64/encoded/data'>b64/encoded/data</key>
+      </keys>
+      <keys jid='romeo@montague.lit' dhcs_sig='b64/encoded/data'>
+        <key rid='1337' dhc='2' ekid='b64/encoded/data'>b64/encoded/data</key>
+        <key kex='true' rid='12321' dhc='4' ekid='b64/encoded/data'>b64/encoded/data</key>
+        <!-- ... -->
+      </keys>
+    </header>
+    <payload>
+      base64/encoded/message/key/encrypted/content/element
+    </payload>
+  </encrypted>
+  <store xmlns='urn:xmpp:hints'/>
+</message>]]></example>
+      <p>
+        Each &lt;key&gt; element has an attribute called 'dhc', which is an unsigned integer. When encrypting and sending a message, the sender fills this attribute with the value of <tt>state.DHsc</tt> of the Double Ratchet session that belongs to the recipient device referenced by 'rid'. To fill the 'ekid' attribute, the sender first loads the value of <tt>state.ek</tt> of the Double Ratchet session that belongs to the recipient device referenced by 'rid'. The sender then calculates the SHA-256 checksum of <tt>state.ek</tt> and truncates the result to 8 bytes/64 bits. The result (which may be cached) is base64 encoded and assigned to 'ekid'. After filling all 'dhc' and 'ekid' attributes, the sender has to calculate the value of the 'dhcs_sig' attribute of each &lt;keys&gt; element. To do so, for each &lt;keys&gt; element, the sender creates a byte string <tt>jid || [(rid || ekid || dhc) || ...]</tt>, where
+      </p>
+      <ul>
+        <li>
+          <tt>(rid || ekid || dhc)</tt> is calculated for each &lt;key&gt; element:
+          <ul>
+            <li>'rid' is the value of the 'rid' attribute, encoded as four bytes in big-endian byte order.</li>
+            <li>'ekid' is the value of the 'ekid' attribute, before being base64 encoded.</li>
+            <li>'dhc' is the value of the 'dhc' attribute, encoded as four bytes in big-endian byte order.</li>
+          </ul>
+        </li>
+        <li>The byte strings <tt>(rid || ekid || dhc)</tt> are concatenated in ascending order of the corresponding 'rid' attributes.</li>
+        <li>'jid' is the value of the 'jid' attribute of the &lt;keys&gt; element, encoded into a byte sequence in UTF-8 encoding and prepended to the intermediate byte string.</li>
+      </ul>
+      <p>
+        The resulting byte string is then signed using the identity key of the sender, the (detached) signature is base64 encoded and assigned to the respective 'dhcs_sig' attribute.
+      </p>
+    </section3>
+  </section2>
+  <section2 topic='Receiving a message' anchor='usecases-receiving'>
+      <p>This section extends <link url="https://xmpp.org/extensions/xep-0384.html#usecases-receiving">the corresponding section in XEP-0384</link>.</p>
+    <p>
+      When done processing the message as described in XEP-0384, regardless of whether the decryption failed or succeeded, the recipient proceeds by validating the signature in the 'dhcs_sig' attribute of the &lt;keys&gt; element belonging to the recipient. To do so, the recipient builds the same byte string that the sender built as described in <link url='#usecases-messagesend'>Sending a message</link>, then validates the signature on that byte string with the identitiy public key of the sender. If any of the attributes are missing or the validation fails, no further actions are taken. If the validation succeeds, the recipient proceeds by loading the values of <tt>state.DHrc</tt> and <tt>state.ek</tt> of the Double Ratchet state that belongs to the sending device referenced by 'sid'. The recipient calculates the ekid from <tt>state.ek</tt> and proceeds to differentiate between following cases:
+    </p>
+    <ol>
+      <li>The message decryption succeeded and <tt>'dhc' &gt; state.DHrc</tt>. In that case, 'dhc' is stored in <tt>state.DHrc</tt>, replacing the previous value.</li>
+      <li>The message decryption failed, <tt>'dhc' &lt; state.DHrc</tt> and 'ekid' matches. In that case, the recipient sends an empty (encrypted) message to the sender, following the rules of <link url='#usecases-messagesend'>Sending a message</link>.</li>
+      <li>The message decryption failed, <tt>'dhc' &gt; state.DHrc + 1</tt> and 'ekid' matches. In that case, the recipient considers the current session to be broken, discards the session, replaces it with a newly created session and notifies the sender be responding with an empty (encrypted) message, following the rules of <link url='https://xmpp.org/extensions/xep-0384.html#usecases-messagesend'>Sending a message</link>.</li>
+    </ol>
+  </section2>
+  <section2 topic='Group Chats' anchor='group-chats'>
+    <section3 topic='Sending a message' anchor='group-send'>
+      <p>This section extends <link url="https://xmpp.org/extensions/xep-0384.html#group-send">the corresponding section in XEP-0384</link>.</p>
+      <p>The <link url="https://xmpp.org/extensions/xep-0384.html#example-11">example</link> is updated to include the newly introduced attributes:</p><!-- TODO: Anchor for the example -->
+      <example caption='Juliet sends a message to a group chat with Romeo and Mercutio'><![CDATA[
+<message
+    from='juliet@capulet.lit/balcony'
+    to='secret-room@conference.capulet.lit'
+    type='groupchat'>
+  <encrypted xmlns=']]>&ns;<![CDATA['>
+    <header sid='27183'>
+      <keys jid='juliet@capulet.lit' dhcs_sig='b64/encoded/data'>
+        <key rid='31415' dhc='5' ekid='b64/encoded/data'>b64/encoded/data</key>
+      </keys>
+      <keys jid='romeo@montague.lit' dhcs_sig='b64/encoded/data'>
+        <key kex='true' rid='123' dhc='7' ekid='b64/encoded/data'>b64/encoded/data</key>
+      </keys>
+      <keys jid='mercutio@verona.lit' dhcs_sig='b64/encoded/data'>
+        <key kex='true' rid='456' dhc='12' ekid='b64/encoded/data'>b64/encoded/data</key>
+      </keys>
+    </header>
+    <payload>
+      base64/encoded/message/key/encrypted/content/element
+    </payload>
+  </encrypted>
+  <store xmlns='urn:xmpp:hints'/>
+</message>
+]]></example>
+    </section3>
+  </section2>
+</section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <p>This section extends <link url="https://xmpp.org/extensions/xep-0384.html#rules">the corresponding section in XEP-0384</link>.</p>
+  <p>Even though some cases of broken sessions can be healed by following this specification, not all cases can. Thus, clients MUST still follow the rule in XEP-0384 and provide a means for users to manually reset sessions.</p>
+  <p>Clients that support message catch-up mechanisms (like &xep0313;), SHOULD monitor message catch-ups for messages that were sent by themselves, that is by the JID and device id of the own device. When encountering such a message, the client first validates 'dhcs_sig' as described in <link url='#usecases-receiving'>Receiving a message</link>. If the validation fails, no further actions are taken. If the validation succeeds, the client checks for each &lt;key&gt; child of each &lt;keys&gt; element whether <tt>'dhc' &gt; state.DHsc</tt> and 'ekid' matches for the corresponding session. If that is the case, the recipient considers the session to be broken, discards the session, replaces it with a newly created session and notifies the corresponding receiving device referenced by 'rid' with an empty (encrypted) message, following the rules of <link url='https://xmpp.org/extensions/xep-0384.html#usecases-messagesend'>Sending a message</link>.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>This section extends <link url="https://xmpp.org/extensions/xep-0384.html#security">the corresponding section in XEP-0384</link>.</p>
+  <p>The rule that "[c]lients MUST NOT react to decryption errors by initiating new sessions automatically and without user interaction" is replaced with the following rule:<br/>Clients MUST NOT react to decryption errors by initiating new sessions automatically and without user interaction, outside of the rules given in <link url='#usecases-receiving'>Receiving a message</link> and the <link url='#rules'>Business Rules</link>.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>The <link url="https://xmpp.org/extensions/xep-0384.html#schema">XML schema specified in XEP-0384</link> is extended to include the three new attributes and is otherwise untouched:</p>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'
+           targetNamespace=']]>&ns;<![CDATA['
+           xmlns=']]>&ns;<![CDATA['>
+
+    <xs:element name='encrypted'>
+        <xs:complexType>
+            <xs:all>
+                <xs:element ref='header'/>
+                <xs:element ref='payload' minOccurs='0' maxOccurs='1'/>
+            </xs:all>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='payload' type='xs:base64Binary'/>
+
+    <xs:element name='header'>
+        <xs:complexType>
+            <xs:sequence maxOccurs='unbounded'>
+                <xs:element ref='keys'/>
+            </xs:sequence>
+            <xs:attribute name='sid' type='xs:unsignedInt'/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='keys'>
+        <xs:complexType>
+            <xs:sequence maxOccurs='unbounded'>
+                <xs:element ref='key'/>
+            </xs:sequence>
+            <xs:attribute name='jid' type='xs:string' use='required'/>
+            <xs:attribute name='dhcs_sig' type='xs:base64Binary' use='required'/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='key'>
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base='xs:base64Binary'>
+                    <xs:attribute name='rid' type='xs:unsignedInt' use='required'/>
+                    <xs:attribute name='kex' type='xs:boolean' default='false'/>
+                    <xs:attribute name='dhc' type='xs:unsignedInt' use='required'/>
+                    <xs:attribute name='ekid' type='xs:base64Binary' use='required'/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='devices'>
+        <xs:complexType>
+            <xs:sequence maxOccurs='unbounded'>
+                <xs:element ref='device'/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='device'>
+        <xs:complexType>
+            <xs:attribute name='id' type='xs:unsignedInt' use='required'/>
+            <xs:attribute name='label' type='xs:string'/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='bundle'>
+        <xs:complexType>
+            <xs:all>
+                <xs:element ref='spk'/>
+                <xs:element ref='spks'/>
+                <xs:element ref='ik'/>
+                <xs:element ref='prekeys'/>
+            </xs:all>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='spk'>
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base='xs:base64Binary'>
+                    <xs:attribute name='id' type='xs:unsignedInt' use='required'/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='spks' type='xs:base64Binary'/>
+    <xs:element name='ik' type='xs:base64Binary'/>
+
+    <xs:element name='prekeys'>
+        <xs:complexType>
+            <xs:sequence maxOccurs='unbounded'>
+                <xs:element ref='pk'/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='pk'>
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base='xs:base64Binary'>
+                    <xs:attribute name='id' type='xs:unsignedInt' use='required'/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>
+]]></code>
+</section1>
+</xep>
