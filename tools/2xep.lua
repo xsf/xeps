@@ -95,8 +95,11 @@ function Doc(body, metadata, variables)
 					local first, last = sv:match("(%S+)%s+(%S+)"); -- Names are hard
 					add(("<firstname>%s</firstname>"):format(first));
 					add(("<surname>%s</surname>"):format(last));
-					-- Why is there HTML in the thing?
-					for typ, addr in sv:gmatch("%shref='(%a+):([^']+)") do
+					-- The values have already be converted to the output format.
+					-- This means author entries with e.g. <user@example.com> will already
+					-- have been converted into <link url='mailto:user@example.com'> by the
+					-- Link() function. Hence this hacky parser to get back the original info.
+					for typ, addr in sv:gmatch("%surl='(%a+):([^']+)") do
 						if typ == "mailto" then
 							add(("<email>%s</email>"):format(addr));
 						elseif typ == "xmpp" then
@@ -180,8 +183,7 @@ function Strikeout(s)
 end
 
 function Link(s, src, tit, attr)
-  return "<a href='" .. escape(src,true) .. "' title='" ..
-         escape(tit,true) .. "'>" .. s .. "</a>"
+  return "<link url='" .. escape(src,true) .. "'>" .. s .. "</link>"
 end
 
 function Image(s, src, tit, attr)
