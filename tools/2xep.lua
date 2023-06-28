@@ -286,10 +286,10 @@ local function has(haystack, needle) --> boolean
 end
 
 function CodeBlock(s, attr)
-	if attr and attr.class and has(attr.class, "example") then
+	if attr and attr.class and (has(attr.class, "example") or has(attr.class, "xml")) then
 		return "<example><![CDATA[".. s ..  "]]></example>"
 	else
-		return "<code"..attributes(attr).."><![CDATA[".. s ..  "]]></code>"
+		return "<code><![CDATA[".. s ..  "]]></code>"
 	end
 end
 
