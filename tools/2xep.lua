@@ -126,7 +126,7 @@ function Doc(body, metadata, variables)
 	end
 	add("</header>");
   add(body)
-	for i = 1, #sectionstack do
+	for i = #sectionstack, 1, -1 do
 		add("</section"..sectionstack[i]..">");
 	end
 	add("</xep>\n");
