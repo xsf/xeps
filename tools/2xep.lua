@@ -95,8 +95,11 @@ function Doc(body, metadata, variables)
 					local first, last = sv:match("(%S+)%s+(%S+)"); -- Names are hard
 					add(("<firstname>%s</firstname>"):format(first));
 					add(("<surname>%s</surname>"):format(last));
-					-- Why is there HTML in the thing?
-					for typ, addr in sv:gmatch("%shref='(%a+):([^']+)") do
+					-- The values have already be converted to the output format.
+					-- This means author entries with e.g. <user@example.com> will already
+					-- have been converted into <link url='mailto:user@example.com'> by the
+					-- Link() function. Hence this hacky parser to get back the original info.
+					for typ, addr in sv:gmatch("%surl='(%a+):([^']+)") do
 						if typ == "mailto" then
 							add(("<email>%s</email>"):format(addr));
 						elseif typ == "xmpp" then
@@ -126,7 +129,7 @@ function Doc(body, metadata, variables)
 	end
 	add("</header>");
   add(body)
-	for i = 1, #sectionstack do
+	for i = #sectionstack, 1, -1 do
 		add("</section"..sectionstack[i]..">");
 	end
 	add("</xep>\n");
@@ -180,8 +183,7 @@ function Strikeout(s)
 end
 
 function Link(s, src, tit, attr)
-  return "<a href='" .. escape(src,true) .. "' title='" ..
-         escape(tit,true) .. "'>" .. s .. "</a>"
+  return "<link url='" .. escape(src,true) .. "'>" .. s .. "</link>"
 end
 
 function Image(s, src, tit, attr)
@@ -286,10 +288,10 @@ local function has(haystack, needle) --> boolean
 end
 
 function CodeBlock(s, attr)
-	if attr and attr.class and has(attr.class, "example") then
+	if attr and attr.class and (has(attr.class, "example") or has(attr.class, "xml")) then
 		return "<example><![CDATA[".. s ..  "]]></example>"
 	else
-		return "<code"..attributes(attr).."><![CDATA[".. s ..  "]]></code>"
+		return "<code><![CDATA[".. s ..  "]]></code>"
 	end
 end
 
