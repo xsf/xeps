@@ -1,0 +1,206 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+  <!ENTITY MTINS 'urn:xmpp:muc-token-invite:0'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>MUC Token Invite</title>
+  <abstract>This specification provides a way to generate tokens to invite users to a MUC room.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XEP-0045</spec>
+    <spec>XEP-0421</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <tags>
+    <tag>muc</tag>
+    <tag>token</tag>
+    <tag>invite</tag>
+  </tags>
+  &pep.;
+  <revision>
+    <version>0.0.1</version>
+    <date>2023-08-15</date>
+    <initials>pep</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>This specification provides a way to request invite tokens to a MUC room in order to invite users whose address is unknown to a member-only &xep0045; room.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Allow tokens to be generated, optionally with constraints.</li>
+    <li>Allow tokens to be revoked.</li>
+    <li>Don't prevent affiliated users of a room to join if they don't possess a token.</li>
+    <li>Don't require clients receiving tokens to have any specific implementation.</li>
+  </ul>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Discovering support' anchor='disco'>
+    <p>Supporting entities MUST advertise the <tt>&MTINS;</tt> &xep0030; feature.</p>
+  </section2>
+  <section2 topic='Token generation' anchor='generation'>
+    <p>An entity may request a token from a &xep0045; service by sending an iq of type <tt>set</tt> containing a <tt>&lt;request&gt;</tt> element in the <tt>&MTINS;</tt> namespace.</p>
+    <example caption='Requesting an invitation token'><![CDATA[
+<iq type='set' to='news@commons.example.org' id='request1'>
+  <request xmlns=']]>&MTINS;<![CDATA['/>
+</iq>]]></example>
+    <p>The MUC room MUST reply to the request with a <tt>&lt;token&gt;</tt> element in the <tt>&MTINS;</tt> namespace, containing the token as text node. The token MUST be an opaque string but does not need to be unique within a room.</p>
+    <example caption='Room successfully replies with a token'><![CDATA[
+<iq type='result' from='news@commons.example.org' to='louise@example.org' id='request1'>
+  <token xmlns=']]>&MTINS;<![CDATA['>lyQZ1RzacYTlf3svGODYq1xVabNnMc2x</token>
+</iq>]]></example>
+    <p>Implementations MUST reply an error ot type auth/forbidden if the requesting entity isn't allowed to generate a token.</p>
+    <example caption='Room replies with an error because user lacks permissions'><![CDATA[
+<iq type='result' from='news@commons.example.org' to='louise@example.org' id='request1'>
+  <error type='auth'>
+    <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>]]></example>
+  </section2>
+  <section2 topic='Limits' anchor='limits'>
+    <p>It is possible to create tokens that may be used only a specific number of times to grant users affiliations, and/or may have an expiry time.</p>
+    <p>To constrain the token to a number of times after which it expires, the <tt>counter</tt> attribute (xs:unsignedInt) can be used in the <tt>&lt;request&gt;</tt> element.</p>
+    <p>To constrain the token to a time limit, the <tt>delay</tt> attribute (xs:unsignedInt) can be used in the <tt>&lt;request&gt;</tt> element.</p>
+    <p>if both attributes are combined, whichever constraint is reached first expires the token.</p>
+    <example caption='A client requests a token with a month time limit and 5 users'><![CDATA[
+<iq type='set' to='news@commons.example.org' id='request2'>
+  <request xmlns=']]>&MTINS;<![CDATA[' delay='2678400' counter='5'/>
+</iq>]]></example>
+    <p>The reply from the service MUST contain at least the requested <tt>delay</tt> and <tt>counter</tt> attributes. Requested values for these attributes MAY be altered by the server. This may be useful to implement a default server policy (maximum time, and/or counter). Values returned indicate current values that apply to the issued token.</p>
+    <p>Services may want to automatically limit issued tokens even with the request doesn't have any. In the following example, the MUC service enforces a maximum time limit of a week as a policy.</p>
+    <example caption='Reply from the room'><![CDATA[
+<iq type='result' from='news@commons.example.org' to='louise@example.org' id='request2'>
+  <token xmlns=']]>&MTINS;<![CDATA['
+         delay='604800'
+         counter='5'
+         >lyQZ1RzacYTlf3svGODYq1xVabNnMc2x</token>
+</iq>]]></example>
+  </section2>
+  <section2 topic='Inviting users' anchor='invites'>
+    <p>Integration with <link url='https://xmpp.org/extensions/xep-0045.html#invite-mediated'>Mediated Invites</link> or &xep0249; is not described in this document as invite tokens generated this way may not be used when the invitee's address is known.</p>
+    <p>Clients may include generated tokens in the <tt>password</tt> parameter of a URI as such:</p>
+    <example caption='URI with an invite token'>xmpp:news@commons.example?join;password=TOKEN</example>
+  </section2>
+  <section2 topic='Using a token' anchor='using'>
+    <p>Receiving entities will follow the usual flow of joining <link url='https://xmpp.org/extensions/xep-0045.html#enter-pw'>password protected-rooms</link>.</p>
+    <p>When a token is used by a participant who doesn't have any affiliation, a server MUST give them an affiliation level of <tt>member</tt>.</p>
+    <p>If an expired token is used by someone who isn't affiliated yet, the room MAY additionally include in the presence error an <tt>&lt;expired-token/&gt;</tt> element in the <tt>&MTINS;</tt> namespace, as a sibling of the <tt>&lt;not-authorized/&gt;</tt> element.</p>
+  </section2>
+  <section2 topic='Listing tokens' anchor='listing'>
+    <p>It is possible for room participants to list tokens by sending an iq of type <tt>get</tt> containing a <tt>&lt;tokens/&gt;</tt> element in the <tt>&MTINS;</tt> namespace.</p>
+    <p>The room MUST reply with all tokens that the participant is allowed to revoke, each listed in <tt>&lt;token&gt;</tt> elements within a <tt>&lt;tokens&gt;</tt> wrapper element. Individual token elements MUST contain updated attibute values, that is, if a token has been issued with <tt>counter</tt> set to 5 and has been used twice (2), listing tokens at this point will show this specific token with a counter attribute value of 3.</p>
+    <example caption='Requesting the token list'><![CDATA[
+<iq type='get' to='news@commons.example.org' id='request3'>
+  <tokens xmlns=']]>&MTINS;<![CDATA['/>
+</iq>
+
+<iq type='result' to='louise@example.org' id='request3'>
+  <tokens xmlns=']]>&MTINS;<![CDATA['>
+    <token counter='3'>lyQZ1RzacYTlf3svGODYq1xVabNnMc2x</token>
+    <token delay='183'>HIFac1EUx3gDA1TEXlblwQ2izGIqAUab</token>
+  </tokens>
+</iq>]]></example>
+  </section2>
+  <section2 topic='Revoking a token' anchor='revoking'>
+    <p>It is possible to revoke a token early by sending an iq containing a <tt>&lt;revoke&gt;</tt> element in the <tt>&MTINS;</tt> namespace, with the token as the text node. The room MUST then reply successfully with an empty iq.</p>
+    <p>If the user is unauthorized to issue tokens, the room should reply with an iq error type auth/forbidden. If the user is unauthorized to revoke the specified token, or if the token doesn't exist, the room should reply with an iq error of type cancel/item-not-found.</p>
+    <p></p>
+    <example caption='A client revokes a token'><![CDATA[
+<iq type='set' to='news@commons.example.org' id='request4'>
+  <revoke xmlns=']]>&MTINS;<![CDATA['>lyQZ1RzacYTlf3svGODYq1xVabNnMc2x</revoke>
+</iq>]]></example>
+    <example caption='The revocation succeeds'><![CDATA[
+<iq type='result' to='louise@example.org' id='request4'/>]]></example>
+    <example caption='The revocation fails because the user is not allowed to revoke specified token'><![CDATA[
+<iq type='result' to='louise@example.org' id='request4'>
+  <error type='cancel'>
+    <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+  </error>
+</iq>]]></example>
+  </section2>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>Tokens may be added to bookmark storage by receiving entities and as such implementing MUC rooms SHOULD ignore tokens provided during join when a user is already affiliated with the room. In this case, if a counter was attached it SHOULD NOT be decremented.</p>
+  <p>Tokens with no constraint are not equivalent to passwords. A token is only required to be supplied once as opposed to passwords, which need to be specified at every join independently of user affiliation.</p>
+  <p>The <link url='#using'>Using a token</link> section describes a way for clients to know they may have used an invalid token by adding an error specific to this document. It is likely that tokens aren't stored indefinitely but rather removed from storage not long after they expire, which makes it hard for MUC services to distinguish between a password for the room before configuration change, and an expired token. This specification assumes that it was an expired token as the room isn't password protected.</p>
+  <p>Possible extensions to this spec could include broadcasting information about the inviter in a new participant's join presence, as well as issuing tokens with specific affiliations and/or &xep0317;.</p>
+</section1>
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>None?</p>
+</section1>
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>None?</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Leaking tokens may lead to inviting unwelcomed people to a room. Token limits and revocations provide users a way to reduce harm in such a case. A service SHOULD also enforce a reasonable maximum value as a time or usage constraint (24h, a week, a year, etc.).</p>
+  <p>Issuing tokens may be locked down by service operators, or by room administrators via the <tt>muc#roomconfig_allowinvites</tt> &xep0045; configuration option.</p>
+  <p>It is RECOMMENDED that room moderators be able to list and revoke tokens generated by every other participant.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>None.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>None.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[<?xml version='1.0' encoding='UTF-8'?>
+<xs:schema
+  xmlns:xs='http://www.w3.org/2001/XMLSchema'
+  targetNamespace='urn:xmpp:muc-token-invite:0'
+  xmlns='urn:xmpp:muc-token-invite:0'
+  elementFormDefault='qualified'>
+
+  <xs:annotations>
+    <xs:documentation>
+      The protocol documented by this schema is defined
+      in XEP-xxxx: https://xmpp.org/extensions/xep-xxxx.html.
+    </xs:documentation>
+  </xs:annotations>
+
+  <xs:element name='request'>
+    <xs:complexType>
+      <xs:attribute name='delay' type='xs:unsignedInt' use='optional'/>
+      <xs:attribute name='counter' type='xs:unsignedInt' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='token' type='xs:string'>
+    <xs:complexType>
+      <xs:attribute name='delay' type='xs:unsignedInt' use='optional'/>
+      <xs:attribute name='counter' type='xs:unsignedInt' use='optional'/>
+      <xs:attribute name='creator' type='xs:string' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='tokens'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='token' minOccurs='1'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='revoke' type='xs:string'/>
+
+  <xs:element name='expired-token'>
+    <xs:simpleType>
+      <xs:restriction base='xs:string'>
+        <xs:enumeration value=''/>
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+</xs:schema>]]></code>
+</section1>
+</xep>
