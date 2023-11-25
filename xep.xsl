@@ -2,7 +2,7 @@
 
 <!--
 
-Copyright (c) 1999 - 2021 XMPP Standards Foundation
+Copyright (c) 1999 - 2023 XMPP Standards Foundation
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and
@@ -257,7 +257,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
             </ul></dd>
           </xsl:if>
           <dt>Copyright</dt>
-          <dd>&#169; 1999 &#x2013; 2021 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</dd>
+          <dd>&#169; 1999 &#x2013; 2023 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</dd>
           <dt>Status</dt>
           <dd>
             <p><xsl:choose>
