@@ -24,6 +24,17 @@
   <shortname>SSDP</shortname>
   &tmolitor;
   <revision>
+    <version>0.3.0</version>
+    <date>2023-12-04</date>
+    <initials>tm</initials>
+    <remark>
+      <ul>
+          <li>Rework all explanations explaining why this specification is needed</li>
+          <li>Simplify protocol</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>0.2.0</version>
     <date>2023-01-14</date>
     <initials>tm</initials>
@@ -48,9 +59,10 @@
   </revision>
 </header>
 <section1 topic='Introduction' anchor='intro'>
-  <p>&rfc6120; and &xep0388; define a way to negotiate SASL mechanisms. When used together with SCRAM mechanisms (&rfc5802;) and channel-binding (&xep0440;) the mechanism selection is protected against downgrade attacks by an active MITM tampering with the TLS channel and advertised SASL mechanisms, while the negotiation of the channel-binding types is still not protected against such downgrade attacks.</p>
+  <p>&rfc6120; and &xep0388; define a way to negotiate SASL mechanisms. When used together with SCRAM mechanisms (&rfc5802;) and channel-binding (&xep0440;) the mechanism selection is protected against downgrade attacks by an active MITM tampering with the TLS channel and advertised SASL mechanisms. Yet, the negotiation of the channel-binding types is not protected against such downgrade attacks.</p>
   <p>&xep0440; tries to mitigate this by making the "tls-server-end-point" (&rfc5929;) channel-binding mandatory to implement for servers. But that leaves clients not able to implement this type, or any channel-binding at all, vulnerable to downgrades of channel-binding types and SASL mechanisms. Furthermore "tls-server-end-point" provides weaker security guarantees than other channel-bindings like for example "tls-exporter" (defined in &rfc5705; and &rfc9266;).</p>
-  <p>This specification aims to solve this issue by spcifying a downgrade protection for both SASL mechanisms and channel-binding types using an optional SCRAM attribute (see &rfc5802;). This specification can be used for SASL1 (&rfc6120;) and SASL2 (&xep0388;) profiles as well as any other SASL profile.</p>
+  <p>Most clients use pinning of channel-binding types and SASL mechanisms to protect against downgrade attacks, but this protection is incomplete. First of all this can not protect the first connection. Second server operators can not deactivate previosly advertised mechanisms (clients having pinned that mechanism will not authenticate anymore). This can be used by attackers to trick users into reinstalling/reconfiguring their chat app to MITM the then first connection (which again is not protected by pinning).</p>
+  <p>This specification aims to solve these issues by spcifying a downgrade protection for both SASL mechanisms and channel-binding types using an optional SCRAM attribute (see &rfc5802;). This specification can be used for SASL1 (&rfc6120;) and SASL2 (&xep0388;) profiles as well as any other SASL profile.</p>
   <p>Note: In the long term the author strives to publish this as an RFC rather than a XEP to also make this protection available to other protocols, after gaining implementation experience.</p>
 </section1>
 <section1 topic='Glossary' anchor='glossary'>
@@ -67,11 +79,39 @@
   <ul>
     <li>Allow detection of SASL mechanism downgrades even if no channel-binding is in use.</li>
     <li>Allow detection of downgrades of channel-binding types.</li>
-    <li>Support all currently defined and future SCRAM mechanisms (&rfc5802; and &rfc7677;)</li>
+    <li>Support all currently defined and future SCRAM mechanisms (&rfc5802; and &rfc7677;).</li>
+    <li>Allow for (more) protocol agility compared to pinning.</li>
+    <li>Be not less secure than pinning when using the SCRAM family of mechanisms (or some similar challenge-response based authentication mechanism).</li>
   </ul>
   <p>Note that this specification intentionally leaves out support for SASL PLAIN. If server and client support PLAIN, no protection against SASL method or channel-binding downgrades is possible and the security relies solely on the underlying TLS channel. As explained in § 13.8.3 of &rfc6120;, servers and clients SHOULD NOT support SASL PLAIN unless it is required by the authentication backend.</p>
-  <p>A compromise might be to use pinning not for concrete SASL mechanisms, but instead pin that something better than SASL PLAIN was previously supported. Thus pinning will ensure that authentication won't fall back to SASL-PLAIN in the future, but also won't hinder protocol agility for the SCRAM family of SASL mechanisms etc..</p>
-  <section2 topic="Attack model 1 (list of channel-binding types)">
+  <p>Instead of pinning a concrete SASL mechanism it might be an acceptable approach to only pin if the server previously supported at least one mechanism better than SASL-PLAIN. This would ensure that the authentication won't fall back to SASL-PLAIN in the future, but also won't hinder protocol agility for the SCRAM family of SASL mechanisms etc..</p>
+</section1>
+<section1 topic="Protection Scenarios" anchor="scenarios">
+  <p>In the following, the limitations of pinning are shown and explained how these can be solved with this specification. This list is by no means meant to be exhaustive. See also <link url="#attack-model">Security Considerations</link> for a more complete attack model and problem description.</p>
+  <section2 topic="MITM Downgrades Channel-Binding Method" anchor="scenario-mitm">
+    <p>The attacker is bit more sophisticated and able to get the private key for the server's certificate and they are only targeting a special user (or a small group of users). This user already connected to the server and thus pinned tls-exporter and tls-unique channel bindings to be supported by the server and thus refuses to downgrade to tls-server-end-point (or to no channel-binding at all).</p>
+    <p>The attacker now tries to downgrade to tls-server-end-point nonetheless and the client will, thanks to pinning, detect this downgrade, alert the user and refuse to connect.</p>
+    <p>But no matter how scary this alert message is, most users will first of all think of a bug, delete their account in the client and set it up again. Especially if they ask friends that don't have this connection problems (and may even tell them to reinstall the app, too).</p>
+    <p>After reinstalling the app and setting up their account again, everything works as before and the client even shows channel-binding in use (if the user even checks that), but in fact now the MITM attacker was successful and is able to intercept or even manipulate every stanza sent/received on the user's connection.</p>
+    <p>But if the client and server in this scenario supported this specification, the MITM would not have been successful. No matter how often the user tries to reconfigure/reinstall their client, the attacker won't succeed in MITMing the connection of that user.</p>
+  </section2>
+  <section2 topic="Protocol Agility: SASL Methods" anchor="scenario-method-agility">
+    <p>In this scenario, we have a setup where either the client or server are not able to do channel-binding. That may well be due to restrictions of the client platform, for example a web based client using BOSH or Websockets, or the server software/tls implementation.</p>
+    <p>Now the server operator briefly activates a SASL method. Let's say they activate SCRAM-SHA-512 and previously had a working setup that only advertised and supported SCRAM-SHA-1. But after activating that, they become aware that this setup has some bugs: some clients are able to authenticate using SCRAM-SHA-512 and some don't but still try, resulting in errors yelled at those users.</p>
+    <p>That may be because the server software has bugs (those bugs may persist in deployments for a very long time), maybe some clients have bugs in their SCRAM-SHA-512 implementation (but not in their SCRAM-SHA-1 implementation), or maybe the server operator simply made some configuration errors they are not able to fix (quickly).</p>
+    <p>Just going back to the old known good configuration will solve these issues for those clients not being able to properly use SCRAM-SHA-512, but since all clients that <strong>were</strong> able to authenticate using SCRAM-SHA-512 now pinned that one, disabling this new SASL method again, will make those clients not connect anymore. That's more or less a DOS vector introduced by pinning.</p>
+    <p>If this specification was used, the clients would not need to pin anything, because the <link url="#hash">SSDP hash</link> included in the SCRAM handshake will detect that this apparent downgrade is in fact no real downgrade but only a legitimate server configuration change.</p>
+    <p>See <link url="#attack-model-2">Attack model 2</link> for an attack that involves a platform not supporting channel-binding that's also mitigated by this specification. More than that: web clients not being able to permanently store any pinning information would still be ("stateless") protected by this specification.</p>
+  </section2>
+  <section2 topic="Protocol Agility: Channel-Binding Types" anchor="scenario-cbtype-agility">
+    <p>A server is configured to use strong channel-binding (tls-exporter / tls-unique) but since the userbase grew the server operator decides to do TLS offloading and thus can only offer tls-server-end-point channel-binding (which is still way better than no channel-binding at all).</p> <p>Another reason to go from tls-exporter / tls-unique to tls-server-end-point may well be a bug in the server/tls library. And a slight modification of this scenario would be the server operator disabling channel-binding altogether (for the same reasons).</p>
+    <p>But since clients are pinning channel-binding types, this configuration change, albeit legitimate, will be erroneously detected as attack and clients won't connect to the server anymore.</p>
+    <p>If this specification was used, the clients would have been able to distinguish that legitimate configuration change from an attack and not drop the connection.</p>
+  </section2>
+</section1>
+<section1 topic="Attack Model" anchor="attack-model">
+  <p>In the following sections, different attack models will be discussed.</p>
+  <section2 topic="Attack Model 1 (List of Channel-Binding Types)" anchor="attack-model-1">
     <p><strong>Scenario:</strong> Bob connects to Alice's XMPP server using a client of his choice supporting SCRAM and channel-binding, Eve wants to MITM this connection. Neither Alice's server nor Bob's client support SASL PLAIN, but only the SCRAM family of SASL mechanisms.</p>
     <p><strong>Prerequisites:</strong> Eve, the MITM attacker, managed to either steal the cert+key of Alice's XMPP server or to convince some CA to give out a cert+key for Alice's XMPP domain. Maybe Bob even installed a CA of his employer/school and now gets MITMed by his employer/school.</p>
     <p>Given this scenario and prerequisites, Eve now can passively MITM the XMPP connection, but Bob and Alice are using channel-binding and this allows them to detect Eve and abort authentication. This forces Eve to be an active attacker, manipulating the data in the XMPP stream to get rid of the channel-binding. Eve does so by changing the list of server-advertised channel-bindings to only include some (fictional) channel-binding types she is sure the client does not support. Bob's client now has the following choices (see also the Security Considerations of &xep0440;):</p>
@@ -89,7 +129,7 @@
     <p><strong>Case 5</strong> won't help if Eve managed to steal the cert+key (or the server either somehow does not support the "tls-server-end-point" type).</p>
     <p><em>This specification solves the problems outlined above by adding an optional SCRAM attribute containing the hash of the client-perceived list of channel-binding types that can be checked by the server and will be cryptographically signed by the authentication password used for SCRAM.</em></p>
   </section2>
-  <section2 topic="Attack model 2 (SASL mechanism list)">
+  <section2 topic="Attack Model 2 (SASL Mechanism List)" anchor="attack-model-2">
     <p><strong>Scenario:</strong> Bob connects to Alice's XMPP server using a client of his choice supporting SCRAM but <strong>no</strong> channel-binding, Eve wants to MITM this connection. Neither Alice's server nor Bob's client support SASL PLAIN, but only the SCRAM family of SASL mechanisms. Eve wants to downgrade the used SCRAM mechanism to something weak that she is able to break in X hours/days (For example some time in the future SCRAM-SHA-1 might be broken that way and the underlying password could be recovered investing X hours/days of computing time. But SCRAM-SHA-1 might still be supported by servers for backwards compatibility with older clients only supporting SCRAM-SHA-1 but not SCRAM-SHA-256 etc.).</p>
     <p><strong>Prerequisites:</strong> Eve, the MITM attacker, managed to either steal the cert+key of Alice's XMPP server or to convince some CA to give out a cert+key for Alice's XMPP domain. Maybe Bob even installed a CA of his employer/school and now gets MITMed by his employer/school.</p>
     <p>Given this scenario and prerequisites, Eve now can passively MITM the XMPP connection, but if Eve wants to actively downgrade the SASL mechanism used by Bob, he has to actively change the server-advertised SASL mechanism list. In this scenario Eve actively removes all SCRAM mechanisms but SCRAM-SHA-1 from the server-advertised list to force Bob's client to use SCRAM-SHA-1. Neither Alice nor Bob would detect that.</p>
@@ -99,12 +139,8 @@
 </section1>
 <section1 topic='Protocol' anchor='protocol'>
   <p>Sections 5.1 and 7 of &rfc5802; allow for arbitrary optional attributes inside SCRAM messages. This specification uses those optional attribute to implement a downgrade protection.</p>
-  <section2 topic="Server Indicates Support" anchor="support">
-    <p>The server uses the optional attribute "d" with the value "ssdp" in its server-first-message to indicate support for this specification.</p>
-    <p>A client supporting this specification but not seeing this attribute advertised by the server MAY abort the authentication. It is RECOMMENDED to wait until the whole SCRAM flow hash been completed to distinguish the case of a server not supporting this specification from a MITM stripping out this optional SCRAM attribute.</p>
-  </section2>
-  <section2 topic="Client Sends Downgrade Protection Hash" anchor="hash">
-    <p>If the server indicated support for this spec in the server-first-message and the client supports it, the client calculates a hash for the server-advertised list of SASL mechanisms and channel-binding types as follows.</p>
+  <section2 topic="Server Sends Downgrade Protection Hash" anchor="hash">
+    <p>The server calculates a hash of the list of SASL mechanisms and channel-binding types it advertised as follows.</p>
     <p>Note: All sorting operations MUST be performed using "i;octet" collation as specified in Section 9.3 of &rfc4790;.</p>
     <ol>
       <li>Initialize an empty ASCII string S</li>
@@ -113,14 +149,13 @@
       <li>If the server used &xep0440; to advertise channel-bindings, sort all server-advertised channel-binding types and append them to string S joined by delimiter "," (%x2C)</li>
       <li>Hash S using the same hash mechanism as used for the SCRAM mechanism currently in use and encode the result using base64</li>
     </ol>
-    <p>The client then adds the optional attribute "d" with the base64 encoded hash obtained in step 5 to its client-final-message. The client MAY send this attribute even if the server did not advertise support.</p>
+    <p>The server then adds the optional attribute "d" with the base64 encoded hash obtained in step 5 to its server-first-message.</p>
     <p>Note: If the server simultaneously advertises SASL1 and SASL2, only the mechanism list of the SASL protocol the client uses for authentication MUST be considered for hashing.</p>
   </section2>
-  <section2 topic="Server Verifys The Downgrade Protection Hash" anchor="verification">
-    <p>Upon receiving the client-final-message the server calculates its own base64 encoded hash using the list of SASL mechanisms and channel-binding types it advertised using SASL1 or SASL2 and &xep0440; by applying the same algorithm as defined in <link url="#hash">Client Sends Downgrade Protection Hash</link>.</p>
-    <p>The server then extracts the base64 encoded hash presented by the client in the optional attribute "d" and compares it to its own hash. If the hashes match, the list of SASL mechanisms and channel-binding types has not been changed by an active MITM.</p>
-    <p>If the hashes do not match, the server MUST fail the authentication as specified in &rfc6120; section 6.5 or &xep0388; section 2.6.2 using the "aborted" error-condition. If &xep0388; is used, the application-specific error-condition "downgrade-detected" in the namespace "urn:xmpp:ssdp:0" MUST be added, too. It MAY further include an optional descriptive text to further clarify this error as specified in &xep0388; section 6.2.6 or &rfc6120; section 6.5. If additional SCRAM data is provided, the used SCRAM "server-error-value" MUST be "downgrade-detected".</p>
-    <p>Non-XMPP implementations MAY use a SCRAM "server-error-value" of "downgrade-detected" alongside any protocol specific error-condition.</p>
+  <section2 topic="Client Verifies The Downgrade Protection Hash" anchor="verification">
+    <p>Upon receiving the server-first-message the client calculates its own base64 encoded hash using the list of SASL mechanisms and channel-binding types the server advertised using SASL1 or SASL2 and &xep0440; by applying the same algorithm as defined in <link url="#hash">Server Sends Downgrade Protection Hash</link>.</p>
+    <p>The client then extracts the base64 encoded hash presented by the server in the optional attribute "d" and compares it to its own hash. If the hashes match, the list of SASL mechanisms and channel-binding types has not been changed by an active MITM.</p>
+    <p>If the hashes do not match, the client MUST fail the authentication. It MAY additionally show a user-facing warning message about an active MITM. If the hashes match, an attacker could still have manipulated them. If so, the server will always fail the authentication according to &rfc5802; because the client-proof will not be based upon the correct SSDP value.</p>
   </section2>
   <section2 topic="Full Example" anchor="example">
     <p>This sections contains an example based on the ones provided in &xep0388;.</p>
@@ -179,31 +214,30 @@
 
 <!--
   SCRAM-SHA-1-PLUS challenge issued by the server as defined in RFC 5802
-  but including the optional attribute indicating support for this specification.
-  Base64 of: 'r=12C4CD5C-E38E-4A98-8F6D-15C38F51CCC6a09117a6-ac50-4f2f-93f1-93799c2bddf6,s=QSXCR+Q6sek8bf92,i=4096,d=ssdp'
+  including the base64 encoded SHA-1 hash of the mechanism and channel-binding lists.
+  Attribute "d" contains base64 encoded SHA-1 hash of 'SCRAM-SHA-1,SCRAM-SHA-1-PLUS|tls-exporter,tls-server-end-point'
+  Base64 of: 'r=12C4CD5C-E38E-4A98-8F6D-15C38F51CCC6a09117a6-ac50-4f2f-93f1-93799c2bddf6,s=QSXCR+Q6sek8bf92,i=4096,d=dRc3RenuSY9ypgPpERowoaySQZY='
 -->
 <challenge xmlns='urn:xmpp:sasl:2'>
-  cj0xMkM0Q0Q1Qy1FMzhFLTRBOTgtOEY2RC0xNUMzOEY1MUNDQzZhMDkxMTdhNi1hYzUwLTRmMmYtOTNmMS05Mzc5OWMyYmRkZjYscz1RU1hDUitRNnNlazhiZjkyLGk9NDA5NixkPXNzZHA=
+  cj0xMkM0Q0Q1Qy1FMzhFLTRBOTgtOEY2RC0xNUMzOEY1MUNDQzZhMDkxMTdhNi1hYzUwLTRmMmYtOTNmMS05Mzc5OWMyYmRkZjYscz1RU1hDUitRNnNlazhiZjkyLGk9NDA5NixkPWRSYzNSZW51U1k5eXBnUHBFUm93b2F5U1FaWT0=
 </challenge>
 
 <!--
   The client responds with the base64 encoded SCRAM-SHA-1-PLUS client-final-message (password: 'pencil')
-  including the base64 encoded SHA-1 hash of the mechanism and channel-binding lists.
-  Attribute "d" contains base64 encoded SHA-1 hash of 'SCRAM-SHA-1,SCRAM-SHA-1-PLUS|tls-exporter,tls-server-end-point'
-  Base64 of: 'c=cD10bHMtZXhwb3J0ZXIsLMcoQvOdBDePd4OswlmAWV3dg1a1Wh1tYPTBwVid10VU,r=12C4CD5C-E38E-4A98-8F6D-15C38F51CCC6a09117a6-ac50-4f2f-93f1-93799c2bddf6,p=UApo7xo6Pa9J+Vaejfz/dG7BomU=,d=dRc3RenuSY9ypgPpERowoaySQZY='
-  The c-attribute contains the GS2-header and channel-binding data blob (32 bytes) as defined in RFC 5802.
+  The c-attribute contains the GS2-header and channel-binding data blob as defined in RFC 5802.
+  Base64 of: 'c=cD10bHMtZXhwb3J0ZXIsLFRISVMgSVMgRkFLRSBDQiBEQVRB,r=12C4CD5C-E38E-4A98-8F6D-15C38F51CCC6a09117a6-ac50-4f2f-93f1-93799c2bddf6,p=YrZgr+FXrBmtcPY6weDLAFcSb9k='
 -->
 <response xmlns='urn:xmpp:sasl:2'>
-  Yz1jRDEwYkhNdFpYaHdiM0owWlhJc0xNY29Rdk9kQkRlUGQ0T3N3bG1BV1YzZGcxYTFXaDF0WVBUQndWaWQxMFZVLHI9MTJDNENENUMtRTM4RS00QTk4LThGNkQtMTVDMzhGNTFDQ0M2YTA5MTE3YTYtYWM1MC00ZjJmLTkzZjEtOTM3OTljMmJkZGY2LHA9VUFwbzd4bzZQYTlKK1ZhZWpmei9kRzdCb21VPSxkPWRSYzNSZW51U1k5eXBnUHBFUm93b2F5U1FaWT0=
+  Yz1jRDEwYkhNdFpYaHdiM0owWlhJc0xGUklTVk1nU1ZNZ1JrRkxSU0JEUWlCRVFWUkIscj0xMkM0Q0Q1Qy1FMzhFLTRBOTgtOEY2RC0xNUMzOEY1MUNDQzZhMDkxMTdhNi1hYzUwLTRmMmYtOTNmMS05Mzc5OWMyYmRkZjYscD1ZclpncitGWHJCbXRjUFk2d2VETEFGY1NiOWs9
 </response>
 
 <!--
   The server accepted this authentication, no tampering with the advertised SASL mechanisms or channel-bindings was detected.
 -->
 <success xmlns='urn:xmpp:sasl:2'>
-  <!-- Base64 of: 'v=sQq8A1dePL5DxWX22Sz4TJMD7t4=' -->
+  <!-- Base64 of: 'v=bWt5Od0DkLlIvhb4BDO8kzkx0LM=' -->
   <additional-data>
-    dj1zUXE4QTFkZVBMNUR4V1gyMlN6NFRKTUQ3dDQ9
+    dj1iV3Q1T2QwRGtMbEl2aGI0QkRPOGt6a3gwTE09
   </additional-data>
   <authorization-identifier>user@example.org</authorization-identifier>
 </success>]]></example>
@@ -213,7 +247,7 @@
   <p>Using SCRAM attributes makes them part of the HMAC signatures used in the SCRAM protocol flow efficiently protecting them against any MITM attacker not knowing the password used.</p>
 </section1>
 <section1 topic='IETF Interaction' anchor='ietf'>
-  <p>This protocol shall be superseded by any IETF RFC providing some or all of the functionality provided by this specification. If such a specification exists implementations SHOULD NOT implement this XEP and SHOULD implement the superseding RFC.</p>
+  <p>This protocol shall be superseded by any IETF RFC providing some or all of the functionality provided by this specification. If such a specification exists implementations SHOULD NOT implement this XEP and SHOULD implement the superseding RFC instead.</p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>This document requires no interaction with &IANA;.</p>
