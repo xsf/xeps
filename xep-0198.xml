@@ -13,6 +13,7 @@
   <status>Draft</status>
   <type>Standards Track</type>
   <sig>Standards</sig>
+  <approver>Council</approver>
   <dependencies>
     <spec>XMPP Core</spec>
   </dependencies>
@@ -28,6 +29,13 @@
   &fabio;
   &dcridland;
   &mwild;
+  &tmolitor;
+  <revision>
+    <version>1.6.1</version>
+    <date>2022-10-05</date>
+    <initials>tm</initials>
+    <remark><p>Clarify SASL2 and BIND2 interaction.</p></remark>
+  </revision>
   <revision>
     <version>1.6</version>
     <date>2018-07-25</date>
@@ -552,8 +560,95 @@
   </section2>
 </section1>
 
+<section1 topic="SASL2 And BIND2 Interaction" anchor="inline">
+  <p class='box'>This section is about &xep0388; (SASL2) and &xep0386; (BIND2) interaction. You don't have to implement this if you don't implement SASL2 and BIND2.</p>
+  <p>&xep0388; (SASL2) describes a way of inlining the stream resumption into the authentication process to reduce the round-trips needed for authentication and subsequent stream resumption. Similarly &xep0386; (BIND2) defines a way of inlining the stream management &lt;enable/> into the resource binding process to reduce round-trips.</p>
+  <section2 topic="Enable Stream Management Inline" anchor="inline-enable">
+    <p>To indicate support for inlining the activation of Stream Management into the resource binding process, the server adds a &lt;feature/> element with var attribute set to "urn:xmpp:sm:3" in the &lt;inline/> element of BIND2 which is sent in the stream features.</p>
+    <p>If the client wishes to begin a new session (i.e. it has no prior session to resume), it simply includes the &lt;enable/> element defined by this specification in its &xep0386; &lt;bind/> request which itself is a child of the &lt;authenticate/> element of SASL2.</p>
+    <section3 topic="Failed To Enable Stream Management">
+      <p>In the unexpected case where the server was able to bind a resource for the client, but unable to enable stream management, it will include a &lt;failed/> element as defined by this specification within the &lt;bound/> response defined by &xep0386;.</p>
+    </section3>
+  </section2>
+  <section2 topic="Inline Stream Resumption" anchor="inline-resume">
+    <p>To indicate support for inlining stream resumption into the authentication process, the server adds a &lt;sm/> element in the namespace "urn:xmpp:sm:3" to the &lt;inline/> element of SASL2.</p>
+    <p>If the client wishes to resume an existing session it, it simply includes the &lt;resume/> element defined by this specification in the SASL2 &lt;authenticate/> element.</p>
+    <p class="box">Note: If the client included a &lt;resume/> element in its SASL2 &lt;authenticate/> element, that MUST be processed first by the server. If that resumption is successful, the server MUST skip resource binding (a resumed session already has a resource bound) and MUST entirely ignore the &lt;bind/> request that might also be inlined in the &lt;authenticate/> element.</p>
+    <p>&xep0388; mandates that the &lt;success> element is immeditaly followed by stream features. If a former stream has been successfully resumed using this specification, the stream is considered re-established immediately after the &lt;success/> element instead and stream features MUST NOT be sent in this case.</p>
+    <section3 topic="Failed Resumption">
+      <p>Sometimes resumption might fail - for example, because the session has been disconnected longer than the server’s resumption timeout. In this case, the server MUST include the &lt;failed/> element defined by this specification in its SASL2 &lt;success/> response, but also MUST continue to process the &lt;bind/> in order to establish a new session for the client.</p>
+      <p>The client can find details about its new session in the &lt;bound/> response (defined by &xep0386;).</p>
+    </section3>
+  </section2>
+  <section2 topic="Inlining Examples" anchor="inline-examples">
+    <example caption='Server announces support for inlining activation of stream management and stream resumption'><![CDATA[
+<stream:features>
+  <authentication xmlns="urn:xmpp:sasl:2">
+    <mechanism>SCRAM-SHA-1</mechanism>
+    <inline>
+      <sm xmlns="urn:xmpp:sm:3"/>
+      <bind xmlns="urn:xmpp:bind2:1">
+        <feature var='urn:xmpp:sm:3'/>
+      </bind>
+    </inline>
+  </authentication>
+</stream:features>
+]]></example>
+    <example caption='Client tries to resume stream and enables stream management inlined in its bind request'><![CDATA[
+<authenticate xmlns='urn:xmpp:sasl:2' mechanism='SCRAM-SHA-1'>
+  <initial-response>[base64 encoded SASL data]</initial-response>
+  <resume xmlns="urn:xmpp:sm:3" h="some-sequence-number" previd="some-long-sm-id"/>
+  <bind xmlns="urn:xmpp:bind2:1">
+    <tag>AwesomeXMPP</tag>
+    <enable xmlns="urn:xmpp:sm:3"/>
+  </bind>
+</authenticate>
+]]></example>
+    <example caption='Client failed to enable stream management'><![CDATA[
+<success xmlns='urn:xmpp:sasl:2'>
+    <additional-data>[base64 encoded SASL data]</additional-data>
+    <authorization-identifier>user@example.com/resource</authorization-identifier>
+    <bound xmlns='urn:xmpp:bind2:1'>
+        <failed xmlns='urn:xmpp:sm:3'>
+            <internal-server-error xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+        </failed>
+        <latest-id>0312a1b8</latest-id>
+    </bound>
+</success>
+]]></example>
+    <example caption='Client failed to resume stream'><![CDATA[
+<success xmlns='urn:xmpp:sasl:2'>
+    <additional-data>[base64 encoded SASL data]</additional-data>
+    <authorization-identifier>user@example.com/resource</authorization-identifier>
+    <failed xmlns='urn:xmpp:sm:3' h='another-sequence-number'>
+        <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    </failed>
+    <bound xmlns='urn:xmpp:bind2:1'>
+        <latest-id>0312a1b8</latest-id>
+    </bound>
+</success>
+]]></example>
+        <example caption='Client failed to resume stream and to enable management of newly bound stream'><![CDATA[
+<success xmlns='urn:xmpp:sasl:2'>
+    <additional-data>[base64 encoded SASL data]</additional-data>
+    <authorization-identifier>user@example.com/resource</authorization-identifier>
+    <failed xmlns='urn:xmpp:sm:3' h='another-sequence-number'>
+        <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    </failed>
+    <bound xmlns='urn:xmpp:bind2:1'>
+        <failed xmlns='urn:xmpp:sm:3'>
+            <internal-server-error xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+        </failed>
+        <latest-id>0312a1b8</latest-id>
+    </bound>
+</success>
+]]></example>
+  </section2>
+</section1>
+
 <section1 topic='Security Considerations' anchor='security'>
   <p>As noted, a server MUST NOT allow a client to resume a stream management session until after the client has authenticated (for some value of "authentication"); this helps to prevent session hijacking.</p>
+  <p>If SASL2 is used to inline stream resumption, implementations must adhere to the security considerations defined in &xep0388; regarding the inclusion of SASL2 requests and inline feature negotiation in TLS 0-RTT ("early data") extensions. That is, these elements MUST NOT be sent or processed if the stream would be resumed solely based on 0-RTT data, except when appropriate mitigations are in place (which are beyond the scope of this document, but may be defined by others).</p>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
