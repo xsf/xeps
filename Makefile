@@ -1,5 +1,3 @@
-.SILENT:
-
 OUTDIR?=build
 REFSDIR?=$(OUTDIR)/refs
 EXAMPLESDIR?=$(OUTDIR)/examples
