@@ -6,7 +6,7 @@ FROM xmppxsf/xeps-base:latest as build
 ARG NCORES=1
 ARG TARGETS="html inbox-html inbox-xml pdf xeplist refs xml"
 
-COPY *.xml xep.* *.css *.xsl *.js *.xsl Makefile refs-LICENSE /src/
+COPY *.xml xep.* *.css *.xsl *.js *.xsl Makefile /src/
 COPY resources/*.pdf /src/resources/
 COPY tools/*.py /src/tools/
 COPY inbox/*.xml inbox/*.ent inbox/*.dtd /src/inbox/
