@@ -528,6 +528,23 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
             </xsl:otherwise>
           </xsl:choose>
         </xsl:variable>
+        <xsl:variable name="bibtex-url">
+          <xsl:choose>
+            <!-- XEPs after a certain number have an immutable version to which we preferably link -->
+            <xsl:when test='/xep/header/number &gt; 300'>
+              <xsl:text>https://xmpp.org/extensions/attic/xep-</xsl:text>
+              <xsl:value-of select='/xep/header/number'/>
+              <xsl:text>-</xsl:text>
+              <xsl:value-of select='/xep/header/revision[position()=1]/version'/>
+              <xsl:text>.html</xsl:text>
+            </xsl:when>
+            <xsl:otherwise>
+              <xsl:text>https://xmpp.org/extensions/xep-</xsl:text>
+              <xsl:value-of select='/xep/header/number'/>
+              <xsl:text>.html</xsl:text>
+            </xsl:otherwise>
+          </xsl:choose>
+        </xsl:variable>
         <pre>
 <!-- If we had XSL 2.0 we could use year-from-date() and lower-case() below. -->
 @report{<xsl:value-of select='$lowercased-surname-firstauthor'/><xsl:value-of select='$year-of-first-history-entry'/><xsl:value-of select='$bibtex-citekey-postfix'/>,
@@ -537,7 +554,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   number = {<xsl:value-of select='/xep/header/number'/>},
   version = {<xsl:value-of select='/xep/header/revision[position()=1]/version'/>},
   institution = {XMPP Standards Foundation},
-  url = {https://xmpp.org/extensions/xep-<xsl:value-of select='/xep/header/number'/>.html},
+  url = {<xsl:value-of select='$bibtex-url'/>},
   date = {<xsl:value-of select='/xep/header/revision[position()=last()]/date'/>/<xsl:value-of select='/xep/header/revision[position()=1]/date'/>},
 }</pre>
         <p>END</p>
