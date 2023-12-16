@@ -35,9 +35,9 @@
 </header>
 <section1 topic='Introduction' anchor='intro'>
   <p>Although &xmppcore; specifies the use of TCP as the method of connecting to an XMPP server, alternative connection methods exist, including the &xep0124; method (for which &xep0206; is the XMPP profile), the websocket
- subprotocol specified in &rfc7395;, &xep0368;, &xep0467;, and &xep0468;, and surely others that don't yet exist. For some of these methods, it is necessary to discover further parameters before connecting, such as the HTTPS URL of a BOSH or WebSocket request. Without ways to auto-discover these parameters, the relevant information would need to be provided manually by a human user (which is cumbersome and error-prone) or hard-coded into XMPP software applications (which is brittle and not interoperable
+ subprotocol specified in &rfc7395;, &xep0368;, &xep0467;, and &xep0468;, and surely others that don't yet exist. For some of these methods, it is necessary to discover further parameters before connecting, such as the HTTPS URL of a BOSH or WebSocket request. Without ways to auto-discover these parameters, the relevant information would need to be provided manually by a human user (which is cumbersome and error-prone) or hard-coded into XMPP software applications (which is brittle and not interoperable)
 ).</p>
-  <p>Additional things also require automatic discovery, like &rfc7711; (replaced here by pinning public keys instead like &rfc7469;), &tls-ech;, SNI names, and ALPN protocols. The web solves these problems in HTTP3 by introducing another set of DNS records (SVCB and HTTPS) but that poses a problem for XMPP because we don't have the clout to introduce our own DNS records and hope for any sort of adoption with the myriad DNS setup panels most people use.  Additionally while we all hope and pray for DNSSEC (and DANE), many TLDs don't yet support it, and we can't trust this info over plaintext (note the web doesn't trust it over plaintext either, DNS-over-TLS is a requirement for ECH).</p>
+  <p>Additional things also require automatic discovery, like &rfc7711; (replaced here by pinning public keys instead like &rfc7469;), &tls-ech;, SNI names, and ALPN protocols.</p>
   <p>This document defines a way to encapsulate information about all these connection methods and parameters for auto-discovery via Link entries in a server's "host-meta.json" file. It also provides a flag to signal to the client or server that all info is here and no other methods need be used.
   </p>
 </section1>
@@ -204,6 +204,41 @@ Access-Control-Allow-Origin: *
     <p>Keep in mind this json file is defined in an RFC and we need to keep backwards compatibility with it, software only implementing XEP-0156 should be able to read and use this file as extended by this XEP only seeing the websocket/bosh connections.</p>
   </section2>
 </section1>
+
+<section1 topic='Rationale' anchor='rationale'>
+  <p>Here I will go through alternative solutions that were explored and explain their deficiencies and why they were not chosen.</p>
+  <section2 topic='Why not DNS?' anchor='rationale-dns'>
+      <ul>
+        <li>SRV records cannot hold the additional parameters needed and are not extensible.</li>
+        <li>The web solves these problems in HTTP3 by introducing another set of DNS records (&rfc9460;) but that poses a problem for XMPP because we don't have the clout to introduce our own DNS records and hope for any sort of adoption with the myriad of DNS setup panels most people use.</li>
+        <li>We could register our own SvcParamKeys and use SVCB records, but that suffers the same problem as above.</li>
+        <li>Perhaps most importantly, while we all hope and pray for DNSSEC (and DANE), many TLDs don't yet support it, and we can't trust this info (pinned keys or secure delegation) without cryptographic authenticity.</li>
+        <li>Some of these parameters not even the web trusts over plaintext, DNS-over-TLS/HTTPS is a requirement for ECH.</li>
+        <li>TXT records can hold arbitrary data, but the authenticity/privacy problems above persist, practical size limits make this a non-starter, and writing a custom parser isn't great from a security perspective.</li>
+      </ul>
+  </section2>
+  <section2 topic='Why not host-meta.xml?' anchor='rationale-hm-xml'>
+      <ul>
+        <li>XMPP uses XML right? So we already have a XML parser to use! Actually no, XMPP uses a (very) strict subset of XML, and an XML parser properly configured to parse XMPP *will not* parse host-meta.xml. Some more security conscious XML parsers are explicitly built for XMPP and cannot be configured to parse host-meta.xml. It is *dangerous* from a security perspective to have an XML parser capable of parsing host-meta.xml anywhere in your client/server, see CVE-2022-0217.</li>
+        <li>Extending host-meta.xml the ideal way where things that can only have 1 value per link and should be an attribute (like port) would require namespaced attributes which are not widely supported or currently used at all in XMPP (though legal).</li>
+        <li>It would also require dummy values in Link like href='DUMMY' or so when a port is set.  Or introducing another tag... Regardless it won't be very clean, and I consider the first issue a complete deal breaker.</li>
+      </ul>
+  </section2>
+  <section2 topic='Why host-meta.json instead of something else?' anchor='rationale-hm-json'>
+      <ul>
+        <li>A major design goal here is enabling 1 single fetch to get everything needed to connect to a server.  This file already exists and is already being grabbed by clients, since we can extend it without breaking compatibility with those clients, this doesn't introduce another network fetch.</li>
+        <li>&rfc7711; already exists for clients and servers and uses JSON, same parser can be used.</li>
+        <li>As stated in the section above, I find a JSON parser much less of a potential security vulnerability to have available than an XML parser capable of parsing host-meta.xml</li>
+      </ul>
+  </section2>
+  <section2 topic='Misc' anchor='rationale-misc'>
+      <ul>
+        <li>host-meta.json has an 'expires' key defined already, why 'ttl' instead? I was almost convinced to use this until I realized this means that the file needs served by a program that can update 'expires' dynamically on fetch, or at least on a schedule, and that is far more complicated and therefore less preferable than a simple ttl that never needs updated allowing clients to keep track of their own expiry.</li>
+        <li>What would be the next best option? Well I think a new file over https/.well-known that is in an XMPP-subset-of-XML format and so can safely share the same parser. It would be similar to <link url='https://xmpp.org/extensions/inbox/hacx.html'>HACX</link> which was rejected with the direction to look into extending &xep0156;, which this is doing.</li>
+      </ul>
+  </section2>
+</section1>
+  
 <section1 topic='Security Considerations' anchor='security'>
   <p>It should be noted this allows your web host to hijack your XMPP connection, but that's actually been true for quite some time, they could already bypass the need for a certificate with POSH, or get one from LetsEncrypt if you didn't have the proper CAA records, or hijack it for websocket/bosh supporting clients, so this doesn't really open up new avenues of attack.</p>
   <p>Please refer to the security considerations and warnings of &rfc7469; with regards to having a backup public key and being careful to not break your domain for the whole TTL</p>
