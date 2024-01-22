@@ -257,7 +257,10 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
             </ul></dd>
           </xsl:if>
           <dt>Copyright</dt>
-          <dd>&#169; 1999 &#x2013; 2021 XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</dd>
+          <!-- Extract the copyright years from the dates via
+               substring(). If we ever use XSL 2.0, then we could use
+               year-from-date(xs:date()) -->
+          <dd>&#169; <xsl:value-of select='substring(/xep/header/revision[position()=last()]/date,1,4)'/> &#x2013; <xsl:value-of select='substring(/xep/header/revision[position()=1]/date,1,4)'/> XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</dd>
           <dt>Status</dt>
           <dd>
             <p><xsl:choose>
