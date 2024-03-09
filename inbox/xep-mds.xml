@@ -1,0 +1,231 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Message Displayed Synchronization</title>
+  <abstract>This specification allows multiple clients of the same user to synchronize the displayed state of their chats.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>Etc.</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>mds</shortname>
+  <author>
+    <firstname>Daniel</firstname>
+    <surname>Gultsch</surname>
+    <email>daniel@gultsch.de</email>
+    <jid>daniel@gultsch.de</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2024-02-21</date>
+    <initials>dg</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>In multi-device environments marking a chat as <em>displayed</em> on one device should mark that chat as <em>displayed</em> on all devices. Historically carbon copies (&xep0280;) of the &lt;displayed/> element of Chat Markers (&xep0333;) have been used to achieve this effect. However this approach has a couple of downsides that this specification is trying eliminate:</p>
+  <ul>
+    <li>The contact has to request Chat Markers by tagging a message with &lt;markable/>.</li>
+    <li>Chat Markers let the contact know that a device has displayed the message. This might not always be advisable when synchronization across multiple devices of the same user is the desired outcome.</li>
+    <li>When used in large group chats Chat Markers can create a lot of unwanted traffic.</li>
+  </ul>
+  <p>This specification isolates the task of multi-device synchronization from providing information to the contact, while borrowing some of the semantics of Chat Markers such as <em>displayed</em> refering to all messages up to this point.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Basic functionality should not depend on server features that go beyond what is commonly implemented at the time of writing this specification.</li>
+    <li>Rely on server-injected &lt;stanza-id/> (see &xep0359;) to provide unique and stable IDs. While this is commonly done as part of &xep0313; it does not technically depend on the message being archived.</li>
+    <li>Define the interaction with &xep0333;.</li>
+    <li>Provide optional methods for traffic optimizations on supporting servers.</li>
+    <li>Make no assertions on what constitutes an <em>open</em> or <em>archived</em> chat. This specification allows clients to state that they have displayed messages in a certain chat up to a certain point. It does not indicate that a chat is open or in case of group chats joined.</li>
+  </ul>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di>
+      <dt>Displayed</dt>
+      <dd>
+          Colloquially this is also known as <em>read</em>. However since a common implementation of <em>read</em> is: "shown on screen, in full, in the context of the chat", and this gives no indication on whether the user has actually read a message, <em>displayed</em> was chosen as a more accurate terminology. A message might also be manually acknowledged by the user, for example via a <em>mark as read</em> action in a notification. Implementations are also possible, for example in smart home devices or infotainment systems, where the message is read aloud by a Text-to-Speech system, but never actually displayed. It is up to the implementors discretion to determine what the best approximation of <em>the user has had a reasonable chance to mentally process the message</em> is.          
+      </dd>
+    </di>
+  </dl>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic="Server-side persistence" anchor='pep-node'>
+    <p>Clients use items in a private PEP (&xep0163;) node called 'urn:xmpp:mds:displayed:0' to synchronize and persist the displayed state (See &xep0223;). The item ID corresponds to the JID of the respective chat. For normal, 1:1 chats this SHOULD be the bare JID of the contact, for group chats this SHOULD be the bare JID of the room and for private messages in group chats the full JID of the participant.</p>
+    <p>The item contains a single &lt;displayed/> element qualified by the 'xrn:xmpp:mds:displayed:0' namespace. The &lt;displayed/> element MUST contain exactly one &xep0359; &lt;stanza-id/> element that corresponds to the stanza-id of the most recent, displayed message, in that particular chat.</p>
+  </section2>
+  <section2 topic="Flagging chat as displayed" anchor='publish'>
+  <p>Only messages <strong>received</strong> by the user (meaning sent by third parties such as a contact, a participant in a group chat, etc) SHOULD be flagged as 'displayed'. However since 'displayed' means <em>all messages up to this point</em> and the stanza-id of a message <strong>sent</strong> by the user indicates a valid point in the chat history, sent messages MAY be flagged as well.</p>
+  <p>Flagging a chat as <em>displayed up to this point</em> happens by publishing a PEP item with an id corresponding to the JID of the chat and a &lt;displayed/> payload element into the 'urn:xmpp:mds:displayed:0' node.</p>
+  <p>For group chats the &lt;stanza-id/> child of the &lt;displayed/> element refers to the stanza-id injected by the room. For all other chats the stanza-id child refers to the stanza-id injected by the user’s server (the server hosting the user account).</p>
+  <p>The client MUST include appropriate publish-options in the publication, including, but not limited to, setting the access model to whitelist and the max-items to max.</p>
+  <example caption='Client marks a chat as display'><![CDATA[
+<iq from='juliet@capulet.lit/balcony' type='set' id='flag-as-displayed-1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:mds:displayed:0'>
+      <item id='romeo@montegue.lit'>
+        <displayed xmlns='urn:xmpp:mds:displayed:0'>
+          <stanza-id xmlns='urn:xmpp:sid:0'
+                     by='juliet@capulet.lit'
+                     id='0f710f2b-52ed-4d52-b928-784dad74a52b'/>
+        </display>
+      </item>
+    </publish>
+    <publish-options>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#publish-options</value>
+        </field>
+        <field var='pubsub#persist_items'>
+          <value>true</value>
+        </field>
+        <field var='pubsub#max_items'>
+          <value>max</value>
+        </field>
+        <field var='pubsub#send_last_published_item'>
+          <value>never</value>
+        </field>
+        <field var='pubsub#access_model'>
+          <value>whitelist</value>
+        </field>
+      </x>
+    </publish-options>
+  </pubsub>
+</iq>
+]]></example>
+    <example caption="Server acknowledges successful storage"><![CDATA[
+<iq to='juliet@capulet.lit/balcony' type='result' id='flag-as-displayed-1'/>
+]]></example>
+  </section2>
+  <section2 topic="Retrieving notifications" anchor="notify">
+    <p>A client interested in synchronizing the displayed state with other clients SHOULD include the 'urn:xmpp:mds:displayed:0+notify' feature in its &xep0115;, as per &xep0163; rules.</p>
+  </section2>
+  <section2 topic="Catching up" anchor="catchup">
+    <p>Upon bind and initial presence a client retrieves all items in the 'urn:xmpp:mds:displayed:0' node to learn what changes to the displayed state have occured while the client was offline.</p>
+    <example caption="Client retrieves all displayed items"><![CDATA[
+<iq from='juliet@capulet.lit/balcony' type='get' id='catchup-1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:mds:displayed:0'/>
+  </pubsub>
+</iq>
+]]></example>
+    <example caption="Server returns the displayed states for various chat"><![CDATA[
+<iq type='result'
+    to='juliet@capulet.lit/balcony'
+    id='catchup-1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:mds:displayed:0'>
+      <item id='romeo@montegue.lit'>
+        <displayed xmlns='urn:xmpp:mds:displayed:0'>
+          <stanza-id xmlns='urn:xmpp:sid:0'
+                     id='0f710f2b-52ed-4d52-b928-784dad74a52b'
+                     by='juliet@capulet.lit'/>
+        </displayed>
+      </item>
+      <item id='example@conference.shakespeare.lit'>
+        <displayed xmlns='urn:xmpp:mds:displayed:0'
+          <stanza-id xmlns='urn:xmpp:sid:0'
+                     id='ca21deaf-812c-48f1-8f16-339a674f2864'
+                     by='example@conference.shakespeare.lit'/>
+        </displayed>
+      </item>
+    </items>
+  </pubsub>
+</iq>
+]]></example>
+  </section2>
+  <section2 topic="Interaction with Chat Markers and Server Assist" anchor="interaction">
+    <p>A &xep0333; displayed marker refers to the message id set by the sender of the message whereas the displayed element defined in this specification refers to the stanza-id injected by the user’s server.</p>
+    <p>In the likely scenario that a client wishes to share the displayed state with their own devices and the sender of the message, a client SHOULD sent a &xep0333; displayed marker and ensure that the 'urn:xmpp:mds:displayed:0' node gets updated.</p>
+    <section3 topic="Server assist">
+      <p>A &xep0060; item publication is a fairly verbose operation for something that is expected to happen rather frequently. Therfore this specification defines an optional way to combine the PEP node item update and the Chat Marker in one simple message.</p>
+    </section3>
+    <section3 topic="Discovering support">
+      <p>Server assisted displayed node updates are an optional feature a user’s server can provide. To signal support the server announces an &xep0115; feature of 'urn:xmpp:mds:server-assist:0' on the account.</p>
+      <example caption="Client queries for server features"><![CDATA[
+<iq type='get' id='disco-1' to='juliet@capulet.lit' from='juliet@capulet.lit/balcony'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+      <example caption="Server responds with features"><![CDATA[
+<iq type='result' id='disco1' from='juliet@capulet.lit' to='juliet@capulet.lit/balcony'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <feature var='urn:xmpp:mds:server-assist:0'/>
+  </query>
+</iq>
+]]></example>
+    </section3>
+    <section3 topic="Sending assisted displayed">
+      <p>To update the displayed item in the 'urn:xmpp:mds:displayed:0' PEP node more efficiently a client MAY send a message with the 'to' attribute set to the item id (which is equivalent to the JID of the contact) and with a &lt;displayed/> element qualified by the 'urn:xmpp:mds:displayed:0' namespace. The server MUST strip the &lt;displayed/> element from the message and continue to process it normally. The server MUST publish a PEP item on the 'urn:xmpp:mds:displayed:0' node where the item id is taken from the 'to' attribute and the payload is the &lt;displayed/> element. A client MUST NOT include the &lt;displayed/> element qualified by the 'urn:xmpp:mds:displayed:0' namespace if the message would otherwise be empty. A client that wishes to update the device synchronized displayed state but not inform the sender of the message via Chat Markers SHOULD use the regular PubSub publication process.</p>
+      <example caption="Romeo sends a message to Juliet"><![CDATA[
+<message to='juliet@capulet.lit' from='romeo@montegue.lit/orchard' id='the-msg-1'>
+  <body>Hi. How are you?</body>
+  <markable xmlns='urn:xmpp:chat-markers:0'/>
+  <stanza-id xmlns='urn:xmpp:sid:0' by='juliet@capulet.lit' id='0423e3a9-d516-493d-bb06-bee0e51ab9fb'/>
+</message>
+]]></example>
+      <example caption="Juliet lets both Romeo and her other devices know she has displayed the message"><![CDATA[
+<message to='romeo@montegue.lit' from='juliet@capulet.let/balcony'>
+   <displayed xmlns='urn:xmpp:chat-markers:0' id='the-msg-1'/>
+   <displayed xmlns='urn:xmpp:mds:displayed:0'>
+     <stanza-id xmlns='urn:xmpp:sid:0' by='juliet@capulet.lit' id='0423e3a9-d516-493d-bb06-bee0e51ab9fb'/>
+   </displayed>
+</message>
+]]></example>
+      <example caption="Server sends out PEP notifications to Juliets connected devices"><![CDATA[
+<message from='juliet@capulet.lit' to='juliet@capulet.lit/balcony' type='headline' id='new-displayed-pep-event'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:xmpp:mds:displayed:0'>
+      <item id='romeo@montegue.lit'>
+        <displayed xmlns='urn:xmpp:mds:displayed:0'>
+          <stanza-id xmlns='urn:xmpp:sid:0' by='juliet@capulet.lit' id='0423e3a9-d516-493d-bb06-bee0e51ab9fb'/>
+        </displayed>
+      </item>
+    </items>
+  </event>
+</message>
+]]></example>
+    </section3>
+  </section2>
+</section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>The displayed state only moves forward. Receiving a displayed state with a stanza-id that references a message older than the current local representation is considered redundant and MUST be ignored.</li>
+    <li>Displayed states with a stanza-id not found in the respective chat MUST be ignored.</li>
+    <li>Receiving an outgoing message (for example via &xep0280; or &xep0313;) SHOULD NOT mark the chat as displayed. Outgoing messages are neutral towards the overall displayed state of a given chat. For example if the <em>displayed up to</em> state references the most recent incoming message and this message is only followed by outgoing messages the overall state of that chat SHOULD be considered <em>displayed</em>.</li>
+    <li>A client receiving an outgoing message MAY NOT update the displayed node item with that stanza-id. However clients SHOULD be able to handle displayed states that use stanza-ids that refer to outgoing messages and simply consider the chat as displayed up to that point.</li>
+    <li>While Chat Markers (&xep0333;), in 1:1 chats, MAY be sent to a full JID, a client combining both &lt;displayed/> elements in a single message MUST address that message to the bare JID, as the server will use the verbatim 'to' attribute as the item ID.</li>
+  </ul>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <ul>
+    <li>When publishing displayed states via &xep0060; the client MUST use publish-options to set the access model on the node to <em>whitelist</em>. To ensure the server supports publish-options the client MUST first check for the "http://jabber.org/protocol/pubsub#publish-options" feature.</li>
+    <li>Servers that support the server assist feature MUST strip the &lt;displayed/> element in the "urn:xmpp:mds:displayed:0" namespace from the message to avoid the stanza-id being leaked to the recipient of that message.</li>
+    <li>Clients MUST NOT put the &lt;displayed/> into a message to trigger server-assited displayed synchronization unless the server announces the "urn:xmpp:mds:server-assist:0" feature.</li>
+    <li>This specification provides a convenient process to synchronize a user’s own devices and informing the third party in one, single message. However letting the third party know is not always desirable, for example when the user has generally opted out of transmitting the displayed status or when a non-contact initiated a chat. In those cases the client MUST use the &xep0060; method instead of server-assist.</li>
+  </ul>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>REQUIRED.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>REQUIRED.</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+  <p>REQUIRED for protocol specifications.</p>
+</section1>
+</xep>
