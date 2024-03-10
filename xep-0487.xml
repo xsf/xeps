@@ -1,0 +1,274 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Host Meta 2 - One Method To Rule Them All</title>
+  <abstract>This document defines an XMPP Extension Protocol for extending XEP-0156 by modifying the JSON Web Host Metadata Link format to support discovering all possible XMPP connection methods, for c2s and s2s</abstract>
+  &LEGALNOTICE;
+  <number>0487</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>RFC 1464</spec>
+  </dependencies>
+  <supersedes>
+      <spec>XEP-0156</spec>
+      <spec>RFC 7711</spec>
+  </supersedes>
+  <supersededby/>
+  <shortname>connections-v2</shortname>
+  <registry/>
+  &moparisthebest;
+  <revision>
+    <version>0.1.0</version>
+    <date>2024-03-10</date>
+    <initials>XEP Editor: dg</initials>
+    <remark>
+      <ul>
+        <li>Promoted to Experimental</li>
+      </ul>
+    </remark>   
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2023-11-19</date>
+    <initials>tjb</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Although &xmppcore; specifies the use of TCP as the method of connecting to an XMPP server, alternative connection methods exist, including the &xep0124; method (for which &xep0206; is the XMPP profile), the websocket
+ subprotocol specified in &rfc7395;, &xep0368;, &xep0467;, and &xep0468;, and surely others that don't yet exist. For some of these methods, it is necessary to discover further parameters before connecting, such as the HTTPS URL of a BOSH or WebSocket request. Without ways to auto-discover these parameters, the relevant information would need to be provided manually by a human user (which is cumbersome and error-prone) or hard-coded into XMPP software applications (which is brittle and not interoperable)
+).</p>
+  <p>Additional things also require automatic discovery, like &rfc7711; (replaced here by pinning public keys instead like &rfc7469;), &tls-ech;, SNI names, and ALPN protocols.</p>
+  <p>This document defines a way to encapsulate information about all these connection methods and parameters for auto-discovery via Link entries in a server's "host-meta.json" file. It also provides a flag to signal to the client or server that all info is here and no other methods need be used.
+  </p>
+</section1>
+
+<section1 topic='HTTPS Lookup Method' anchor='http'>
+
+  <section2 topic='Link Format' anchor='httpformat'>
+    <p>The HTTPS lookup method uses Web Host Metadata &rfc6415; to categorize and list the URIs of alternative connection methods. It is intended to replace all current methods for looking up connection information by "native" clients and servers, as well as be used by web browsers.</p>
+    <p>Each alternative connection method is specified in the host-meta.json (JRD) file using a distinctive link relation &rfc5988;. This specification defines several extension relation types, here links are provided to their respective transport definitions:</p>
+    <ul>
+      <li>urn:xmpp:alt-connections:tls           - c2s Direct TLS - &xep0368;</li>
+      <li>urn:xmpp:alt-connections:quic          - c2s Quic       - &xep0467;</li>
+      <li>urn:xmpp:alt-connections:s2s-websocket - s2s WebSocket  - &xep0468;</li>
+      <li>urn:xmpp:alt-connections:s2s-tls       - s2s Direct TLS - &xep0368;</li>
+      <li>urn:xmpp:alt-connections:s2s-quic      - s2s Quic       - &xep0467;</li>
+    </ul>
+    <p>And additionally re-uses some defined in &xep0156;:</p>
+    <ul>
+      <li>urn:xmpp:alt-connections:websocket     - c2s WebSocket - &rfc7395;</li>
+      <li>urn:xmpp:alt-connections:xbosh         - c2s BOSH      - &xep0206;</li>
+    </ul>
+    <p>Additionally a top level "xmpp" object is defined, which currently has the following subfields defined:</p>
+    <ul>
+      <li>"ttl" - integer - MANDATORY - seconds this document can be cached for</li>
+      <li>"public-key-pins-sha-256" - list of strings - OPTIONAL - base64 sha256 hashes of public keys to trust, use as defined in &rfc7469;</li>
+    </ul>
+    <p>The following are new fields defined in each link object:</p>
+    <ul>
+      <li>"priority" and "weight" - integers - MANDATORY - Use as defined in &rfc2782;</li>
+      <li>"sni" - string - MANDATORY - name to send in the TLS/QUIC SNI extension</li>
+      <li>"ech" - string - OPTIONAL - Use as defined in &tls-ech;</li>
+      <li>"ips" - list of strings - at least one MANDATORY - IPv4 or IPv6 addresses only, connect to these</li>
+    </ul>
+    <p>The "href" field in websocket/bosh links remains unchanged from XEP-0156, but is replaced by "port" (integer) in Direct TLS/Quic connections.</p>
+  </section2>
+
+  <section2 topic='Business Rules' anchor='httpbizrules'>
+    <p>The following business rules apply:</p>
+    <ol start='1'>
+      <li>host-meta files MUST be fetched only over HTTPS, and MUST only use secure connections (TLS or equivalent).
+          This provides secure delegation, meaning you MUST send the provided SNI and validate that the certificate 
+          is valid for that host *or* the XMPP domain (or the public key hash is pinned).</li>  
+      <li>host-meta responses with the top level "xmpp" object mean this XEP is in use and legacy SRV/POSH/etc lookups SHOULD be skipped, alternatively if the top level "xmpp" object does not exist, XEP-0156 rules apply instead.</li>
+      <li>Client/Server implementations SHOULD consider weight/priority as presumably the server admin has thought about which links can handle load best etc, but MAY prioritize certain protocols over others, for example a privacy client may want to use websocket to look most like HTTPS, or a mobile client might prefer Quic for connection roaming. Regardless server operators MUST NOT count on any ordering, a client can connect to any of these under even normal circumstances.</li>
+    </ol>
+  </section2>
+
+  <section2 topic='Examples' anchor='httpexamples'>
+    <p>It is possible to use additionally a JSON-based format for host-meta information. The JSON representation of the host metadata is named JRD and specified in Appendix A of &rfc6415;. The above XRD example would be presented in JRD as:</p>
+    <example caption='Result for /.well-known/host-meta.json'><![CDATA[
+{
+  "xmpp": {
+    "ttl": 3000,
+    "public-key-pins-sha-256": [
+      "4/mggdlVx8A3pvHAWW5sD+qJyMtUHgiRuPjVC48N0XQ="
+    ]
+  },
+  "links": [
+    {
+      "rel": "urn:xmpp:alt-connections:websocket",
+      "href": "wss://other.example.org/xmpp-websocket",
+      "ips": [
+        "1.2.3.4",
+        "fd00:feed:dad:beef::1"
+      ],
+      "priority": 15,
+      "weight": 50,
+      "sni": "example.org",
+      "ech": "eG1wcC1jbGllbnQ="
+    },
+    {
+      "rel": "urn:xmpp:alt-connections:tls",
+      "port": 443,
+      "ips": [
+        "1.2.3.4",
+        "fd00:feed:dad:beef::1"
+      ],
+      "priority": 10,
+      "weight": 50,
+      "sni": "example.org",
+      "ech": "eG1wcC1jbGllbnQ="
+    },
+    {
+      "rel": "urn:xmpp:alt-connections:quic",
+      "port": 443,
+      "ips": [
+        "1.2.3.4",
+        "fd00:feed:dad:beef::1"
+      ],
+      "priority": 5,
+      "weight": 50,
+      "sni": "example.org",
+      "ech": "eG1wcC1jbGllbnQ="
+    },
+    {
+      "rel": "urn:xmpp:alt-connections:s2s-websocket",
+      "href": "wss://other.example.org/s2s-xmpp-websocket",
+      "ips": [
+        "1.2.3.4",
+        "fd00:feed:dad:beef::1"
+      ],
+      "priority": 15,
+      "weight": 50,
+      "sni": "example.org",
+      "ech": "eG1wcC1jbGllbnQ="
+    },
+    {
+      "rel": "urn:xmpp:alt-connections:s2s-tls",
+      "port": 443,
+      "ips": [
+        "1.2.3.4",
+        "fd00:feed:dad:beef::1"
+      ],
+      "priority": 10,
+      "weight": 50,
+      "sni": "example.org",
+      "ech": "eG1wcC1jbGllbnQ="
+    },
+    {
+      "rel": "urn:xmpp:alt-connections:s2s-quic",
+      "port": 443,
+      "ips": [
+        "1.2.3.4",
+        "fd00:feed:dad:beef::1"
+      ],
+      "priority": 5,
+      "weight": 50,
+      "sni": "example.org",
+      "ech": "eG1wcC1jbGllbnQ="
+    },
+    {
+      "rel": "urn:xmpp:alt-connections:xbosh",
+      "href": "https://web.example.com:5280/bosh"
+    }
+  ]
+}
+]]></example>
+  </section2>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <section2 topic='For Server Administrators' anchor='impl-admins'>
+    <p>For the forseeable future you will need to maintain legacy SRV records in addition to this file, and you should provide DANE TLSA records too if possible.</p>
+    <p>To make your server as accessible to other clients/servers no matter how bad the network they are on, it is advised to use port 443 when possible, as it looks the most like HTTPS.</p>
+    <p>Extra care must be taken in updating "public-key-pins-sha-256" similar to that which is required of HPKP and DANE, summarized here, you MUST add the new key to the file, continue using the old key until least 2 TTL periods have passed, and only then remove the old key from the file and start using the new key.</p>
+    <p>To make connection discovery work in web clients (including those hosted on a different domain) the host service SHOULD set appropriate <link url="https://www.w3.org/TR/cors/">CORS</link> headers for Web Host Metadata files. The exact headers and values are out of scope of this document but may include: <em>Access-Control-Allow-Origin</em>, <em>Access-Control-Allow-Methods</em> and <em>Access-Control-Allow-Headers</em>.</p>
+    <p>Due care has to be exercised in limiting the scope of <em>Access-Control-Allow-Origin</em> response header to Web Host Metadata files only.</p>
+    <code caption="Example header allowing all sites to read host metadata"><![CDATA[
+Access-Control-Allow-Origin: *
+]]></code>
+    <p class="box"><em>Access-Control-Allow-Origin</em> header with a value of <em>*</em> allows JavaScript code running on a different domain to read the content of Web Host Metadata files. Special value <em>*</em> ensures that the request will only succeed if it is <link url="https://www.w3.org/TR/cors/#resource-requests">invoked without user credentials</link> (e.g. cookies, HTTP authentication).</p>
+  </section2>
+  <section2 topic='For Programmers' anchor='impl-codemonkey'>
+    <p>
+      As an author of a client or server, you presumably have users, and those users have a single desire, to communicate over XMPP. 
+      This means that they want to connect at any costs, they *do not* want to see the first error to appear and have all further attempts aborted until it's fixed.
+      With this problem statement, here is a list of current best practices to make this happen:
+    </p>
+    <ul>
+      <li>"ttl" is a guideline for when you SHOULD try to fetch a newer copy, if you can't, you MUST try to fetch connection info other ways, and also fall back to expired data if needed</li>
+      <li>When trying a particular connection with a list of IPs, you can try them all in order, or pick a random one like DNS would do, but if you do, you MUST keep track of the ones you tried, and try all the rest later if your connection wasn't succesful</li>
+      <li>An application MUST keep trying every possible connection until they have both an authenticated stream (the TLS certificate is valid) and have seen a valid XMPP stream element for the server you are trying to connect to.  You may get an authenticated stream and an HTTP or IMAP or SMTP error, or even an XMPP stream header for another server, you MUST keep going until both of these are satisified.</li>
+    </ul>
+  </section2>
+  <section2 topic='For Future Spec Writers' anchor='impl-speccy'>
+    <p>Keep in mind this json file is defined in an RFC and we need to keep backwards compatibility with it, software only implementing XEP-0156 should be able to read and use this file as extended by this XEP only seeing the websocket/bosh connections.</p>
+  </section2>
+</section1>
+
+<section1 topic='Rationale' anchor='rationale'>
+  <p>At the time of this writing, connecting to an XMPP server requires at least 5 seperate fetches of data, and doesn't support half the things this XEP does.  I don't find adding more fetches a sustainable path forward, hence definining one extensible method for all things going forward.</p>
+  <p>Here I will go through alternative solutions that were explored and explain their deficiencies and why they were not chosen.</p>
+  <section2 topic='Why not DNS?' anchor='rationale-dns'>
+      <ul>
+        <li>SRV records cannot hold the additional parameters needed and are not extensible.</li>
+        <li>The web solves these problems in HTTP3 by introducing another set of DNS records (&rfc9460;) but that poses a problem for XMPP because we don't have the clout to introduce our own DNS records and hope for any sort of adoption with the myriad of DNS setup panels most people use.</li>
+        <li>We could register our own SvcParamKeys and use SVCB records, but that suffers the same problem as above.</li>
+        <li>Perhaps most importantly, while we all hope and pray for DNSSEC (and DANE), many TLDs don't yet support it, and we can't trust this info (pinned keys or secure delegation) without cryptographic authenticity.</li>
+        <li>Some of these parameters not even the web trusts over plaintext, DNS-over-TLS/HTTPS is a requirement for ECH.</li>
+        <li>TXT records can hold arbitrary data, but the authenticity/privacy problems above persist, practical size limits make this a non-starter, and writing a custom parser isn't great from a security perspective.</li>
+      </ul>
+  </section2>
+  <section2 topic='Why not host-meta.xml?' anchor='rationale-hm-xml'>
+      <ul>
+        <li>XMPP uses XML right? So we already have a XML parser to use! Actually no, XMPP uses a (very) strict subset of XML, and an XML parser properly configured to parse XMPP *will not* parse host-meta.xml. Some more security conscious XML parsers are explicitly built for XMPP and cannot be configured to parse host-meta.xml. It is *dangerous* from a security perspective to have an XML parser capable of parsing host-meta.xml anywhere in your client/server, see CVE-2022-0217.</li>
+        <li>Extending host-meta.xml the ideal way where things that can only have 1 value per link and should be an attribute (like port) would require namespaced attributes which are not widely supported or currently used at all in XMPP (though legal).</li>
+        <li>It would also require dummy values in Link like href='DUMMY' or so when a port is set.  Or introducing another tag... Regardless it won't be very clean, and I consider the first issue a complete deal breaker.</li>
+      </ul>
+  </section2>
+  <section2 topic='Why host-meta.json instead of something else?' anchor='rationale-hm-json'>
+      <ul>
+        <li>A major design goal here is enabling 1 single fetch to get everything needed to connect to a server.  This file already exists and is already being grabbed by clients, since we can extend it without breaking compatibility with those clients, this doesn't introduce another network fetch.</li>
+        <li>&rfc7711; already exists for clients and servers and uses JSON, same parser can be used.</li>
+        <li>As stated in the section above, I find a JSON parser much less of a potential security vulnerability to have available than an XML parser capable of parsing host-meta.xml</li>
+      </ul>
+  </section2>
+  <section2 topic='Why do we even need these additional parameters?' anchor='rationale-params'>
+      <ul>
+        <li>SNI fixes a fundamental problem we have with current methods of secure delegation (XEP-0156 and DNSSEC signed SRV records), in that these enable certificate validation to allow a certificate if it contains either one of two names, the service name *or* the target name. But you can only send one name with SNI, and nothing indicates which to send! If you send the wrong one the connection will fail, this necessitates sending one and, if it fails, sending the other, which is of course less than ideal.</li>
+        <li>ECH allows encrypting SNI+ALPN on the wire and so is invaluable for privacy.</li>
+        <li>Pinned public keys are a better replacement for POSH (they don't need changed on certificate renewal which commonly happens every 60 days now), and an alternative to DANE which can't be used where DNSSEC is not available.</li>
+      </ul>
+  </section2>
+  <section2 topic='Misc' anchor='rationale-misc'>
+      <ul>
+        <li>host-meta.json has an 'expires' key defined already, why 'ttl' instead? I was almost convinced to use this until I realized this means that the file needs served by a program that can update 'expires' dynamically on fetch, or at least on a schedule, and that is far more complicated and therefore less preferable than a simple ttl that never needs updated allowing clients to keep track of their own expiry.</li>
+        <li>What would be the next best option? Well I think a new file over https/.well-known that is in an XMPP-subset-of-XML format and so can safely share the same parser. It would be similar to <link url='https://xmpp.org/extensions/inbox/hacx.html'>HACX</link> which was rejected with the direction to look into extending &xep0156;, which this is doing.</li>
+      </ul>
+  </section2>
+</section1>
+  
+<section1 topic='Security Considerations' anchor='security'>
+  <p>It should be noted this allows your web host to hijack your XMPP connection, but that's actually been true for quite some time, they could already bypass the need for a certificate with POSH, or get one from LetsEncrypt if you didn't have the proper CAA records, or hijack it for websocket/bosh supporting clients, so this doesn't really open up new avenues of attack.</p>
+  <p>Please refer to the security considerations and warnings of &rfc7469; with regards to having a backup public key and being careful to not break your domain for the whole TTL. For this reason and others it is advised to put a max limit on TTL of 1 week (604800).</p>
+  <p>Validating certs is full of edge cases and must be done with the utmost of care and precision.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This document requires no interaction with the &REGISTRAR;.</p>
+</section1>
+</xep>
