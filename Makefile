@@ -1,5 +1,3 @@
-.SILENT:
-
 OUTDIR?=build
 REFSDIR?=$(OUTDIR)/refs
 EXAMPLESDIR?=$(OUTDIR)/examples
@@ -36,6 +34,7 @@ xep_pdfs=$(patsubst %.xml,$(OUTDIR)/%.pdf,$(xeps))
 xep_refs=$(patsubst xep-%.xml, $(REFSDIR)/reference.XSF.XEP-%.xml, $(xeps))
 xep_examples=$(patsubst xep-%.xml, $(EXAMPLESDIR)/%.xml, $(xeps))
 
+all_xep_check_ok=$(patsubst %.xml, .%.xml.check.ok, $(xeps))
 
 .PHONY: help
 help:
@@ -46,6 +45,7 @@ help:
 	@echo '                  refs  -  build all IETF refs'
 	@echo '                  html  -  build all XEPs'
 	@echo '            inbox-html  -  build all ProtoXEPs'
+	@echo '                 check  -  check all XEPs for errors'
 	@echo '                 clean  -  recursively unlink the build tree'
 	@echo '               preview  -  builds html whenever an XEP changes (requires inotify-tools)'
 	@echo '              examples  -  extract all examples'
@@ -82,6 +82,9 @@ refs: $(xep_refs)
 .PHONY: examples
 examples: $(xep_examples)
 
+.PHONY: check
+check: $(all_xep_check_ok)
+
 .PHONY: xep-%
 xep-%: $(OUTDIR)/xep-%.html $(REFSDIR)/reference.XSF.XEP-%.xml $(OUTDIR)/xep-%.pdf $(EXAMPLESDIR)/%.xml;
 
@@ -106,30 +109,24 @@ $(EXAMPLESDIR)/%.xml: xep-%.xml $(XMLDEPS) examples.xsl | $(EXAMPLESDIR)
 $(REFSDIR)/reference.XSF.XEP-%.xml: xep-%.xml $(XMLDEPS) ref.xsl | $(REFSDIR)
 	xsltproc --path $(CURDIR) ref.xsl "$<" > "$@" && echo "Finished building $@"
 
-$(xep_htmls): $(OUTDIR)/xep-%.html: xep-%.xml $(XMLDEPS) $(HTMLDEPS) | $(OUTDIR)
+.%.xml.check.ok: %.xml
 	xmllint --nonet --noout --noent --loaddtd --valid "$<"
-	# Check for non-data URIs
-	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
+	# Check for non-data URIs, the result set of the XPath expression below should be empty
+	# Disabled for now, see
+	# https://github.com/xsf/xeps/issues/1316 and https://gitlab.gnome.org/GNOME/libxml2/-/issues/673
+	# xmllint --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< > /dev/null
+	touch $@
 
-	# Actually build the HTML
+$(xep_htmls): $(OUTDIR)/xep-%.html: xep-%.xml $(XMLDEPS) $(HTMLDEPS) | $(OUTDIR)
 	xsltproc --path $(CURDIR) --param htmlbase "$(if $(findstring inbox,$<),'../','./')" xep.xsl "$<" > "$@" && echo "Finished building $@"
 
 $(proto_xep_htmls): $(OUTDIR)/inbox/%.html: inbox/%.xml $(XMLDEPS) $(proto_HTMLDEPS) | $(OUTDIR)
-	xmllint --nonet --noout --noent --loaddtd --valid "$<"
-	# Check for non-data URIs
-	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
-
-	# Actually build the HTML
 	xsltproc --path $(CURDIR) --param htmlbase "$(if $(findstring inbox,$<),'../','./')" xep.xsl "$<" > "$@" && echo "Finished building $@"
 
 $(OUTDIR)/xmpp.pdf $(OUTDIR)/xmpp-text.pdf: | $(OUTDIR)
 	cp "resources/$(notdir $@)" "$@"
 
 $(OUTDIR)/%.pdf: %.xml $(XMLDEPS) $(TEXMLDEPS)
-	xmllint --nonet --noout --noent --loaddtd --valid "$<"
-	# Check for non-data URIs
-	! xmllint --nonet --noout --noent --loaddtd --xpath "//img/@src[not(starts-with(., 'data:'))]" $< 2>/dev/null && true
-
 	xsltproc --path $(CURDIR) xep2texml.xsl "$<" > "$(@:.pdf=.tex.xml)"
 	texml -e utf8 "$(@:.pdf=.tex.xml)" "$(@:.pdf=.tex)"
 	sed -i -e 's|\([\s"]\)\([^"]http://[^ "]*\)|\1\\path{\2}|g' \
