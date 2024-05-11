@@ -1,0 +1,229 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep><header>
+<title>Reporting Account Affiliations</title>
+<abstract>This specification documents a way for an XMPP server to report to other entities the relationship it has with a user on its domain.</abstract>
+&LEGALNOTICE;
+<number>0489</number>
+<status>Experimental</status>
+<type>Standards Track</type>
+<sig>Standards</sig>
+<approver>Council</approver>
+<dependencies/>
+<supersedes/>
+<supersededby/>
+<shortname>raa</shortname>
+<author>
+<firstname>Matthew</firstname>
+<surname>Wild</surname>
+<email>mwild1@gmail.com</email>
+</author>
+<revision>
+    <version>0.1.0</version>
+    <date>2024-03-11</date>
+    <initials>XEP Editor: dg</initials>
+    <remark>
+      <ul>
+        <li>Promoted to Experimental</li>
+      </ul>
+    </remark>
+  </revision>
+<revision>
+<version>0.0.1</version>
+<date>2023-06-28</date>
+<initials>mjw</initials>
+<remark>
+</remark>
+</revision>
+</header>
+<section1 anchor="introduction" topic="Introduction">
+
+<p>This specification documents a way for an XMPP server to report to other entities the relationship it has with a user on its domain.</p>
+
+<p>In practice, a server may not trust all accounts equally. For example, if a server offers anonymous access or open registration, it may have very little trust in such users. Meanwhile a user account that was provisioned by a server administrator for an employee or a family member would naturally have a higher level of trust.</p>
+
+<p>Even if a server alters its own behaviour based on how much it trusts a user account (such as preventing anonymous users from performing certain actions), other entities on the network have no way of knowing what trust to place in JIDs they have not encountered before - they can only judge the server as a whole.</p>
+
+<p>This lack of insight can result in the negative actions (spam, abuse, etc.) by untrusted users on a domain causing the whole domain to be sanctioned by other servers.</p>
+
+</section1><section1 anchor="requirements" topic="Requirements">
+
+<p>This protocol will allow:</p>
+
+<ul>
+<li>Servers to communicate the affiliation of the end user that sent a stanza</li>
+<li>Remote servers to query a user’s affiliation on demand</li>
+</ul>
+
+<p>By providing this high-level information to other entities on the network, it
+allows them to make informed decisions about how to handle traffic at the
+account level rather than the server level.</p>
+
+<p>For example, during a spam wave, a public MUC service may choose not to grant
+the 'participant' role by default to accounts that were very recently
+registered.</p>
+
+<p>It aims to achieve this while preserving the privacy of the user themselves,
+and ensuring the user’s server has full discretion over what data to provide
+and to which entities it is provided.</p>
+
+<section2 anchor="related-work" topic="Related work">
+
+<p>This specification has similar goals to that of <link url='https://xmpp.org/extensions/xep-0275.html'>XEP-0275: Entity Reputation</link>. It differs in the following ways:</p>
+
+<ul>
+<li>Rather than attempting to define a semi-standardized scale, it reports qualitative actionable account status information. This makes implementation simpler, and servers don’t have to guess at appropriate thresholds on a universal quantitative scale.</li>
+<li>This specification can be extended in the future if necessary. The scoring algorithm in XEP-0275 is coded into the document, and changing the value assignments may impact existing deployments that have defined thresholds based on the current specification.</li>
+<li>The 'trust' level in this specification is superficially similar to the Entity Reputation score, however with notable differences: trust levels are calculated only by a server for its own users, and we make no attempt to standardize an algorithm.</li>
+</ul>
+
+<p>Some of this information may also be discovered through <link url='https://xmpp.org/extensions/xep-0030.html'>XEP-0030: Service Discovery</link>. This specification provides more detailed information than is currently exposed via service discovery, and it is also push-based, removing the need for recipients to separately query an account’s status while determining how to handle a stanza.</p>
+
+</section2></section1><section1 anchor="affiliations" topic="Affiliations">
+
+<p>An affiliation is what we call the relationship that a user has with a service. Different affiliations
+imply different levels of trust. The affiliations defined in this specification are as follows:</p>
+
+<ul>
+<li><strong>anonymous:</strong> the address belongs to an anonymous, temporary or guest account. The user is not known to the server.</li>
+<li><strong>registered:</strong> the address belongs to an account that self-registered, e.g. using XEP-0077</li>
+<li><strong>member:</strong> the address belongs to a trusted member of the server - e.g. accounts that are provisioned for known users.</li>
+<li><strong>admin:</strong> the address belongs to a server administrator</li>
+</ul>
+
+<p>It should be noted that these affiliations extend the account types defined
+in the <link url='https://xmpp.org/registrar/disco-categories.html#account'>Service Discovery Identities registry</link>. Notably, this document adds an additional affiliation type: 'member'.</p>
+
+</section1><section1 anchor="protocol" topic="Protocol">
+
+<section2 anchor="info-element" topic="Info element">
+
+<p>An affiliation element looks like this:</p>
+
+<example  caption="The affiliation info element"><![CDATA[<info xmlns='urn:xmpp:raa:0'
+      affiliation='member'
+      since='2023-06-27T00:00:00Z'
+      trust='57' />]]></example>
+
+<p>The 'affiliation' attribute MUST be present, and the value MUST be one of the affiliations listed in the previous section. The 'since' attribute is optional, and contains a XEP-0082 DateTime profile string representing the date and time at which the account was approximately created. Please see the <link url='#security-considerations'>security considerations</link> for advice on preserving privacy before exposing this information.</p>
+
+</section2><section2 anchor="query" topic="Query">
+
+<p>An entity may directly query for affiliation information about a JID.</p>
+
+<example  caption="Service at example.com sends a query for information about a JID"><![CDATA[<iq type="get" to="mr.nobody@service.example" from="example.com" id="123">
+    <query xmlns='urn:xmpp:raa:0'/>
+</iq>]]></example>
+
+<p>The server SHOULD respond successfully with as much information as it permits the requesting entity to see:</p>
+
+<example  caption="Service responds with affiliation information"><![CDATA[<iq type="result" to="example.com" from="mr.nobody@service.example" id="123">
+    <info xmlns='urn:xmpp:raa:0' affiliation='registered' since='2023-06-27T00:00:00Z' trust='47'/>
+</iq>]]></example>
+
+<p>Alternatively, the server MAY respond with a 'forbidden' error if it does not permit the requesting entity to view any information about account affiliations:</p>
+
+<example  caption="Service forbids entity from querying this information"><![CDATA[<iq type="error" to="example.com" from="mr.nobody@service.example" id="123">
+    <error type='auth'>
+        <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    </error>
+</iq>]]></example>
+
+</section2><section2 anchor="embedding" topic="Embedding">
+
+<p>Alternatively the &lt;info/&gt; element can be embedded into outgoing stanzas, such as presence or messages:</p>
+
+<example  caption="Embedding affiliation information"><![CDATA[<presence to="user@example.com"
+          from="mr.nobody@service.example"
+          type="subscribe">
+    <info xmlns='urn:xmpp:raa:0'
+          affiliation='registered'
+          since='2023-06-27T00:00:00Z' />
+</presence>]]></example>
+
+<p>The above stanza demonstrates a subscription request sent by a recently-registered user to a user on another server. When embedding, a server MUST announce which stanzas it supports embedding in. In such
+stanzas it MUST strip any existing &lt;info/&gt; elements that may have been sent by the client.</p>
+
+<p>Receiving servers MUST only trust embedded &lt;info/&gt; elements when the origin
+server has announced support for them.</p>
+
+</section2></section1><section1 anchor="business-rules" topic="Business rules">
+
+<p>A server may exercise discretion over when it includes affiliation information. For example, it MAY choose to only reveal this information when sending stanzas to trusted servers, or withold it when sending stanzas to untrusted servers (the definition of trusted servers is beyond this specification - it may be implementation-specific or based on a protocol such as <link url='https://xmpp.org/extensions/xep-0267.html'>XEP-0267: Server Buddies</link>).</p>
+
+<p>Similarly, the information does not need to be included for every type of stanza. For example, a server SHOULD only include this information for stanzas that are sent to non-contacts. For example, messages and presence to JIDs that have not granted a presence subscription to the sender yet (i.e. absent from the sender’s roster, or with a subscription state of 'none' or 'from').</p>
+
+<p>A server MAY also withold or reduce the information for certain affiliations - e.g. by reporting server administrators as simply 'member' if the server does not want to expose this information to the recipient.</p>
+
+<p>The inclusion of the 'since' attribute is optional, but it SHOULD be included for accounts with the affiliation 'registered' accounts that were created within the past 30 days. It MAY be approximate (e.g. rounded to the nearest day) for performance or privacy reasons (the latter is discussed in the <link url='#security-considerations'>security considerations</link> section).</p>
+
+<p>The inclusion of the 'trust' attribute is optional, but it SHOULD be included for 'registered' accounts if 'since' is not included. That is, at least one of 'since' or 'trust' SHOULD be present for accounts with affiliation 'registered' to ensure a recipient has sufficient information to act on. The value of the 'trust' attribute MUST be an integer from 0 to 100 (inclusive). The value may be calculated by the server using any algorithm it deems appropriate. However, the same algorithm MUST be used for all users of the same affiliation, so that comparison between them is meaningful.</p>
+
+</section1><section1 anchor="discovery" topic="Discovery">
+
+<p>If a server supports this protocol and the query functionality, it MUST
+advertise the 'urn:xmpp:raa:0' feature in response to service discovery
+queries on its domain JID.</p>
+
+<p>If the server also supports embedding affiliation into stanzas, it MUST also
+advertise the appropriate features from this list:</p>
+
+<dl>
+<di><dt>urn:xmpp:raa:0#embed-presence-sub</dt>
+<dd>&lt;info/&gt; may be embedded in presence subscription requests originating from the user’s <strong>bare JID</strong>.</dd></di>
+<di><dt>urn:xmpp:raa:0#embed-presence-directed</dt>
+<dd>&lt;info/&gt; may be embedded in directed presence (including e.g. XEP-0045 join requests) from the user’s full JID.</dd></di>
+<di><dt>urn:xmpp:raa:0#embed-message</dt>
+<dd>&lt;info/&gt; may be embedded in message stanzas.</dd></di>
+</dl>
+
+</section1><section1 anchor="security-considerations" topic="Security Considerations">
+
+<p>This specification describes a protocol that can be used to help enhance the
+security of the XMPP network. However, some considerations do apply.</p>
+
+<section2 anchor="account-age-privacy" topic="Account age privacy">
+
+<p>If a server chooses to expose an account’s creation timestamp to untrusted
+entities, the reported value SHOULD be approximate - e.g. rounded to the day
+on which the account registered - to preserve privacy. Providing a value with
+a high precision may allow entities to correlate the account registration with
+other actions performed by the user, or determine a user’s likely time zone.</p>
+
+<p>In particular, and in accordance with the security considerations of XEP-0082,
+the 'since' value MUST be reported in UTC.</p>
+
+</section2><section2 anchor="spoofing" topic="Spoofing">
+
+<p>The payloads described in this specification may be embedded by the server in
+stanzas originating from a user’s JID. This makes it trivial for clients to
+send spoofed &lt;info/&gt; elements if the server does not remove them. To
+protect against such spoofing:</p>
+
+<ul>
+<li>Origin servers MUST advertise the correct features according to the stanza types they embed the &lt;info/&gt; element within.</li>
+<li>Origin servers MUST strip client-originating &lt;info/&gt; elements from any stanza types they have advertised support for.</li>
+<li>Receiving servers MUST ignore &lt;info/&gt; elements embedded within stanzas from other servers unless that server advertises support for embedding within that specific stanza type.</li>
+</ul>
+
+</section2></section1><section1 anchor="iana-considerations" topic="IANA Considerations">
+
+<p>None.</p>
+
+</section1><section1 anchor="xmpp-registrar-considerations" topic="XMPP Registrar Considerations">
+
+<p>This document extends the 'Identity Categories and Types Registry' defined by
+XEP-0030 with the following addition to the 'account' category:</p>
+
+<code ><![CDATA[<type>
+  <name>member</name>
+  <desc>The user@host is a trusted member of the server - e.g. an account that was provisioned for known user</desc>
+  <doc>XEP-xxxx</doc>
+</type>]]></code>
+</section1>
+</xep>
+
