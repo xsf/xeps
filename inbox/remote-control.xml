@@ -1,0 +1,840 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Jingle Remote Control</title>
+  <abstract>This specification defines a way to remotely control a device using local peripheral inputs.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>XEP-0166</spec>
+    <spec>XEP-0343</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>remote-control</shortname>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2024-05-11</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>Thanks to &xep0166;, &xep0167;, and associated XEPs, it is now possible to have video calls between devices through XMPP. Several XMPP clients also support desktop sharing, i.e., using screen capture of the current desktop session or of a specific application window instead of the usual webcam stream.</p>
+  <p>With this in place, we are one step away from having a remote desktop feature: if one "controlling" peer sends data from input peripherals to another "controlled" device and this other device uses them as input, we have a remote control system. This specification proposes ways to transmit input data to achieve remote control, with or without attached video call sessions, so that it can be used to remotely control a whole desktop or specific applications, to use remotely or simulate input devices for another device that may lack them (e.g., single-board computers or IoT devices), and it establishes a framework that can be extended to share data (e.g., clipboard content).</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The design goals of this XEP are:</p>
+  <ul>
+    <li>Allow remote control of desktops, single applications, or any kind of device.</li>
+    <li>Work with any input device, with special focus on keyboards, mice, and touch devices.</li>
+    <li>Work with or without Audio/Video calls as done by &xep0167; applications.</li>
+    <li>Work between devices of different screen sizes, or even if a device has no screen at all.</li>
+    <li>Be as close to existing data formats as possible to make implementation easy.</li>
+    <li>Allow bidirectional communication for feature such as haptic feedback, LED status, data polling, clipboard transmission, etc.</li>
+  </ul>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+ <ul>
+   <li><strong>Controlling device</strong>: A device used for remotely accessing and controlling another device, typically sending its input peripherals (keyboard, mouse, etc.) to the controlled device.</li>
+   <li><strong>Controlling entity</strong>: The person or program manipulating the controlling device.</li>
+   <li><strong>Controlled device</strong>: The target system or device being accessed and managed through a controlling device via remote control functionality; it receives and processes the input data from the controlling device as if it were entered locally.</li>
+   <li><strong>Controlled application</strong>: The software being controlled on the controlled device. It can be a whole desktop screen, a single monitor, a single desktop application, a non graphic application, or anything making sense in this context.</li>
+ </ul>
+</section1>
+
+<section1 topic='Overview' anchor='overview'>
+  <p>Remote control works by defining a new Jingle application, with the namespace 'urn:xmpp:jingle:apps:remote-control:0'. Once permission is granted, a streaming transport is established between "controlling" and "controlled" device. Input peripheral data are sent using CBOR serialization format (&rfc8949;). Controlled device receive those data, decode them, and use them to simulate inputs.</p>
+  <p>Audio or video streams can optionally be used in the same session to transmit the audio and/or video content of the controlled application. Additionally, Audio/Video streams can also be used for communication between the controlling entity and the controlled device user; this can be useful for explaining what is currently being done, for teaching, and so on.</p>
+</section1>
+
+
+<section1 topic='Jingle Conformance'>
+  <p>In accordance with Section 12 of <cite>XEP-0166</cite>, this document specifies the following information related to the Remote Control application type:</p>
+  <ol>
+    <li>
+      <p>The application format negotiation process is defined in the <link url='#negotiation'>Negotiating a Remote Control Session</link> section of this document.</p>
+    </li>
+    <li>
+      <p>The semantics of the &DESCRIPTION; element are defined in the <link url='#application_format'>Application Format</link> section of this document.</p>
+    </li>
+    <li>
+      <p>There is no mapping of Remote Control semantics to the Session Description Protocol.</p>
+    </li>
+    <li>
+      <p>A Remote Control session MUST use a streaming transport method, not a datagram transport method.</p>
+      <p>Even if in theory any streaming transport could be used, &xep0343; SHOULD be used as the preferred transport method, given that Remote Control is often utilized in conjunction with &xep0167; and should be made accessible for web clients.</p>
+    </li>
+    <li><p>Transport components are not used in Remote Control.</p></li>
+    <li>
+      <p>Description of content sending and receiving is describe in the <link url="#exchanging_input_data">Exchanging Input Data</link> section of this document.</p>
+    </li>
+  </ol>
+</section1>
+
+<section1 topic='Negotiating a Remote Control Session' anchor='negotiation'>
+  <p>A Remote Control session is requested when one of the Jingle &CONTENT; elements has a child &DESCRIPTION; element qualified by the 'urn:xmpp:jingle:apps:remote-control:0' namespace. This content MAY be the only content of the session, or it MAY be associated with &xep0167; media contents.</p>
+
+  <p>If a Remote Control session content is associated with &xep0167; and if WebRTC is used as transport (via &xep0176; and &xep0343;), the same WebRTC session MUST be used for all contents.</p>
+
+  <p>A Remote Control content MAY be added to an existing &xep0167; session by using a Jingle <strong>content-add</strong> as specified in <link url='https://xmpp.org/extensions/xep-0166.html#def-action-content-add'>XEP-0166's "content-add"</link> section. If this new content appears and uses WebRTC for transport, and a WebRTC session is already used for &xep0167;, the same WebRTC session MUST be used and a data-channel MUST be created inside, using the content's name as the Data Channel label. Permission SHOULD be requested from the user to allow remote control, before accepting the &CONTENT;.</p>
+
+  <p>As a rule of thumb, Remote Control sessions, in particular in the remote desktop use case, are generally associated with a single unidirectional video stream (with the &CONTENT; 'senders' attribute set to "responder"). This stream MUST diffuse the content of the controlled application. An additional audio unidirectional stream may also be used to transmit the sounds emitted by the controlled application. If those streams are bidirectional (i.e., with the 'senders' attribute not set, or set to "both"), the content emitted by the controlling device SHOULD be similar to a normal A/V call, i.e., webcam and/or desktop sharing with sound from the microphone. This is notably useful if the Remote Control feature is used for teaching, or explaining what is done on the controlled app. Additional video and/or audio streams may be used to have communication with the controlled device user, resulting in up to 2 video and 2 audio streams. In this case, the first video and audio streams MUST be used for controlled application content, and optionally controlling entity video, while the last 2 MUST have the 'senders' attribute set to "responder" and be used for controlled device user feedback.</p>
+
+<p>The following table summarizes the video stream usage in Remote Control sessions.</p>
+<table caption="Video Stream Usage in Remote Control Sessions">
+  <tr>
+    <th>Number of Streams</th>
+    <th>Use Case</th>
+    <th>Senders Attribute</th>
+    <th>Remarks</th>
+  </tr>
+  <tr>
+    <td>0</td>
+    <td>Remote Control without A/V feedback</td>
+    <td>-</td>
+    <td>No A/V streams, inputs are simply sent to the controlled device.</td>
+  </tr>
+  <tr>
+    <td>1 video (optional 1 audio)</td>
+    <td>Simple controlled application video feedback</td>
+    <td>senders="responder"</td>
+    <td>The first video stream is mandatory if &xep0167; is used.</td>
+  </tr>
+  <tr>
+    <td>1 video, 1 audio</td>
+    <td>Controlled application feedback + controlling entity video and audio</td>
+    <td>senders="both"</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>2 video, 2 audio</td>
+    <td>Controlled application feedback + bidirectional communication</td>
+    <td>senders="both" (first 2 streams), senders="responder" (last 2 streams)</td>
+    <td>First 2 streams: controlled application content and controlling entity video. Last 2 streams: controlled device user feedback.</td>
+  </tr>
+</table>
+
+  <section2 topic="Negotiation example">
+    <p>This is a negotiation example: Juliets wants to control Romeo's device to help him with a new software. After using her client to initiate a Remote Control session, her clients send the Jingle initiation stanza:</p>
+
+    <example caption="Juliet's Client Sends session-initiate"><![CDATA[
+<iq id="IQ_1" type="set" from="juliet@capulet.lit/balcony" to="romeo@montague.lit/orchard">
+  <jingle xmlns="urn:xmpp:jingle:1" sid="42d6beee-b51d-4a4b-8333-405051a33a10" action="session-initiate" initiator="juliet@capulet.lit/balcony">
+    <content creator="initiator" name="1" senders="initiator">
+      <description xmlns="urn:xmpp:jingle:apps:remote-control:0">
+        <device type="keyboard"/>
+        <device type="mouse"/>
+        <device type="touch"/>
+        <device type="wheel"/>
+      </description>
+      <transport xmlns="urn:xmpp:jingle:transports:webrtc-datachannel:1" sctp-port="5000" max-message-size="1073741823">
+        <!-- XEP-0343 payload -->
+      </transport>
+    </content>
+    <content creator="initiator" name="0" senders="responder">
+      <description xmlns="urn:xmpp:jingle:apps:rtp:1" media="video">
+        <!-- XEP-0167 payload -->
+      </description>
+      <transport xmlns="urn:xmpp:jingle:transports:ice-udp:1" ufrag="f0a1620c" pwd="6fb807d5f37ca6f7f248dae57fe3da02">
+        <!-- XEP-0176 payload -->
+      </transport>
+    </content>
+  </jingle>
+</iq>]]></example>
+
+    <example caption="Romeo's Client Sends Acknowledgement."><![CDATA[
+<iq to="juliet@capulet.lit/balcony" from="romeo@montague.lit/orchard" id="IQ_1" type="result"/>]]></example>
+
+<p>Romeo accepts the session, but his device doesn't handle touch inputs, so his client accepts every decive but the "touch" one (<tt>&lt;device type="touch"/&gt;</tt> is missing in its response):</p>
+
+    <example caption="Romeo clients Sends the session-accept Stanza"><![CDATA[
+<iq id="IQ_2" type="set" from="romeo@montague.lit" to="juliet@capulet.lit/balcony">
+  <jingle xmlns="urn:xmpp:jingle:1" sid="42d6beee-b51d-4a4b-8333-405051a33a10" action="session-accept" responder="romeo@montague.lit">
+    <content creator="initiator" name="1">
+      <description xmlns="urn:xmpp:jingle:apps:remote-control:0">
+        <device type="keyboard"/>
+        <device type="mouse"/>
+        <device type="wheel"/>
+      </description>
+      <transport xmlns="urn:xmpp:jingle:transports:webrtc-datachannel:1" sctp-port="5000" max-message-size="1073741823">
+        <!-- XEP-0343 payload -->
+      </transport>
+    </content>
+    <content creator="initiator" name="0">
+      <description xmlns="urn:xmpp:jingle:apps:rtp:1" media="video">
+        <!-- XEP-0167 payload -->
+      </description>
+      <transport xmlns="urn:xmpp:jingle:transports:ice-udp:1" ufrag="UozLzExwo0c2lw2yfCm2CSX0RgPeocCT" pwd="RDMWbP4Rh/nFU54Q5UfuFR27oUQ1oALR">
+        <!-- XEP-0176 payload -->
+      </transport>
+    </content>
+  </jingle>
+</iq>]]></example>
+
+    <example caption="Juliet's Client Sends Acknowledgement."><![CDATA[
+<iq to="romeo@montague.lit/orchard" from="juliet@capulet.lit/balcony" id="IQ_2" type="result"/>]]></example>
+
+<p>From this point the WebRTC session is established and a Data Channel is opened. Input events are then sent on the wire using CBOR as explained below.</p>
+
+  </section2>
+
+</section1>
+
+<section1 topic='Application Format' anchor='application_format'>
+
+  <p>The &DESCRIPTION; element contains 0, 1, or more &lt;device&gt; child elements, indicating which devices the controlling entity wishes to access.</p>
+  <p>When the responder is sending back a Remote Control &DESCRIPTION;, it MUST add a &DESCRIPTION; element for each device that has been accepted (i.e., that the controlling device may control). The responder MUST NOT add a &lt;device&gt; element for a specific device if authorization has not been granted to control it. That means that the initiator's list of &lt;device&gt; elements MAY differ from the one of the responder (if the responder is not willing to let the controller control all devices, or if a specific device is not present on the controlled device).</p>
+
+  <p>If no &lt;device&gt; element is specified, the session is a simple screen-sharing session. Note that in this case, at least one &xep0167; &CONTENT; element MUST be present; otherwise, the Jingle session MUST be terminated.</p>
+
+  <p>&lt;device&gt; elements may have child elements specific to this device type and how it should be managed. Those elements may be specified by future specifications extending this one.</p>
+
+  <p>Note: the Remote Control content may be unidirectional or bidirectional. All devices described here are unidirectional, meaning that the 'senders' attribute of the Remote Control &CONTENT; SHOULD be set to "initiator". However, future specifications may add devices that communicate in both directions (e.g., for haptic feedback, clipboard transmission, event pulling, LED feedback, etc.). In this case, the 'senders' attribute will be unset or set to "both".</p>
+  <p>A &lt;device&gt; element has a mandatory 'type' attribute, whose value is the kind of device that is requested by the controlling entity.</p>
+  <p>The current specification defines 4 &lt;device&gt; elements, described below.</p>
+
+  <section2 topic="mouse device" anchor="mouse_device">
+    <p>&lt;device type="mouse"/&gt; is used when the controlling entity want to control the mouse pointer.</p>
+  </section2>
+  <section2 topic="wheel device" anchor="wheel_device">
+    <p>&lt;device type="wheel"/&gt; is used when the controlling entity wants to send wheel events (e.g. for scrolling). Most of the time, this is a mouse wheel, but it can be an equivalent device not related to the mouse.</p>
+    <p>Note: when "mouse" device is accepted, responder SHOULD also accept wheel device. This has been made a separate device only to handle the case of independent wheel devices.</p>
+  </section2>
+  <section2 topic="touch device" anchor="touch_device">
+    <p>&lt;device type="touch"/&gt; is used when the controlling entity wants to send touch events (e.g. screen taps, gestures).</p>
+    <p>Note: touch device MUST NOT be requested or accepted if no &xep0167; video stream is present in the session.</p>
+  </section2>
+  <section2 topic="keyboard device" anchor="keyboard_device">
+    <p>&lt;device type="keyboard"/&gt; is used when the controlling entity wants to send keyboard events..</p>
+  </section2>
+</section1>
+
+<section1 topic='Exchanging Input Data' anchor='exchanging_input_data'>
+  <p>Events data are transmitted on the wire using CBOR. The reason is that input data must be sent as fast as possible in an efficient way, and CBOR is a standard, extensible, and efficient binary format well suited for this task. Furthermore, it is easily mapped to JSON, which makes it ideal to work with Web APIs and other APIs using JSON. Each event is encoded as a map, resulting as a stream of CBOR map objects on the wire.</p>
+  <p>To make understanding of the format easier and this document more readable, JSON is used in examples of this specification, but data needs to be ultimately serialized to/from CBOR to go on the wire.</p>
+  <p>The input event data format here is inspired by those found in Web APIs. This makes them straightforward to use in web-based applications, but also easy to adapt to underlying platforms as the Web APIs are abstracted and thought to work anywhere.</p>
+  <p>The general format of an input event looks like this:</p>
+  <code>
+    {
+        "type": "keyboard",
+        "device_id": "device_123",
+        "timestamp": 1712678325.0,
+        "key": "A",
+    }
+  </code>
+  <p>The first three keys ("type", "device_id", and "timestamp") are common to all device events. Other keys are device-specific.</p>
+  <p>The common keys are specified as follows:</p>
+  <dl>
+    <di>
+      <dt>type</dt>
+      <dd>
+        <p>Type of event (e.g., "mouse", "keydown").<br />
+         <em>Field type</em>: <strong>string</strong><br />
+         This key is <strong>REQUIRED</strong>.</p>
+      </dd>
+    </di>
+
+    <di>
+      <dt>device_id</dt>
+      <dd>
+        <p>Unique identifier of this device. If not specified, the receiver MUST assume that there is a single device of this kind (e.g., single mouse, single keyboard, single touch screen).<br />
+         <em>Field type</em>: <strong>string</strong><br />
+         This key is <strong>OPTIONAL</strong>.</p>
+      </dd>
+    </di>
+
+    <di>
+      <dt>timestamp</dt>
+      <dd>
+        <p>Unix timestamp (time since Unix Epoch) of when the event occurred.<br />
+         <em>Field type</em>: <strong>double</strong><br />
+         This key is <strong>REQUIRED</strong>.</p>
+      </dd>
+    </di>
+
+  </dl>
+
+</section1>
+
+<section1 topic="Device Events">
+  <p>Below is the description of the events for the 4 types of devices specified here. Future specifications may add new types of events.</p>
+  <p>Note that a controlling device doesn't need to have the device in question to send those events: for instance, a touch device doesn't have to send touch events, and can instead send mouse events to simulate a mouse, or an automation mechanism can simulate input devices.</p>
+
+  <section2 topic="Mouse Events">
+    <p>Several events are user to describe mouse movement, and button pressed or released. They are inspired from DOM Events and have similar fields.</p>
+    <section3 topic="common keys">
+      <p>The following keys are common to all mouse events.</p>
+      <p><strong>Note:</strong> if a &xep0167; video stream is attached to the session, the "x" and "y" keys are related to the video stream (x=0 and y=0 means the upper left corner of the video stream). If not video stream is attached, "x" and "y" keys MUST NOT be sent. "movementX" and "movementY" MUST be used instead. Those values are mutually exclusive, it's either "x" and "y" or "movementX" and "movementY", the controlled device MUST handle both cases.</p>
+      <dl>
+        <di>
+          <dt>x</dt>
+          <dd>
+            <p>The X coordinate of the mouse pointed for the event, relative to video stream.<br />
+              <em>Field type</em>: <strong>double</strong><br />
+                This key is <strong>REQUIRED</strong> if "movementX and "movementY" are not sent, and MUST NOT be present if there is no &xep0167; video stream.</p>
+          </dd>
+        </di>
+
+        <di>
+          <dt>y</dt>
+          <dd>
+            <p>The Y coordinate of the mouse pointed for the event, relative to video stream.<br />
+              <em>Field type</em>: <strong>double</strong><br />
+                This key is <strong>REQUIRED</strong> if "movementX and "movementY" are not sent, and MUST NOT be present if there is no &xep0167; video stream.</p>
+          </dd>
+        </di>
+
+        <di>
+          <dt>movementX</dt>
+          <dd>
+            <p>Relative X coordinate (difference between the X coordinate between this event and the previous mouse event).<br />
+              <em>Field type</em>: <strong>double</strong><br />
+              This key is <strong>REQUIRED</strong> if "x" and "y" are not sent, and MUST NOT be present otherwise.</p>
+          </dd>
+        </di>
+
+        <di>
+          <dt>movementY</dt>
+          <dd>
+            <p>Relative Y coordinate (difference between the Y coordinate between this event and the previous mouse event).<br />
+              <em>Field type</em>: <strong>double</strong><br />
+              This key is <strong>REQUIRED</strong> if "x" and "y" are not sent, and MUST NOT be present otherwise.</p>
+          </dd>
+        </di>
+
+      </dl>
+    </section3>
+
+    <section3 topic="mousedown" anchor="mousedown">
+      <p>The "mousedown" event means that one or more mouse buttons have been pressed.</p>
+      <p>The only key used in addition to common ones is the "buttons" key:</p>
+      <dl>
+        <di>
+          <dt>buttons</dt>
+          <dd>
+            <p>Indicates which buttons have been pressed. This uses the same values as the equivalent DOM MouseEvent "buttons" <note>MouseEvent: buttons property &lt;<link url="https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/buttons">https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/buttons</link>&gt;.</note>, except for value "0", which is not used here. Possible values are:</p>
+            <ul>
+              <li><strong>1</strong>: Primary button (usually the left button)</li>
+              <li><strong>2</strong>: Secondary button (usually the right button)</li>
+              <li><strong>4</strong>: Auxiliary button (usually the mouse wheel button or middle button)</li>
+              <li><strong>8</strong>: 4th button (typically the "Browser Back" button)</li>
+              <li><strong>16</strong>: 5th button (typically the "Browser Forward" button)</li>
+            </ul>
+            <p><em>Field type</em>: <strong>int</strong><br />
+                This key is <strong>REQUIRED</strong>.</p>
+          </dd>
+        </di>
+      </dl>
+    </section3>
+
+    <section3 topic="mouseup" anchor="mouseup">
+      <p>The "mousedown" event means that one or more mouse buttons have been released.</p>
+      <p>The only key used in addition to common ones is the "buttons" key, its definition is the same as for <link url="#mousedown">mousedown</link> event.</p>
+    </section3>
+
+    <section3 topic="mousemove" anchor="mousemove">
+      <p>The "mousemove" event means that the mouse pointer has been move. It does not contain any custom keys in addition to common ones.</p>
+    </section3>
+  </section2>
+
+  <section2 topic="Wheel Events">
+    <p>One event is used to describe wheel move in all 3 axis (X, Y and Z).</p>
+
+    <section3 topic="wheel" anchor="wheel">
+      <p>The "wheel" event indicate that the wheel has been moved by one or more of the 3 axis.</p>
+      <p>Note that even if all keys are OPTIONAL, at least one "delta*" key MUST be set.</p>
+      <p>The only key used in addition to common ones is the "buttons" key:</p>
+      <dl>
+        <di>
+          <dt>deltaX</dt>
+          <dd>
+            <p>Horizontal scroll amount.<br />
+              <em>Field type</em>: <strong>double</strong><br />
+              This key is <strong>OPTIONAL</strong> and default to 0.</p>
+          </dd>
+        </di>
+        <di>
+          <dt>deltaY</dt>
+          <dd>
+            <p>Vertical scroll amount.<br />
+              <em>Field type</em>: <strong>double</strong><br />
+              This key is <strong>OPTIONAL</strong> and default to 0.</p>
+          </dd>
+        </di>
+        <di>
+          <dt>deltaZ</dt>
+          <dd>
+            <p>Scroll amount for the Z axis.<br />
+              <em>Field type</em>: <strong>double</strong><br />
+              This key is <strong>OPTIONAL</strong> and default to 0.</p>
+          </dd>
+        </di>
+        <di>
+          <dt>deltaMode</dt>
+          <dd>
+            <p>Indicate the unit of delta* scroll values. This uses the same values as the equivalent DOM WheelEvent "deltaMode" <note>WheelEvent: deltaMode property &lt;<link url="https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent/deltaMode">https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent/deltaMode</link>&gt;.</note>. Possible values are:</p>
+            <ul>
+              <li><strong>0</strong>: The delta values are specified in pixels.</li>
+              <li><strong>1</strong>: The delta values are specified in lines.</li>
+              <li><strong>2</strong>: The delta values are specified in pages.</li>
+            </ul>
+            <p><em>Field type</em>: <strong>int</strong><br />
+                This key is <strong>OPTIONAL</strong> and default to 0.</p>
+          </dd>
+        </di>
+      </dl>
+    </section3>
+  </section2>
+
+  <section2 topic="Touch Events">
+    <p>Three events are used to describe touches. They all have the same single "touches" key with is a (potentially empty) array of "touch" objects, as described below.</p>
+
+    <section3 topic="common key">
+      <p>All touch events have a "touches" key which is an array of "touch" map. They represent the touch objects that are <strong>currently</strong> in contact with the surface. That means that even for the "touchend" event, it's the list of touch objects still in contact, not the removed ones.</p>
+      <p>The key usable in a touch map are specified below:</p>
+      <dl>
+        <di>
+          <dt>identifier</dt>
+          <dd>
+            <p>An unique identifier for this touch object. This uses the same values as the equivalent DOM Touch "identifier" <note>Touch &lt;<link url="https://developer.mozilla.org/en-US/docs/Web/API/Touch">https://developer.mozilla.org/en-US/docs/Web/API/Touch</link>&gt;</note>. A given touch point will have the same identifier for the duration of its movement around the surface.<br />
+              <em>Field type</em>: <strong>string</strong><br />
+                This key is <strong>REQUIRED</strong>.</p>
+          </dd>
+        </di>
+        <di>
+          <dt>x</dt>
+          <dd>
+            <p>The X coordinate of the mouse pointed for the event, relative to video stream.<br />
+              <em>Field type</em>: <strong>double</strong><br />
+                This key is <strong>REQUIRED</strong>.</p>
+          </dd>
+        </di>
+
+        <di>
+          <dt>y</dt>
+          <dd>
+            <p>The Y coordinate of the mouse pointed for the event, relative to video stream.<br />
+              <em>Field type</em>: <strong>double</strong><br />
+                This key is <strong>REQUIRED</strong>.</p>
+          </dd>
+        </di>
+
+        <di>
+          <dt>radiusX</dt>
+          <dd>
+            <p>This uses the same values as the equivalent DOM Touch "radiusX" <note>Touch &lt;<link url="https://developer.mozilla.org/en-US/docs/Web/API/Touch">https://developer.mozilla.org/en-US/docs/Web/API/Touch</link>&gt;</note>. Returns the X radius of the ellipse that most closely circumscribes the area of contact with the screen. The value is in pixels of the same scale as screenX.<br />
+              <em>Field type</em>: <strong>float</strong><br />
+                This key is <strong>OPTIONAL</strong>.</p>
+          </dd>
+        </di>
+
+        <di>
+          <dt>radiusY</dt>
+          <dd>
+            <p>This uses the same values as the equivalent DOM Touch "radiusY" <note>Touch &lt;<link url="https://developer.mozilla.org/en-US/docs/Web/API/Touch">https://developer.mozilla.org/en-US/docs/Web/API/Touch</link>&gt;</note>. Returns the Y radius of the ellipse that most closely circumscribes the area of contact with the screen. The value is in pixels of the same scale as screenY.<br />
+              <em>Field type</em>: <strong>float</strong><br />
+                This key is <strong>OPTIONAL</strong>.</p>
+          </dd>
+        </di>
+
+        <di>
+          <dt>rotationAngle</dt>
+          <dd>
+            <p>This uses the same values as the equivalent DOM Touch "rotationAngle" <note>Touch &lt;<link url="https://developer.mozilla.org/en-US/docs/Web/API/Touch">https://developer.mozilla.org/en-US/docs/Web/API/Touch</link>&gt;</note>. Returns the angle (in degrees) that the ellipse described by radiusX and radiusY must be rotated, clockwise, to most accurately cover the area of contact between the user and the surface.<br />
+              <em>Field type</em>: <strong>float</strong><br />
+                This key is <strong>OPTIONAL</strong>.</p>
+          </dd>
+        </di>
+
+        <di>
+          <dt>force</dt>
+          <dd>
+            <p>This uses the same values as the equivalent DOM Touch "force" <note>Touch &lt;<link url="https://developer.mozilla.org/en-US/docs/Web/API/Touch">https://developer.mozilla.org/en-US/docs/Web/API/Touch</link>&gt;</note>. Returns the amount of pressure being applied to the surface by the user, as a float between 0.0 (no pressure) and 1.0 (maximum pressure).<br />
+              <em>Field type</em>: <strong>float</strong><br />
+                This key is <strong>OPTIONAL</strong>.</p>
+          </dd>
+        </di>
+
+      </dl>
+    </section3>
+
+    <section3 topic="touchstart" anchor="touchstart">
+      <p>One or more touch objects are placed on the surface.</p>
+    </section3>
+
+    <section3 topic="touchend" anchor="touchend">
+      <p>One or more touch objects are removed from the surface.</p>
+    </section3>
+
+    <section3 topic="touchmove" anchor="touchmove">
+      <p>One or more touch objects are moved along the surface.</p>
+    </section3>
+  </section2>
+
+  <section2 topic="Keyboard Events">
+    <p>There are two keyboard events, they use the same keys.</p>
+
+    <section3 topic="common key">
+      <p>The following keys are common to all keyboard events:</p>
+      <dl>
+        <di>
+          <dt>key</dt>
+          <dd>
+            <p>A string representing the key value. This use DOM key values, and it the same as the equivalent DOM KeyboardEvent "key" <note>KeyboardEvent: key property &lt;<link url="https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/key">https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/key</link>&gt;</note>. You can check the possible values at <link url="https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_key_values">https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_key_values</link>. The <link url="https://w3c.github.io/uievents/tools/key-event-viewer.html">W3C Keyboard Event Viewer</link> can also be useful to check keys value while working with this specification.<br />
+              <em>Field type</em>: <strong>string</strong><br />
+                This key is <strong>REQUIRED</strong>.</p>
+            </dd>
+          </di>
+          <di>
+            <dt>location</dt>
+            <dd>
+              <p>A number representing the location of the key on the keyboard. This uses the same values as the equivalent DOM KeyboardEvent "location" <note>KeyboardEvent: location property &lt;<link url="https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/location">https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/location</link>&gt;</note>, except for value "0", which is not used here. Possible values are (the values description is an abstract of Mozilla Developer Network <note>KeyboardEvent: location property &lt;<link url="https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/location">https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/location</link>&gt; available under <link url="https://creativecommons.org/licenses/by-sa/2.5/">Creative Commons Attribution-ShareAlike license (CC-BY-SA), v2.5 or any later version.</link> as specified at &lt;<link url="https://developer.mozilla.org/en-US/docs/MDN/Writing_guidelines/Attrib_copyright_license">https://developer.mozilla.org/en-US/docs/MDN/Writing_guidelines/Attrib_copyright_license</link>&gt;.</note>):</p>
+            <ul>
+              <li><strong>1</strong>: The key was the left-hand version of the key; for example, the left-hand Control key was pressed on a standard 101 key US keyboard. This value is only used for keys that have more than one possible location on the keyboard.</li>
+              <li><strong>2</strong>: The key was the right-hand version of the key; for example, the right-hand Control key is pressed on a standard 101 key US keyboard. This value is only used for keys that have more than one possible location on the keyboard.</li>
+              <li><strong>3</strong>: The key was on the numeric keypad, or has a virtual key code that corresponds to the numeric keypad.</li>
+              <li><strong>4</strong>: The key was on a mobile device; this can be on either a physical keypad or a virtual keyboard.</li>
+              <li><strong>5</strong>: The key was a button on a game controller or a joystick on a mobile device. </li>
+            </ul>
+              <p><em>Field type</em>: <strong>int</strong><br />
+                  This key is <strong>OPTIONAL</strong>.</p>
+              </dd>
+            </di>
+          </dl>
+        </section3>
+
+        <section3 topic="keydown" anchor="keydown">
+          <p>A key is pressed.</p>
+        </section3>
+
+        <section3 topic="keyup" anchor="keyup">
+          <p>A key is released.</p>
+        </section3>
+
+  </section2>
+
+  <section2 topic="Summary of Event Keys">
+    <p>This section summarize the possible event key values for the devices specified here.</p>
+
+    <table caption="Summary of Events and Keys">
+      <tr>
+        <th>Key</th>
+        <th>Device</th>
+        <th>Event Types</th>
+        <th>Description</th>
+        <th>Requirement</th>
+        <th>Remarks</th>
+        <th>Data Type</th>
+      </tr>
+      <tr>
+        <td>buttons</td>
+        <td><link url="#mouse_device">Mouse</link></td>
+        <td><link url="#mousedown">mousedown</link>, <link url="#mouseup">mouseup</link></td>
+        <td>Indicates which buttons have been pressed or released</td>
+        <td>Required</td>
+        <td>-</td>
+        <td>int</td>
+      </tr>
+      <tr>
+        <td>deltaMode</td>
+        <td><link url="#wheel_device">Wheel</link></td>
+        <td><link url="#wheel">wheel</link></td>
+        <td>Indicate the unit of delta* scroll values</td>
+        <td>Optional</td>
+        <td>Default to 0</td>
+        <td>int</td>
+      </tr>
+      <tr>
+        <td>deltaX</td>
+        <td><link url="#wheel_device">Wheel</link></td>
+        <td><link url="#wheel">wheel</link></td>
+        <td>Horizontal scroll amount</td>
+        <td>Optional</td>
+        <td>Default to 0. At least one "delta*" key must be set</td>
+        <td>double</td>
+      </tr>
+      <tr>
+        <td>deltaY</td>
+        <td><link url="#wheel_device">Wheel</link></td>
+        <td><link url="#wheel">wheel</link></td>
+        <td>Vertical scroll amount</td>
+        <td>Optional</td>
+        <td>Default to 0. At least one "delta*" key must be set</td>
+        <td>double</td>
+      </tr>
+      <tr>
+        <td>deltaZ</td>
+        <td><link url="#wheel_device">Wheel</link></td>
+        <td><link url="#wheel">wheel</link></td>
+        <td>Scroll amount for the Z axis</td>
+        <td>Optional</td>
+        <td>Default to 0. At least one "delta*" key must be set</td>
+        <td>double</td>
+      </tr>
+      <tr>
+        <td>key</td>
+        <td><link url="#keyboard_device">Keyboard</link></td>
+        <td><link url="#keydown">keydown</link>, <link url="#keyup">keyup</link></td>
+        <td>A string representing the key value. Uses DOM key values</td>
+        <td>Required</td>
+        <td>-</td>
+        <td>string</td>
+      </tr>
+      <tr>
+        <td>location</td>
+        <td><link url="#keyboard_device">Keyboard</link></td>
+        <td><link url="#keydown">keydown</link>, <link url="#keyup">keyup</link></td>
+        <td>A number representing the location of the key on the keyboard</td>
+        <td>Optional</td>
+        <td>-</td>
+        <td>int</td>
+      </tr>
+      <tr>
+        <td>movementX</td>
+        <td><link url="#mouse_device">Mouse</link></td>
+        <td><link url="#mousemove">mousemove</link></td>
+        <td>Relative X coordinate (difference between the X coordinate of this event and the previous mouse event)</td>
+        <td>Required*</td>
+        <td>Only required if "x" and "y" are not sent</td>
+        <td>double</td>
+      </tr>
+      <tr>
+        <td>movementY</td>
+        <td><link url="#mouse_device">Mouse</link></td>
+        <td><link url="#mousemove">mousemove</link></td>
+        <td>Relative Y coordinate (difference between the Y coordinate of this event and the previous mouse event)</td>
+        <td>Required*</td>
+        <td>Only required if "x" and "y" are not sent</td>
+        <td>double</td>
+      </tr>
+      <tr>
+        <td>touches</td>
+        <td><link url="#touch_device">Touch</link></td>
+        <td><link url="#touchstart">touchstart</link>, <link url="#touchend">touchend</link>, <link url="#touchmove">touchmove</link></td>
+        <td>A list of touch objects.</td>
+        <td>Required</td>
+        <td>-</td>
+
+        <td><em>List of touch objects</em></td>
+      </tr>
+      <tr>
+        <td>type</td>
+        <td>All</td>
+        <td>All events</td>
+        <td>Type of event (e.g., "mouse", "keydown")</td>
+        <td>Required</td>
+        <td>-</td>
+        <td>string</td>
+      </tr>
+      <tr>
+        <td>device_id</td>
+        <td>All</td>
+        <td>All events</td>
+        <td>Unique identifier of this device</td>
+        <td>Optional</td>
+        <td>For single device type, it's not needed</td>
+        <td>string</td>
+      </tr>
+      <tr>
+        <td>timestamp</td>
+        <td>All</td>
+        <td>All events</td>
+        <td>Unix timestamp (time since Unix Epoch) of when the event occurred</td>
+        <td>Required</td>
+        <td>-</td>
+        <td>double</td>
+      </tr>
+      <tr>
+        <td>x</td>
+        <td><link url="#mouse_device">Mouse</link>, <link url="#touch_device">Touch</link></td>
+        <td><link url="#mousedown">mousedown</link>, <link url="#mouseup">mouseup</link>, <link url="#mousemove">mousemove</link>, <link url="#touchstart">touchstart</link>, <link url="#touchend">touchend</link>, <link url="#touchmove">touchmove</link></td>
+        <td>X coordinate of the mouse pointer or touch point, relative to video stream</td>
+        <td>Required*</td>
+        <td>Only required if "movementX" and "movementY" are not sent and if there is a &xep0167; video stream</td>
+        <td>double</td>
+      </tr>
+      <tr>
+        <td>y</td>
+        <td><link url="#mouse_device">Mouse</link>, <link url="#touch_device">Touch</link></td>
+        <td><link url="#mousedown">mousedown</link>, <link url="#mouseup">mouseup</link>, <link url="#mousemove">mousemove</link>, <link url="#touchstart">touchstart</link>, <link url="#touchend">touchend</link>, <link url="#touchmove">touchmove</link></td>
+        <td>Y coordinate of the mouse pointer or touch point, relative to video stream</td>
+        <td>Required*</td>
+        <td>Only required if "movementX" and "movementY" are not sent and if there is a &xep0167; video stream</td>
+        <td>double</td>
+      </tr>
+    </table>
+
+    <table caption="Touch Object">
+      <tr>
+        <th>Key</th>
+        <th>Description</th>
+        <th>Requirement</th>
+        <th>Remarks</th>
+        <th>Data Type</th>
+      </tr>
+      <tr>
+        <td>identifier</td>
+        <td>An unique identifier for this touch object</td>
+        <td>Required</td>
+        <td>-</td>
+        <td>string</td>
+      </tr>
+      <tr>
+        <td>force</td>
+        <td>Returns the amount of pressure being applied to the surface by the user, as a float between 0.0 (no pressure) and 1.0 (maximum pressure)</td>
+        <td>Optional</td>
+        <td>-</td>
+        <td>float</td>
+      </tr>
+      <tr>
+        <td>radiusX</td>
+        <td>Returns the X radius of the ellipse that most closely circumscribes the area of contact with the screen</td>
+        <td>Optional</td>
+        <td>-</td>
+        <td>float</td>
+      </tr>
+      <tr>
+        <td>radiusY</td>
+        <td>Returns the Y radius of the ellipse that most closely circumscribes the area of contact with the screen</td>
+        <td>Optional</td>
+        <td>-</td>
+        <td>float</td>
+      </tr>
+      <tr>
+        <td>rotationAngle</td>
+        <td>Returns the angle (in degrees) that the ellipse must be rotated, clockwise, to most accurately cover the area of contact between the user and the surface</td>
+        <td>Optional</td>
+        <td>-</td>
+        <td>float</td>
+      </tr>
+      <tr>
+        <td>x</td>
+        <td>X coordinate of the touch object</td>
+        <td>Required</td>
+        <td>Related to the video stream (if present)</td>
+        <td>double</td>
+      </tr>
+      <tr>
+        <td>y</td>
+        <td>Y coordinate of the touch object</td>
+        <td>Required</td>
+        <td>Related to the video stream (if present)</td>
+        <td>double</td>
+      </tr>
+    </table>
+  </section2>
+</section1>
+
+<section1 topic="Extending this Specification">
+  <p>It is expected that future specifications will extend this one. To make an extension, we recommand to follows those rules:</p>
+  <ul>
+    <li>Use "Remote Control" in your title to easily find extensions. "Remote Control: Clipboard" or "Remote Control: Gamepad" are good extension titles.</li>
+    <li>Describe the &lt;device&gt; element and if necessary any device-specific child.</li>
+    <li>Specify the new events in the same way as here: consistency make it easier to follow different specifications.</li>
+    <li>Indicate it the event is unidirectional (only send from controlling device to controlled device) or bidirectional (controlled device can send data too).</li>
+    <li>For each key of the new event, give a short description, the data type, and indicate wether the data is <strong>OPTIONAL</strong> or <strong>REQUIRED</strong>.</li>
+    <li>The namespace 'urn:xmpp:jingle:apps:remote-control:xxx:y' should be used for extension of this specification, where <strong>xxx</strong> is a short name, usually the name of the new managed device, and <strong>y</strong> is the usual specification version number.</li>
+  </ul>
+</section1>
+
+
+<section1 topic='Business Rules' anchor='rules'>
+  <p>A controlled device MAY send data back to the controlling device, for instance, to send force haptic feedback such as vibration or force feedback. All devices in this specification are unidirectional, but future specifications may add bidirectional ones. If any bidirectional device is requested, the 'senders' attribute of the Remote Control content MUST be unset or set to "both".</p>
+  <p>It is up to the controlling entity to optimize or not the data sent with whatever appropriate algorithm. For instance, if a mouse is moved twice without a button or keyboard being pressed in-between, the controlling entity could send a single mouse event that is a combination of the two moves.</p>
+  <p>If a Remote Control &CONTENT; is used with &xep0167; &CONTENT;, the session is a Remote Control session, and not a video call; it SHOULD be presented as a Remote Control session to the user, and the media streams are used as feedback and/or support as described above.</p>
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>If a client supports the protocol specified in this XEP, it MUST advertise it by including the "urn:xmpp:jingle:apps:remote-control:0" discovery feature in response to a &xep0030; information request.</p>
+
+  <example caption="Service Discovery information request"><![CDATA[
+<iq type='get'
+    from='juliet@example.org/balcony'
+    to='romeo@example.org/orchard'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq type='result'
+    from='romeo@example.org/orchard'
+    to='juliet@example.org/balcony'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:jingle:apps:remote-control:0'/>
+    ...
+  </query>
+</iq>]]></example>
+
+</section1>
+
+<section1 topic="Security Considerations" anchor="security">
+  <p>Obviously, allowing an entity to remotely control a device is giving a high and dangerous level of access, similar to having the person using the controlling device sitting in front of this computer.</p>
+  <p>Before starting the remote control session, the client SHOULD ask for permission from the user of the controlled device in a clear and understandable way, explaining in non-technical terms that the other person will fully control the inputs of the device. A client MAY allow for automatic permission (e.g., to control an IoT device or a work computer from home by well-known entities), but this must be done clearly or stated somewhere, and the controlling entity SHOULD be duly checked.</p>
+  <p>In addition, a controlled device SHOULD display an obvious, clear, and always visible indicator that the inputs are currently being remotely controlled, with an obvious and easily accessible button to stop remote control immediately.</p>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>TODO</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+<section1 topic='XML Schema' anchor='schema'>
+
+  <section2 topic='urn:xmpp:jingle:apps:remote-control:0' anchor='schemas-remote-control'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:jingle:apps:remote-control:0'
+    xmlns='urn:xmpp:jingle:apps:remote-control:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='description'>
+    <xs:complexType>
+      <xs:all>
+        <xs:element name='device' type='deviceElementType' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:all>
+    </xs:complexType>
+  </xs:element>
+
+<xs:complexType name='deviceElementType'>
+  <xs:attribute name='type' use='required'>
+    <xs:simpleType>
+      <xs:restriction base='xs:NMTOKEN'/>
+    </xs:simpleType>
+  </xs:attribute>
+  <xs:any namespace='##other' processContents='lax' minOccurs='0' maxOccurs='unbounded'/>
+</xs:complexType>
+
+</xs:schema>]]></code>
+  </section2>
+
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>Thanks to NLNet foundation/NGI Assure for funding the work on this specification.</p>
+</section1>
+</xep>
