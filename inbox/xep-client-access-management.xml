@@ -1,0 +1,209 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep><header>
+<title>Client Access Management</title>
+<abstract>This specification details how an XMPP account owner can view and control which applications and services have access to their account.</abstract>
+&LEGALNOTICE;
+<number>xxxx</number>
+<status>ProtoXEP</status>
+<type>Standards Track</type>
+<sig>Standards</sig>
+<approver>Council</approver>
+<dependencies/>
+<supersedes/>
+<supersededby/>
+<shortname>cam</shortname>
+<author>
+<firstname>Matthew</firstname>
+<surname>Wild</surname>
+<email>mwild1@gmail.com</email>
+</author>
+<revision>
+<version>0.0.1</version>
+<date>2024-08-20</date>
+<initials>mjw</initials>
+<remark>
+</remark>
+</revision>
+</header>
+<section1 topic="Introduction" anchor="introduction">
+
+<p>A common feature of secure online services today is the ability for users to monitor and manage what software and services have access to their account. This is especially relevant for XMPP - a diverse ecosystem of software around an interoperable standard can lead to many and various types of applications having access to a user’s account.</p>
+
+<p>This specification provides a standard protocol to let a user view and manage what has access to their account.</p>
+
+</section1><section1 topic="Requirements" anchor="requirements">
+
+<ul>
+<li>It should be possible for an account owner to obtain a list of applications and entities that are permitted access to their account.</li>
+<li>Where possible, additional details of such access should be provided, to allow informed decisions. This may include things like when access was last used (so that access can removed when no longer used).</li>
+<li>Where possible, an account owner should be able to revoke access so that an application or entity can no longer access their account.</li>
+</ul>
+
+</section1><section1 topic="Use Cases" anchor="use-cases">
+
+<section2 topic="Listing clients" anchor="listing-clients">
+
+<p>To list clients that have access to the user’s account, send a <tt>&lt;list/&gt;</tt> payload element inside an <tt>&lt;iq/&gt;</tt> of type 'get':</p>
+
+<example  caption="Client requests list of clients from server"><![CDATA[<iq id="5468616e6b73" type="get">
+  <list xmlns="urn:xmpp:cam:0"/>
+</iq>]]></example>
+
+<p>The server will respond with a list of clients:</p>
+
+<example  caption="Client receives list of clients from server"><![CDATA[<iq id="5468616e6b73" to="user@example.com/UYJKBHKT" type="result" xmlns="jabber:client">
+  <clients xmlns="urn:xmpp:cam:0">
+    <client connected="true" id="zeiP41HLglIu" type="session">
+      <first-seen>2023-04-06T14:26:08Z</first-seen>
+      <last-seen>2023-04-06T14:37:25Z</last-seen>
+      <auth>
+        <password/>
+      </auth>
+      <permission status="unrestricted"/>
+      <user-agent>
+        <software>Gajim</software>
+        <uri>https://gajim.org/</uri>
+        <device>Juliet's laptop</device>
+      </user-agent>
+    </client>
+    <client connected="false" id="HjEEr45_LQr" type="access">
+      <first-seen>2023-03-27T15:16:09Z</first-seen>
+      <last-seen>2023-03-27T15:37:24Z</last-seen>
+      <auth>
+          <grant/>
+      </auth>
+      <permission status="normal"/>
+      <user-agent>
+        <software>REST client</software>
+      </user-agent>
+    </client>
+  </clients>
+</iq>]]></example>
+
+<p>The following attributes are defined on the <tt>&lt;client/&gt;</tt> tag:</p>
+
+<ul>
+<li>'connected': a boolean that reflects whether this client has an active session
+on the server ("active" includes connected and sessions that may be disconnected but may yet be reconnected, e.g. using &xep0198;).</li>
+<li>'id': an opaque reference for the client, which can be used to revoke access.</li>
+<li>'type': either <tt>"session"</tt> if this client is known to have an active or inactive
+client session on the server, or "access" if no session has been established (e.g.
+it may have been granted access to the account, but only used non-XMPP APIs or
+never logged in).</li>
+</ul>
+
+<p>The <tt>&lt;first-seen/&gt;</tt> and <tt>&lt;last-seen/&gt;</tt> elements contain timestamps that reflect
+when a client was first granted access to the user’s account, and when it most
+recently used that access. For active sessions, it may reflect the current
+time or the time of the last login.</p>
+
+<p>The <tt>&lt;user-agent/&gt;</tt> element contains information about the client software. It
+may contain any of three optional child elements, each containing text content:</p>
+
+<ul>
+<li><tt>&lt;software/&gt;</tt> - the name of the software</li>
+<li><tt>&lt;uri/&gt;</tt> - a URI/URL for the client, such as a homepage</li>
+<li><tt>&lt;device/&gt;</tt> - a human-readable identifier/name for the device where the client
+runs</li>
+</ul>
+
+<p>The <tt>&lt;auth/&gt;</tt> element MUST be included, and lists the known authentication methods that the client has used to gain access to the account. The following child elements are defined:</p>
+
+<ul>
+<li><tt>&lt;password/&gt;</tt> - the client has presented a valid password</li>
+<li><tt>&lt;grant/&gt;</tt> - the client has a valid authorization grant (e.g. via OAuth). The <tt>&lt;grant/&gt;</tt> element may also contain details of the grant and the associated permissions (described below)</li>
+<li><tt>&lt;fast/&gt;</tt> - the client has active FAST tokens</li>
+</ul>
+
+<p>The <tt>&lt;auth/&gt;</tt> element is explicitly extensible - alternative/future authentication mechanisms may be included under appropriate namespaces.</p>
+
+<p>The <tt>&lt;permission/&gt;</tt> element MUST also be present, and contains details of the client’s level of access to the user’s account. The 'status' attribute of the permission element MUST be present and MUST be one of the following values:</p>
+
+<ul>
+<li>"unrestricted" - the client has full unlimited access to the account.</li>
+<li>"normal" - the client has general access to the account, but some security-relevant features may be restricted (such as managing account access and changing the account password).</li>
+<li>"restricted" - the client has additional restrictions in place. In such a case the details of these restrictions SHOULD be included in an appropriate format (and namespace) within the <tt>&lt;permission/&gt;</tt> element.</li>
+</ul>
+
+</section2><section2 topic="Revoking access" anchor="revoking-access">
+
+<p>To revoke a client’s access, send a <tt>&lt;revoke/&gt;</tt> payload element with an 'id' attribute
+containing one of the client ids fetched from the list:</p>
+
+<example  caption="Client requests revocation of another client&apos;s access"><![CDATA[<iq id="4e4c6e6574" type="set">
+  <revoke xmlns="urn:xmpp:cam:0" id="HjEEr45_LQr" />
+</iq>]]></example>
+
+<p>The server will respond with an empty result if the revocation succeeds:</p>
+
+<example  caption="Server confirms successful revocation"><![CDATA[<iq id="4e4c6e6574" type="result" />]]></example>
+
+<p>If the identified client has previously authenticated with a password, there is no way to
+revoke access except by changing the user’s password. If you request
+revocation of such a client, the server will respond with a 'service-unavailable'
+error, with the 'password-reset-required' application error:</p>
+
+<example  caption="Server indicates password reset required"><![CDATA[<iq id="4e4c6e6574" type="error">
+  <error type="cancel">
+    <service-unavailable xmlns="xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'">
+    <password-reset-required xmlns="urn:xmpp:cam:0"/>
+  </error>
+</iq>]]></example>
+
+<p>Changing the user’s password can be performed using &xep0077;.</p>
+
+</section2></section1><section1 topic="Accessibility Considerations" anchor="accessibility-considerations">
+
+<p>This XEP is not deemed to require any additional accessibility considerations
+beyond those normally required for implementations.</p>
+
+</section1><section1 topic="Security Considerations" anchor="security-considerations">
+
+<p>Servers MUST ensure that the provided client listing is an accurate
+representation of what has access to the user’s account. It MUST ensure that
+the protocol described here is protected from unauthorized access by third
+parties, to avoid information leaks and denial of service.</p>
+
+<p>In addition to the account owner, implementations MAY provide functionality
+for server administrators to view and revoke access on behalf of users. For
+example, if a popular third-party client is discovered to be compromised, an
+administrator may want to immediately revoke its access to all accounts on
+their server.</p>
+
+</section1><section1 topic="Privacy Considerations" anchor="privacy-considerations">
+
+<p>This specification provides methods designed to enhance privacy, by allowing
+revocation of account access when it is no longer needed.</p>
+
+<p>To allow users to make an informed decision, the client listing needs to
+contain useful information that can help them to identify clients that are
+suspicious, unwanted, or no longer needed. This may involve the server storing
+additional information about client sessions than it would otherwise.
+Implementations MUST make it possible for a deployment to choose whether to
+keep certain information, and how long for. This ensures that deployments can
+adapt to their own requirements, the needs and wishes of their users, and the
+jurisdictions they operate in.</p>
+
+<p>The defaults should aim to strike a balance between privacy and security, and
+keep client session information for no longer than necessary.</p>
+
+</section1><section1 topic="IANA Considerations" anchor="iana-considerations">
+
+<p>None.</p>
+
+</section1><section1 topic="XMPP Registrar Considerations" anchor="xmpp-registrar-considerations">
+
+<p>None.</p>
+
+</section1><section1 topic="Acknowledgements" anchor="acknowledgements">
+
+<p>Thanks to Kim Alvefur for assisting in the review of this protocol, and the
+associated prototype implemention. Thanks to NLnet for providing the funding
+to work on XMPP authentication improvements.</p>
+</section1>
+</xep>
+

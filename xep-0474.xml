@@ -24,6 +24,17 @@
   <shortname>SSDP</shortname>
   &tmolitor;
   <revision>
+    <version>0.3.1</version>
+    <date>2024-09-11</date>
+    <initials>tm</initials>
+    <remark>
+      <ul>
+          <li>Fix typos</li>
+          <li>Adapt attack-model section to new simplified protocol</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>0.3.0</version>
     <date>2023-12-04</date>
     <initials>tm</initials>
@@ -62,7 +73,7 @@
   <p>&rfc6120; and &xep0388; define a way to negotiate SASL mechanisms. When used together with SCRAM mechanisms (&rfc5802;) and channel-binding (&xep0440;) the mechanism selection is protected against downgrade attacks by an active MITM tampering with the TLS channel and advertised SASL mechanisms. Yet, the negotiation of the channel-binding types is not protected against such downgrade attacks.</p>
   <p>&xep0440; tries to mitigate this by making the "tls-server-end-point" (&rfc5929;) channel-binding mandatory to implement for servers. But that leaves clients not able to implement this type, or any channel-binding at all, vulnerable to downgrades of channel-binding types and SASL mechanisms. Furthermore "tls-server-end-point" provides weaker security guarantees than other channel-bindings like for example "tls-exporter" (defined in &rfc5705; and &rfc9266;).</p>
   <p>Most clients use pinning of channel-binding types and SASL mechanisms to protect against downgrade attacks, but this protection is incomplete. First of all this can not protect the first connection. Second server operators can not deactivate previosly advertised mechanisms (clients having pinned that mechanism will not authenticate anymore). This can be used by attackers to trick users into reinstalling/reconfiguring their chat app to MITM the then first connection (which again is not protected by pinning).</p>
-  <p>This specification aims to solve these issues by spcifying a downgrade protection for both SASL mechanisms and channel-binding types using an optional SCRAM attribute (see &rfc5802;). This specification can be used for SASL1 (&rfc6120;) and SASL2 (&xep0388;) profiles as well as any other SASL profile.</p>
+  <p>This specification aims to solve these issues by specifying a downgrade protection for both SASL mechanisms and channel-binding types using an optional SCRAM attribute (see &rfc5802;). This specification can be used for SASL1 (&rfc6120;) and SASL2 (&xep0388;) profiles as well as any other SASL profile.</p>
   <p>Note: In the long term the author strives to publish this as an RFC rather than a XEP to also make this protection available to other protocols, after gaining implementation experience.</p>
 </section1>
 <section1 topic='Glossary' anchor='glossary'>
@@ -87,7 +98,7 @@
   <p>Instead of pinning a concrete SASL mechanism it might be an acceptable approach to only pin if the server previously supported at least one mechanism better than SASL-PLAIN. This would ensure that the authentication won't fall back to SASL-PLAIN in the future, but also won't hinder protocol agility for the SCRAM family of SASL mechanisms etc..</p>
 </section1>
 <section1 topic="Protection Scenarios" anchor="scenarios">
-  <p>In the following, the limitations of pinning are shown and explained how these can be solved with this specification. This list is by no means meant to be exhaustive. See also <link url="#attack-model">Security Considerations</link> for a more complete attack model and problem description.</p>
+  <p>In the following, the limitations of pinning are shown and explained how these can be solved with this specification. This list is by no means meant to be exhaustive. See also <link url="#attack-model">Attack Model</link> for a more complete attack model and problem description.</p>
   <section2 topic="MITM Downgrades Channel-Binding Method" anchor="scenario-mitm">
     <p>The attacker is bit more sophisticated and able to get the private key for the server's certificate and they are only targeting a special user (or a small group of users). This user already connected to the server and thus pinned tls-exporter and tls-unique channel bindings to be supported by the server and thus refuses to downgrade to tls-server-end-point (or to no channel-binding at all).</p>
     <p>The attacker now tries to downgrade to tls-server-end-point nonetheless and the client will, thanks to pinning, detect this downgrade, alert the user and refuse to connect.</p>
@@ -127,18 +138,18 @@
     <p><strong>Case 3</strong> can result in a successful or failed authentication, depending on wether the server supports the type randomly selected by the client. Unfortunately a failed authentication due to selecting the wrong channel-binding type can not be distinguished from a failed authentication because of invalid credentials etc. Thus authentication using <em>some</em> channel-binding type will slow down authentication speed, because the client has to cycle through all channel-binding types it supports until it finds one the server supports (and eventually fall back to no channel-binding, if all channel-binding types have been tried). So, if server and client have mutually supported channel-binding types, Eve won't "win", but authentication will potentially need many roundtrips. If they don't have mutually supported channel-bindig types, Eve wouldn't have had to manipulate the channel-binding list in the first place.</p>
     <p><strong>Case 4</strong> does not help on first authentication. This could be neglected, but since channel-binding types aren't that easily ordered by percieved strength and could legitimately change, this could effectively lead to a Denial of Service. For example Alice might want to offload TLS termination because of higher server load and now her server does not support "tls-exporter" anymore but only "tls-server-end-point". A client pinning "tls-exporter" would not be able to connect to Alice's server anymore after the TLS offloading is in place.</p>
     <p><strong>Case 5</strong> won't help if Eve managed to steal the cert+key (or the server either somehow does not support the "tls-server-end-point" type).</p>
-    <p><em>This specification solves the problems outlined above by adding an optional SCRAM attribute containing the hash of the client-perceived list of channel-binding types that can be checked by the server and will be cryptographically signed by the authentication password used for SCRAM.</em></p>
+    <p><em>This specification solves the problems outlined above by adding an optional SCRAM attribute containing the hash of the server-sent list of channel-binding types that can be checked by the client and will be cryptographically signed by the authentication password used for SCRAM.</em></p>
   </section2>
   <section2 topic="Attack Model 2 (SASL Mechanism List)" anchor="attack-model-2">
     <p><strong>Scenario:</strong> Bob connects to Alice's XMPP server using a client of his choice supporting SCRAM but <strong>no</strong> channel-binding, Eve wants to MITM this connection. Neither Alice's server nor Bob's client support SASL PLAIN, but only the SCRAM family of SASL mechanisms. Eve wants to downgrade the used SCRAM mechanism to something weak that she is able to break in X hours/days (For example some time in the future SCRAM-SHA-1 might be broken that way and the underlying password could be recovered investing X hours/days of computing time. But SCRAM-SHA-1 might still be supported by servers for backwards compatibility with older clients only supporting SCRAM-SHA-1 but not SCRAM-SHA-256 etc.).</p>
     <p><strong>Prerequisites:</strong> Eve, the MITM attacker, managed to either steal the cert+key of Alice's XMPP server or to convince some CA to give out a cert+key for Alice's XMPP domain. Maybe Bob even installed a CA of his employer/school and now gets MITMed by his employer/school.</p>
     <p>Given this scenario and prerequisites, Eve now can passively MITM the XMPP connection, but if Eve wants to actively downgrade the SASL mechanism used by Bob, he has to actively change the server-advertised SASL mechanism list. In this scenario Eve actively removes all SCRAM mechanisms but SCRAM-SHA-1 from the server-advertised list to force Bob's client to use SCRAM-SHA-1. Neither Alice nor Bob would detect that.</p>
     <p>Pinning of SASL mechanisms could be used for that, but in doing this, Alice would loose some flexibility. She might have briefly activated SCRAM-SHA-512 and deactivated it again. Now Bob's client can not authenticate using SCRAM-SHA-512 anymore and authentication will always fail, if pinning is used. Pinning won't help on first connection either. See above for a pinning + SSDP compromise when still supporting SASL PLAIN.</p>
-    <p><em>This specification solves this problem by adding an optional SCRAM attribute containing the hash of the client-perceived SASL mechanism list that can be checked by the server and will be cryptographically signed by the authentication password used for SCRAM.</em></p>
+    <p><em>This specification solves this problem by adding an optional SCRAM attribute containing the hash of the server-sent SASL mechanism list that can be checked by the client and will be cryptographically signed by the authentication password used for SCRAM.</em></p>
   </section2>
 </section1>
 <section1 topic='Protocol' anchor='protocol'>
-  <p>Sections 5.1 and 7 of &rfc5802; allow for arbitrary optional attributes inside SCRAM messages. This specification uses those optional attribute to implement a downgrade protection.</p>
+  <p>Sections 5.1 and 7 of &rfc5802; allow for arbitrary optional attributes inside SCRAM messages. This specification uses those optional attributes to implement a downgrade protection.</p>
   <section2 topic="Server Sends Downgrade Protection Hash" anchor="hash">
     <p>The server calculates a hash of the list of SASL mechanisms and channel-binding types it advertised as follows.</p>
     <p>Note: All sorting operations MUST be performed using "i;octet" collation as specified in Section 9.3 of &rfc4790;.</p>

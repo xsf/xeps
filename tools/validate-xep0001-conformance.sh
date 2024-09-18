@@ -39,7 +39,7 @@ file_name=$(basename -- "$1")
 
 # The test for exit code equalling 10 detects when the XPATH evaluation yields no results. In that case, the execution
 # should not fail immediately, but use an empty value instead (which will likely cause a validation failure further down).
-header_number=$(xmllint --xpath '/xep/header/number/text()' --nowarning --dtdvalid "$xep_dtd" "$1") || test $?=10
+header_number=$(xmllint --xpath '/xep/header/number/text()' --nowarning --noent --dtdvalid "$xep_dtd" "$1") || test $?=10
 header_status=$(xmllint --xpath '/xep/header/status/text()' --nowarning --dtdvalid "$xep_dtd" "$1") || test $?=10
 header_type=$(xmllint --xpath '/xep/header/type/text()' --nowarning --dtdvalid "$xep_dtd" "$1") || test $?=10
 header_approver=$(xmllint --xpath '/xep/header/approver/text()' --nowarning --dtdvalid "$xep_dtd" "$1") || test $?=10
