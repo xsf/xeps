@@ -1,0 +1,100 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Happy Eyeballs</title>
+  <abstract>When a server's IPv4 path and protocol are working, but the server's IPv6 path and protocol are not working, a dual-stack application that initiates a connect experiences significant connection delay compared to an IPv4-only application. This is undesirable because it causes the dual-stack initiating entity to have a worse user experience. This XEP defines how IETF's 'Happy Eyeballs' algorithm requirements that reduce this user-visible delay are applied to XMPP.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>RFC 6120</spec>
+    <spec>RFC 2782</spec>
+    <spec>RFC 6724</spec>
+    <spec>RFC 8305</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  <author>
+    <firstname>Guus</firstname>
+    <surname>der Kinderen</surname>
+    <email>guus.der.kinderen@gmail.com</email>
+    <jid>guus.der.kinderen@igniterealtime.org</jid>
+  </author>
+  <revision>
+    <version>1.0.0</version>
+    <date>2024-09-19</date>
+    <initials>gk</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>In context of establishing TCP connections between XMPP entities, &rfc6120; defines the resolution of Fully Qualified Domain Names of the receiving entity (server) by an initiating entity (client or server). The described Preferred Process uses SRV lookup, based on &rfc2782;, and a Fallback Process using A or AAAA record resolution.</p>
+  <p>The Preferred Process definition explicitly states that resolved addresses are tried in a particular sequence, progressing to the next address only after a preceding connection attempt has failed. As specific addresses or entire address families (IPv4 vs IPv6) may perform suboptimal on a network, or may be blocked, or broken completely, this can lead to user-visible delay.</p>
+  <p>Requirements for algorithms that reduce such delay are specified in &rfc8305;. This XEP defines how this 'Happy Eyeballs' technique can be applied to XMPP, thus reducing the aforementioned user-visible delays.</p>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <p>This document mostly uses terminology borrowed from &rfc2782;, &rfc6724; and &rfc8305;.</p>
+  <dl>
+    <di><dt>Dual Stacked (hosts) (from RFC 2782)</dt><dd>Hosts that support both the IPv4 and IPv6 address families.</dd></di>
+    <di><dt>Target host (from RFC 2782)</dt><dd>A host (typically represented by a domain name) that is announced in the Target attribute of an SRV resource record. Used to identify service that provide an (XMPP) service.</dd></di>
+    <di><dt>Priority group</dt><dd>Target hosts in an SRV response that share the same 'priority' value</dd></di>
+    <di><dt>Resolution Delay</dt><dd>The time to wait for an AAAA response after receiving an A response (from RFC 8305) and to wait for a response to the request made against the first (by SRV 'weight' ordering) target after receiving a response for a later target.</dd></di>
+  </dl>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The primary goal of 'Happy Eyeballs' is to reduce user-visible delays when connections are established, notably on dual-stacked hosts.</p>
+  <p>The 'Happy Eyeballs' algorithm as defined in &rfc8305; does not take into account the SRV lookup that is defined to be XMPP's Preferred Process for the resolution of Fully Qualified Domain Names. SRV defines attributes that are used for target host priority and server selection.</p>
+  <p>By deploying multiple SRV Resource Records (RR) that contain 'weight' and 'priority' attributes that are unequal to that of other RRs, the administrator explicitly defines that certain servers are more preferable than others. As this is a deliberate act, such information SHOULD NOT be discarded. This XEP describes how these attributes are best applied in a 'Happy Eyeballs' algorithm.</p>
+</section1>
+<section1 topic='Algorithm' anchor='algorithm'>
+  <p>The 'Happy Eyeballs' algorithm described in this section applies primarily to the Preferred Process of resolution of fully qualified domain names as described in &rfc6120;, section 3.2.1, as it largely focuses on the incorporation of address characteristics discovered through SRV lookups.</p>
+  <p>When an initiation entity makes use of the Fallback Process defined in &rfc6120;, Section 3.2.2, then the 'Happy Eyeballs' algorithm defined in this XEP is essentially the same as the algorithm that is specified in &rfc8305;.</p>
+  <section2 topic='Service Resolution' anchor='serviceres'>
+    <p>The initiating entity preforms an SRV lookup, sorts and orders the resulting list of target hosts, as defined in the 'Usage rules' section of &rfc2782;. This results in a complete, ordered list of target hosts.</p>
+    <p>To maintain strict ordering as defined by the 'priority' attribute of SRV, the remainder of the algorithm is applied iteratively for each group of target hosts that shares the same SRV 'priority' value ('priority groups'), in priority order (lowest first, as specified in &rfc2782;). Only after all connection attempts (as described in <link url='#connecting'>section 4.4</link>) for all target hosts in the first priority group are exhausted, target hosts for the subsequent priority group are processed. This is repeated for all priority groups.</p>
+  </section2>
+  <section2 topic='Hostname Resolution' anchor='hostnameres'>
+    <p>The initiating entity sends out both AAAA and A DNS queries, largely following the process as defined in section 3 'Hostname Resolution Query Handling' of &rfc8305;. The process defined therein, which is based on resolution of one hostname, is adjusted as follows to accommodate the lookup of more than one hostname (each of the target hosts returned by the SRV lookup):</p>
+    <p>An AAAA and A query is sent out for each host in the priority group, starting with an AAAA query for the first host, immediately followed by an A query for the first host. This is immediately followed by an AAAA query, and then an A query, for the second host. This is repeated for all hosts in the priority group.</p>
+    <p>In line with section 3 of &rfc8305;, a connection attempt is immediately started if a positive AAAA response for the first host is received first, and the 'Resolution Delay' is applied when the A response for that host is received first due to reordering. As stated in &rfc8305;, this is done to give preference to IPv6. In addition to the specification in &rfc8305;, the 'Resolution Delay' is <em>also</em> applied when responses for hosts other than the first target are received prior to receiving responses for the first target. This helps maintain the preference order that is derived from SRV's 'weight' attribute.</p>
+  </section2>
+  <section2 topic='Sorting Addresses' anchor='sorting'>
+    <p>&rfc8305;, Section 4 describes how resolved addresses are sorted before attempts are mode to connect to them, which is a slightly modified version fo the Destination Address Selection as defined in &rfc6724;, Section 6.</p>
+    <p>An additional Destination Selection rule that prefers an addresses by their SRV-defined Weight attribute SHOULD be added before rule 9 of &rfc6724; (but after the two rules added by &rfc8305;).</p>
+  </section2>
+  <section2 topic='Connection Attempts' anchor='connecting'>
+    <p>Connection attempts are made as described in &rfc8305;, Section 5. If no successful connection has been established after the entire sorted list of addresses has been processed, the initiating client can restart the algorithm with <link url='#hostnameres'>Hostname Resolution</link> of the next priority group.</p>
+    <p>When all priority groups are exhausted and no connection has been successfully established, the initiating entity MAY attempt to establish connections using Fallback Process defined in &rfc6120;, Section 3.2.2. If it does, it SHOULD implement this in accordance with the 'Happy Eyeballs' algorithm as defined in &rfc8305;.</p>
+  </section2>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>This XEP, similar to &rfc8305;, assumes that the preference policy for the host destination address favors IPv6 over IPv4, as it has many desirable properties designed to be improvements over IPv4. If so desired, the recommendations in this document can easily be adapted to change to reflect a different preference policy.</p>
+</section1>
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>This document does not require any Accessibility Considerations.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>This document does not define Security Considerations in addition to those defined in &rfc2782;, &rfc6724; and &rfc8305;</p>
+</section1>
+<section1 topic='Privacy Considerations' anchor='privacy'>
+  <p>This document does not define Privacy Considerations in addition to those defined in &rfc2782;, &rfc6724; and &rfc8305;</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document does not require any IANA actions.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This document does not require any XMPP Registrar actions.</p>
+</section1>
+  <section1 topic='Acknowledgements' anchor='acks'>
+    <p>Work on this specification was funded through the NGI0 Core Fund, a fund established by NLnet with financial support from the European Commission's Next Generation Internet programme, under the aegis of DG Communications Networks, Content and Technology. The author's gratitude goes out to all those involved in realizing this valuable opportunities.</p>
+  </section1>
+</xep>
