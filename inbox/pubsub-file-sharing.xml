@@ -1,0 +1,235 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Pubsub File Sharing</title>
+  <abstract>This specification explains how to share files and optionally include directory structures similar to filesystems over XMPP Pubsub. It leverages XMPP Pubsub to enable notifications about file changes and manage permissions, providing users with real-time updates and control mechanisms. An optional mechanism is also specified for managing uploaded files.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0447</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>pubsub-relationships</shortname>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2024-10-19</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<!-- </section1> -->
+<section1 topic='Introduction' anchor='intro'>
+  <p>File sharing is a foundational use case in XMPP, with numerous attempts to facilitate the sharing of file hierarchies. Notable efforts include &xep0105;, &xep0135;, &xep0214;, and &xep0329;. However, these previous approaches often fall short in key areas, particularly in the realm of notifications, and/or use now-deprecated specifications. While &xep0214; is the only specification that supports file hierarchies with notifications, it has seen limited adoption and suffers from its reliance on an outdated stack and issues with &xep0248;, especially concerning permission management between collection and leaf nodes.</p>
+  <p>The current specification addresses these shortcomings by leveraging a more modern stack. It adapts &xep0447; to Pubsub for robust access management and notifications, and incorporates <em>XEP-XXXX: Pubsub Node Relationships</em> to handle hierarchical structures. This results in a flexible and easy-to-implement solution that supports a wide range of use cases, including server-based file hosting, ad-hoc or permanent per-device directory sharing, and gateways to other file-sharing protocols.</p>
+</section1>
+
+<section1 topic="Requirements" anchor="reqs">
+  <p>The design goals of this XEP are:</p>
+  <ul>
+    <li>To use as many existing mechanisms as possible.</li>
+    <li>To be as easy as possible to implement for both clients and services, once dependencies are in place.</li>
+    <li>To support mapping a traditional filesystem directory structure.</li>
+    <li>To support notifications for changes, such as new or deleted files and directories.</li>
+    <li>To allow for server file hosting use cases.</li>
+    <li>To enable device file directory structure sharing use cases.</li>
+    <li>To facilitate gateways to other file hosting protocols or mechanisms, such as FTP or "cloud" hosting.</li>
+    <li>To permit access control at the node and descendant levels, without parent nodes overriding descendant node permissions and vice versa.</li>
+    <li>To provide a quick file listing soon after a file structure is shared.</li>
+    <li>To ensure compatibility with end-to-end encryption for both file metadata and transfers.</li>
+  </ul>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+  <p>This section defines key terms used throughout this specification.</p>
+  <ul>
+    <li><strong>Root Node</strong>: The well-known node "urn:xmpp:pubsub-file-sharing:0" that serves as the top-level container for shared files and directories. It is the entry point for discovering all shared resources.</li>
+    <li><strong>Directory</strong>: A logical grouping of files and/or other directories, represented by a Pubsub node. They can map to usual filesystem directories.</li>
+    <li><strong>Well-Known Node/Directory</strong>: A predefined node/directory with a specific purpose, such as "urn:xmpp:pubsub-file-sharing:0" (root node) or "urn:xmpp:pubsub-file-sharing:0:/uploaded" (Uploaded directory).</li>
+  </ul>
+</section1>
+
+<section1 topic="General Structure and Payload" anchor="payload">
+  <p>Pubsub nodes represent directories, and files data are put in their items. The payload of the file items MUST be a &lt;file-sharing&gt; element, including metadata and sources, as specified in &xep0447;. The &lt;file-sharing&gt; element MUST NOT have a 'disposition' attribute as it doesn't make sense in the context of pubsub file sharing.</p>
+</section1>
+
+<section1 topic="Node Structure and Naming" anchor="naming">
+  <p>To facilitate a clear and consistent approach to file sharing, this specification defines a well-known node for discovering shared files and a node/item naming convention. This ensures that files and directories can be easily identified and managed.</p>
+
+  <section2 topic="Well-Known Node" anchor="well-known-node">
+    <p>Entities that support file sharing through this protocol MUST have a well-known node for discovering shared files. This node is defined as "urn:xmpp:pubsub-file-sharing:0".</p>
+    <p>When a user subscribes to this node using XEP-XXXX: Pubsub Extended Subscription, they will receive notifications for any new or deleted files and directories up to the requested depth. The node's items represent the shared files.</p>
+    <p>To discover file hierarchy, use XEP-XXXX: Pubsub Extended Discovery.</p>
+    <example caption="Discovering Directories From Well-known Node"><![CDATA[
+<iq type='get'
+    from='juliet@example.org/balcony'
+    to='files.example.org'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'
+    node='urn:xmpp:pubsub-file-sharing:0'>
+    <x xmlns='jabber:x:data' type='submit'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:pubsub-ext-disco:0</value>
+      </field>
+      <field var='type'>
+        <value>nodes</value>
+      </field>
+      <field var='depth'>
+        <value>1</value>
+      </field>
+    </x>
+  </query>
+</iq>]]></example>
+  </section2>
+
+  <section2 topic="Node and Item Naming Convention" anchor="naming-convention">
+    <p>To ensure a consistent and intuitive structure while maintaining unique node names across the pubsub service, the following naming convention is used for nodes and items:</p>
+    <ul>
+      <li><strong>Root Node:</strong> The well-known node "urn:xmpp:pubsub-file-sharing:0" serves as the root of the file sharing structure.</li>
+      <li><strong>Directory Nodes:</strong> Each directory is represented by a node with a name that reflects its path relative to the root. This node name follows the template "<tt>urn:xmpp:pubsub-file-sharing:0:<em>&lt;unique ID&gt;</em>/<em>&lt;directory name&gt;</em></tt>, where <em>&lt;unique ID&gt;</em> is a unique identifier across the pubsub service and MUST NOT contain the "/" character. For example, a directory named "Documents" with a unique ID of "abc123" would be represented by the node "<tt>urn:xmpp:pubsub-file-sharing:0:abc123/Documents</tt>.</li>
+    <li><strong>File Items:</strong> Each file is represented as an item within its corresponding directory node. The item's ID is the name of the file, and its payload contains metadata and source information for the file. For example, a file named "report.pdf" in the "Documents" directory (with unique ID "abc123") would be represented by the item "<tt>report.pdf</tt>", which is within the node "<tt>urn:xmpp:pubsub-file-sharing:0:abc123/Documents</tt>".</li>
+  </ul>
+    <p>This convention allows for an easy mapping of file system structure to a pubsub node hierarchy, making it simple to navigate and manage shared files without encountering conflicts due to non-unique node names.</p>
+  </section2>
+</section1>
+
+<section1 topic="Handling Metadata and File Changes" anchor="handling-changes">
+  <p>This section specifies how metadata and file deletions are handled in the context of shared files and directories.</p>
+
+  <section2 topic="Metadata and File Association" anchor="metadata-association">
+    <p>Each file item includes metadata and source information. The metadata is provided using the <tt>file</tt> element as described in <span class="ref"><link url="https://xmpp.org/extensions/xep-0446.html">File metadata element (XEP-0446)</link></span> <note>XEP-0446: File metadata element &lt;<link url="https://xmpp.org/extensions/xep-0446.html">https://xmpp.org/extensions/xep-0446.html</link>&gt;.</note>. The source information is provided using the <tt>sources</tt> element, which lists the available sources for the file.</p>
+<example caption="Example of a File Item With Metadata and Sources"><![CDATA[
+<iq type='result'
+    from='files.example.org'
+    to='juliet@example.org/balcony'
+    id='items1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:pubsub-file-sharing:0:EASD1546/Images'>
+      <item id='beach-sunset.jpg'>
+        <file-sharing xmlns='urn:xmpp:sfs:0'>
+          <file xmlns='urn:xmpp:file:metadata:0'>
+            <media-type>image/jpeg</media-type>
+            <name>beach-sunset.jpg</name>
+            <size>8765432</size>
+            <hash xmlns='urn:xmpp:hashes:2' algo='sha3-256'>GZTbL1pJmX9jzVgQwR0HfI+DyKuPcWvE2nUxYiMkS78=</hash>
+            <desc>A stunning sunset on the beach.</desc>
+          </file>
+          <sources>
+            <url-data xmlns='http://jabber.org/protocol/url-data' target='https://photos.example.org/gallery/beach-sunset.jpg' />
+            <jinglepub xmlns='urn:xmpp:jinglepub:1' from='files.example.org' id='9876543B-2CFB-AE7E-B45Z-3DAA225972BB'>
+              <description xmlns='urn:xmpp:jingle:apps:file-transfer:5' />
+            </jinglepub>
+          </sources>
+        </file-sharing>
+      </item>
+    </items>
+  </pubsub>
+</iq>]]></example>
+
+  </section2>
+
+  <section2 topic="Mapping of Files and Metadata" anchor="mapping">
+    <p>For services declaring support for this specification (as explained in the <link url="#disco">Discovering Support</link> section), the following rules apply:</p>
+    <ul>
+      <li>When a mapped file is deleted or updated, the corresponding items SHOULD be deleted or updated accordingly.</li>
+      <li>Conversely, when an item in pubsub corresponding to a file is updated or retracted, the corresponding file SHOULD be updated or deleted accordingly.</li>
+      <li>When a directory is deleted, the mapped node SHOULD also be deleted accordingly.</li>
+      <li>When a directory is renamed, the mapped node SHOULD first be deleted and another one SHOULD be created with the new name. Additionally, the &lt;redirect/&gt; element SHOULD be used as specified in the <link url="https://xmpp.org/extensions/xep-0060.html#owner-delete-success">XEP-0060: Delete a Node/Success Case</link>.</li>
+    </ul>
+    <p>A service MAY prohibit deletion or update of items based on its internal policy. In this case, the service MUST return a &lt;forbidden&gt; error and SHOULD use a human-readable explanation of the error.</p>
+
+    <p>If support for this specification is not advertised, it means that file sharing metadata are manually set by an XMPP client on a generic pubsub service. In such cases, the mapping cannot be performed by the pubsub service and there is no guarantee of synchronization between files and metadata.</p>
+  </section2>
+
+</section1>
+
+<section1 topic="End to End Encryption" anchor="e2ee">
+  <p>File sharing can optionally use end-to-end encryption. For file metadata, this can be achieved at the pubsub level using specifications such as &xep0473; or &xep0477; or any relevant mechanism. For file transfers, this is dependent on the chosen source, and specifications such as &xep0391; with &xep0396; could be used.</p>
+</section1>
+
+<section1 topic="Well-Known Directories" anchor="well-known">
+  <p>This specification introduces predefined nodes for special directories that MAY be used by pubsub services. Other specifications MAY define additional well-known nodes as needed. If these directories are implemented, they SHOULD be attached to the root node "urn:xmpp:pubsub-file-sharing:0".</p>
+
+  <p>The only explicitly defined directory in this specification is the 'Uploaded' directory. This directory MUST use the node named "urn:xmpp:pubsub-file-sharing:0:/uploaded", where the unique ID field is intentionally left blank. The purpose of the 'Uploaded' directory is to track files uploaded via specifications such as &xep0363;. It enables end-users to view and manage their uploaded files (e.g., for deletion purposes), typically through the PEP service associated with each user.</p>
+</section1>
+
+<section1 topic="Business Rules" anchor="rules">
+  <p>The following business rules apply to the file sharing protocol:</p>
+  <ul>
+    <li>Support for XEP-XXXX Pubsub Node Relationships is optional. If not supported, the file sharing protocol cannot handle file hierarchies and can only manage flat files. Well-known directories cannot be attached to the root node, and clients must directly search for them. Therefore, support for file hierarchies is tied to support for XEP-XXXX: Pubsub Node Relationships and is detected as explained in its Discovering Support section.</li>
+    <li>If a service advertises support for this specification (as explained in <link url="#disco">Discovering Support</link>) but cannot monitor file changes (e.g., because it does not support <link url="https://en.wikipedia.org/wiki/Inotify">inotify</link> or a similar mechanism), it MUST refuse any subscription attempts by sending a &lt;feature-not-implemented/&gt; error with a pubsub-specific error condition of &lt;unsupported/&gt;, as explained in <link url="https://xmpp.org/extensions/xep-0060.html#subscriber-subscribe-error-unsupported">XEP-0060: §6.1.3.10 Subscriptions Not Supported</link>.</li>
+    <li>Entities MUST ensure that access control is correctly managed at the node and descendant levels, without parent nodes overriding descendant node permissions and vice versa.</li>
+    <li>A pubsub service MAY propose different hierarchies (i.e., different child nodes or items) from the root node according to the requesting entities.</li>
+    <li>As the number of items may be high, a supporting service SHOULD use &xep0059;.</li>
+  </ul>
+</section1>
+
+<section1 topic="Discovering Support" anchor="disco">
+  <p>If an entity supports sharing files through the protocol specified in this XEP, it MUST advertise it by including the "urn:xmpp:pubsub-file-sharing:0" discovery feature in response to a &xep0030; information request.</p>
+  <example caption="Service Discovery Information Request"><![CDATA[
+<iq type='get'
+    from='juliet@example.org/balcony'
+    to='files.example.org'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption="Service Discovery Information Response"><![CDATA[
+<iq type='result'
+    from='files.example.org'
+    to='juliet@example.org/balcony'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:pubsub-file-sharing:0'/>
+    ...
+  </query>
+</iq>]]></example>
+  <p>When declaring support for this protocol, a pubsub service MUST manage a mapping between files and pubsub nodes.</p>
+  <p>Alternatively, XMPP clients can use this specification by filling in metadata related to files on any generic pubsub service. In such cases, there is no need to advertise support at the discovery level. File sharing nodes are identified either by searching for the well-known node 'urn:xmpp:pubsub-file-sharing:0' or any other node that starts with a similar prefix.</p>
+
+</section1>
+
+  <section1 topic="Security Considerations" anchor="security">
+  <p>The following security considerations apply to the file sharing protocol:</p>
+  <ul>
+    <li>Entities MUST manage access control at both the node and descendant levels, ensuring that permissions are preserved for all child and parent nodes. This prevents unauthorized access to files and directories.</li>
+    <li>Entities SHOULD use secure protocols (e.g., HTTPS) for transferring files to prevent eavesdropping and tampering with the data.</li>
+    <li>Entities SHOULD implement rate limiting and other security measures to prevent abuse of the file sharing service.</li>
+    <li>File sharing involves numerous security risks. Implementations must take care to prevent the diffusion of sensitive files (e.g., "/etc/password"), denial-of-service (DoS) techniques such as never completing a file transfer or repeatedly requesting files, improper permission mapping, and accidental sharing (e.g., by following symbolic links).</li>
+    <li>The security considerations of dependencies, such as &xep0447;, also apply.</li>
+    <li>Supporting services SHOULD hide nodes and items from entities that are not authorized to access the corresponding files or directories.</li>
+  </ul>
+</section1>
+
+<section1 topic="IANA Considerations" anchor="iana">
+  <p>This document does not require interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+
+<section1 topic="Acknowledgements" anchor="acks">
+  <p>Thanks to NLNet foundation/NGI Zero Core for funding the work on this specification.</p>
+</section1>
+
+</xep>
