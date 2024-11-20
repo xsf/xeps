@@ -1,0 +1,283 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Pubsub Extended Subscriptions</title>
+<abstract>This specification extends the XMPP PubSub protocol by introducing mechanisms for users to subscribe to an entire node hierarchy or to receive notifications on node metadata updates.</abstract>
+  &LEGALNOTICE;
+  <number>0497</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>XEP-0060</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>pubsub-ext-sub</shortname>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.1.0</version>
+    <date>2024-11-20</date>
+    <initials>XEP Editor: dg</initials>
+    <remark>
+      <p>Promoted to Experimental</p>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2024-10-15</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+<p>One of the key mechanisms in &xep0060; is its subscription functionality, which allows users to be notified of changes in node content. This specification extends this mechanism by allowing subscriptions to an entire hierarchy using "parent" relationships as defined in XEP-XXXX: Pubsub Node Relationships. Subscribers will receive notifications when items are published or retracted, nodes are added or removed from a branch, or nodes and their descendants are deleted. Additionally, the specification introduces an option for subscribing to metadata updates, enabling users to be notified of changes in node relationships, access models, or any other kind of metadata.</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The design goals of this XEP are:</p>
+  <ul>
+      <li>be backward compatible: nothing must be broken for existing implementations;</li>
+      <li>use existing mechanisms whenever possible;</li>
+      <li>allow clients to get node metadata updates;</li>
+      <li>allow clients to subscribe to node hierarchy when XEP-XXXX Pubsub Node Relationships' parent relationship is used;</li>
+      <li>allow clients to subscribe to linked nodes when XEP-XXXX Pubsub Node Relationships' link relationship is used.</li>
+  </ul>
+</section1>
+
+<section1 topic='Subscription Options' anchor='options'>
+  <p>This specification uses subscription options as defined in &xep0060;. Those options can be configured by following <link url="https://xmpp.org/extensions/xep-0060.html#subscriber-configure">§6.3 Configure Subscription Options</link>.</p>
+  <section2 topic="Subscription Type" anchor="type">
+    <p>The type of subscription is defined by the 'var' attribute with a value of "{urn:xmpp:pubsub-ext-sub:0}type". This option MUST have the type "list-multi", and it MUST default to only the "items" value. The possible values for this field are:</p>
+    <ul>
+      <li><strong>items</strong>: subscribe to items notification, which is equivalent to a usual node subscription as defined at <link url="https://xmpp.org/extensions/xep-0060.html#subscriber-subscribe">XEP-0060 §6.1 Subscribe to a Node</link>.</li>
+      <li><strong>metadata</strong>: subscribe to metadata updates, as explained in <link url="#metadata_notif">Metadata Notification</link>.</li>
+      <li><strong>linked items</strong>: subscribe to items with "link" relationship to this node, as explained in <link url="#linked_notif">Linked Items Notification</link>.</li>
+    </ul>
+  </section2>
+  <section2 topic="Subscription Depth" anchor="depth">
+    <p>The subscription depth is used when a client wants to subscribe to a parent node and all its descendants (up to requested depth). The "parent" relationship is explained in XEP-XXXX Pubsub Node Relationships.</p>
+    <p>The 'var' attribute for the subscription depth field MUST be "{urn:xmpp:pubsub-ext-sub:0}depth", and it MUST have a type of "text-single".</p>
+    <p>The value MUST be castable to a signed integer, and it MUST default to "0". This value indicates how many levels of descendants this subscription must apply to:</p>
+    <ul>
+      <li>"0" for subscribing only to items on this node (the default);</li>
+      <li>"1" for subscribing to its items and direct children's items;</li>
+      <li>"2" for subscribing to items including up to two descendant levels, and so forth.</li>
+      <li>A negative value means unlimited depth is requested (i.e., subscription to the whole arborescence).</li>
+    </ul>
+    <p>However, an implementation MAY limit the maximum depth for performance reasons; in such cases, it MUST be advertised through disco as explained in <link url="#disco">Discovering Support</link>. When the subscription depth has a value different from "0", subscriptions must dynamically adapt to nodes added or removed within the arborescence: if a node gains a new "parent" relationship to any subscribed node, it will automatically become part of the subscription; conversely, if such a relationship is modified or the node is deleted, it will no longer be included in the subscription.</p>
+  </section2>
+</section1>
+
+<section1 topic='Subscription Request and Notification' anchor='sub_req_notif'>
+  <section2 topic='Request' anchor='sub_req'>
+    <p>In this example, Romeo is subscribing to the 'some-node-name' node and requesting to receive notifications for items, metadata updates, and linked items within the entire node hierarchy (unlimited depth).</p>
+    <example caption="Romeo Subscribes to a Node and its Descendants with Linked Items and Metadata Updates"><![CDATA[
+<iq type='set'
+  from='romeo@example.org/orchard'
+  to='pubsub.example.org'
+  id='sub-1'>
+<pubsub xmlns='http://jabber.org/protocol/pubsub'>
+  <subscribe jid='romeo@example.org'
+    node='some-node-name'/>
+  <options>
+    <x xmlns='jabber:x:data' type='submit'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>http://jabber.org/protocol/pubsub#subscribe_options</value>
+      </field>
+      <field var='{urn:xmpp:pubsub-ext-sub:0}type'>
+        <value>items</value>
+        <value>metadata</value>
+        <value>linked items</value>
+      </field>
+      <field var='{urn:xmpp:pubsub-ext-sub:0}depth'>
+        <value>-1</value>
+      </field>
+    </x>
+  </options>
+</pubsub>
+</iq>
+    ]]></example>
+  <section3 topic='Success Case' anchor='subscribe-success'>
+    <p>If the service allows the subscription, it MUST inform the requesting entity that it is now subscribed.</p>
+    <example caption="Service responds with success"><![CDATA[
+<iq type='result'
+    from='pubsub.example.org'
+    to='romeo@example.org/orchard'
+    id='sub-1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscription node='some-node-name'
+      jid='romeo@example.org'
+      subscription='subscribed'/>
+  </pubsub>
+</iq>
+    ]]></example>
+</section3>
+  </section2>
+  <section2 topic='Notification Types' anchor='notif_types'>
+    <p>This section describes the notifications that are sent for each subscription type: <strong>items</strong>, <strong>metadata</strong>, and <strong>linked items</strong>.</p>
+
+    <section3 topic='Items Notification' anchor='items_notif'>
+      <p>When a user subscribes to items, notifications are sent for items published or retracted within the subscribed node and its descendants (if applicable, and if the entity is allowed to see the item). Each notification contains an &lt;items&gt; element within an &lt;event&gt; element, which includes one or more &lt;item&gt; elements. This is the same notification as explained in <link url="https://xmpp.org/extensions/xep-0060.html#publisher-publish-success-withpayload">XEP-0060 §7.1.2.1 Notification With Payload</link>.</p>
+      <example caption="Service Notifies Subscribers of Items"><![CDATA[
+<message from='pubsub.example.org' to='juliet@example.org/balcony' id='items-1'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='some-node-name'>
+      <item id='item1'>
+          <!-- … -->
+      </item>
+    </items>
+  </event>
+</message>]]></example>
+    </section3>
+
+    <section3 topic='Metadata Notification' anchor='metadata_notif'>
+      <p>When a user subscribes to metadata updates, notifications are sent for changes in node metadata. Each notification contains a &lt;configuration&gt; element within an &lt;event&gt; element, which includes the updated metadata. The notification SHOULD include only the updated data.</p>
+      <example caption="Service Notifies Subscribers of Metadata Updates"><![CDATA[
+      <message from='pubsub.example.org' to='juliet@example.org/balcony' id='config-1'>
+        <event xmlns='http://jabber.org/protocol/pubsub#event'>
+          <configuration node='some-node-name'>
+            <x xmlns='jabber:x:data' type='result'>
+              <field var='FORM_TYPE' type='hidden'>
+                <value>http://jabber.org/protocol/pubsub#meta-data</value>
+              </field>
+              <field var='pubsub#title'>
+                <value>New Title</value>
+              </field>
+              <field var='pubsub#description'>
+                <value>New Description</value>
+              </field>
+              <field var='pubsub#access_model'>
+                <value>open</value>
+              </field>
+            </x>
+          </configuration>
+        </event>
+      </message>
+        ]]></example>
+      <p>When a node is removed from a branch of a <strong>parent</strong> relationship tree-like structure by changing the 'parent' field, and if it is part of a subscription with suitable depth, the last metadata notification is sent. This notifies the XMPP client that the node has been removed by checking the modified 'parent' field.</p>
+      <p>In the following example, the 'parent' field is changed to remove the node from the branch it was on. Note that the field is present, but set to an empty value.</p>
+      <example caption="Service Notifies Subscribers of Node Removal from Tree-Like Structure"><![CDATA[
+      <message from='pubsub.example.org' to='juliet@example.org/balcony' id='config-2'>
+        <event xmlns='http://jabber.org/protocol/pubsub#event'>
+          <configuration node='removed-node-name'>
+            <x xmlns='jabber:x:data' type='result'>
+              <field var='FORM_TYPE' type='hidden'>
+                <value>http://jabber.org/protocol/pubsub#meta-data</value>
+              </field>
+              <field var='{urn:xmpp:pubsub-relationships:0}parent' />
+            </x>
+          </configuration>
+        </event>
+      </message>
+        ]]></example>
+    </section3>
+
+    <section3 topic='Linked Items Notification' anchor='linked_notif'>
+      <p>When a user subscribes to linked items, notifications are sent for items published or retracted within nodes that have a "link" relationship with the subscribed node. Each notification contains an &lt;items&gt; element within an &lt;event&gt; element, which includes one or more &lt;item&gt; elements, as explained in &xep0060;. The subscription is effective even if the linked relationship was established after the initial subscription.</p>
+
+      <example caption="Service Notifies Subscribers of Linked Items"><![CDATA[
+<message from='pubsub.example.org' to='juliet@example.org/balcony' id='linked-1'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:xmpp:pubsub-attachments:1/xmpp:juliet@capulet.lit?;node=urn%3Axmpp%3Amicroblog%3A0;item=balcony-restoration-afd1'>
+      <item id='romeo@montague.lit'>
+          <!-- … -->
+      </item>
+    </items>
+  </event>
+</message>]]></example>
+    </section3>
+
+    <section3 topic="Depth Subscription" anchor="depth">
+      <p>When subscribing with a specified depth on a node, an implicit subscription is created for all descendants up to the indicated number of levels (or without limit if the depth is a negative number). The depth implicit subscription depends on the subscription type: if "linked items" are requested, linked items MUST be included; otherwise, they MUST NOT be included (i.e., only descendants with no 'link' field set will trigger notifications).</p>
+      <p>Implicit subscriptions MUST respect the access model of the node where the item has been published and all its parent nodes as explained in XEP-XXXX: Pubsub Node Relationships §4.4 Parent Relationship Rules.</p>
+    </section3>
+
+  </section2>
+</section1>
+
+<section1 topic="Business Rules" anchor="rules">
+  <p>A pubsub service MAY filter out metadata fields from notification, e.g., if they are not relevant in this use case, or if they would trigger too many notifications. This is an implementation-dependent decision.</p>
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>If a pubsub service supports the protocol specified in this XEP, it MUST advertise it by including the "urn:xmpp:pubsub-ext-sub:0" discovery feature in response to a &xep0030; information request.</p>
+
+  <example caption="Service Discovery Information Request"><![CDATA[
+<iq type='get'
+    from='juliet@example.org/balcony'
+    to='pubsub.example.org'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+<example caption="Service Discovery Information Response"><![CDATA[
+<iq type='result'
+  from='pubsub.example.org'
+  to='juliet@example.org/balcony'
+  id='disco1'>
+<query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+  <feature var='urn:xmpp:pubsub-ext-sub:0'/>
+    ...
+</query>
+</iq>]]></example>
+
+<p>If a pubsub service has a limitation in the maximum supported subscription depth, it MUST advertise that fact in the node metadata (as specified in <link url='https://xmpp.org/extensions/xep-0060.html#registrar-formtypes-metadata'>XEP-0060 §5.4 Discover Node Metadata</link>) with a field which MUST have a 'var' attribute set to "{urn:xmpp:pubsub-ext-sub:0}max-depth", a 'type' attribute set to "text-single", and a value which MUST be castable to an integer. If no such field is defined, that means the pubsub service has no depth limit.</p>
+
+<example caption="Pubsub Service Advertises a Max Depth of 20 Layers"><![CDATA[
+<iq type='result'
+    from='pubsub.example.org'
+    to='juliet@example.org/balcony'
+    id='meta1'>
+<query xmlns='http://jabber.org/protocol/disco#info'
+       node='some_node'>
+<identity category='pubsub' type='leaf'/>
+<feature var='http://jabber.org/protocol/pubsub'/>
+<x xmlns='jabber:x:data' type='result'>
+  <field var='FORM_TYPE' type='hidden'>
+    <value>http://jabber.org/protocol/pubsub#meta-data</value>
+  </field>
+  <field var='{urn:xmpp:pubsub-ext-sub:0}max-depth' type='text-single'>
+    <value>20</value>
+  </field>
+  <!-- … -->
+</x>
+</query>
+</iq>]]></example>
+
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+
+  <p>When doing an implicit subscription, pubsub service MUST be sure to respect the access model of implicitely subscribed node and all its parents as explained in XEP-XXXX Pubsub Node Relationships 4.4 Parent Relationship Rules. If an entity is not allowed by any of the access model, the pubsub service MUST NOT send a notification.</p>
+  <p>Similarly, a metadata update notification MUST NOT be send if the subscribed entity would not otherwise be allowed to see the metadata.</p>
+
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document does not require interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>Thanks to NLNet foundation/NGI Zero Core for funding the work on this specification.</p>
+</section1>
+
+</xep>
