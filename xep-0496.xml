@@ -1,0 +1,275 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Pubsub Node Relationships</title>
+  <abstract>This specification describes how to establish links between pubsub nodes, allowing for optional hierarchical organization.</abstract>
+  &LEGALNOTICE;
+  <number>0496</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>XEP-0060</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>pubsub-relationships</shortname>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.1.0</version>
+    <date>2024-11-20</date>
+    <initials>XEP Editor: dg</initials>
+    <remark>
+      <p>Promoted to Experimental</p>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2024-10-09</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>There are many cases where pubsub nodes have a relationship: because a feature needs several nodes (e.g., &xep0346;) or because a node describes information for another one (or its items), like in &xep0470;.</p>
+  <p>Sometimes this relationship is hierarchical (e.g., &xep0277;, where comment nodes depend on blog items), or a tree-like hierarchy may be desirable (e.g., a file-sharing feature representing directories and files).</p>
+  <p>So far, to have this kind of relationship, two ways were used:</p>
+  <ul>
+    <li>Using a flat organization, with prefixed nodes. For instance, &xep0277; uses a well-defined prefix for comments ("urn:xmpp:microblog:0:comments/"). This has several major inconveniences:
+      <ul>
+        <li>It can quickly become messy, as all nodes appear at the same level. If an end-user inspects the nodes of its pubsub service, a massive number of them may be present.</li>
+        <li>The XMPP client is responsible for updating the nodes' permissions in case of changes, such as if a blog node changes access model from "open" to "whitelist". All comment nodes must be modified accordingly. This is prone to error and can lead to accidentally giving incorrect access to a node.</li>
+        <li>If a node is deleted, other related nodes may not be deleted, resulting in orphan nodes that can be forgotten. For instance: if a parent blog node is deleted, comment nodes or attachment nodes may be forgotten and not deleted, even though they no longer serve any purpose.</li>
+      </ul>
+    </li>
+    <li>Using &xep0248;. This specification is an appreciable effort to solve the hierarchical use case but has some major drawbacks:
+      <ul>
+        <li>It is not well supported. Only a few Pubsub services or XMPP clients implement it.</li>
+        <li>Its complexity: The specification introduces the notion of collection and leaf nodes, which may be confusing and difficult to handle and requires dedicated logic notably in XMPP clients.</li>
+        <li>It only supports hierarchical relationships and is not adapted to simple relationship use cases as for &xep0346; or &xep0470;.</li>
+        <li>The handling of collection node deletion is unspecified, as per <link url="https://xmpp.org/extensions/xep-0248.html#imple-delete">8.2 Handling Collection Node Deletion</link>. While this flexibility may have some use, the unpredictable behavior it can lead to outweighs its benefits.</li>
+        <li>Most importantly, a collection node access model overwrites those of its leaf nodes, as explained at <link url='https://xmpp.org/extensions/xep-0248.html#security-access'>XEP-0248 §9.1 Security Considerations/Access Model</link>, which is a showstopper.</li>
+      </ul>
+    </li>
+
+  </ul>
+  <p>This specification proposes another solution, aiming to replace &xep0248; and is:</p>
+    <ul>
+      <li>Really easy to implement for XMPP clients.</li>
+      <li>Relatively easy to implement for Pubsub services.</li>
+      <li>Backward compatible (clients not supporting this specification can still interact as usual with pubsub nodes).</li>
+      <li>Simple to understand.</li>
+      <li>Hopefully, fixing all the issues mentioned in this introduction.</li>
+    </ul>
+  <p>To make things simple, this specification only treats relationships between nodes. Other features (notably subscription to a hierarchy) will be managed in separate XEPs.</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <p>The design goals of this XEP are:</p>
+  <ul>
+      <li>to allow simple relationships, indicating related nodes and automatically deleting them when the main node is deleted;</li>
+      <li>to enable parent/child relationships to form a tree-like hierarchy;</li>
+      <li>in a tree-like hierarchy, permissions must be preserved for child and all parent nodes (i.e., an entity must have permission to access the requested node and all its parents in order to access a given node);</li>
+      <li>to be straightforward to implement for XMPP clients;</li>
+      <li>to be as easy as possible to implement for Pubsub services;</li>
+      <li>to be backward compatible: clients not implementing this specification should still be able to access nodes.</li>
+  </ul>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+    <ul>
+        <li><strong>linked node</strong>: Node declared in the "link" field of the current node.</li>
+        <li><strong>parent node</strong>: Node declared in the "parent" field of the current node.</li>
+        <li><strong>linking node</strong>: A node having a "link" relationship to the current node.</li>
+        <li><strong>child node</strong>: A node having a "parent" relationship to the current node.</li>
+        <li><strong>root node</strong>: A node without any "parent".</li>
+    </ul>
+</section1>
+
+<section1 topic='Relationships' anchor='relationships'>
+  <section2 topic="Definitions" anchor="rel-definitions">
+    <p>This specification defines two types of relationships:</p>
+    <ul>
+      <li><strong>link</strong>: a "link" is a simple relationship between nodes. It indicates that multiple nodes are interconnected, either because a feature requires several nodes to function together (e.g., &xep0346;), or because one node extends another node or its items (e.g., &xep0470;).</li>
+      <li><strong>parent</strong>: a "parent" is a hierarchical relationship where the referenced node is positioned higher in the hierarchy. It signifies that one or more nodes depend on the parent, such as when comment nodes rely on a microblog node (e.g., &xep0277;), or when a tree-like structure is required for organizing items (e.g., a file-sharing system that mimics directory/file structure).</li>
+    </ul>
+  </section2>
+
+  <section2 topic="Settings a Relationship" anchor="rel-setting">
+    <p>To set a relationship, an XMPP client must first ensure that the pubsub service supports this specification (see <link url="#disco">Discovering Support</link> below). Then the relationship is established by setting the relevant configuration field parameter to a node as explained in <link url="https://xmpp.org/extensions/xep-0060.html#owner-configure">XEP-0060 §8.2 Configure a Node</link>. The var "{urn:xmpp:pubsub-relationships:0}link" must be used for a "link" relationship, and the var "{urn:xmpp:pubsub-relationships:0}parent" must be used for a "parent" relationship.</p>
+    <p>When setting a relationship in the pubsub service, the service MUST ensure that the resulting graph does not contain any cycle. This means that it must be impossible to return to an initial node by following the relationships, whether they are labeled as "link" or "parent". By sequentially following these relationships, one must always end at a node without any outgoing "link" or "parent" relationships.</p>
+    <p>If setting a "link" or "parent" relationship would result in a cyclic graph, the service MUST reject the configuration with a &lt;not-allowed/&gt; error, specifying a pubsub-specific error condition of &lt;invalid-option/&gt;, and SHOULD include a human-readable text explaining the problem.</p>
+    <p>If when setting a "link" relationship, the linked node has a "parent" relationship, the pubsub service MUST set the same parent to the linking node. If the linking node has already a parent which is different from the "parent" of the linked node, the service MUST reject the configuration with a &lt;not-allowed/&gt; error, specifying a pubsub-specific error condition of &lt;invalid-option/&gt;, and SHOULD include a human-readable text explaining the problem.</p>
+    <p>If a "parent" relationship is set to a linked node, the "parent" of all linking node MUST be set to the same node by the service. A service MUST NOT accept a "parent" relationship set to a linking node: linking nodes' parent relationship are always automatically set by the service itself when the linked node's "parent" relationship is set. In other terms, "parent" field can't be set on a node if it has a "link" field. This is to be sure that linking nodes are always on the same level as the linked node. If a "parent" is set on a node with "link" field, the service MUST reject the configuration with a &lt;not-allowed/&gt; error, specifying a pubsub-specific error condition of &lt;invalid-option/&gt;, and SHOULD include a human-readable text explaining the problem.</p>
+  </section2>
+
+  <section2 topic="Link Relationship Rules" anchor="link-rules">
+    <p>The following rules apply to the "link" relationship:</p>
+    <ul>
+      <li>When a linked node is deleted, all linked nodes MUST be automatically deleted by the pubsub service.</li>
+      <li>Deleting a linking node does not affect the linked node or any other linking nodes.</li>
+      <li>The access model and publish model of nodes with a "link" relationship are independent.</li>
+      <li>When a parent of a linked node is modified, the parents of linking nodes MUST be automatically updated by the pubsub service, as explained in <link url="#rel-setting">Setting a Relationship</link>.</li>
+    </ul>
+  </section2>
+
+  <section2 topic="Parent Relationship Rules" anchor="parent-rules">
+    <p>The following rules apply to the "parent" relationship:</p>
+    <ul>
+      <li>When a parent node is deleted, all child nodes MUST be automatically deleted by the pubsub service. This will recursively delete children of children and so on, resulting in the deletion of the entire branch of the parent node.</li>
+      <li>To access a node, an entity MUST have access to all parents. In other words, a pubsub service MUST NOT allow access to a node for an entity if that entity is not allowed by the access model of the node or any of its parents up to the root node.</li>
+      <li>To publish to a node, an entity MUST have publication rights for all parents. In other words, a pubsub service MUST NOT permit publishing to a node from an entity if that entity is not permitted by the publish model of the node or any of its parents up to the root node.</li>
+    </ul>
+  </section2>
+
+</section1>
+
+<section1 topic="Examples" anchor="examples">
+  <section2 topic="Link Relationship Example" anchor="rel-link-ex">
+    <p>Juliet XMPP client links an attachment node to a microblog node.</p>
+    <example caption="Client requests link relationship configuration"><![CDATA[
+<iq type='set'
+   from='juliet@capulet.lit/balcony'
+   to='pubsub.example.org'
+   id='link1'>
+ <pubsub xmlns='http://jabber.org/protocol/pubsub#owner'>
+   <configure node='urn:xmpp:pubsub-attachments:1/xmpp:juliet@capulet.lit?;node=urn%3Axmpp%3Amicroblog%3A0;item=balcony-restoration-afd1'>
+     <x xmlns='jabber:x:data' type='submit'>
+       <field var='{urn:xmpp:pubsub-relationships:0}link'>
+         <value>urn:xmpp:microblog:0</value>
+       </field>
+     </x>
+   </configure>
+ </pubsub>
+/iq>]]></example>
+
+  <example caption="Service responds with confirmation"><![CDATA[
+<iq type='result'
+    from='pubsub.example.org'
+    to='juliet@capulet.lit/balcony'
+    id='link1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub#owner'>
+    <configure node='urn:xmpp:pubsub-attachments:1/xmpp:juliet@capulet.lit?;node=urn%3Axmpp%3Amicroblog%3A0;item=balcony-restoration-afd1'>
+      <x xmlns='jabber:x:data' type='form'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#node_config</value>
+        </field>
+        <field var='{urn:xmpp:pubsub-relationships:0}link' type='text-single'">
+          <value>urn:xmpp:microblog:0</value>
+        </field>
+        [...]
+      </x>
+    </configure>
+  </pubsub>
+</iq>]]></example>
+</section2>
+
+<section2 topic="Parent Relationship Example" anchor="rel-parent-ex">
+  <p>When a comment node for &xep0277; is created, Juliet’s XMPP client configures the parent relationship.</p>
+  <example caption="Client requests parent relationship configuration"><![CDATA[
+<iq type='set'
+    from='juliet@capulet.lit/balcony'
+    to='pubsub.example.org'
+    id='parent1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub#owner'>
+    <configure node='urn:xmpp:microblog:0:comments/some-item-id'>
+      <x xmlns='jabber:x:data' type='submit'>
+        <field var='{urn:xmpp:pubsub-relationships:0}parent'>
+          <value>urn:xmpp:microblog:0</value>
+        </field>
+      </x>
+    </configure>
+  </pubsub>
+</iq>]]></example>
+
+<example caption="Service responds with confirmation"><![CDATA[
+<iq type='result'
+  from='pubsub.example.org'
+  to='juliet@capulet.lit/balcony'
+  id='parent1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub#owner'>
+    <configure node='urn:xmpp:microblog:0:comments/some-item-id'>
+      <x xmlns='jabber:x:data' type='form'>
+        <field var='FORM_TYPE' type='hidden'>
+          <value>http://jabber.org/protocol/pubsub#node_config</value>
+        </field>
+        <field var='{urn:xmpp:pubsub-relationships:0}parent' type='text-single'">
+          <value>urn:xmpp:microblog:0</value>
+        </field>
+        [...]
+      </x>
+    </configure>
+  </pubsub>
+</iq>
+  ]]></example>
+</section2>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <p>By default, node discovery as explained at <link url="https://xmpp.org/extensions/xep-0060.html#entity-nodes">XEP-0060: Discover Nodes</link> is unaffected by this specification. However, it is expected that a future specification will add an optional way to filter out or display linking nodes and/or child nodes, resulting in a much clearer listing of PubSub nodes. That also means that child nodes are not displayed when doing a disco request on a parent node; this is to avoid breaking existing implementations that would not expect to discover nodes on a non-collection node.</p>
+  <p>This specification is backward compatible: nodes remain accessible normally to unsupporting clients. The main difference for them will be the automatic deletion of linked and child nodes and the propagation rules for access models and publish models. Setting a relationship remains possible even for unsupporting clients, as it involves only a regular node configuration update.</p>
+  <p>A tree-like structure with "parent" relationships does not prevent node name conflicts: to be backward compatible, nodes are still available normally as they would in a flat structure. This means that names must always be unique within the pubsub service to avoid conflicts, even deep inside the "parent" hierarchy.</p>
+  <p>If a node is created without any relationship, a Pubsub service MAY automatically create relationships for well-known nodes. For instance, a "parent" relationship can be created to the corresponding microblog node if a &xep0277; comment node is created, or a "link" relationship can be created if a &xep0470; attachment node is detected. However, if a relationship (either "link" or "parent") is set when creating the node, the Pubsub service MUST NOT change it or add other relationships. This is useful for working with non-supporting clients while still maintaining a clean organization of nodes.</p>
+  <p>For "link" relationships, the first node to be created is the one which is linked. For example: in &xep0346;, the "template" node is the one which is linked, meaning that it's the "submitted" node which must link to it.</p>
+  <p>If one wants to delete a parent node without deleting all its descendants, the direct child must first be unparented; that is, their "parent" attribute must be set to another node name or removed entirely. Then, the parent node can be deleted.</p>
+
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>If a pubsub service supports the protocol specified in this XEP, it MUST advertise it by including the "urn:xmpp:pubsub-relationships:0" discovery feature in response to a &xep0030; information request.</p>
+
+  <example caption="Service Discovery Information Request"><![CDATA[
+<iq type='get'
+    from='juliet@example.org/balcony'
+    to='pubsub.example.org'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption="Service Discovery Information Response"><![CDATA[
+<iq type='result'
+    from='pubsub.example.org'
+    to='juliet@example.org/balcony'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:pubsub-relationships:0'/>
+    ...
+  </query>
+</iq>]]></example>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+
+<p>The "parent" relationship enhances security by preventing accidental bad synchronization of permission changes. For example, if an &xep0277; blog node’s access model is changed from "open" to "whitelist", without this specification, all comment nodes must be manually updated one by one by the XMPP client, which is error prone. However, with this specification and a "parent" relationship in place, the permissions are automatically propagated according to the <link url="#parent-rules">Parent Relationship Rules</link>.</p>
+
+<p>The automatic deletion of linked or child nodes might surprise end-users, especially when using non-supporting XMPP clients. If the hierarchy is not visible to the user, it may not be clear that other nodes will also be deleted automatically. Supporting clients should ensure that the automatic deletion is clear to end-user.</p>
+
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document does not require interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>Thanks to NLNet foundation/NGI Zero Core for funding the work on this specification.</p>
+</section1>
+
+</xep>
