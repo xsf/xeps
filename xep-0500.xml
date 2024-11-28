@@ -1,0 +1,512 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>MUC Slow Mode</title>
+  <abstract>
+    This specification describes a way to rate limit messages a single user can
+    send to a MUC room. It includes room configuration option, and how servers
+    and clients can handle such a feature.
+  </abstract>
+  &LEGALNOTICE;
+  <number>0500</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+    <spec>XEP-0045</spec>
+    <spec>XEP-0068</spec>
+    <spec>XEP-0122</spec>
+    <spec>XEP-0128</spec>
+    <spec>RFC6120</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>muc-slow-mode</shortname>
+  <tags>
+    <tag>muc</tag>
+    <tag>slow mode</tag>
+  </tags>
+  <author>
+    <firstname>John</firstname>
+    <surname>Livingston</surname>
+    <email>contact@john-livingston.fr</email>
+    <jid>john@im.yiny.org</jid>
+  </author>
+  <revision>
+    <version>0.1.0</version>
+    <date>2024-11-28</date>
+    <initials>XEP Editor: dg</initials>
+    <remark>
+      <p>Promoted to Experimental</p>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2024-02-28</date>
+    <initials>psa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>
+    There are some contexts in which you want to be able to rate limit &xep0045;
+    messages. This could have multiple motivations: avoid flooding, garantee
+    a better readability of the room when there are hundreds of active users, …
+  </p>
+  <p>
+    This specification propose a new option to MUC rooms, allowing room owners
+    to fix a duration that users MUST wait between two messages.
+    We will also specify how the server MUST reject messages send too quickly,
+    and how clients SHOULD handle this feature (by preventing users to send
+    messages without waiting the delay to be over, and displaying some
+    information to them).
+  </p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <p>This document addresses the following requirements:</p>
+  <ul>
+    <li>
+      How to allow room owners to enable and configure the feature by editing
+      the MUC room discovery information.
+    </li>
+    <li>
+      How to enable and configure the feature without allowing room owners to
+      change the configuration.
+    </li>
+    <li>
+      How the server MUST reject messages that does not respect the parameters.
+    </li>
+    <li>
+      How clients SHOULD handle rooms with such feature enabled.
+    </li>
+  </ul>
+</section1>
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di>
+      <dt>Clients</dt>
+      <dd>
+        The client software used by end-users to join MUC rooms.
+      </dd>
+    </di>
+    <di>
+      <dt>Moderator</dt>
+      <dd>
+        A room role that is usually associated with room admins but that can be
+        granted to non-admins.
+      </dd>
+    </di>
+    <di>
+      <dt>MUC</dt>
+      <dd>
+        The multi-user chat protocol for text-based conferencing
+        (e.g. &xep0045;).
+      </dd>
+    </di>
+    <di>
+      <dt>Participant</dt>
+      <dd>
+        An occupant who does not have admin status; in a moderated room,
+        a participant is further defined as having voice (in contrast to a
+        visitor).
+        A participant has a role of "participant".
+      </dd>
+    </di>
+    <di>
+      <dt>Role</dt>
+      <dd>
+        A temporary position or privilege level within a room, distinct from a
+        user's long-lived affiliation with the room; the possible roles are
+        "moderator", "participant", and "visitor" (it is also possible to have
+        no defined role). A role lasts only for the duration of an occupant's
+        visit to a room. See &xep0045;.
+      </dd>
+    </di>
+    <di>
+      <dt>Room administrator</dt>
+      <dd>
+        A user empowered by the room owner to perform administrative functions
+        such as banning users; however, a room administrator is not allowed to
+        change the room configuration or to destroy the room. An admin has an
+        affiliation of "admin". See &xep0045;.
+      </dd>
+    </di>
+    <di>
+      <dt>Room owner</dt>
+      <dd>
+        Users that have special access to a room, and that can edit room
+        configuration. See &xep0045; - Owner Use Cases.
+      </dd>
+    </di>
+    <di>
+      <dt>Service Discovery Extensions</dt>
+      <dd>
+        See &xep0128;
+      </dd>
+    </di>
+    <di>
+      <dt>Slow Mode</dt>
+      <dd>
+        Feature allowing to rate limit user messages in a MUC room.
+      </dd>
+    </di>
+    <di>
+      <dt>Slow Mode duration</dt>
+      <dd>
+        When the Slow Mode feature is active, specifies the duration, in
+        seconds, users must wait between two text messages.
+      </dd>
+    </di>
+    <di>
+      <dt>Visitor</dt>
+      <dd>
+        In a moderated room, an occupant who does not have voice (in contrast to
+        a participant). A visitor has a role of "visitor".
+      </dd>
+    </di>
+  </dl>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <p>
+    The MUC Slow Mode can for example be used when a MUC room is associated
+    to a live video stream. In such case, there are often hundreds of people
+    writing at the same time. To avoid flooding, and encourage participants to
+    post relevant messages, slow mode can be usefull.
+  </p>
+</section1>
+<section1 topic="MUC configuration" anchor="muc-configuration">
+  <section2 topic="Activating Slow Mode in the MUC Room configuration">
+    <p>
+      Your implementation MAY allow the Slow Mode feature to be set room by
+      room, by their owners.
+    </p>
+    <p>
+      If room owners can configure the Slow Mode feature, the server MUST add a
+      <tt>'muc#roomconfig_slow_mode_duration'</tt> field in the room
+      configuration form.
+    </p>
+    <p>
+      This field MUST have its type equal to <tt>'text-single'</tt>.
+    </p>
+    <p>
+      This field SHOULD use
+      <link url="https://xmpp.org/extensions/xep-0122.html">
+        Data Forms Validation
+      </link>, having its datatype equal to <tt>'xs:integer'</tt>.
+    </p>
+    <p>
+      The <tt>'value'</tt> of the field MUST be a positive integer, so you MUST
+      add a <tt>'range'</tt> validation, as described in &xep0122;.
+    </p>
+    <p>
+      Value <tt>'0'</tt> means that the slow mode is disabled for this room.
+    </p>
+    <p>
+      Any positive value is the duration, in seconds, users must wait between
+      two messages.
+    </p>
+    <p>
+      Here is an example of response the server could send when a client is
+      querying <link url="https://xmpp.org/extensions/xep-0045.html#roomconfig">
+      room configuration form</link>:
+    </p>
+    <example caption="Room configuration example"><![CDATA[
+<iq from='coven@chat.shakespeare.lit'
+  id='config1'
+  to='crone1@shakespeare.lit/desktop'
+  type='result'>
+  <query xmlns='http://jabber.org/protocol/muc#owner'>
+    <x xmlns='jabber:x:data' type='form'>
+      <title>Configuration for "coven" Room</title>
+      <instructions>
+        Complete this form to modify the
+        configuration of your room.
+      </instructions>
+      <field
+          type='hidden'
+          var='FORM_TYPE'>
+        <value>http://jabber.org/protocol/muc#roomconfig</value>
+      </field>
+      <field
+        var='muc#roomconfig_slow_mode_duration'
+        type='text-single'
+        label='Slow Mode (0=disabled, any positive integer= users can send a message every X seconds.)'
+      >
+        <validate xmlns='http://jabber.org/protocol/xdata-validate' datatype='xs:integer'>
+          <range min='0'/>
+        </validate>
+        <value>20</value>
+      </field>
+      <!-- and any other field... -->
+    </x>
+  </query>
+</iq>
+]]></example>
+    <p>
+      If the configuration is changed, the server SHOULD send a status code
+      <tt>'104'</tt>, as specified in
+      <link url="https://xmpp.org/extensions/xep-0045.html#roomconfig-notify">
+        XEP-0045 - Notification of configuration changes
+      </link>.
+    </p>
+  </section2>
+  <section2 topic="Client discovering" anchor="client-discovering">
+    <p>
+      The feature can be enabled on a room:
+    </p>
+    <ul>
+      <li>
+        by the room owner, if your implementation allow them to set this option,
+      </li>
+      <li>by a server-wide parameter,</li>
+      <li>by any other criteria, specific to the room or not.</li>
+    </ul>
+    <p>
+      In other words: you can enable this feature, without adding the field in
+      the room configuration form. This allows for example server admins to
+      apply a rate limit server-wide, or to set the slow mode programmatically
+      on any wanted criteria (number of users in the room, current server load,
+      room context, ...).
+    </p>
+    <p>
+      In any case, to allow clients to discover that the feature is active, the
+      server MUST respond on
+      <link url="https://xmpp.org/extensions/xep-0045.html#disco-roominfo">
+        room information queries
+      </link>
+      by adding a <tt>'muc#roominfo_slow_mode_duration'</tt> field.
+      This field type MUST be <tt>'text-single'</tt>, and its value MUST be a
+      positive integer.
+    </p>
+    <p>
+      Value <tt>'0'</tt> means that the slow mode is disabled for this room.
+    </p>
+    <p>
+      Any positive value is the duration, in seconds, users must wait between
+      two messages.
+    </p>
+    <p>
+      Any invalid (non-positive integer) value sent by the server MUST be
+      considered as equal to <tt>'0'</tt> (in case of a bad implementation).
+    </p>
+    <p>
+      Here is an example of response the server could send when a client is
+      <link url="https://xmpp.org/extensions/xep-0045.html#disco-roominfo">
+      querying room information</link>:
+    </p>
+    <example caption="Room information example"><![CDATA[
+<iq from='coven@chat.shakespeare.lit'
+    id='ik3vs715'
+    to='hag66@shakespeare.lit/pda'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity
+        category='conference'
+        name='The place to be'
+        type='text'/>
+    <feature var='http://jabber.org/protocol/muc'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>http://jabber.org/protocol/muc#roominfo</value>
+      </field>
+      <field var='muc#roominfo_slow_mode_duration' type='text-single'>
+        <value>20</value>
+      </field>
+
+      <!-- and any other field... -->
+    </x>
+  </query>
+</iq>
+]]></example>
+  <p>
+    If the slow mode duration has changed (either because the room configuration
+    was modified, or because a server parameter has changed, or any other
+    reason), the server SHOULD send a status code <tt>'104'</tt>, as specified
+    in <link url="https://xmpp.org/extensions/xep-0045.html#roomconfig-notify">
+    XEP-0045 - Notification of configuration changes</link>.
+  </p>
+  </section2>
+</section1>
+<section1 topic="Server-side rate limiting" anchor="server-side-rate-limiting">
+  <p>
+    When the Slow Mode is enabled, server MUST NOT accept two consecutive
+    messages from the same user, to the same room, until the slow mode duration
+    has elapsed.
+  </p>
+  <p>
+    Only messages containing at least one <tt>'&lt;body/&gt;'</tt> element must
+    be taking into account (to avoid counting <tt>'chatstate'</tt> messages for
+    example).
+  </p>
+  <p>
+    Room administrators and owners MUST NOT be rate limited.
+  </p>
+  <p>
+    If a user bypass the limit, the server MUST reply an error stanza, that
+    respects &rfc6120; stanza erors (see
+    <link url="https://xmpp.org/rfcs/rfc6120.html#stanzas-error">
+    RFC6120 - stanza errors</link>), to reject the message. Especially:
+  </p>
+  <ul>
+    <li>
+      <tt>'error_type'</tt> MUST be <tt>'wait'</tt>, as described in
+      <link url="https://xmpp.org/rfcs/rfc6120.html#stanzas-error-syntax">
+        RFC6120 - Stanzas error - Syntax
+      </link>.
+    </li>
+    <li>
+      <tt>'error_condition'</tt> MUST be <tt>'policy-violation'</tt>, as
+      described in
+      <link url="https://xmpp.org/rfcs/rfc6120.html#stanzas-error-conditions">
+        RFC 6120 - Stanzas error - Defined Stream Error Conditions</link>,
+    </li>
+    <li>
+      the stanza SHOULD contain a <tt>&lt;text&gt;'</tt> element explaining why
+      the message was rejected, and this message SHOULD mention the slow mode
+      duration so that users can understand why they can't post their message.
+    </li>
+  </ul>
+  <p>
+    Here is an example or error stanza:
+  </p>
+  <example caption='Example error stanza'><![CDATA[
+<message
+  xmlns="jabber:client"
+  type="error"
+  to="crone1@shakespeare.lit/desktop"
+  id="528df978-aa6b-422a-b987-056a810c4733"
+  from="coven@chat.shakespeare.lit"
+>
+  <error type="wait">
+    <policy-violation xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" />
+    <text xmlns="urn:ietf:params:xml:ns:xmpp-stanzas">
+      You have exceeded the limit imposed by the slow mode in this room.
+      You have to wait 20 seconds between messages. Please try again later.
+    </text>
+  </error>
+</message>
+]]></example>
+  <p>
+    The rejected message MUST NOT be forwarded to other room occupants.
+  </p>
+</section1>
+<section1 topic="Client handling">
+  <p>
+    When a participant joins a room, the client SHOULD request room information
+    as described in section
+    <link url="client-discovering">Client discovering</link>", and look for the
+    <tt>'muc#roominfo_slow_mode_duration'</tt> field.
+  </p>
+  <p>
+    If this field is present, and contains a valid strictly positive integer
+    value, the client SHOULD display an information somewhere, to tell users
+    that there is a slow mode limitation that applies to this room.
+    This information MAY also be displayed to users for which the rate limit
+    does not apply (administrators, owners, ...).
+  </p>
+  <p>
+    Moreover, each time a participant sends a text message, the client SHOULD
+    prevent the user to send another message before the timeout is passed.
+    This MAY be done either by disabling the input field, or the submit button.
+    If the user has at least the administrator acces level, the client
+    SHOULD NOT disable the input field or the submit button.
+  </p>
+  <p>
+    To avoid some frustrating behaviour, in case there is some lag on the server
+    for example, the client MAY start counting time after receiving the message
+    echo. Indeed, if the first message is processed with some delay by the
+    server, it could consider that the duration is not passed yet when receiving
+    the next one.
+  </p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>
+    As a same user can join a room with multiple sessions and/or nicknames,
+    the server MUST use the appropriate criteria to identify the account, and
+    apply the same limits to all user's sessions.
+  </p>
+  <p>
+    The slow mode duration parameter is a positive integer. When parsing its
+    value, clients and servers MUST ignore invalid value.
+    They MUST also check that this value is not to big to store in memory
+    (this depends on the data type used by the implementation).
+  </p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>
+    This document requires no interaction with the Internet Assigned Numbers
+    Authority (IANA).
+  </p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic="Field Standardization">
+    <p>
+      &xep0068; defines a process for standardizing the fields used within Data
+      Forms scoped by a particular namespace, and the XMPP Registrar maintains a
+      registry of such FORM_TYPES (see &FORMTYPES;).
+      In this XEP there are two uses of such form fields:
+    </p>
+    <ol>
+      <li>
+        Configuration of the slow mode duration using the
+        <tt>'muc#roomconfig_slow_mode_duration'</tt> field.
+      </li>
+      <li>
+        Discovery of the slow mode duration using the 
+        <tt>'muc#roominfo_slow_mode_duration'</tt> field.
+      </li>
+    </ol>
+    <p>
+      The registry submissions associated with these namespaces are defined
+      below.
+    </p>
+  <section3 topic='muc#roomconfig_slow_mode_duration'>
+    <p>
+      The registrar shall add the following field to the 'muc#roomconfig' data
+      form:
+    </p>
+      <example caption='Registry Submission'><![CDATA[
+<form_type>
+  <name>http://jabber.org/protocol/muc#roomconfig</name>
+  <doc>XEP-XXXX</doc>
+  <desc>
+    Forms extension for slow mode support in a MUC room.
+  </desc>
+  <field
+    var='muc#roomconfig_slow_mode_duration'
+    type='text-single'
+    label='Slow Mode (0=disabled, any positive integer= users can send a message every X seconds.)'
+  />  
+</form_type>
+]]></example>
+    </section3>
+    <section3 topic='muc#roominfo_slow_mode_duration'>
+      <p>
+        The registrar shall add the following field to the 'muc#roominfo' data
+        form:
+      </p>
+        <example caption='Registry Submission'><![CDATA[
+<form_type>
+  <name>http://jabber.org/protocol/muc#roominfo</name>
+  <doc>XEP-XXXX</doc>
+  <desc>
+    Forms extension for slow mode support in a MUC room.
+  </desc>
+  <field
+    var='muc#roominfo_slow_mode_duration'
+    label='Slow Mode (0=disabled, any positive integer= users can send a message every X seconds.)'
+  />  
+</form_type>
+  ]]></example>
+    </section3>
+  </section2>
+</section1>
+</xep>
