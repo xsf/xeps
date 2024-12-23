@@ -1,0 +1,158 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>MUC Activity Indicator</title>
+  <abstract>This specification provides querying entities an approximate indication of the level of activity in a given XEP-0045 Multi-User Chat room.</abstract>
+  &LEGALNOTICE;
+  <number>0502</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0045</spec>
+    <spec>XEP-0128</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>muc-activity</shortname>
+  <tags/>
+  &jonaswielicki;
+  <revision>
+    <version>0.1.0</version>
+    <date>2024-12-23</date>
+    <initials>XEP Editor: dg</initials>
+      <remark><p>Promoted to Experimental</p>
+    </remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2024-11-29</date>
+    <initials>jsc</initials>
+    <remark><p>Initial submission.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Currently, the only activity metric available to entities considering
+    interacting with a &xep0045; chat is the number of occupants which is
+    published in the &xep0030; response.</p>
+  <p>However, the number of occupants alone is not a great metric for
+    usefulness of a chat. On the one end of the spectrum there may be highly
+    active, but small, groups of experts on a specific topic who are happy to
+    help. On the other end of the spectrum there may be huge chats consisting
+    mostly of lurkers.</p>
+  <p>This specification introduces a new field in the disco#info data which
+    gives an indication of the rate at which messages are sent in a given
+    group chat.</p>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>MUST NOT impose excessive computing requirements on servers.</li>
+    <li>MUST be useful as rough indicator.</li>
+  </ul>
+</section1>
+<section1 topic='Use Cases' anchor='usecases'>
+  <section2 topic='Retrieving the message activity level' anchor='retrieve'>
+    <p>To request the current level of message activity, an entity sends a standard &xep0030; information request to a MUC's address:</p>
+    <example caption='Entity Queries Chat Room for Information'><![CDATA[
+<iq from='hag66@shakespeare.lit/pda'
+    id='lx09df27'
+    to='coven@chat.shakespeare.lit'
+    type='get'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>
+]]></example>
+    <p>Services implementing this specification MUST return the {urn:xmpp:muc-activity}message-activity field, if:</p>
+    <ul>
+      <li>The room is persistent, and</li>
+      <li>The room is public, and</li>
+      <li>The data is currently available.</li>
+    </ul>
+    <p>The field MUST contain an approximation of the number of messages sent per hour in this room as floating point value. For example approximation approaches, see the <link url="#impl">Implementation Notes</link> below.</p>
+    <example caption='Service Returns Disco Info Result for Room'><![CDATA[
+<iq from='coven@chat.shakespeare.lit'
+    id='lx09df27'
+    to='hag66@shakespeare.lit/pda'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <!-- ... -->
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>http://jabber.org/protocol/muc#roominfo</value>
+      </field>
+      <!-- ... -->
+      <field var='{urn:xmpp:muc-activity}message-activity'
+             label='Messages per hour'>
+        <value>23.42</value>
+      </field>
+    </x>
+  </query>
+</iq>
+]]></example>
+    <p>In particular, services MUST omit the field entirely if the above preconditions are not met. Services MUST NOT put placeholder values in the field.</p>
+  </section2>
+</section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>The value provided in the form field MUST be in units of messages per hour.</li>
+    <li>The time frame over which this number is derived is service-defined. However, services SHOULD NOT take into account messages which are older than 72 hours.</li>
+    <li>Services MUST NOT count messages without a &lt;body/&gt; element, unless it is known that this message would be rendered as standalone message on a compliant client nontheless.</li>
+    <li>Services MUST NOT count messages where the type is not groupchat; in particular, they MUST NOT count private messages among occupants.</li>
+    <li>Services SHOULD NOT count &xep0308; messages.</li>
+    <li>Consumers MUST NOT assume that the number is exact.</li>
+    <li>Consumers MUST NOT assume that the number is updated in real-time.</li>
+    <li>Services SHOULD update the number at least once per hour.</li>
+  </ul>
+</section1>
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>The obvious "correct" implemetation to provide the message rate would be
+    to, internally, query the number of messages sent in the room since its
+    inception and divide that by the number of hours since its inception.
+    Such an implementation is likely to be expensive, in particular for large,
+    high-traffic rooms.</p>
+  <p>In order to cater for that, the <link url='#rules'>Business Rules</link>
+    allow for some significant leeway in how implementations approximate the
+    number of messages per hour.</p>
+  <p>For implementations where fetching the number of messages in a certain
+    time frame is too expensive, the following simplified approach is
+    outlined: For each MUC, allocate a shift register of 25 counters. Whenever
+    an eligible message is broadcast through the MUC, increase the first
+    counter. Every hour, shift the counters onward (so that the first counter
+    becomes the second and so on) and reset the first counter to zero. Whenever
+    the message rate is requested (via disco#info or otherwise), sum the
+    counters two through 25 and divide the sum by 24.</p>
+  <p>That way, only constant storage per MUC and constant CPU time per message
+    and request is required. As a trade-off, this introduces a latency of one
+    hour for updating the counter.</p>
+</section1>
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>This specification does not introduce new user interaction concepts.</p>
+</section1>
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>Services MAY translate the label attribute of the field according to
+    the language indicated in the requester's IQ stanza.</p>
+</section1>
+<section1 topic='Security Considerations' anchor='security'>
+  <p>Services MUST choose a sufficiently cheap algorithm to provide the
+    message activity indicator. Otherwise, they are open to trivial
+    denial-of-service attacks by high-rate disco#info requests.</p>
+</section1>
+<section1 topic='Privacy Considerations' anchor='privacy'>
+  <p>Services MUST NOT publish message activity indicators for MUCs which are
+    not publicly listed (muc_public feature flag) or where users
+    would need some kind of specific authorization to join (such as a password
+    or the member affiliation).</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>No IANA interactions required.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>The form field should be registered, eventually.</p>
+</section1>
+</xep>
