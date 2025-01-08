@@ -103,9 +103,9 @@ do
 
     status="$(xpath "$xep" '/xep/header/status/text()')"
     approvers=""
-    if echo "$status" | grep -E '^(Experimental|Deferred)$' &>/dev/null
+    if echo "$status" | grep -E '^(Experimental|Proposed|Deferred)$' &>/dev/null
     then
-        # Experimental or Deferred
+        # Experimental, Proposed or Deferred
         if [ "$status" == 'Deferred' ]
         then
             add_tag "Needs Editor Action"
@@ -115,7 +115,7 @@ do
 
         approvers="$(xpath "$xep" '/xep/header/author/email/text()' | sort -u)"
     else
-        # *not* Experimental or Deferred
+        # *not* Experimental, Proposed or Deferred
         approvers="$(xpath "$xep" '/xep/header/approver/text()' 2>/dev/null || echo 'Unknown')"
     fi
 
