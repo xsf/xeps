@@ -1,0 +1,203 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Gateway Relayed Encryption</title>
+  <abstract>This specification describes a mechanism for end-to-end encryption with gateways that is compatible with third-party networks.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0001</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>gre</shortname>
+  <tags>
+    <tag>gre</tag>
+    <tag>e2ee</tag>
+  </tags>
+  <author>
+    <firstname>Jérôme</firstname>
+    <surname>Poisson</surname>
+    <email>goffi@goffi.org</email>
+    <jid>goffi@jabber.fr</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2025-01-12</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>Gateways are widely used in XMPP for communicating with third-party networks, often referred to as "legacy networks". The existing mechanisms face two significant security challenges:</p>
+  <ul>
+    <li>Credentials are frequently stored by the gateway, most of time unencrypted.</li>
+    <li>End-to-end encryption is currently not feasible: either end-to-end encryption (e2ee) is omitted entirely, or a message must be decrypted by the gateway before being re-encrypted for the target protocol.</li>
+  </ul>
+  <p>This specification proposes a solution to address the second issue. It defines a method for gateways to instruct end-user clients on how to format and encrypt payloads.</p>
+
+  <p>Common encryption algorithms, such as OpenPGP, are often used by third-party networks; however, protocols typically employ their own formatting beforehand. By providing a mechanism that explains how to format the payload and which algorithm to use for encryption, clients can format and encrypt payloads themselves. This allows gateways to forward encrypted payloads (and apply additional treatments if necessary) without being able to access or decrypt the plain text content.</p>
+  <p>This specification provides the general mechanism for relayed encryption; separate XEPs will specify specific encryption algorithms and payload formatting means.</p>
+</section1>
+
+<section1 topic="Requirements" anchor="reqs">
+  <p>The design goals of this XEP are:</p>
+  <ul>
+    <li>To allow optional backward compatibility with clients that do not support this specification or requested formatting methods/encryption algorithms.</li>
+    <li>It must be possible for a gateway to make use of this specification mandatory, so no plain text or decryptable content is used.</li>
+    <li>To support the inclusion of attachments.</li>
+    <li>To require as little effort as possible from XMPP clients: they should perform only minimal formatting and encryption to keep clear payloads out of reach for gateways. The gateway will handle most legacy protocol conversions and management tasks.</li>
+    <li>To be extensible and flexible enough to support various use cases.</li>
+  </ul>
+  <p><strong>Note:</strong> This specification focuses on gateways for &MESSAGE; stanzas, but it may be extended later for Pubsub-based gateways or other use cases.</p>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+  <p>This section defines key terms used throughout this specification.</p>
+  <ul>
+    <li><strong>Formatter</strong>: A specification that explains how a message must be arranged before encryption.</li>
+    <li><strong>Formatted Payload</strong>: The data resulting from processing by the formatter, before encryption.</li>
+    <li><strong>Encrypted</strong>: A specification detailing how to encrypt the formatted payload before sending it to the gateway.</li>
+  </ul>
+</section1>
+
+<section1 topic='Overview' anchor='overview'>
+  <p>A gateway needs to define two things to allow for relayed encryption: a <strong>formatter</strong> and an <strong>encrypter</strong>. The formatter is used to teach clients how to arrange the content of the payload before encrypting it, and the encrypter specifies which algorithms and parameters must be used. This specification defines a wrapper to then send the encrypted payload to the gateway. In addition, a generic method to request data necessary for the formatter and encrypter is also specified.</p>
+</section1>
+
+<section1 topic='Formatter' anchor='formatter'>
+  <p>A formatter describes how a client must arrange payload content before encryption. It can be a well-known format (e.g., MIME) that the client can use if it knows it, or it can be a generic formatter using sandboxed technology (such as WebAssembly). The output of the formatter will be used internally by the client directly as input for the encrypter.</p>
+  <p>To specify the formatter to use, a &xep0030; disco feature of 'urn:xmpp:gre:formatter:[FORMATTER_NAME]:[VERSION]' MUST be announced, where <em>[FORMATTER_NAME]</em> is the short name of the formatter, and <em>[VERSION]</em> is the version of the formatter specification to use. A gateway MAY specify several versions of the same formatter if it supports more than one; the client SHOULD use the highest version that it implements. Gateways MAY have more than one kind of formatter, in which case the client chooses which one to use based on its internal implementation.</p>
+  <p>Specifications of formatters SHOULD be named with the following template: "GRE Formatter: [FORMATTER NAME]" and MUST have the tags "gre" and "formatter".</p>
+</section1>
+
+<section1 topic='Encrypter' anchor='encrypter'>
+  <p>An encrypter describes to a client which encryption algorithm and parameters must be used when encrypting the payload. It specifies necessary details such as the type of encryption, key size, mode of operation, initialization vectors (if applicable), and any other required parameters. The output of the encrypter will be the encrypted payload that is sent to the gateway. Encrypter specifications SHOULD specify how various keys and other required data are exchanged. Encrypter MUST specify how the &lt;encrypted/&gt; element (as specified in <link url='#sending_receiving'>Sending and Receiving Encrypted Data</link>) children must be built to send the message.</p>
+  <p>As with formatters, an encrypter can be a well-known encryption algorithm (e.g., OpenPGP) or a generic encrypter using sandboxed technology (such as WebAssembly). However, unlike formatters, sandboxing is not enough for encrypters; they must also be verified and validated. Since the encrypter is a crucial part of the system, nothing provided by a gateway can be used without further validation. A generic encrypter specification MUST specify how to verify and validate provided generic encrypters.</p>
+  <p>To specify the encrypter to use, a &xep0030; disco feature of 'urn:xmpp:gre:encrypter:[ENCRYPTER_NAME]:[VERSION]' MUST be announced, where <em>[ENCRYPTER_NAME]</em> is the short name of the encrypter, and <em>[VERSION]</em> is the version of the encrypter specification to use. A gateway MAY specify several versions of the same encrypter if it supports more than one; the client SHOULD use the highest version that it implements. Gateways MAY have more than one kind of encrypter, in which case the client chooses which one to use based on its internal implementation.</p>
+  <p>Specifications of encrypters SHOULD be named with the following template: "GRE Encrypter: [ENCRYPTER_NAME]" and MUST have the tags "gre" and "encrypter".</p>
+</section1>
+
+<section1 topic='Relayed Encryption Data' anchor='data'>
+  <p>Some data may be necessary to format and/or encrypt a message. This specification provides a simple mechanism to retrieve data from a gateway to prepare encryption.</p>
+  <p>To exchange data, a client MAY send an &IQ; of type 'get', which MUST include a "data" child element qualified by the namespace 'urn:xmpp:gre:0'. The "formatter" attribute MUST be set to the namespace of the chosen formatter, and the "encrypter" attribute MUST be set to the namespace of the chosen encrypter. This element MAY contain arbitrary child elements specified either by the used formatter and/or encrypter specifications. The stanza MUST be sent to the bare JID of the destination, i.e., the "localpart" of the JID MUST be specified (as the returned data may be specific to the recipient).</p>
+  <p>The gateway MUST return the data in a form as specified in &xep0004;. The form MUST have a "FORM_TYPE" of "urn:xmpp:gre:data" and MUST include a 'sender_id' field for which the value is the ID used on the legacy network as seen by other entities on the legacy network (e.g., the "from" email seen by the recipient for an email gateway).</p>
+  <p>Formatter and encrypter specific data MAY be added to the form, using namespaced fields with Clark Notation as explained in &xep0068;.</p>
+
+<example caption="Client Requests Data from Gateway"><![CDATA[
+<iq type='get'
+    from='romeo@example.net/orchard'
+    to='some_user@gateway.example.org'
+    id='data1'>
+  <data xmlns='urn:xmpp:gre:0'
+        formatter='urn:xmpp:gre:formatter:some_formatter:0'
+        encrypter='urn:xmpp:gre:encrypter:some_encrypter:0'>
+    <!-- Arbitrary child elements can be added here -->
+  </data>
+</iq>
+]]></example>
+
+<example caption="Gateway Responds with Data"><![CDATA[
+<iq type='result'
+    from='some_user@gateway.example.org'
+    to='romeo@example.net/orchard'
+    id='data1'>
+  <data xmlns='urn:xmpp:gre:0'>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:gre:data</value>
+      </field>
+      <field var='sender_id'>
+        <value>some_id_for_legacy_network@example.com</value>
+      </field>
+      <!-- Other fields can be added here as per formatter and encrypter specifications -->
+    </x>
+  </data>
+</iq>
+]]></example>
+</section1>
+
+<section1 topic='Sending and Receiving Encrypted Messages' anchor='sending_receiving'>
+  <p>Once a message has been encrypted and is ready to be sent to the gateway for relay, the client MUST create an &lt;encrypted/&gt; element as a child of the &MESSAGE; stanza. This element MUST have the namespace 'urn:xmpp:gre:0', a "formatter" attribute with the namespace of the used formatter, and an "encrypter" attribute with the namespace of the used encrypter. The children of this element MUST follow the specification of the chosen encrypter.</p>
+  <example caption='An example encrypted message stanza.'><![CDATA[
+<message to='some_user@gateway.example.org'>
+  <encrypted xmlns='urn:xmpp:gre:0'
+    formatter='urn:xmpp:gre:formatter:example_formatter:0'
+    encrypter='urn:xmpp:gre:encrypter:example_encrypter:0'>
+    <!-- DATA AS SPECIFIED BY ENCRYPTER -->
+  </encrypted>
+</message>]]></example>
+  <p>The gateway is then free to adapt the encrypted data and transmit it using the legacy network protocol.</p>
+  <p>The same element is used by the gateway to send encrypted messages from entities on the legacy network.</p>
+</section1>
+
+<section1 topic="Business Rules" anchor="rules">
+  <p>The following business rules apply to Gateway Relayed Encryption:</p>
+  <ul>
+    <li>If the gateway accepts only encrypted content using this specification, it MUST advertise this fact by adding the "urn:xmpp:gre:encrypted_only:0" feature in response to &xep0030; information requests and MUST reject non-encrypted content with a stanza error. The stanza error MUST have a type set to "modify", a "policy-violation" condition, and SHOULD include a &lt;text/&gt; element stating clearly that the message must be encrypted using this specification.</li>
+    <li>Client implementations SHOULD use &xep0380; to advertise the fact that the message is encrypted.</li>
+    <li>When a user has multiple devices, all devices SHOULD receive copies of sent and received encrypted messages thanks to &xep0280;. To decrypt the messages and maintain a synchronized history, other devices must implement this specification and the used formatter and encrypter. The encrypter specification SHOULD explain how to decrypt the message for other devices.</li>
+    <li>To simplify recipient ID manipulation (which can be important for formatters), &xep0106; MUST be used to transform recipient IDs as used by legacy networks into JIDs used by the gateway.</li>
+    <li>It is expected that <link url="#data">Relayed Encryption Data</link> can be cached and called only once per session. However, the formatter and/or encrypter MAY request that those data are dynamic and need to be retrieved before each encryption. Due to the extra resources it would require, this behavior is discouraged unless absolutely necessary.</li>
+    <li>To limit metadata to the server and avoid reaching the maximum stanza size, it is recommended to use &xep0247; between the client and the gateway for sending large encrypted content (notably with attachments). Note, however, that this will skip carbon copy, thereby breaking history synchronization across multiple devices.</li>
+  </ul>
+</section1>
+
+<section1 topic="Discovering Support" anchor="disco">
+  <p>If an entity supports Gateway Relayed Encryption, it MUST advertise it by including the "urn:xmpp:gre:0" discovery feature in response to a &xep0030; information request. In addition, entities MUST support at least one formatter and one encrypter, and MUST include the corresponding namespace in their feature.</p>
+  <example caption="Service Discovery Information Request"><![CDATA[
+<iq type='get'
+    from='juliet@example.org/balcony'
+    to='some_gateway.example.org'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption="Service Discovery Information Response"><![CDATA[
+<iq type='result'
+    from='some_gateway.example.org'
+    to='juliet@example.org/balcony'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:gre:0'/>
+    <feature var='urn:xmpp:gre:formatter:example_formatter:0'/>
+    <feature var='urn:xmpp:gre:encrypter:example_encrypter:0'/>
+    ...
+  </query>
+</iq>]]></example>
+  <p>If a gateway accepts only content encrypted using this specification, it MUST advertise it by adding the "urn:xmpp:gre:encrypted_only:0" feature.</p>
+
+</section1>
+
+<section1 topic="Security Considerations" anchor="security">
+  <p>The following security considerations apply to the Gateway Relayed Encryption protocol:</p>
+  <ul>
+    <li>Clients must be cautious about every data received from the gateway and notify users of anything suspicious. For instance, if a gateway is known to only accept encrypted content with "urn:xmpp:gre:encrypted_only:0", any change in policy should be explicitly shown to the end-user before sending unencrypted data.</li>
+    <li>Whenever possible, encrypters SHOULD sign the encrypted payload.</li>
+  </ul>
+</section1>
+
+<section1 topic="IANA Considerations" anchor="iana">
+  <p>This document does not require interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+
+<section1 topic="Acknowledgements" anchor="acks">
+  <p>Thanks to NLNet foundation/NGI Zero Core for funding the work on this specification.</p>
+</section1>
+
+</xep>
