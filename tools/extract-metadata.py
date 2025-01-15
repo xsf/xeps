@@ -107,6 +107,18 @@ def extract_xep_metadata(document):
         for child in minidom_children(tags_elem):
             tags.append(minidom_get_text(child))
 
+    supersedes = []
+    supersedes_el = minidom_find_child(header, "supersedes")
+    if supersedes_el is not None:
+        for child in minidom_children(supersedes_el):
+            supersedes.append(minidom_get_text(child))
+
+    supersededby = []
+    supersededby_el = minidom_find_child(header, "supersededby")
+    if supersededby_el is not None:
+        for child in minidom_children(supersededby_el):
+            supersededby.append(minidom_get_text(child))
+
     return {
         "last_revision": {
             "version": last_revision_version,
@@ -120,6 +132,8 @@ def extract_xep_metadata(document):
         "abstract": abstract,
         "shortname": shortname,
         "tags": tags,
+        "supersedes": supersedes,
+        "supersededby": supersededby,
         "title": title,
         "approver": approver,
         "last_call": last_call,
@@ -149,6 +163,18 @@ def make_metadata_element(number, metadata, accepted, *, protoname=None):
         for tag in metadata["tags"]:
             tags.append(text_element("tag", tag))
         result.append(tags)
+
+    if metadata["supersedes"]:
+        supersedes = etree.Element("supersedes")
+        for spec in metadata["supersedes"]:
+            supersedes.append(text_element("spec", spec))
+        result.append(supersedes)
+
+    if metadata["supersededby"]:
+        supersededby = etree.Element("supersededby")
+        for spec in metadata["supersededby"]:
+            supersededby.append(text_element("spec", spec))
+        result.append(supersededby)
 
     if metadata["last_revision"]["version"] is not None:
         last_revision = metadata["last_revision"]
