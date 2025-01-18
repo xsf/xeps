@@ -18,14 +18,30 @@
   <dependencies>
     <spec>XMPP Core</spec>
     <spec>XMPP IM</spec>
+    <spec>XEP-0245</spec>
     <spec>XEP-0313</spec>
+    <spec>XEP-0359</spec>
     <spec>XEP-0421</spec>
+    <spec>XEP-0428</spec>
   </dependencies>
   <supersedes/>
   <supersededby/>
   <shortname>message-retract</shortname>
   &lance;
   &jcbrand;
+  <revision>
+    <version>0.4.2</version>
+    <date>2025-01-18</date>
+    <initials>jcb</initials>
+    <remark>
+        <ul>
+          <li>Use a XEP-0425 /me command in the fallback body</li>
+          <li>State that a tombstone's &lt;retracted/&gt; element's 'id' attribute should match the retraction message's 'id'.</li>
+          <li>Specify XEP-0359 as a dependency and require that the stanza 'id' be used instead of the origin-id.</li>
+          <li>Update the "Security Considerations" to mention the risk of non-unique message IDs.</li>
+        </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.4.1</version>
     <date>2024-02-24</date>
@@ -134,22 +150,21 @@
   <example caption="The user's client sends a message to the wrong recipient"><![CDATA[
 <message type='chat' to='lord@capulet.example' id='wrong-recipient-1'>
   <body>Have not saints lips, and holy palmers too?</body>
-  <origin-id xmlns='urn:xmpp:sid:0' id='origin-id-1'/>
 </message>]]></example>
 
-  <p>The message author notices that the message was sent to the wrong recipient and indicates to their client that the message should be retracted.</p>
-  <p>The client sends out a retraction message and uses the &xep0359; origin ID to refer to the original message that should be removed.</p>
+  <p>The author notices that the message was sent to the wrong recipient and indicates to their client that it should be retracted.</p>
+  <p>The client sends out a retraction message and uses the 'id' attribute of the &lt;message&gt; element in the original message to indicate that it should be removed.</p>
   <p>In the case of a group chat message, for example &xep0045;, instead of the origin ID, the XEP-0359 stanza ID that was assigned by the group chat SHOULD be used.</p>
 
-  <example caption="The client sends out a retraction message"><![CDATA[
+  <example caption="The client sends out a retraction"><![CDATA[
 <message type='chat' to='lord@capulet.example' id='retract-message-1'>
-  <retract id="origin-id-1" xmlns='urn:xmpp:message-retract:1'/>
+  <retract id="wrong-recipient-1" xmlns='urn:xmpp:message-retract:1'/>
   <fallback xmlns="urn:xmpp:fallback:0" for='urn:xmpp:message-retract:1'/>
-  <body>This person attempted to retract a previous message, but it's unsupported by your client.</body>
+  <body>/me retracted a previous message, but it's unsupported by your client.</body>
   <store xmlns="urn:xmpp:hints"/>
 </message>]]></example>
 
-<p>It's RECOMMENDED that you include a &xep0428; tag with fallback text in the &lt;body/&gt;, so that older clients can still indicate the intent to retract and so that older servers will archive the retraction. Additionally, you MAY include a &xep0334; &lt;store/&gt; hint, to indicate that the stanza needs to be archived.</p>
+<p>It's RECOMMENDED that you include a &xep0428; tag with fallback text in the &lt;body/&gt;, so that servers will archive the retraction and non-supporting clients can still indicate that there was an intent to retract. Additionally, you MAY include a &xep0334; &lt;store/&gt; hint, to indicate that the stanza needs to be archived.</p>
 
 </section1>
 
@@ -180,10 +195,8 @@
   <p>
       When replacing the original message with a tombstone, the original contents
       (i.e. the &lt;body/&gt; and any related elements which might leak information about the original message)
-      get replaced with a &lt;retracted/&gt; element which MUST include an 'id' attribute referring to the
-      original message as detailed in the section on <link url='#business-id'>using the correct ID</link>,
-      so that clients can match it to the subsequent retraction
-      (which MUST also be stored in the archive).
+      get replaced with a &lt;retracted/&gt; element which MUST include an 'id' attribute that's set to the value of the retraction's &lt;message/&gt; element's 'id' attribute,
+      so that clients can match the tombstone to the retraction (which MUST also be stored in the archive).
   </p>
   <p>The &lt;retracted/&gt; element SHOULD also include a 'stamp' attribute indicating the time at which the retraction took place.</p>
   <p>As with other XEP-0313 archived messages, the &xep0203; &lt;delay/&gt; element is used to indicate when the original message was received.</p>
@@ -193,8 +206,8 @@
   <result xmlns='urn:xmpp:mam:2' queryid='f27' id='stanza-id-1'>
     <forwarded xmlns='urn:xmpp:forward:0'>
       <delay xmlns='urn:xmpp:delay' stamp='2019-09-20T23:08:25Z'/>
-      <message type="groupchat" from="romeo@montague.example" to="lord@capulet.example" id="wrong-recipient-1">
-        <retracted stamp='2019-09-20T23:09:32Z' xmlns='urn:xmpp:message-retract:1' id='origin-id-1'/>
+      <message type='groupchat' from='romeo@montague.example' to='lord@capulet.example' id='wrong-recipient-1'>
+        <retracted stamp='2019-09-20T23:09:32Z' xmlns='urn:xmpp:message-retract:1' id='retract-message-1'/>
       </message>
   </forwarded>
 </result>
@@ -206,32 +219,45 @@
   <p>A MUC or other service that supports message retraction SHOULD prevent further distribution of the message by the service (e.g., by not replaying the message to new occupants joining the room, omitting the message from history archive requests where possible, or replacing the original message with a 'tombstone').</p>
   <p>Some clients may have been offline while the retraction was issued. The archiving service therefore MUST store the retraction message, regardless of whether the original message is deleted or replaced with a tombstone. These clients will then become aware of the retraction as soon as they catch up with the archive.</p>
   <p>A client MAY inform the user that a no-longer displayed message did previously exist and has been removed.</p>
-  <p>Clients SHOULD add the &xep0359; &lt;origin-id&gt; on sent one-on-one "chat" messages to make them suitable for message retraction.</p>
+  <p>Supporting clients MUST set a unique 'id' on the &lt;message&gt; element in outgoing stanzas (as per &xep0359;), to make them suitable for retraction.</p>
   <p>The Sender MUST NOT send a retraction request for a message with non-messaging payloads. For example, a sender MUST NOT send a retraction for a roster item exchange request or a file transfer part.</p>
   <p>A retraction (that's not part of a &xep0425; operation) MUST only be processed when both the original message and the retraction request are received from the same bare-JID (in a one-on-one conversation) or full-JID (in a non-anonymous MUC from &xep0045;).</p>
   <p>When used in a semi-anonymous MUC, the recipient client MUST check that a message retraction was sent by the author of the retracted message by checking the occupant id from &xep0421;.</p>
 
   <section2 topic='Using the correct ID' anchor='business-id'>
     <p>
-      For messages of type 'groupchat', the stanza's &xep0359; 'origin ID' MUST NOT be
-      used for retractions. Instead, in group chat situations, the ID assigned to
+      For messages of type 'groupchat', the ID assigned to
       the stanza by the group chat itself must be used. This is discovered in a
       &lt;stanza-id&gt; element with a 'by' attribute that matches the bare JID
       of the group chat, as defined in &xep0359;.
     </p>
     <p>
-      This implies that group chat messages without a &xep0359; stanza ID cannot be retracted.
+      If a group chat does not support &xep0359;, a client can still opt to include an &lt;origin-id&gt; element in the message stanza,
+      which can be used to refer to the message in a retraction.
     </p>
     <p>
-      For other message types the sender should use the 'id' from a &xep0359;
-      &lt;origin-id&gt; if present, or the value of the 'id' attribute on the
-      &lt;message&gt; otherwise.
+      For other message types the sender should use the value of the 'id' attribute on the &lt;message&gt; element. See however the <link url='#security'>Security Considerations</link> below.
     </p>
   </section2>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
   <p>There can never be a guarantee that a retracted message was never seen or otherwise distributed, and it is encouraged for clients and services when possible to inform users that no such guarantee exists.</p>
-  <p>To prevent message spoofing, it's very important that the JID or occupant id of message retractions are checked (as explained in the  <link url='#rules'>Business Rules</link> section).</p>
+  <p>
+   If message retraction results in the complete removal of any record of the original message's body, for example to be replaced by a tombstone, then this could be used to hide messages that moderators might want to be notified of.
+  </p>
+  <p>To prevent message spoofing, it's very important that the sender's JID or XEP-0421 occupant id of message retractions are checked (as explained in the <link url='#rules'>Business Rules</link> section).</p>
+  <section2 topic='Uniqueness of message IDs' anchor='message-id-uniqueness'>
+  <p>
+  Clients that don't support &xep0359; (and therefore don't support &xep0424;), are not guaranteed to have a unique 'id' attribute on their &lt;message&gt; elements.
+  This means that when someone is using a supporting client, and attempts to retract a message from a different, non-supporting client,
+  it might not be possible to uniquely indentify the message being retracted, as more than one message could have the same 'id' attribute.
+  </p>
+  <p>
+  To mitigate this, clients can do a &xep0030; request to check if the other client supports XEP-0359, and if not,
+  they can choose to not support retraction for messages from that client, or otherwise warn the client about this limitation.
+  However, the other client might not be online to respond to a disco request, so this is not a foolproof method.
+  </p>
+  </section2>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
   <p>None.</p>
