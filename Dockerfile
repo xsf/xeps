@@ -6,14 +6,7 @@ FROM xmppxsf/xeps-base:latest as build
 ARG NCORES=1
 ARG TARGETS="html inbox-html inbox-xml pdf xeplist refs xml"
 
-COPY *.xml xep.* *.css *.xsl *.js *.xsl Makefile /src/
-COPY resources/*.pdf /src/resources/
-COPY tools/*.py /src/tools/
-COPY inbox/*.xml inbox/*.ent inbox/*.dtd /src/inbox/
-COPY texml-xsl/*.xsl /src/texml-xsl/
-
-WORKDIR /src
-RUN OUTDIR=/var/www/html/extensions/ make -j$NCORES $TARGETS
+RUN --mount=target=/xeps make -C /xeps -j$NCORES $TARGETS OUTDIR=/var/www/html/extensions
 RUN bash -c 'rm -f /var/www/html/extensions/*.{log,aux,toc,tex,tex.xml,out}'
 
 FROM nginx:1-alpine
