@@ -1,0 +1,378 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY namespace "urn:xmpp:spaces:0">
+  <!ENTITY xep-number "0503">
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+  %ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>Server-side spaces</title>
+  <abstract>This document defines an XMPP protocol to cluster
+    several groupchat rooms together.</abstract> &LEGALNOTICE; <number>&xep-number;</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig> Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+      <spec>XMPP Core</spec>
+      <spec>XMPP IM</spec>
+    </dependencies>
+  <supersedes />
+  <supersededby />
+  <shortname>spaces</shortname>
+    &nicoco;
+  <revision>
+    <version>0.1.0</version>
+    <date>2025-03-11</date>
+    <initials>XEP Editor: dg</initials>
+      <remark><p>Promoted to Experimental</p>
+    </remark>
+  </revision>
+  <revision>
+      <version>0.0.1</version>
+      <date>2025-02-23</date>
+      <initials>nc</initials>
+      <remark><p>Initial version.</p></remark>
+    </revision>
+  </header>
+  <section1 topic='Introduction' anchor='intro'>
+    <p>A single group chat room is not always enough.</p>
+    <p>In various situations, one wishes to have several rooms clustered together around a common
+      theme. For instance, large open source software projects use different rooms for user support,
+      development, announcements, etc. Other chat networks solved this by allowing (or even, for
+      some of them, forcing) rooms to be children of a parent entity (examples: Slack's <em>
+      workspaces</em>, Discord's <em>servers</em>, Mattermost's <em>teams</em>, WhatsApp's <em>
+      communities</em>, Matrix's <em>spaces</em>).</p>
+    <p>This clustering is already possible in practice by using a dedicated MUC Service (&xep0045;)
+      to group several rooms, but this limits its <em>spaces</em> creation to administrator of
+      servers. This specification proposes a mechanism that:</p>
+    <ul>
+      <li>is groupchat protocol-independent;</li>
+      <li>makes it possible to host several <em>spaces</em> on a single MUC service.</li>
+    </ul>
+    <p>Since there are many subtle variations over the concept of <em>spaces</em>, this
+      specification voluntarily <strong>does not cover</strong> access control, permissions,
+      membership inside a <em> space</em> and its children rooms. Similarly, it does not describe
+      how a <em>space</em> holding rooms hosted on several groupchat services in the federated XMPP
+      network would work (but it does not forbid it). It aims at being a lowest common denominator
+      for all sort of <em>spaces</em> to be built on.</p>
+  </section1>
+  <section1 topic="Terminology" anchor='terminology'>
+    <ul>
+      <li>A <em>space</em> is an adressable entity acting as the "parent" of several related rooms.</li>
+      <li>A <em>spaces service</em> is an adressable entity that contains the <em>spaces</em>, i.e.,
+        it is the parent of multiple <em>spaces</em>.</li>
+    </ul>
+  </section1>
+  <section1 topic='Discovering support' anchor='discovering-support'>
+    <p>Support is discoverd via a <tt>disco#info</tt> request (&xep0030;). The <em>spaces service</em>
+      MUST reply with an identity of type "spaces" (plural) of the "conference" category, and the <tt>
+      &namespace;</tt> feature.</p>
+    <example caption='Querying the features of a Spaces Service.'><![CDATA[
+<iq type='get'
+    from='john@northern.songs.example/walrus'
+    to='apple.records.example'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+    <example caption='Spaces Service responds with its identity and feature.'><![CDATA[
+<iq type='result'
+    from='apple.records.example'
+    to='john@northern.songs.example/walrus'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='conference' type='spaces' name='Spaces entity'>
+    ...
+    <feature var='urn:xmpp:spaces:0'/>
+    ...
+  </query>
+</iq>
+]]></example>
+  </section1>
+  <section1 topic='Protocol' anchor='protocol'>
+    <section2 topic='Fetching spaces from a spaces service' anchor='spaces-list'>
+      <p>Fetching the list of <em>spaces</em> hosted on a <em>spaces service</em> is done via a <tt>
+        disco#items</tt> (&xep0030;) request directed at the <em>spaces service</em>'s JID at the <tt>
+        &namespace;</tt> node. Using a JID plus a node makes it possible for an entity to be a <em>spaces
+        service</em> while having other identities for which the <tt>disco#items</tt> behaviour on
+        the JID alone is standardized (e.g., a &xep0045; service).</p>
+      <p>The <em>space service</em> MUST respond with the list of available spaces for the
+        requesting entity (considerations regarding access control and visibility of spaces are
+        outside the scope of this specification). Each space has a JID.</p>
+      <example caption='Querying the list of spaces'><![CDATA[
+<iq type='get'
+    from='george@harrisongs.lsd.example/flowerpower'
+    to='apple.records.example'>
+  <query xmlns='http://jabber.org/protocol/disco#items'
+         node='urn:xmpp:spaces:0'/>
+</iq>
+]]></example>
+      <example caption='Space Service responds with the list of spaces it hosts'><![CDATA[
+<iq type='result'
+    from='apple.records.example'
+    to='george@harrisongs.lsd.example/flowerpower'>
+  <query xmlns='http://jabber.org/protocol/disco#items'
+         node='urn:xmpp:spaces:0'>
+    <item jid='space1@apple.records.example' name='Space #1' />
+    <item jid='space2@apple.records.example' name='Space #2' />
+    <item jid='space3@apple.records.example' name='Space #3' />
+  </query>
+</iq>
+]]></example>
+      <p>If the <em>spaces service</em> hosts a large number of <em>spaces</em>, implementations MAY
+        paginate the results using &xep0059;.</p>
+    </section2>
+    <section2 topic='Getting the list of rooms in a specific space' anchor='list-rooms'>
+      <p>Fetching the list of rooms that are children of a <em>space</em> is done via a <tt>
+        disco#items</tt> directed at the JID of the space on the <tt>space#items</tt> node. Using a
+        node on top of the JID makes it possible for a space to be a room itself, which is possible
+        but not required by this specification.</p>
+      <p>In this case, the <em>space</em> JID MUST be present in the list of rooms.</p>
+      <example caption='Querying the list of spaces'><![CDATA[
+<iq type='get'
+    from='paul@northern.songs.example/fool-hill'
+    to='space1@apple.records.example'>
+  <query xmlns='http://jabber.org/protocol/disco#items' 
+         node='space#items' />
+</iq>
+]]></example>
+      <example caption='Entity responds with the rooms (children) of this space'><![CDATA[
+<iq type='result'
+    from='space1@apple.records.example'
+    to='paul@northern.songs.example/fool-hill'>
+  <query xmlns='http://jabber.org/protocol/disco#items'
+         node='space#items'>
+    <item jid='room1@apple.records.example' name='Room #1' />
+    <item jid='room2@apple.records.example' name='Room #2' />
+    <item jid='room3@apple.records.example' name='Room #3' />
+    <!-- If the space JID is also a room JID, then it MUST be inside that list -->
+    <item jid='space1@apple.records.example' name='Lobby' />
+  </query>
+</iq>
+]]></example>
+    </section2>
+    <section2 topic='Getting information on a specific space' anchor='space-info'>
+      <p>Getting information on a space is achieved by a <tt>disco#info</tt> query on the space JID.
+        The <em>space</em> responds with an identity of category "conference" and type "space"
+        (singular), along with a <tt>&namespace;</tt> feature.</p>
+      <p>The space responds with a &xep0128; element of <tt>FORM_TYPE=space#info</tt>.</p>
+      <example caption='Querying a specific space'><![CDATA[
+<iq type='get'
+    from='paul@northern.songs.example/fool-hill'
+    to='space1@apple.records.example'>
+  <query xmlns='http://jabber.org/protocol/disco#info' />
+</iq>
+]]></example>
+      <example
+        caption='Entity responds'><![CDATA[
+<iq type='result'
+    from='space1@apple.records.example'
+    to='paul@northern.songs.example/fool-hill'>
+  <query xmlns='http://jabber.org/protocol/disco#info' '>
+    <identity category='conference' type='space' name='Space #1'>
+    ...
+    <feature var='urn:xmpp:spaces:0' />
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>space#info</value>
+      </field>
+      <field var='space#jid'>
+        <value>space1@apple.records.example</value>
+      </field>
+      <field var='space#name'>
+        <value>Space #1</value>
+      </field>
+      <field var='space#desc'>
+        <value>Here we discuss stuff of the utmost importance.</value>
+      </field>
+      <field var='space#avatar'>
+        <value>https://apple.records.example/logo-highres.jpg</value>
+        <value>https://apple.records.example/logo-lowres.jpg</value>
+      </field>
+      <field var='space#avatarhash'>
+        <value>XXX</value>
+        <value>YYY</value>
+      </field>
+      <field var='space#rooms'>
+        <value>room1@apple.records.example</value>
+        <value>room2@apple.records.example</value>
+        <value>room3@apple.records.example</value>
+      </field>
+    </x>
+  </query>
+</iq>
+]]></example>
+    </section2>
+    <section2 topic='Getting live updates of the space' anchor='space-updates'>
+      <p>A <em>spaces service</em> SHOULD also implement a minimal subset of features of a Pubsub
+        Service (&xep0060;) for other entities to subscribe to updates of the informations of a
+        given space, such as room additions/removal, or name/avatar/description changes, without
+        needing to poll regularly.</p>
+      <p>To receive live updates on a given space, an entity sends a subscription request on the JID
+        of the <em>space</em> directed at the <tt>&namespace;</tt> node. <em>Spaces services</em>
+        MAY automatically subscribe entities that join a room that is a children of a given space.</p>
+      <example caption='Subscribing to live of updates of a space'><![CDATA[
+<iq type="set"
+    from="george@martin.com.example/outerspace"
+    to="space1@apple.records.example">
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscribe node='urn:xmpp:spaces:0' jid='george@martin.com.example' />
+  </pubsub>
+</iq>
+<iq type="result"
+    to="space1@apple.records.example"
+    from="george@martin.com.example/outerspace">
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <subscription node='urn:xmpp:spaces:0' subscription='subscribed' />
+  </pubsub>
+</iq>
+        ]]></example>
+      <example caption='Space sends an update of the space'><![CDATA[
+<message from='space1@apple.records.example'
+         to='francisco@denmark.lit.example'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:xmpp:spaces:0'>
+      <item id='latest'>
+        <x xmlns='jabber:x:data' type='result'>
+          <field var='FORM_TYPE' type='hidden'>
+            <value>space#info</value>
+          </field>
+          <field var='space#jid'>
+            <value>space1@apple.records.example</value>
+          </field>
+          <field var='space#name'>
+            <value>We will now call this one Spaces #3 just to make things confusing.</value>
+          </field>
+          ...
+          <field var='space#rooms'>
+            <value>room1@apple.records.example</value>
+            <value>room2@apple.records.example</value>
+            <value>room3@apple.records.example</value>
+            <value>room4@apple.records.example</value>
+          </field>
+        </x>
+      </item>
+    </items>
+  </event>
+</message>
+        ]]></example>
+      <p>Alternatively, a <em>space service</em> MAY send updates in the form of headline messages
+        containing the <tt>space#info</tt> form, emanating from the <em>space</em> JID.</p>
+    </section2>
+    <section2 topic='Room advertises a parent space' anchor='space-avatar'>
+      <p>If a room is part of a <em>space</em>, it MUST return the <tt>space#info</tt> form as part
+        of its &xep0128; reponse, and advertise the <tt>&namespace;</tt> feature.</p>
+      <example
+        caption='Querying room info'><![CDATA[
+<iq type='get'
+    from='ringo@drums.boom.example/kick'
+    to='room1@apple.records.example'>
+  <query xmlns='http://jabber.org/protocol/disco#info' />
+</iq>
+]]></example>
+      <example caption='Room responds'><![CDATA[
+<iq type='get'
+    from='room1@apple.records.example'
+    to='ringo@drums.boom.example/kick'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category="conference" type="text" />
+    ...
+    <feature var='urn:xmpp:spaces:0' />
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>space#info</value>
+      </field>
+      <field var='space#jid'>
+        <value>space1@apple.records.example</value>
+      </field>
+      <field var='space#name'>
+        <value>Space #1</value>
+      </field>
+      ...
+    </x>
+  </query>
+</iq>
+]]></example>
+    </section2>
+    <section2 topic='Managing a space' anchor='space-manage'>
+      <p>The <em>spaces service</em> SHOULD implement &xep0050; for entities to create, update and
+        delete adhoc commands. Creating and updating a <em>space</em> rely on the minimal <tt>
+        space#info</tt> form defined in this document.</p>
+      <section3 topic='Creation' anchor='creating-a-space'>
+        <p>Creating a <em>space</em> uses a command on the <em>spaces service</em> JID directed at
+          the <tt>space#create</tt> node. The entity responds with the <tt>space#info</tt> form.</p>
+      </section3>
+      <section3 topic='Update' anchor='updating-a-space'>
+        <p>Updating a <em>space</em> uses a command on the <em>space</em> JID directed at the <tt>
+          space#update</tt> node. The entity responds with the <tt>space#info</tt> form.</p>
+      </section3>
+      <section3 topic='Deletion' anchor='deleting-a-space'>
+        <p>Deleting a <em>space</em> uses a command on the <em>space</em> JID directed at the <tt>
+          space#delete</tt> node. Whether or not the rooms in this space shall be deleted on is out
+          of scope of this specification.</p>
+      </section3>
+    </section2>
+  </section1>
+  <section1 topic="Business rules" anchor="business">
+    <p>A <em>spaces service</em> can be a dedicated component, but this is <strong>not a requirement</strong>.
+      It can also be a MUC service (&xep0045;) if it hosts rooms too. It MUST also be a pubsub
+      service if it broadcast updates via &xep0060;.</p>
+    <p>This is <strong>not a requirement</strong>, but a <em>space</em> can be a room itself. In
+      this case, this room can act as a "lobby" (general purpose room) for this <em>space</em>.
+      Permissions and roles of this room can propagate to the rooms of this space, and/or act as the
+      permission model for updating the <em>space</em>.</p>
+    <p>A room MAY be part of different <em>spaces</em>. In this case, it MUST advertise multiple <tt>
+      space#info</tt> forms in its <tt>disco#info</tt> (&xep0128;).</p>
+  </section1>
+  <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
+      <p>New namespace "urn:xmpp:spaces:0"</p>
+    </section2>
+    <section2 topic='Spaces Category/Type' anchor='registrar-category'>
+      <p>New category "spaces" for "conference" identity. (spaces service)</p>
+      <p>New category "space" for "conference" identity. (a specific space)</p>
+    </section2>
+    <section2 topic='Field Standardization' anchor='registrar-field'>
+      <p>This document defines a new <tt>FORM_TYPE</tt>: <tt>space#info</tt>.</p>
+      <code caption='Registry Submission'><![CDATA[
+<form_type>
+  <name>space#info</name>
+  <doc>XEP-xxxx</doc>
+  <desc>
+    Description of a space, meant to be used in disco#info XEP-0128
+  </desc>
+  <field
+     var='space#jid'
+     type='text'
+     label='JID this space.'/>
+  <field
+     var='space#name'
+     type='text'
+     label='Human-readable name of the space' />
+  <field
+     var='space#desc'
+     type='text'
+     label='Human-readable description of the purpose of this space'/>
+  <field
+     var='space#avatarhash'
+     type='text-multi'
+     label='Hashes of the avatar representing the space'/>
+  <field
+     var='space#avatar'
+     type='text-multi'
+     label='Sources for the avatar'/>
+  <field
+     var='space#rooms'
+     type='jid-multi'
+     label='Rooms that are part of this space'/>
+</form_type>
+]]></code>
+    </section2>
+  </section1>
+  <section1 topic='Security considerations' anchor='security'>
+    <p>Security considerations are related to access control, and are out of scope of this document.</p>
+  </section1>
+  <section1 topic='XML Schema' anchor='schema'>
+    <p>No new schema is defined in this document.</p>
+  </section1>
+</xep>
