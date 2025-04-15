@@ -58,6 +58,18 @@
     <jid>jabber@larma.de</jid>
   </author>
   <revision>
+    <version>0.9.0</version>
+    <date>2025-04-07</date>
+    <initials>th</initials>
+    <remark>
+      <p>Device labels must be signed</p>
+      <p>Allow empty device list in XML schema</p>
+      <p>Reworded security consideration that could be interpreted as forbidding trust mechanisms like BTBV/TOFU</p>
+      <p>Added section about dealing with lack of presence subscription</p>
+      <p>Removed reference to omemo-session-healing</p>
+    </remark>
+  </revision>
+  <revision>
     <version>0.8.3</version>
     <date>2022-01-18</date>
     <initials>gh/@6k27f</initials>
@@ -415,28 +427,34 @@
       <item id='current'>
         <devices xmlns=']]>&ns;<![CDATA['>
           <device id='12345' />
-          <device id='4223' label='Gajim on Ubuntu Linux' />
+          <device id='4223' label='Gajim on Ubuntu Linux' labelsig='b64/encoded/data' />
         </devices>
       </item>
     </items>
   </event>
 </message>]]></example>
+    <p>Additionally, a strategy is required for dealing with OMEMO-encrypted chats between accounts without mutual presence subscription. Without presence, PEP can not be relied on to always have an up-to-date version of the device list cached. A few potential strategies for dealing with this issue are:</p>
+    <ul>
+      <li>Subscribe to the missing device list nodes directly using <link url='https://xmpp.org/extensions/xep-0060.html#subscriber-subscribe'>&xep0060; §6.1</link>. This is a viable option in use-cases where potential chat partners are known, for example in IM-clients that keep message history and thus have a list of accounts with which OMEMO-encrypted messages have been exchanged before.</li>
+      <li>Manually fetch the device list when a new encrypted message is likely to be sent soon, for example when the message input field receives focus or is being typed into.</li>
+      <li>Manually fetch the device list right before sending an encrypted message. This strategy is not recommended for interactive clients where it may cause noticable delays.</li>
+    </ul>
   </section2>
   <section2 topic='Announcing support' anchor='usecases-announcing'>
     <section3 topic='Device list' anchor='devices'>
     <p>In order for other devices to be able to initiate a session with a given device, it first has to announce itself by adding its device id to the devices PEP node.</p>
     <p>It is REQUIRED to set the access model of the <tt>&nsdevices;</tt> node to ‘open’ to give entities without presence subscription read access to the devices and allow them to establish an OMEMO session. Not having presence subscription is a common occurrence on the first few messages between two contacts and can also happen fairly frequently in group chats as not every participant had prior communication with every other participant.</p>
     <p>The access model can be changed efficiently by using publish-options.</p>
-    <p>The device element MAY contain an attribute called label, which is a user defined string describing the device that published that bundle. It is RECOMMENDED to keep the length of the label under 53 Unicode code points.</p>
+    <p>The device element MAY contain an attribute called label, which is a user defined string describing the device that published that bundle. It is RECOMMENDED to keep the length of the label under 53 Unicode code points. If a label is set, it MUST be accompanied by an attribute called labelsig, which contains a signature of the label to prevent malicious insertion or replacement of labels. The value of the labelsig attribute is found by encoding the label to bytes using utf-8, signing the label using the identity key (refer to <tt>Sig(PK, M)</tt> in <link url="#protocol-key_exchange">Key Exchange</link>), and encoding the signature to text using base64. The label attribute MUST be ignored if no labelsig attribute is present or the signature does not pass validation.</p>
     <example caption='Adding the own device id to the list'><![CDATA[
 <iq from='juliet@capulet.lit' type='set' id='announce1'>
   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
     <publish node=']]>&nsdevices;<![CDATA['>
       <item id='current'>
         <devices xmlns=']]>&ns;<![CDATA['>
-          <device id='12345' label='Dino on Lenovo Thinkpad T495'/>
+          <device id='12345' label='Dino on Lenovo Thinkpad T495' labelsig='b64/encoded/data' />
           <device id='4223' />
-          <device id='31415' label='Conversations on Pixel 3' />
+          <device id='31415' label='Conversations on Pixel 3' labelsig='b64/encoded/data' />
         </devices>
       </item>
     </publish>
@@ -722,9 +740,9 @@
   </section2>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
-  <p>Clients MUST NOT use a newly built session to transmit data without user intervention. If a client were to opportunistically start using sessions for sending without asking the user whether to trust a device first, an attacker could publish a fake device for this user, which would then receive copies of all messages sent by/to this user. A client MAY use such "not (yet) trusted" sessions for decryption of received messages, but in that case it SHOULD indicate the untrusted nature of such messages to the user. This rule does not apply to empty OMEMO messages (as per <link url='#usecases-messagesend'>Sending a message</link>) that are used purely to transfer key material, e.g. as part of heartbeat messages or automatic key exchange completion.</p>
+  <p>Clients MUST NOT use a newly built session (or any other session) to transmit data without ensuring trust first. If a client were to opportunistically start using sessions for sending without asking the user whether to trust a device first, an attacker could publish a fake device for this user, which would then receive copies of all messages sent by/to this user. A client MAY use such "not (yet) trusted" sessions for decryption of received messages, but in that case it SHOULD indicate the untrusted nature of such messages to the user. This rule does not apply to empty OMEMO messages (as per <link url='#usecases-messagesend'>Sending a message</link>) that are used purely to transfer key material, e.g. as part of heartbeat messages or automatic key exchange completion.</p>
   <p>When prompting the user for a trust decision regarding a key, the client SHOULD present the user with a fingerprint in the form of a hex-string, QR code, or other unique representation, such that it can be compared by the user. To ensure interoperability between clients and older versions of OMEMO, the fingerprint SHOULD be chosen to be the public part of the IdentityKey in its byte-encoded Curve25519 form (see the notes on XEdDSA and the byte-encoding of public keys in the <link url="#protocol-key_exchange">X3DH protocol section</link> for details). When displaying the fingerprint as a hex-string, the RECOMMENDED way to make it easier to compare the fingerprint is to split the lowercase hex-string into 8 substrings of 8 chars each, then coloring each group of 8 lowercase hex chars using &xep0392;.</p>
-  <p>Clients MUST NOT react to decryption errors by initiating new sessions automatically and without user interaction. An exception to this rule is specified for clients that support automatic session healing as per XEP-XXXX. TODO: Refer to the omemo-session-healing XEP as soon as it is accepted.</p>
+  <p>Clients MUST NOT react to decryption errors by initiating new sessions automatically and without user interaction.</p>
   <p>While it is RECOMMENDED that clients postpone private key deletion until after message catch-up, the X3DH standard mandates that clients should not use duplicate-PreKey sessions for sending, so clients MAY delete such keys immediately for security reasons. For additional information on potential security impacts of this decision, refer to <note>Menezes, Alfred, and Berkant Ustaoglu. "On reusing ephemeral keys in Diffie-Hellman key agreement protocols." International Journal of Applied Cryptography 2, no. 2 (2010): 154-158.</note>.</p>
 </section1>
 <section1 topic='IANA Considerations' anchor='iana'>
@@ -790,7 +808,7 @@
 
     <xs:element name='devices'>
         <xs:complexType>
-            <xs:sequence maxOccurs='unbounded'>
+            <xs:sequence minOccurs='0' maxOccurs='unbounded'>
                 <xs:element ref='device'/>
             </xs:sequence>
         </xs:complexType>
@@ -800,6 +818,7 @@
         <xs:complexType>
             <xs:attribute name='id' type='xs:unsignedInt' use='required'/>
             <xs:attribute name='label' type='xs:string'/>
+            <xs:attribute name='labelsig' type='xs:base64Binary'/>
         </xs:complexType>
     </xs:element>
 
