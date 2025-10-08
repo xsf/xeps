@@ -318,7 +318,7 @@ end
 
 function CodeBlock(s, attr)
 	if attr and attr.class and (has(attr.class, "example") or has(attr.class, "xml")) then
-		return "<example><![CDATA[".. s ..  "]]></example>"
+		return "<example "..attributes({ caption = attr.caption }).."><![CDATA[".. s ..  "]]></example>"
 	else
 		return "<code><![CDATA[".. s ..  "]]></code>"
 	end
