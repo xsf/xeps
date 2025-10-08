@@ -64,6 +64,7 @@ function Doc(body, metadata, variables)
 		expires? , author+ , revision+ , councilnote?)
 	]];
 	for field, r in string.gmatch(header_schema, "(%w+)(%p?)") do
+		local repeated = r ~= "";
 		local v = metadata[field] or variables[field];
 		if not v then
 			if field == "legal" then
@@ -87,8 +88,18 @@ function Doc(body, metadata, variables)
 			end
 		end
 		if type(v) == "table" then
-			for sk, sv in pairs(v) do
+			if not repeated then
+				-- Field is not repeated, so a single element
+				-- contains all children
 				add(string.format("<%s>", field));
+			end
+
+			for sk, sv in pairs(v) do
+				if r ~= "" then
+					-- This field is repeated for each child
+					add(string.format("<%s>", field));
+				end
+
 				if type(sk) == "string" then
 					add(("<%s>%s</%s>"):format(sk, tostring(sv), sk));
 				elseif field == "author" then
@@ -120,6 +131,11 @@ function Doc(body, metadata, variables)
 				else
 					add(tostring(sv));
 				end
+				if repeated then
+					add(string.format("</%s>", field));
+				end
+			end
+			if not repeated then
 				add(string.format("</%s>", field));
 			end
 		else
