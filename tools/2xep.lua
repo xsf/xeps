@@ -45,10 +45,19 @@ end
 -- to pandoc, and pandoc will add do the template processing as
 -- usual.
 function Doc(body, metadata, variables)
+  local entities = {
+    "<!ENTITY % ents SYSTEM 'xep.ent'>";
+  };
+
+  if metadata.entities and type(metadata.entities) == "table" then
+    for sk, sv in pairs(metadata.entities) do
+      table.insert(entities, string.format("<!ENTITY %s \"\n%s\n\" >\n", sk, sv:gsub("\"", "'")));
+    end
+  end
   local buffer = { [[
 <?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE xep SYSTEM 'xep.dtd' [
-  <!ENTITY % ents SYSTEM 'xep.ent'>
+  ]]..table.concat(entities, "\n")..[[
 %ents;
 ]>
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
@@ -61,7 +70,7 @@ function Doc(body, metadata, variables)
 		(title , abstract , legal , number , status , lastcall* ,
 		interim* , type , sig , approver* , dependencies , supersedes ,
 		supersededby , shortname , schemaloc* , registry? , discuss? ,
-		expires? , author+ , revision+ , councilnote?)
+		expires? , author+ , revision+ , councilnote? , entities?)
 	]];
 	for field, r in string.gmatch(header_schema, "(%w+)(%p?)") do
 		local repeated = r ~= "";
@@ -86,6 +95,8 @@ function Doc(body, metadata, variables)
 			if v ~= "xxxx" then
 				v = string.format("%04d", tonumber(v));
 			end
+		elseif field == "entities" then
+			goto next;
 		end
 		if type(v) == "table" then
 			if not repeated then
@@ -158,8 +169,10 @@ end
 -- Comments indicate the types of other variables.
 
 function Str(s)
-  if string.match(s, "^&[%w%-.]+;$") then return s; end
-  return escape(s)
+  s = s:gsub("&[%w%-.]+;", function (ent)
+    return "2XEPREF:"..ent:sub(2);
+  end);
+  return (escape(s):gsub("2XEPREF:", "&"));
 end
 
 function Space()
