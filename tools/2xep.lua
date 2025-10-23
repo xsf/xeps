@@ -45,10 +45,19 @@ end
 -- to pandoc, and pandoc will add do the template processing as
 -- usual.
 function Doc(body, metadata, variables)
+  local entities = {
+    "<!ENTITY % ents SYSTEM 'xep.ent'>";
+  };
+
+  if metadata.entities and type(metadata.entities) == "table" then
+    for sk, sv in pairs(metadata.entities) do
+      table.insert(entities, string.format("<!ENTITY %s \"\n%s\n\" >\n", sk, sv:gsub("\"", "'")));
+    end
+  end
   local buffer = { [[
 <?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE xep SYSTEM 'xep.dtd' [
-  <!ENTITY % ents SYSTEM 'xep.ent'>
+  ]]..table.concat(entities, "\n")..[[
 %ents;
 ]>
 <?xml-stylesheet type='text/xsl' href='xep.xsl'?>
@@ -61,9 +70,10 @@ function Doc(body, metadata, variables)
 		(title , abstract , legal , number , status , lastcall* ,
 		interim* , type , sig , approver* , dependencies , supersedes ,
 		supersededby , shortname , schemaloc* , registry? , discuss? ,
-		expires? , author+ , revision+ , councilnote?)
+		expires? , author+ , revision+ , councilnote? , entities?)
 	]];
 	for field, r in string.gmatch(header_schema, "(%w+)(%p?)") do
+		local repeated = r ~= "";
 		local v = metadata[field] or variables[field];
 		if not v then
 			if field == "legal" then
@@ -85,10 +95,22 @@ function Doc(body, metadata, variables)
 			if v ~= "xxxx" then
 				v = string.format("%04d", tonumber(v));
 			end
+		elseif field == "entities" then
+			goto next;
 		end
 		if type(v) == "table" then
-			for sk, sv in pairs(v) do
+			if not repeated then
+				-- Field is not repeated, so a single element
+				-- contains all children
 				add(string.format("<%s>", field));
+			end
+
+			for sk, sv in pairs(v) do
+				if r ~= "" then
+					-- This field is repeated for each child
+					add(string.format("<%s>", field));
+				end
+
 				if type(sk) == "string" then
 					add(("<%s>%s</%s>"):format(sk, tostring(sv), sk));
 				elseif field == "author" then
@@ -120,6 +142,11 @@ function Doc(body, metadata, variables)
 				else
 					add(tostring(sv));
 				end
+				if repeated then
+					add(string.format("</%s>", field));
+				end
+			end
+			if not repeated then
 				add(string.format("</%s>", field));
 			end
 		else
@@ -142,8 +169,10 @@ end
 -- Comments indicate the types of other variables.
 
 function Str(s)
-  if string.match(s, "^&[%w%-.]+;$") then return s; end
-  return escape(s)
+  s = s:gsub("&[%w%-.]+;", function (ent)
+    return "2XEPREF:"..ent:sub(2);
+  end);
+  return (escape(s):gsub("2XEPREF:", "&"));
 end
 
 function Space()
@@ -289,7 +318,7 @@ end
 
 function CodeBlock(s, attr)
 	if attr and attr.class and (has(attr.class, "example") or has(attr.class, "xml")) then
-		return "<example><![CDATA[".. s ..  "]]></example>"
+		return "<example "..attributes({ caption = attr.caption }).."><![CDATA[".. s ..  "]]></example>"
 	else
 		return "<code><![CDATA[".. s ..  "]]></code>"
 	end
