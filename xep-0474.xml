@@ -24,6 +24,17 @@
   <shortname>SSDP</shortname>
   &tmolitor;
   <revision>
+    <version>0.5.0</version>
+    <date>2025-10-25</date>
+    <initials>tm</initials>
+    <remark>
+      <ul>
+          <li>Add business rules describing client behavior</li>
+          <li>Make clear that PLAIN still has to be pinned away, if not disabled entirely</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>0.4.0</version>
     <date>2025-01-24</date>
     <initials>tm</initials>
@@ -104,8 +115,7 @@
     <li>Allow for (more) protocol agility compared to pinning.</li>
     <li>Be not less secure than pinning when using the SCRAM family of mechanisms (or some similar challenge-response based authentication mechanism).</li>
   </ul>
-  <p>Note that this specification intentionally leaves out support for SASL PLAIN. If server and client support PLAIN, no protection against SASL method or channel-binding downgrades is possible and the security relies solely on the underlying TLS channel. As explained in § 13.8.3 of &rfc6120;, servers and clients SHOULD NOT support SASL PLAIN unless it is required by the authentication backend.</p>
-  <p>Instead of pinning a concrete SASL mechanism it might be an acceptable approach to only pin if the server previously supported at least one mechanism better than SASL-PLAIN. This would ensure that the authentication won't fall back to SASL-PLAIN in the future, but also won't hinder protocol agility for the SCRAM family of SASL mechanisms etc..</p>
+  <p>Note that this specification intentionally leaves out support for SASL PLAIN. If server and client support PLAIN, no protection against SASL method or channel-binding downgrades is possible and the security relies solely on the underlying TLS channel. See <link url="rules">Business Rules</link> for advice how to handle PLAIN.</p>
 </section1>
 <section1 topic="Protection Scenarios" anchor="scenarios">
   <p>In the following, the limitations of pinning are shown and explained how these can be solved with this specification. This list is by no means meant to be exhaustive. See also <link url="#attack-model">Attack Model</link> for a more complete attack model and problem description.</p>
@@ -154,7 +164,7 @@
     <p><strong>Scenario:</strong> Bob connects to Alice's XMPP server using a client of his choice supporting SCRAM but <strong>no</strong> channel-binding, Eve wants to MITM this connection. Neither Alice's server nor Bob's client support SASL PLAIN, but only the SCRAM family of SASL mechanisms. Eve wants to downgrade the used SCRAM mechanism to something weak that she is able to break in X hours/days (For example some time in the future SCRAM-SHA-1 might be broken that way and the underlying password could be recovered investing X hours/days of computing time. But SCRAM-SHA-1 might still be supported by servers for backwards compatibility with older clients only supporting SCRAM-SHA-1 but not SCRAM-SHA-256 etc.).</p>
     <p><strong>Prerequisites:</strong> Eve, the MITM attacker, managed to either steal the cert+key of Alice's XMPP server or to convince some CA to give out a cert+key for Alice's XMPP domain. Maybe Bob even installed a CA of his employer/school and now gets MITMed by his employer/school.</p>
     <p>Given this scenario and prerequisites, Eve now can passively MITM the XMPP connection, but if Eve wants to actively downgrade the SASL mechanism used by Bob, he has to actively change the server-advertised SASL mechanism list. In this scenario Eve actively removes all SCRAM mechanisms but SCRAM-SHA-1 from the server-advertised list to force Bob's client to use SCRAM-SHA-1. Neither Alice nor Bob would detect that.</p>
-    <p>Pinning of SASL mechanisms could be used for that, but in doing this, Alice would loose some flexibility. She might have briefly activated SCRAM-SHA-512 and deactivated it again. Now Bob's client can not authenticate using SCRAM-SHA-512 anymore and authentication will always fail, if pinning is used. Pinning won't help on first connection either. See above for a pinning + SSDP compromise when still supporting SASL PLAIN.</p>
+    <p>Pinning of SASL mechanisms could be used for that, but in doing this, Alice would loose some flexibility. She might have briefly activated SCRAM-SHA-512 and deactivated it again. Now Bob's client can not authenticate using SCRAM-SHA-512 anymore and authentication will always fail, if pinning is used. Pinning won't help on first connection either. See <link url="reqs">Requirements</link> and <link url="rules">Business Rules</link> sections for a pinning + SSDP compromise when still supporting SASL PLAIN.</p>
     <p><em>This specification solves this problem by adding an optional SCRAM attribute containing the hash of the server-sent SASL mechanism list that can be checked by the client and will be cryptographically signed by the authentication password used for SCRAM.</em></p>
   </section2>
 </section1>
@@ -264,9 +274,33 @@
 </success>]]></example>
   </section2>
 </section1>
+<section1 topic='Business Rules' anchor='rules'>
+  <p>The rules outlined in section 'Interaction with SASL mechanisms' of &xep0440; are important and SHOULD still be followed when implementing this specification. Some of these rules MUST be modified as follows when implementing this specification in a client:</p>
+  <ul>
+    <li><strong>Old rule 6:</strong> If the client is using either SASL1 or SASL2 to authenticate and receives announcements for
+      SASL mechanisms supporting channel-binding and channel-binding types, but none of these announced channel-binding types are
+      supported by it, it MUST abort authentication, if tls-server-end-point is also not advertised by the server
+      (this is an ongoing MITM attack, as per our first rule above).</li>
+    <li><strong>New rule 6 (emphasis changed):</strong> If the client is using either SASL1 or SASL2 to authenticate
+      and receives announcements for SASL mechanisms supporting channel-binding and channel-binding types
+      <em>and it would pick a 'SCRAM-*-PLUS' method</em>,
+      but none of these announced channel-binding types are supported by it,
+      <em>it SHOULD continue authentication by sending "n" in the GSS-header (see &rfc5802;)
+      up to the server-first-message and then check the SSDP hash included therein
+      following the instructions in section <link url="verification">Client Verifies The Downgrade Protection Hash"</link>
+      of this specification. (If the hash matches, no MITM has tampered with the channel-binding list and it is legitimate even without
+      listing tls-server-end-point.)</em></li>
+  </ul>
+  <p>As explained in § 13.8.3 of &rfc6120;, clients and servers SHOULD NOT support SASL PLAIN unless it is required by the authentication backend. If clients still want to support SASL PLAIN, the following rules should be followed:</p>
+  <ol>
+    <li>Clients MUST pin the fact that they did use some sort of SCRAM mechanism (or SASL EXTERNAL) rather than PLAIN once and MUST NOT fall back to PLAIN in future authentications if that pinning is present.</li>
+    <li>To secure the very first connection/authentication against possible MITM attacks, clients MAY use some sort of whitelist or blacklist of servers to selectively enable/disable PLAIN support.</li>
+  </ol>
+  <p>Clients SHOULD NOT pin a concrete SCRAM mechanism but rather rely on this specification to secure the channel-binding and SASL method lists against downgrades by active MITM attackers.</p>
+</section1>
 <section1 topic='Security Considerations' anchor='security'>
   <p>Using SCRAM attributes makes them part of the HMAC signatures used in the SCRAM protocol flow efficiently protecting them against any MITM attacker not knowing the password used.</p>
-  <p>The delimiters %x1E and %x1F were chosen because they are invalid in &w3xml; which is used by &rfc6120;. This decision MUST be revisited when the XML standard is ever upgraded!</p>
+  <p>The delimiters %x1E and %x1F were chosen because they are invalid in &w3xml; which is used by &rfc6120;. This decision MUST be revisited when the XML standard used in xmpp is ever upgraded!</p>
 </section1>
 <section1 topic='IETF Interaction' anchor='ietf'>
   <p>This protocol shall be superseded by any IETF RFC providing some or all of the functionality provided by this specification. If such a specification exists implementations SHOULD NOT implement this XEP and SHOULD implement the superseding RFC instead.</p>
