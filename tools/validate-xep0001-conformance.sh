@@ -151,13 +151,13 @@ case $file_name in
     ;;
 esac
 
-# 6. Check that /xep/header/approver/text() (XPath) is either Board or Council
+# 6. Check that /xep/header/approver/text() (XPath) is either Board, Council or Editor
 case $header_approver in
-  Board | Council )
-    echo -e "${ANSI_PASS}[PASS]${ANSI_RESET} XPATH value /xep/header/approver/text() ('$header_approver') equals either 'Board' or 'Council'."
+  Board | Council | Editor )
+    echo -e "${ANSI_PASS}[PASS]${ANSI_RESET} XPATH value /xep/header/approver/text() ('$header_approver') equals either 'Board', 'Council' or 'Editor'."
     ;;
   *)
-    echo -e "${ANSI_FAIL}[FAIL]${ANSI_RESET} XPATH value /xep/header/approver/text() ('$header_approver') does not equals 'Board' or 'Council' (but should)."
+    echo -e "${ANSI_FAIL}[FAIL]${ANSI_RESET} XPATH value /xep/header/approver/text() ('$header_approver') does not equals 'Board', 'Council' or 'Editor' (but should)."
     validation_result=1
     ;;
 esac
@@ -183,6 +183,18 @@ then
     validation_result=1
   else
     echo -e "${ANSI_PASS}[PASS]${ANSI_RESET} XPATH value /xep/header/approver/text() ('$header_approver') is 'Board' and XPATH value /xep/header/type/text() is not 'Standards Track'."
+  fi
+fi
+
+# If the approver (see above) is Editor, enforce that /xep/header/type is Humorous.
+if [ "$header_approver" = "Editor" ]
+then
+  if [ "$header_type" = "Humorous" ]
+  then
+    echo -e "${ANSI_PASS}[PASS]${ANSI_RESET} XPATH value /xep/header/approver/text() ('$header_approver') is 'Editor' and XPATH value /xep/header/type/text() is 'Humorous'."
+  else
+    echo -e "${ANSI_FAIL}[FAIL]${ANSI_RESET} XPATH value /xep/header/approver/text() ('$header_approver') is 'Editor' but XPATH value /xep/header/type/text() is not 'Humorous' (it should be)."
+    validation_result=1
   fi
 fi
 
