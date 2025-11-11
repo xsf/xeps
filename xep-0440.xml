@@ -1,6 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE xep SYSTEM 'xep.dtd' [
-  <!ENTITY rfc5056 "<span class='ref'><link url='http://tools.ietf.org/html/rfc5056'>RFC 5056</link></span> <note>RFC 5056:  On the Use of Channel Bindings to Secure Channels &lt;<link url='http://tools.ietf.org/html/rfc5056'>http://tools.ietf.org/html/rfc5056</link>&gt;.</note>" >
   <!ENTITY iana-cb-types "<span class='ref'><link url='https://www.iana.org/assignments/channel-binding-types/channel-binding-types.xhtml'>IANA Channel-Binding Types Registry</link></span> <note>IANA Channel-Binding Types Registry &lt;<link url='https://www.iana.org/assignments/channel-binding-types/channel-binding-types.xhtml'>https://www.iana.org/assignments/channel-binding-types/channel-binding-types.xhtml</link>&gt;.</note>" >
   <!ENTITY % ents SYSTEM 'xep.ent'>
 %ents;
@@ -12,8 +11,8 @@
   <abstract>This specification allows servers to annouce their supported SASL channel-binding types to clients.</abstract>
   &LEGALNOTICE;
   <number>0440</number>
-  <status>Experimental</status>
-  <lastcall>2024-05-20</lastcall>
+  <status>Proposed</status>
+  <lastcall>2025-10-28</lastcall>
   <type>Standards Track</type>
   <sig>Standards</sig>
   <approver>Council</approver>
@@ -24,6 +23,21 @@
   <supersededby/>
   <shortname>sasl-cb-types</shortname>
   &flow;
+  &tmolitor;
+  <revision>
+    <version>0.5</version>
+    <date>2025-10-25</date>
+    <initials>tm</initials>
+    <remark>
+      <ul>
+        <li>Address a possible MITM attack vector by making the tls-server-end-point channel-binding mandatory to implement</li>
+        <li>Remove the whole 'Interaction with SASL mechanisms' section and replace it with 'Business Rules'</li>
+        <li>Rework whole 'Security Considerations' section</li>
+        <li>Some minor editorial changes</li>
+        <li>Add Thilo Molitor as author</li>
+      </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.4.2</version>
     <date>2024-07-02</date>
@@ -32,7 +46,7 @@
       <ul>
         <li>Add an XML schema.</li>
         <li>Mention that this specification does add a new namespace that should go to the registrar.</li>
-	<li>Fix indentation, typos, misuse of '' vs. &lt;/&gt; for elements, etc.</li>
+        <li>Fix indentation, typos, misuse of '' vs. &lt;/&gt; for elements, etc.</li>
       </ul>
     </remark>
   </revision>
@@ -93,7 +107,7 @@
   basically unspecified.</p>
 
   <p>The extension defined herein fills the gap left by &rfc6120;, by
-  allowing the server the announce its supported channel-binding
+  allowing the server to announce its supported channel-binding
   types.</p>
 
 </section1>
@@ -119,7 +133,7 @@
   &lt;authentication/&gt; stream-feature element as specified in the
   &xep0388;.</p>
 
-  <example caption='Example &lt;mechanisms/&gt; stream feature with SASL Channel-Binding Type Capability.'><![CDATA[
+  <example caption='Example SASL1 &lt;mechanisms/&gt; stream feature with SASL Channel-Binding Type Capability.'><![CDATA[
 <stream:features>
   <sasl-channel-binding xmlns='urn:xmpp:sasl-cb:0'>
     <channel-binding type='tls-server-end-point'/>
@@ -132,60 +146,120 @@
   </mechanisms>
 </stream:features>]]></example>
 
+<example caption='Example SASL2 &lt;authentication&gt; stream feature with SASL Channel-Binding Type Capability.'><![CDATA[
+<stream:features>
+  <sasl-channel-binding xmlns='urn:xmpp:sasl-cb:0'>
+    <channel-binding type='tls-server-end-point'/>
+    <channel-binding type='tls-exporter'/>
+  </sasl-channel-binding>
+  <authentication xmlns='urn:xmpp:sasl:2'>
+    <mechanism>SCRAM-SHA-1</mechanism>
+    <mechanism>SCRAM-SHA-1-PLUS</mechanism>
+    <inline>
+      <sm xmlns='urn:xmpp:sm:3'/>
+      <bind xmlns='urn:xmpp:bind:0'/>
+    </inline>
+  </authentication>
+</stream:features>]]></example>
+
 </section1>
 
-<section1 topic='Interaction with SASL mechanisms' anchor='sasl-mech-interaction'>
+<section1 topic='Business Rules' anchor='business-rules'>
 
-  <p>Some channel-binding enabled SASL mechanisms reflect the server's
-  presumed channel-binding abilities back to the server. This prevents
-  SASL mechanism stripping attacks, where a Man in the Middle (MITM)
-  removes certain SASL mechanisms in an attempt to downgrade the
-  mechanism choosen for authentication to a non-channel-binding enabled
-  one. An example of a SASL mechanism family with this feature is
-  &rfc5802;. This standard specifies the gs2-cbind-flag. The flag has a
-  tristate value of "I don't support channel-binding" (n), "I think you
-  do not support channel-binding, but I do" (y), or, "Let us use
-  channel-binding type X" (p).</p>
-
-  <p>Clients using the information provided
-  via &lt;sasl-channel-binding/&gt; MAY want to indicate to the server
-  that they do not support channel-binding (even if they do) if no
-  mutual supported channel-binding type was found. The only alternative
-  is, that the client signals the server that it believes that the server
-  does not support channel binding. But this may cause the server to
-  terminate the connection, because it indicates a potential ongoing
-  SASL mechanism stripping attack.</p>
+  <p>Client developers MUST follow the following rules to ensure that implementing this specification
+    in conjunction with SCRAM (&rfc5802;) or any other equivalent SASL mechanism supporting channel-binding
+    does not introduce a MITM attack vector. The rules are specifically taylored to SCRAM. For other
+    SASL mechanisms supporting channel-binding, client developers MUST use the equivalent to "y" and "n"
+    defined by those mechanisms.</p>
+  
+  <ol>
+    <li>Servers MUST implement tls-server-end-point and enable/advertise it.
+      Clients SHOULD implement tls-server-end-point and use it if no stronger
+      channel-binding method is mutually supported.</li>
+    <li>If the client doesn't support channel-binding, it MUST send "n" in the GSS-header (see &rfc5802;).</li>
+    <li>If the client supports channel-binding, but the server announced neither SASL mechanisms supporting channel-binding
+      nor channel-binding types (via this specification), it MUST send "y" in accordance to &rfc5802;.</li>
+    <li>If the client is using SASL2 (&xep0388;) to authenticate and received announcements
+      for SASL mechanisms supporting channel-binding from the server, but no channel-binding types,
+      it MUST abort the authentication (this is either an implementation error or ongoing MITM attack
+      where channel-binding types are stripped).
+      This condition is undefined with SASL1 (&rfc6120;), but the client MAY also abort authentication
+      in this case (or it MAY try authentication using tls-server-end-point  or any other channel-binding mechanism).</li>
+    <li>If the client is using SASL2 to authenticate and it receives channel-binding announcements,
+      from the server, but no SASL mechanisms supporting channel-binding are announced, it MUST abort authentication
+      (this is an implementation error or ongoing MITM attack where SASL mechanisms are stripped).
+      It SHOULD do the same when using SASL1.</li>
+    <li>If the client is using either SASL1 or SASL2 to authenticate and receives announcements for
+      SASL mechanisms supporting channel-binding and channel-binding types, but none of these announced channel-binding types are
+      supported by it, it MUST abort authentication, if tls-server-end-point is also not advertised by the server
+      (this is an ongoing MITM attack, as per our first rule above).</li>
+    <li>The client SHOULD use a channel-binding stronger than tls-server-end-point, if advertised
+      by the server and implemented by it (that is: set the p=&lt;channel-binding-name&gt; GSS-header
+      to that channel-binding type according to &rfc5802;).</li>
+  </ol>
+  
+  <p>When implementing &xep0474; the above rules might be relaxed a bit, see that specification for details.</p>
+  
+  <p>A more sophisticated attacker managing to steal the certificate and private key of the server
+    won't be detected by the tls-server-end-point channel-binding. Clients and servers SHOULD implement
+    stronger channel-binding types like tls-exporter, to detect and prevent such attacks</p>
 
 </section1>
 
 <section1 topic='Security Considerations' anchor='security'>
 
-  <p>If a client signals to the server that it does not support
-  channel binding, because it found no mutual supported
-  channel-binding types, another MITM attack
-  vector is introduced. An active attacker could replace the
-  &lt;sasl-channel-binding;&gt; list with channel bindings unlikely
-  (or impossible) to be supported by the client. If the client is
-  configured to use non-channel-binding SASL mechanisms as a fallback,
-  this could be used to downgrade the connection security. Note that
-  this attack is a different one than the SASL mechanism stripping one:
-  Here the attacker tempers with the announced channel-binding types,
-  i.e., the values within &lt;sasl-channel-binding;&gt;</p>
+  <p>The following considerations refer to SCRAM,
+    as it is the only widely depolyed mechanism with channel binding
+    at the time of writing this document. As already stated in the <link url="#business-rules">Business Rules</link>,
+    other mechanisms supporting channel-binding will have some sort of equivalent for "y" and "n".</p>
+  
+  <p>In SCRAM (&rfc5802;) the client-first-message contains three possible values in the 
+    GSS-header part:</p>
+  <ol>
+    <li>y - The client would have used channel-binding, but the server did not offer any.</li>
+    <li>n - The client does not support channel-binding (even if the server offered any).</li>
+    <li>p=&lt;cb-name&gt; - The name of the channel-binding, the client wants to use.</li>
+  </ol>
+  
+  <p>The RFC explains, that sending "y" when the server advertised channel-binding
+    support is to be used as a MITM-detection. An attacker stripping out all *-PLUS variants can be detected this way:
+    the server knows it advertised them and the client reports via "y", that it would have used them if it saw them advertised,
+    so the server can abort the authentication in this case.</p>
+  
+  <p>This works reasonably well, if there is only one single channel-binding 
+    possible. But that's the exact assumption this specification now changes:
+    it is now possible to advertise a list of different channel-bindings for the client 
+    to choose.</p>
+  
+  <p>But this creates a problem: what to do if the server advertised a list of 
+    channel-binding algorithms, but the client doesn't support any of these?
+    Assuming there is no MITM attacker present, the client can't send "y" in the GSS-header,
+    because the server would then abort the authentication because it advertised channel-bindings.
+    Sending "n" and continuing without channel-binding is fine in this case,
+    but it won't be if a MITM attacker were present.
+    <note>This isn't fully hypothetical. An older client might only support tls-unique, 
+    while the server only advertises tls-exporter (which can be used for tls 1.2, 
+    too, if the extended master secret is used).
+    Blocking the connection entirely is of course at the discretion of the client 
+    developer, but it hinders interoperability, especially while phasing out one 
+    channel-binding-type and introducing a new one.</note></p>
 
-  <p>Depending on the application's security policy, clients may
-  refrain from falling back to non-channel-binding SASL mechanisms
-  if no mutual supported channel-binding type is available.
-  Alternatively, they may try channel-binding with a supported type
-  nevertheless. To mitigate the attack describe above, clients
-  could "pin" the announced channel bindings types by a service. In that
-  case, implementations may want to allow the set of pinned channel-binding
-  types to be extended to stronger ones.</p>
+  <p>Any MITM attacker could just manipulate the list of channel-bindings advertised using this specification
+    to just list some dummy mechanisms the client doesn't support. If the client acted like
+    in the non-attacker case depicted in the last paragraph and sent "n",
+    the attacker would have successfully downgraded the client to non-channel-binding.
+    The client won't be able to distinguish the attacker case from the non-attacker one.</p>
+  
+  <p>The rules in the <link url="#business-rules">Business Rules</link>
+    section fix that loophole. Tls-server-end-point was picked, because it is the lowest denominator
+    that can be implemented by virtually everyone and even though it isn't as strong as tls-exporter
+    or tls-unique, it still catches many attacks.
+    <strong>This only works reliably, if <em>every</em> server supports and announces tls-server-end-point.</strong></p>
 
-  <p>As further mitigation, servers MUST and clients are RECOMMENDED to
-  at least implement the channel-binding type tls-server-end-point (&rfc5929;)
-  to increase the probability of a mutual supported channel-binding type. However,
-  due its improved security properties, the tls-exporter (&rfc9266;) channel-binding
-  type should be prefered over tls-server-end-point.</p>
+  <p>A client following the rules above and seeing a server-advertised list without
+    tls-sever-end-point, immediately knows, that some attacker tampered with the list of channel-binding types
+    and can abort the authentication. It never needs to send "n" even though it supports channel-binding and
+    can still safely send "y" if it doesn't see any '*-PLUS' variants and channel-bindings announced.</p>
 
 </section1>
 
