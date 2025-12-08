@@ -1,0 +1,187 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Forums</title>
+  <abstract>This specification describes how to implement XMPP-based discussion forums.</abstract>
+  &LEGALNOTICE;
+  <number>0508</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0472</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>forums</shortname>
+  <tags>
+    <tag>Pubsub</tag>
+    <tag>Pubsub Social Feed</tag>
+    <tag>Forums</tag>
+  </tags>
+  &goffi;
+  <revision>
+    <version>0.1.0</version>
+    <date>2025-12-08</date>
+    <initials>dg</initials>
+    <remark>Accepted as Experimental by council vote</remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2025-10-14</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>XMPP has offered more than instant messaging since its early days. It notably provides a powerful &xep0060; foundation, which serves as the basis for many features.</p>
+  <p>Blogging is one such feature, initially implemented through direct use of &rfc4287; in Pubsub items, then via &xep0277;, and more recently with &xep0472;, a more generic basis for Atom-based features.</p>
+  <p>While blogging is ideal for one-to-many communication, it’s not well-adapted to multi-party, topic-specific discussions. Forums have therefore been used in various forms since the early days of the Internet – from Usenet and mailing lists to web-based platforms.</p>
+  <p>This specification describes how to implement forums with XMPP in a flexible way, allowing for feature-rich forums and the building of gateways to existing ones.</p>
+</section1>
+
+<section1 topic="Requirements" anchor="reqs">
+  <p>The design goals of this XEP are:</p>
+  <ul>
+    <li>Based on &xep0060; and compatible with pubsub-based features (&xep0470;, end-to-end encryption, etc).</li>
+    <li>Support hierarchical organization of forums.</li>
+    <li>Reuse existing specifications, notably Atom (&rfc4287;) via &xep0472; and &xep0496; for the optional hierarchy.</li>
+    <li>Allow creation of the two main types of forums: Flat and Threaded.</li>
+    <li>Flexible enough to build gateways to most common third-party forums.</li>
+  </ul>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+    <ul>
+
+        <li><strong>Forum</strong>: A themed grouping of discussions.</li>
+        <li><strong>Topic</strong>: A discussion subject within a forum.</li>
+        <li><strong>Replies</strong>: Messages posted in response to a topic.</li>
+        <li><strong>Root Post</strong>: First message of a topic, to which other messages will reply.</li>
+        <li><strong>Flat Forum</strong>: A forum where all replies to a topic are displayed chronologically in a single linear thread. While messages can reference and reply to other messages, they maintain their chronological order regardless of the reply hierarchy.</li>
+        <li><strong>Threaded Forum</strong>: A forum where replies can be added to any message within a topic, creating nested reply structures that form multiple threads or continuations of existing threads.</li>
+    </ul>
+</section1>
+
+<section1 topic='Overview' anchor='overview'>
+  <p>A forum is based on a node using one of the two dedicated &xep0472; profiles. This node items are the forum topics. Each topic has a comments node where replies can be posted.</p>
+  <p>This specification describes two forum profiles for &xep0472;: one for flat forums, and one for threaded forums. The payload of those items uses Atom (&rfc4287;) via &xep0472;.</p>
+  <p>Forums can be optionally organized in hierarchy using &xep0496;, allowing for better organisation and easier discovery.</p>
+  <p>Advanced features such as reactions are implemented using &xep0470; and end-to-end encrypted forums are possible via standard pubsub e2ee specifications such as &xep0473;.</p>
+</section1>
+
+<section1 topic='Forums Hierarchy' anchor='hierarchy'>
+  <p>To organize the forums, a service can optionally have a hierarchy. This is done by using &xep0496;, which defines the 'parent' relationship used in this specification. The <em>pubsub#type</em> and <em>pubsub#title</em> refer to the configuration fields of a pubsub node as described at <link url="https://xmpp.org/extensions/xep-0060.html#owner-configure">XEP-0060 §8.2</link>.</p>
+
+  <p>Two types of nodes are used for the hierarchy: <em>root nodes</em> and <em>category nodes</em>.</p>
+
+  <section2 topic='Root Nodes' anchor='root-nodes'>
+    <p>Root nodes serve as the entry point for forums.</p>
+    <ul>
+      <li>A root node MUST NOT have any parent and MUST have a <em>pubsub#type</em> set to 'urn:xmpp:forums:root:0'.</li>
+      <li>This node MUST NOT have any items.</li>
+      <li>If a service provides a single forum hierarchy without user-created hierarchies, it MUST use the well-known name 'urn:xmpp:forums:0' for its root node and MUST advertise the feature 'urn:xmpp:forums:0' in response to &xep0030; disco#info requests.</li>
+      <li>In other cases (e.g., a generic pubsub service where users can create new forum hierarchies), any node name may be used; root nodes are then found by checking the value of the 'pubsub#type' attribute.</li>
+      <li>Root nodes SHOULD have a <em>pubsub#title</em> set to explain what the forum hierarchy is about.</li>
+    </ul>
+  </section2>
+
+  <section2 topic='Category Nodes' anchor='category-nodes'>
+    <p>Category nodes organize forums and function as folders containing other categories or forums.</p>
+    <ul>
+      <li>A category node MUST have a parent set to either a root node or another category node.</li>
+      <li>Category depth may be arbitrary, but it is recommended to keep it low to avoid confusion from excessive subcategories.</li>
+      <li>A category node MUST have a <em>pubsub#type</em> set to 'urn:xmpp:forums:category:0' and MUST NOT have any items.</li>
+      <li>Category node names MUST follow the 'urn:xmpp:forums:category:0:&lt;UNIQUE ID&gt;' scheme, where '&lt;UNIQUE ID&gt;' is an identifier that MUST be unique across the service.</li>
+      <li>A category node MUST have a <em>pubsub#title</em> set to a suitable label for the category, which will be displayed to end-users.</li>
+    </ul>
+  </section2>
+
+  <p>A client can find forum hierarchies by either checking the well-known node (if the service announces the feature 'urn:xmpp:forums:0' in response to &xep0030; disco#info requests) or by looking for nodes with the 'pubsub#type' attribute set to 'urn:xmpp:forums:root:0'. &xep0462; can be used in the later case if the pubsub service supports it.</p>
+</section1>
+
+<section1 topic="Forums Profiles" anchor="profiles">
+  <p>Forums are based on &xep0472;. Two profiles are defined: one for flat forums and one for threaded forums. In both cases, a forum consists of a forum node in which each item consists of a root post. Each root post MUST:</p>
+  <ul>
+    <li>include a &lt;title&gt; element (the topic title) as defined in &rfc4287;;</li>
+    <li>include a &lt;content&gt; element (the topic root post) as defined in &rfc4287;;</li>
+    <li>include a single comments node (as specified in <link url="https://xmpp.org/extensions/xep-0277.xml#comments">XEP-0277 §3 Comments</link>), where replies are published.</li>
+  </ul>
+  <p>The organization of replies depends on the forum type.</p>
+  <section2 topic="Flat Forums" anchor="flat-forums">
+    <ul>
+      <li>Flat forums MUST set the 'pubsub#type' to "urn:xmpp:pubsub-social-feed:flat-forums:0".</li>
+      <li>All replies MUST be posted to the comments node of the root post.</li>
+      <li>A reply MAY reference another reply by using a &lt;in-reply-to/&gt; element as specified in <link url="https://xmpp.org/extensions/xep-0472.html#reply">XEP-0472 §4.4 Replying to a Post</link>.</li>
+    </ul>
+    <p>With this profile, the XMPP client knows that the view is flat, and can detect the links between replies with the &lt;in-reply-to/&gt; element, and show them with whatever user interface is appropriate.</p>
+  </section2>
+  <section2 topic="Threaded Forums" anchor="threaded-forums">
+    <ul>
+      <li>Threaded forums MUST set the 'pubsub#type' to "urn:xmpp:pubsub-social-feed:threaded-forums:0".</li>
+      <li>All published replies MUST link to a comments node (which can be created in advance, or automatically if the pubsub service supports auto-create as specified in <link url="https://xmpp.org/extensions/xep-0060.html#publisher-publish-autocreate">XEP-0060 §7.1.4 Automatic Node Creation</link>).</li>
+      <li>All replies MUST be posted to the comments node of the items they are replying to.</li>
+      <li>The &lt;in-reply-to/&gt; element as specified in <link url="https://xmpp.org/extensions/xep-0472.html#reply">XEP-0472 §4.4 Replying to a Post</link> MUST NOT be used.</li>
+    </ul>
+    <p>With this profile, the XMPP client knows that the view is a tree-like view of nested threads.</p>
+  </section2>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <p>In forums, publications can often be edited, and with &xep0060; alone, this will overwrite the old item with a new one, causing it to appear before items published later. However, for forums we often want chronological order; this can be achieved by using &xep0413; to order by date of creation.</p>
+  <p>Forums (i.e., the nodes with one of the two profiles defined in <link url="#profiles">Forums Profiles</link>) can have no parent (mostly used in pubsub services which do not support &xep0496;), have a category node as parent, or have a root node as parent. They can also be siblings to category nodes (i.e., have the same parent as a category node) if it makes sense for them to appear at the same level as some categories.</p>
+  <p>Root posts must include both a &lt;title&gt; and a &lt;content&gt; element. Replies may include both a &lt;title&gt; and a &lt;content&gt; (where the &lt;title&gt; serves as the reply's title), or only a &lt;title&gt; (which will be used as the body, resulting in a reply without a distinct title). The XMPP client determines whether to require a title for replies.</p>
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>Forums can be created on a generic pubsub service, in which case no forums-specific discovery feature is advertised. A client can discover a forum by looking for root nodes (i.e., nodes with the type "urn:xmpp:forums:root:0") if the server supports &xep0496;. Otherwise, the client can look directly for forums profiles as defined in <link url="#profiles">Forums Profiles</link>. In both cases, &xep0462; can be used to make discovery easier, if the pubsub service supports it.</p>
+  <p>If a service has a built-in forums support (e.g., a gateway to an existing forum), it MUST advertise it by including the "urn:xmpp:forums:0" discovery feature in response to a &xep0030; information request:</p>
+
+  <example caption="Service Discovery information request"><![CDATA[
+<iq type='get'
+    from='juliet@example.org/balcony'
+    to='forums.example.org'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq type='result'
+    from='forums.example.org'
+    to='juliet@example.org/balcony'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:forums:0'/>
+    ...
+  </query>
+</iq>]]></example>
+  <p>In this case the service MUST have a root node with the well-known name "urn:xmpp:forums:0" and MUST implement &xep0496;.</p>
+</section1>
+
+<section1 topic="Security Considerations" anchor="security">
+  <p>There are many inherent risks in using forums, primarily depending on their public visibility and popularity. Forum services should implement robust moderation tools and monitor content for spam, aggressive behavior, inappropriate content, bullying, sexism, racism, and other toxic behavior.</p>
+  <p>General security considerations related to PubSub services apply, notably impersonation risks (which can be mitigated by services supporting the 'publisher' attribute and the use of &xep0475;), attacks such as excessive node or item creation, and so forth.</p>
+</section1>
+
+<section1 topic="IANA Considerations" anchor="iana">
+  <p>This document does not require interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <p>TODO</p>
+</section1>
+
+</xep>
