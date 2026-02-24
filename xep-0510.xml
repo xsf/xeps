@@ -1,0 +1,224 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>End-to-End Encrypted Contacts Metadata</title>
+  <abstract>This specification describes how to encrypt contacts metadata to minimize server exposure.</abstract>
+  &LEGALNOTICE;
+  <number>0510</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0163</spec>
+    <spec>XEP-0223</spec>
+    <spec>XEP-0473</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>contacts</shortname>
+  <tags>
+    <tag>Roster</tag>
+    <tag>Pubsub</tag>
+    <tag>e2ee</tag>
+  </tags>
+  &goffi;
+  <revision>
+    <version>0.1.0</version>
+    <date>2026-02-10</date>
+    <initials>dg</initials>
+    <remark><p>Accepted as Experimental by council vote</p></remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2026-01-11</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>Roster is a central component of the XMPP specifications, serving as the mechanism for indicating to the server and other devices who we know, along with associated metadata and presence permission data. While convenient, this information carries significant privacy implications. In the context of ongoing efforts to reduce metadata exposure in XMPP, this document specifies a method for managing contact data in a more privacy-respectful way by using end-to-end encryption, while retaining the original roster mechanism described in &rfc6121; for server-required features and backward compatibility.</p>
+</section1>
+
+<section1 topic="Requirements" anchor="reqs">
+  <p>The design goals of this XEP are:</p>
+  <ul>
+    <li>Reduce metadata exposure: no contact data should be exposed to server beyond what is required for presence permission and backward compatibility.</li>
+    <li>Mandatory end-to-end encryption.</li>
+    <li>Contact data must not be tied to a JID or any domain-specific identifier.</li>
+    <li>The mechanism must be usable in serverless configurations, without relying on server-side storage or processing of contact data.</li>
+  </ul>
+</section1>
+
+<section1 topic='Design Decisions' anchor='design'>
+  <p>A few words to explain the design decisions. There are basically two ways to encrypt contact metadata:</p>
+  <ol>
+    <li>By using the existing roster mechanism, adding a new element to handle metadata, and implementing end-to-end encryption for this element.</li>
+    <li>By implementing another metadata mechanism, exploiting other XMPP mechanisms. &xep0060; is the most suitable one for this use case.</li>
+  </ol>
+  <p>Option 2 has been chosen for the following reasons:</p>
+  <ul>
+    <li>The &lt;item/&gt; element of the roster mechanism, as specified in &rfc6121; <link url="https://www.rfc-editor.org/rfc/rfc6121#section-2.1.2">§2.1.2</link>, has a mandatory "jid" element, and as per requirements we don't want to tie contact data to a JID.</li>
+    <li>The roster's &lt;item/&gt; element has not been explicitly designed to accept extra elements, and most implementations probably do not support them. While this could be added, there is a risk that some implementations remove unknown elements, and it would take years for the entire ecosystem to support them. Even then, there will always be a risk that an old client removes unknown metadata, as experience has shown with legacy bookmark mechanisms (with &xep0048; clients could remove unknown elements).</li>
+    <li>There is no end-to-end encryption mechanism for roster. While this could be added, it would certainly bring compatibility issues with existing implementations, would still leave the JID visible in clear text (as it is mandatory on the &lt;item/&gt; element), and would require additional extensions. On the other hand, there are already end-to-end encryption mechanisms for &xep0060; (notably &xep0473;).</li>
+  </ul>
+</section1>
+
+<section1 topic='Service and Well-Known Nodes' anchor='nodes'>
+  <p>Encrypted contacts use two well-known nodes:</p>
+  <ul>
+    <li><strong>urn:xmpp:contacts</strong> where contact information is stored.</li>
+    <li><strong>urn:xmpp:contacts-groups</strong> where groups used to classify contacts are stored.</li>
+  </ul>
+  <p>These nodes MUST be set on the &xep0163; service (except in serverless configurations, where they MAY be set on another relevant pubsub service, see <link url='#rules'>Business Rules</link>), and MUST follow &xep0223;. The IDs used for the pubsub items MUST NOT have any semantic meaning, and in particular MUST NOT be derived from any contact-related data.</p>
+  <p>Both node items MUST be end-to-end encrypted. The currently recommended method is using &xep0473; as OX is well adapted for this use case. However, another encryption method MAY be used in the future if proven better.</p>
+
+  <section2 topic='Contacts Node' anchor='contacts-node'>
+    <p>Contact metadata are stored on the 'urn:xmpp:contacts' node. Each published item MUST have either a &lt;contact/&gt; element qualified by the 'urn:xmpp:contacts:0' namespace or a &lt;reserved/&gt; element qualitifed by the 'urn:xmpp:contacts:0' namespace (see <link url='#reserved'>below</link>).</p>
+    <p>The &lt;contact/&gt; element MAY have a 'name' attribute to specify the "handle" to be associated with the contact, in the same way as for roster items as described in &rfc6121; <link url="https://www.rfc-editor.org/rfc/rfc6121#section-2.1.2.4">§2.1.2.4</link>.</p>
+    <p>The &lt;contact/&gt; element may have the following child elements:</p>
+    <section3 topic='identity' anchor='identity'>
+      <p>The &lt;contact/&gt; MUST have a way to identify the contact, by having one or more &lt;identity/&gt; elements qualified by the 'urn:xmpp:contacts:0' namespace. This element MUST have a 'type' attribute. The 'type' attribute can have the value "jid" when the contact is identified by its bare JID; in that case, its content is the bare JID of the contact. Future specifications may propose other &lt;identity/&gt; types to identify contacts by other means (e.g., cryptographic fingerprint).</p>
+    </section3>
+    <section3 topic='group' anchor='group'>
+      <p>In a similar way as for &rfc6121; roster, zero, one, or more groups may be associated with a contact. However, groups use IDs and are defined in the separate node 'urn:xmpp:contacts-groups'. This allows group names or other metadata to be modified without having to change all references to this group.</p>
+      <p>A group is specified by the &lt;group/&gt; element, which MUST have an 'id' attribute set to the ID of the desired group. This ID is associated with group metadata in the 'urn:xmpp:contacts-groups' node.</p>
+    </section3>
+    <section3 topic="Contacts Example" anchor="contacts-example">
+      <p>Romeo adds Juliet to his contacts:</p>
+      <example caption="Setting a Contact Item"><![CDATA[
+<iq type='set'
+  from='romeo@example.net/orchard'
+  to='romeo@example.net'
+  id='contact1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:contacts'>
+      <item id='a1b2c3d4'>
+        <contact xmlns='urn:xmpp:contacts:0' name='Juliet Capulet'>
+          <identity type='jid'>juliet@example.org</identity>
+          <group id='grp-789'/>
+          <group id='grp-123'/>
+        </contact>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+]]></example>
+      <p><em>Note: the example is in clear here, but in real use cases it is end-to-end encrypted.</em></p>
+    </section3>
+  </section2>
+
+  <section2 topic='Groups Node' anchor='groups-node'>
+    <p>Group metadata are stored on the 'urn:xmpp:contacts-groups' node. Each published item MUST have either a &lt;group/&gt; element qualified by the 'urn:xmpp:contacts:0' namespace or a &lt;reserved/&gt; element qualitifed by the 'urn:xmpp:contacts:0' namespace (see <link url='#reserved'>below</link>).</p>
+    <p>The &lt;group/&gt; element MUST have an 'id' attribute set to a unique value. This ID defines the group identity and MUST NOT change as long as the group is not deleted.</p>
+    <p>The &lt;group/&gt; element MUST have a 'name' attribute to specify the "handle" to be associated with the group. This name MAY be changed in an existing group.</p>
+    <p>The &lt;group/&gt; element may have the following child element:</p>
+    <section3 topic='description' anchor='group-description'>
+      <p>An optional &lt;description/&gt; element may be used to describe the group.</p>
+    </section3>
+    <section3 topic="Groups Example" anchor="groups-example">
+      <p>Romeo adds the groups where he places Juliet:</p>
+      <example caption="Setting Group Items"><![CDATA[
+<iq type='set'
+  from='romeo@example.net/orchard'
+  to='romeo@example.net'
+  id='group1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:contacts-groups'>
+      <item id='grp-789'>
+        <group xmlns='urn:xmpp:contacts:0' id='grp-789' name='Friends'/>
+      </item>
+      <item id='grp-123'>
+        <group xmlns='urn:xmpp:contacts:0' id='grp-123' name='House of Capulet'/>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+]]></example>
+      <p><em>Note: the example is in clear here, but in real use cases it is end-to-end encrypted.</em></p>
+    </section3>
+  </section2>
+  <section2 topic='Reserved Element' anchor='reserved'>
+    <p>Since contact and group metadata are stored one per pubsub item, the number of items may reveal the size of the contact list. To mitigate this, clients MAY publish additional items without actual data, which should be ignored by other clients. This prevents the server from precisely determining the number of contacts or groups by simply counting encrypted pubsub items.</p>
+    <p>For either the contacts or groups node, a client MAY publish an item containing only a &lt;reserved/&gt; element qualified by the 'urn:xmpp:contacts:0' namespace. A client may publish as many such items as desired, replace an existing &lt;contact/&gt; or &lt;group/&gt; element with a reserved one, or vice versa.</p>
+    <section3 topic="Reserved Example" anchor="reserved-example">
+      <p>Romeo wants to hide the size of his contact list by publishing reserved items:</p>
+      <example caption="Setting Reserved Items"><![CDATA[
+<iq type='set'
+  from='romeo@example.net/orchard'
+  to='romeo@example.net'
+  id='reserved1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:contacts'>
+      <item id='a1b2c3d5'>
+        <reserved xmlns='urn:xmpp:contacts:0'/>
+      </item>
+    </publish>
+  </pubsub>
+</iq>
+]]></example>
+      <p><em>Note: the example is in clear here, but in real use cases it is end-to-end encrypted.</em></p>
+    </section3>
+  </section2>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>The &rfc6121; roster mechanism is still used, as it is necessary for presence permission handling and backward compatibility. However, when encrypted contacts metadata are used, the roster should be kept minimal: the 'name' attribute and &lt;group/&gt; element SHOULD NOT be used. Instead, an encrypted contact with the same JID SHOULD be used to store the name and group metadata.</li>
+    <li>As random IDs are used, it is possible that two or more &lt;contact/&gt; elements referring to the same contact are published (e.g., due to a race condition between two clients updating the same contact). In this case, the receiving client MUST merge the data from both elements (overwriting data from the previous item in case of conflict, in the order of item reception). The receiving client MAY overwrite the last seen &lt;contact/&gt; element with the result of the merge, and MAY either delete the older items or replace them with &lt;reserved/&gt; elements.</li>
+    <li>In serverless setups, as there is no server to offer a PEP service, the well-known node may be placed on whichever service is used to replace &xep0163;.</li>
+  </ul>
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>If a client supports encrypted contacts, it MUST advertise it by including the "urn:xmpp:contacts:0" discovery feature in response to a &xep0030; information request:</p>
+
+  <example caption="Service Discovery information request"><![CDATA[
+<iq type='get'
+    from='juliet@example.org/balcony'
+    to='romeo@montague.lit/orchard'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq type='result'
+    from='romeo@montague.lit/orchard'
+    to='juliet@example.org/balcony'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:contacts:0'/>
+    ...
+  </query>
+</iq>]]></example>
+</section1>
+
+<section1 topic="Security Considerations" anchor="security">
+  <p>The security consideration of used XEPs apply here and must be carrefully checked, in paritcular the ones from &xep0060; &xep0223; and &xep0473;.</p>
+</section1>
+
+<section1 topic="IANA Considerations" anchor="iana">
+  <p>This document does not require interaction with &IANA;.</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>TODO</p>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>This work has been done for the <link url='https://nlnet.nl/project/ServerlessXMPP/'>Serverless and Metadata Reduction for XMPP</link> project. Many thanks to NLNet foundation and NGI Zero Core for funding the work on this specification.</p>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <p>TODO</p>
+</section1>
+
+</xep>
