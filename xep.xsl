@@ -337,7 +337,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
             <xsl:choose>
               <xsl:when test='string(/xep/header/status) = "Draft"'>Stable</xsl:when>
               <xsl:otherwise><xsl:value-of select='/xep/header/status'/></xsl:otherwise>
-              <xsl:value-of select='/xep/header/status'/>
             </xsl:choose>
           </a></dd>
           <dt>Type</dt>
