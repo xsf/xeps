@@ -170,6 +170,25 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   </xsl:template>
 
   <xsl:template match='/'>
+    <xsl:variable name="bibtex-url">
+      <xsl:choose>
+        <!-- XEPs after a certain number have an immutable version to which we preferably link -->
+        <!-- TODO: We currently have no versioned link for the latest version of a XEP,
+             hence the logic below is disabled for all XEPs, by testing for XEP version number > 99999 -->
+        <xsl:when test='/xep/header/number &gt; 999999'>
+          <xsl:text>https://xmpp.org/extensions/attic/xep-</xsl:text>
+          <xsl:value-of select='/xep/header/number'/>
+          <xsl:text>-</xsl:text>
+          <xsl:value-of select='/xep/header/revision[position()=1]/version'/>
+          <xsl:text>.html</xsl:text>
+        </xsl:when>
+        <xsl:otherwise>
+          <xsl:text>https://xmpp.org/extensions/xep-</xsl:text>
+          <xsl:value-of select='/xep/header/number'/>
+          <xsl:text>.html</xsl:text>
+        </xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
     <html lang='en'>
       <head>
         <title>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></title>
@@ -191,6 +210,16 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
           <xsl:attribute name='name'><xsl:text>viewport</xsl:text></xsl:attribute>
           <xsl:attribute name='content'>width=device-width, initial-scale=1.0</xsl:attribute>
         </meta>
+        <!-- BEGIN PRIMARY META TAGS -->
+        <meta>
+          <xsl:attribute name='name'>title</xsl:attribute>
+          <xsl:attribute name='content'>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='name'>description</xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='/xep/header/abstract'/></xsl:attribute>
+        </meta>
+        <!-- END PRIMARY META TAGS -->
         <!-- BEGIN META TAGS FOR DUBLIN CORE -->
         <meta>
           <xsl:attribute name='name'><xsl:text>DC.Title</xsl:text></xsl:attribute>
@@ -234,6 +263,50 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
           <xsl:attribute name='content'><xsl:value-of select='/xep/header/legal/copyright'/></xsl:attribute>
         </meta>
         <!-- END META TAGS FOR DUBLIN CORE -->
+        <!-- BEGIN META TAGS FOR OPEN GRAPH / FACEBOOK -->
+        <meta>
+          <xsl:attribute name='property'>og:type</xsl:attribute>
+          <xsl:attribute name='content'>website</xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='property'>og:url</xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='$bibtex-url'/></xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='property'>og:title</xsl:attribute>
+          <xsl:attribute name='content'>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='property'>og:description</xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='/xep/header/abstract'/></xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='property'>og:image</xsl:attribute>
+          <xsl:attribute name='content'>https://xmpp.org/images/london.jpg</xsl:attribute>
+        </meta>
+        <!-- END META TAGS FOR OPEN GRAPH / FACEBOOK -->
+        <!-- BEGIN META TAGS FOR X / TWITTER -->
+        <meta>
+          <xsl:attribute name='name'>twitter:card</xsl:attribute>
+          <xsl:attribute name='content'>summary</xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='name'>twitter:url</xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='$bibtex-url'/></xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='name'>twitter:title</xsl:attribute>
+          <xsl:attribute name='content'>XEP-<xsl:value-of select='/xep/header/number'/>:<xsl:text> </xsl:text><xsl:value-of select='/xep/header/title' /></xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='name'>twitter:description</xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='/xep/header/abstract'/></xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='name'>twitter:image</xsl:attribute>
+          <xsl:attribute name='content'>https://xmpp.org/images/logos/xmpp-logo.svg</xsl:attribute>
+        </meta>
+        <!-- END META TAGS FOR X / TWITTER -->
       </head>
       <body onload="prettyPrint()">
         <!-- TITLE -->
@@ -536,25 +609,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
             </xsl:when>
             <xsl:otherwise>
               <xsl:value-of select='translate(/xep/header/shortname, $uppercase, $lowercase)'/>
-            </xsl:otherwise>
-          </xsl:choose>
-        </xsl:variable>
-        <xsl:variable name="bibtex-url">
-          <xsl:choose>
-            <!-- XEPs after a certain number have an immutable version to which we preferably link -->
-            <!-- TODO: We currently have no versioned link for the latest version of a XEP,
-                 hence the logic below is disabled for all XEPs, by testing for XEP version number > 99999 -->
-            <xsl:when test='/xep/header/number &gt; 999999'>
-              <xsl:text>https://xmpp.org/extensions/attic/xep-</xsl:text>
-              <xsl:value-of select='/xep/header/number'/>
-              <xsl:text>-</xsl:text>
-              <xsl:value-of select='/xep/header/revision[position()=1]/version'/>
-              <xsl:text>.html</xsl:text>
-            </xsl:when>
-            <xsl:otherwise>
-              <xsl:text>https://xmpp.org/extensions/xep-</xsl:text>
-              <xsl:value-of select='/xep/header/number'/>
-              <xsl:text>.html</xsl:text>
             </xsl:otherwise>
           </xsl:choose>
         </xsl:variable>
