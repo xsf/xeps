@@ -170,7 +170,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
   </xsl:template>
 
   <xsl:template match='/'>
-    <xsl:variable name="bibtex-url">
+    <xsl:variable name="canonical-url">
       <xsl:choose>
         <!-- XEPs after a certain number have an immutable version to which we preferably link -->
         <!-- TODO: We currently have no versioned link for the latest version of a XEP,
@@ -270,7 +270,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         </meta>
         <meta>
           <xsl:attribute name='property'>og:url</xsl:attribute>
-          <xsl:attribute name='content'><xsl:value-of select='$bibtex-url'/></xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='$canonical-url'/></xsl:attribute>
         </meta>
         <meta>
           <xsl:attribute name='property'>og:title</xsl:attribute>
@@ -292,7 +292,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         </meta>
         <meta>
           <xsl:attribute name='name'>twitter:url</xsl:attribute>
-          <xsl:attribute name='content'><xsl:value-of select='$bibtex-url'/></xsl:attribute>
+          <xsl:attribute name='content'><xsl:value-of select='$canonical-url'/></xsl:attribute>
         </meta>
         <meta>
           <xsl:attribute name='name'>twitter:title</xsl:attribute>
@@ -621,7 +621,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   number = {<xsl:value-of select='/xep/header/number'/>},
   version = {<xsl:value-of select='/xep/header/revision[position()=1]/version'/>},
   institution = {XMPP Standards Foundation},
-  url = {<xsl:value-of select='$bibtex-url'/>},
+  url = {<xsl:value-of select='$canonical-url'/>},
   date = {<xsl:value-of select='/xep/header/revision[position()=last()]/date'/>/<xsl:value-of select='/xep/header/revision[position()=1]/date'/>},
 }</pre>
         <p>END</p>
