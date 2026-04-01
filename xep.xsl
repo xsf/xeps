@@ -456,7 +456,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <!-- DISCUSSION VENUE -->
         <h3 id='appendix-discuss'>Appendix E: Discussion Venue<xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='"appendix-discuss"'/></xsl:call-template></h3>
         <xsl:variable name='discuss.count' select='count(/xep/header/discuss)'/>
-        <xsl:variable name='discuss.venue' select='count(/xep/header/discuss)'/>
         <xsl:if test='$discuss.count=1'>
           <xsl:variable name='discussWeb'>
             <xsl:text>https://mail.jabber.org/mailman/listinfo/</xsl:text>
