@@ -282,7 +282,19 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         </meta>
         <meta>
           <xsl:attribute name='property'>og:image</xsl:attribute>
-          <xsl:attribute name='content'>https://xmpp.org/images/london.jpg</xsl:attribute>
+          <xsl:attribute name='content'>https://xmpp.org/images/logos/xmpp-logo-text-banner.jpg</xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='property'>og:image:alt</xsl:attribute>
+          <xsl:attribute name='content'>XMPP (Extensible Messaging and Presence Protocol) Logo</xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='property'>og:image:width</xsl:attribute>
+          <xsl:attribute name='content'>1200</xsl:attribute>
+        </meta>
+        <meta>
+          <xsl:attribute name='property'>og:image:height</xsl:attribute>
+          <xsl:attribute name='content'>630</xsl:attribute>
         </meta>
         <!-- END META TAGS FOR OPEN GRAPH / FACEBOOK -->
         <!-- BEGIN META TAGS FOR X / TWITTER -->
@@ -304,7 +316,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         </meta>
         <meta>
           <xsl:attribute name='name'>twitter:image</xsl:attribute>
-          <xsl:attribute name='content'>https://xmpp.org/images/logos/xmpp-logo-text-black.png</xsl:attribute>
+          <xsl:attribute name='content'>https://xmpp.org/images/logos/xmpp-logo-text-banner.jpg</xsl:attribute>
         </meta>
         <!-- END META TAGS FOR X / TWITTER -->
       </head>
