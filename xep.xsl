@@ -541,7 +541,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
           <xsl:choose>
             <!-- XEPs after a certain number have an immutable version to which we preferably link -->
             <!-- TODO: We currently have no versioned link for the latest version of a XEP,
-                 hence the logic below is disabled for all XEPs, by testing for XEP version number > 99999 -->
+                 hence the logic below is disabled for all XEPs, by testing for XEP number > 999999 -->
             <xsl:when test='/xep/header/number &gt; 999999'>
               <xsl:text>https://xmpp.org/extensions/attic/xep-</xsl:text>
               <xsl:value-of select='/xep/header/number'/>
