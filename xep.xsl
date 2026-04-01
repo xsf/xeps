@@ -304,7 +304,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         </meta>
         <meta>
           <xsl:attribute name='name'>twitter:image</xsl:attribute>
-          <xsl:attribute name='content'>https://xmpp.org/images/logos/xmpp-logo.svg</xsl:attribute>
+          <xsl:attribute name='content'>https://xmpp.org/images/logos/xmpp-logo-text-black.png</xsl:attribute>
         </meta>
         <!-- END META TAGS FOR X / TWITTER -->
       </head>
