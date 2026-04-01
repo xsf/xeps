@@ -997,6 +997,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
       <xsl:number level='single' count='section1'/>.<xsl:number level='single' count='section2'/>.<xsl:number level='single' count='section3'/>.<xsl:number level='single' count='section4'/>
       <xsl:text> </xsl:text>
       <xsl:value-of select='@topic' />
+      <xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='$anchor'/></xsl:call-template>
     </h5>
     <xsl:apply-templates/>
     </div>
@@ -1024,6 +1025,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
       <xsl:number level='single' count='section1'/>.<xsl:number level='single' count='section2'/>.<xsl:number level='single' count='section3'/>.<xsl:number level='single' count='section4'/>.<xsl:number level='single' count='section5'/>
       <xsl:text> </xsl:text>
       <xsl:value-of select='@topic' />
+      <xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='$anchor'/></xsl:call-template>
     </h6>
     <xsl:apply-templates/>
     </div>
