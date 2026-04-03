@@ -21,8 +21,14 @@
   </dependencies>
   <supersedes/>
   <supersededby/>
-  <shortname>NOT_YET_ASSIGNED</shortname>
+  <shortname>IAP</shortname>
   &dcridland;
+  <revision>
+    <version>0.2.0</version>
+    <date>2026-04-03</date>
+    <initials>dwd</initials>
+    <remark>Updates based on implementation</remark>
+  </revision>
   <revision>
     <version>0.1.0</version>
     <date>2025-12-12</date>
@@ -39,18 +45,20 @@
   </revision>
 </header>
 <section1 topic='Introduction'>
-  <p>When clients (or initiating servers) connect, thanks to &xep0388; there is now a single waited-for round-trip after the connection itself is established,
+  <p>When clients (or initiating servers) connect, thanks to &xep0388; there is now at least one single waited-for round-trip after the connection itself is established,
       before the exchange of stanzas can occur. This is because after sending the stream open, the initiator cannot know the features (and thus what SASL2 etc
       options are supported) until it has received them, and until it does receive them, therefore cannot know what the optimal features and suboptions are to negotiate.</p>
-    <p>Although specifications such as &xep0484; suggest that pipelining is feasible, clients which do so risk "missing out" on improved security and other features.</p>
+    <p>Although specifications such as &xep0484; suggest that pipelining the initial authentication step is feasible, clients which do so risk "missing out" on improved security and other features.</p>
   <p>This protocol, herein "IAP", therefore allows a server to provide a token which is tied to what features are available, which the client
       then uses to indicate the basis of its authentication attempt. If this does not match, the authentication attempt is rejected without prejudice,
       and can be retried with the currently available features.</p>
     <p>Note that the protocol is explicitly possible for both C2S and S2S.</p>
+    <p>Also note that for multi-step authentication this does not allow pipelining through &lt;challenge/> and &lt;response/> elements.</p>
 </section1>
 <section1 topic='Protocol' anchor='protocol'>
   <section2 topic='Stream Feature' anchor='feature'>
     <p>If a server supports IAP, this is indicated by a stream feature, consisting of an element of config-version, qualified by the namespace urn:xmpp:iap:0. This has two attributes, first, a optional scheme, which has the value (if present) of "opaque". Second, a mandatory value, for which the value is as defined below.</p>
+    <p>When an initiator is sent this stream feature, it SHOULD immediately cache this value as the current value.</p>
     <example caption="Stream features"><![CDATA[
 <stream:features>
   <!-- ... -->
@@ -67,7 +75,7 @@
       <p>If a responder sees such an element and it does not match the current value, the responder rejects the &lt;authenticate&gt;
           with a &lt;failure&gt; "without prejudice", meaning that the attempted authentication is not counted as a "failed login", the
           account is not penalised or locked out, etc.</p>
-      <p>The failure SHOULD be of type &lt;aborted&gt;, and carry an application-specific error of &lt;config-version-mismatch&gt;, qualified by the 'urn:xmpp:iap:0' namespace.</p>
+      <p>The failure SHOULD be of type &lt;aborted&gt;, and MUST carry an application-specific error of &lt;config-version-mismatch&gt;, qualified by the 'urn:xmpp:iap:0' namespace. On failure, the initiator will already have seen the new config-version feature advertised, and MUST update a previously cached value with the new value, and reconsider what &lt;authenticate/> command to use.</p>
       <p>Otherwise, the SASL2 authentication proceeds as per normal.</p>
       <example caption="Example 4 of XEP-0388 with the config-version element included"><![CDATA[
 <authenticate xmlns='urn:xmpp:sasl:2' mechanism='BLURDYBLOOP'>
@@ -100,6 +108,8 @@
 </section1>
 <section1 topic='Examples' anchor='examples'>
   <p>Here is the flow from XEP-0484 (FAST), as a single example including the full stream and with annotations to indicate packets and round-trips.</p>
+  <section2 topic="Initial Session">
+    <p>In the initial session, the client has no config version, so waits for the features. On seeing the config-version feature, it will then cache the opaque token for subsequent tokens - but it's already too late to use it this session. Including it anyway in the &lt;authenticate/> is not an error, but achieves nothing.</p>
     <example caption="Initial session"><![CDATA[
     <!-- Client sends first -->
     <!-- C --><stream:stream xmlns:stream='http://etherx.jabber.org/stream' xmlns='jabber:client' from='user@example.com' to='example.com' version='1.0'>
@@ -141,6 +151,9 @@
          token='WXZzciBwYmFmdmZnZiBqdmd1IGp2eXFhcmZm' />
 </success>
 ]]></example>
+  </section2>
+  <section2 topic="Subsequent Session">
+    <p>In a subsequent session, the client will use the config version token cached from the previous session. This allows it to attempt a pipeline safely.</p>
     <example caption="Subsequent session"><![CDATA[
     <!-- Client sends first, pipelining the authentication -->
     <!-- C --><stream:stream xmlns:stream='http://etherx.jabber.org/stream' xmlns='jabber:client' from='user@example.com' to='example.com'>
@@ -181,6 +194,10 @@
          token='R3VyIHpiZmcgbnl2aXIgdmYgZ3VyIGp2eXFyZmcu' />
 </success>
 ]]></example>
+  </section2>
+  <section2 topic="Failed Subsequent Session">
+    <p>If, when it tries to authenticate, the config version mismatches, then the server will reject the attempt. However, by the time the client sees this error the client will already know that its IAP attempt will fail, since it will have seen the new config-version feature, and indeed will have cached the new token ready to use next time.</p>
+    <p>It will immediately retry, though it might choose a new method, or take advantage of some new inline protocol.</p>
     <example caption="Failed subsequent session"><![CDATA[
     <!-- Client sends first, pipelining the authentication -->
     <!-- C --><stream:stream xmlns:stream='http://etherx.jabber.org/stream' xmlns='jabber:client' from='user@example.com' to='example.com'>
@@ -198,6 +215,7 @@
   <authentication xmlns='urn:xmpp:sasl:2'>
     <mechanism>SCRAM-SHA-1</mechanism>
     <mechanism>SCRAM-SHA-1-PLUS</mechanism>
+    <mechanism>BLURDYBLOOP</mechanism>
     <inline>
       <fast xmlns='urn:xmpp:fast:0' tls-0rtt='true'>
         <mechanism>HT-SHA-256-ENDP</mechanism>
@@ -213,8 +231,19 @@
   <config-version-mismatch xmlns='urn::xmpp:iap:0'/>
   <text>Configuration version mismatch</text>
 </failure>
-<!-- Client will then proceed as the previous example -->
+<!-- Client will then proceed with a normal authenticate,
+  -- optionally using the correct config-version, and
+  -- taking into consideration the new SASL mechanism -->
+    <authenticate xmlns='urn:xmpp:sasl:2' mechanism='HT-SHA-256-ENDP'>
+  <initial-response>[base64 encoded SASL data]</initial-response>
+  <bind xmlns='urn:xmpp:bind:0'>
+    <tag>AwesomeXMPP</tag>
+  </bind>
+  <fast xmlns='urn:xmpp:fast:0' count='123' />
+  <config-version xmlns='urn:xmpp:iap:0' scheme='opaque' value='SSBjaGFuZ2VkIHRoaXMh'/>
+</authenticate>
 ]]></example>
+  </section2>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
     <p>Servers which attempt interpretation of matching non-identical tokens can cause clients to miss opportunities to improve their security, or gain new features (which might include security features). So again, this remains NOT RECOMMENDED.</p>
