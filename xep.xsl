@@ -337,7 +337,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
             <xsl:choose>
               <xsl:when test='string(/xep/header/status) = "Draft"'>Stable</xsl:when>
               <xsl:otherwise><xsl:value-of select='/xep/header/status'/></xsl:otherwise>
-              <xsl:value-of select='/xep/header/status'/>
             </xsl:choose>
           </a></dd>
           <dt>Type</dt>
@@ -457,7 +456,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <!-- DISCUSSION VENUE -->
         <h3 id='appendix-discuss'>Appendix E: Discussion Venue<xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='"appendix-discuss"'/></xsl:call-template></h3>
         <xsl:variable name='discuss.count' select='count(/xep/header/discuss)'/>
-        <xsl:variable name='discuss.venue' select='count(/xep/header/discuss)'/>
         <xsl:if test='$discuss.count=1'>
           <xsl:variable name='discussWeb'>
             <xsl:text>https://mail.jabber.org/mailman/listinfo/</xsl:text>
@@ -543,7 +541,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
           <xsl:choose>
             <!-- XEPs after a certain number have an immutable version to which we preferably link -->
             <!-- TODO: We currently have no versioned link for the latest version of a XEP,
-                 hence the logic below is disabled for all XEPs, by testing for XEP version number > 99999 -->
+                 hence the logic below is disabled for all XEPs, by testing for XEP number > 999999 -->
             <xsl:when test='/xep/header/number &gt; 999999'>
               <xsl:text>https://xmpp.org/extensions/attic/xep-</xsl:text>
               <xsl:value-of select='/xep/header/number'/>
@@ -999,6 +997,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
       <xsl:number level='single' count='section1'/>.<xsl:number level='single' count='section2'/>.<xsl:number level='single' count='section3'/>.<xsl:number level='single' count='section4'/>
       <xsl:text> </xsl:text>
       <xsl:value-of select='@topic' />
+      <xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='$anchor'/></xsl:call-template>
     </h5>
     <xsl:apply-templates/>
     </div>
@@ -1026,6 +1025,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
       <xsl:number level='single' count='section1'/>.<xsl:number level='single' count='section2'/>.<xsl:number level='single' count='section3'/>.<xsl:number level='single' count='section4'/>.<xsl:number level='single' count='section5'/>
       <xsl:text> </xsl:text>
       <xsl:value-of select='@topic' />
+      <xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='$anchor'/></xsl:call-template>
     </h6>
     <xsl:apply-templates/>
     </div>
