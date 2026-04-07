@@ -1,0 +1,116 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+<!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+  <!ENTITY NSMUC2 'urn:xmpp:muc:0'>
+  <!ENTITY NSMUC2PAM 'urn:xmpp:muc:pam:0'>
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>New MUC</title>
+    <abstract>This document specifies an enhanced Multi-User Chat protocol that is broadly backwards compatible with that of XEP-0045, but adds a number of key improvements.</abstract>
+    &LEGALNOTICE;
+    <number>XXXX</number>
+    <status>ProtoXEP</status>
+    <type>Standards Track</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XMPP Core</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>MUC2</shortname>
+    &dcridland;
+    <revision>
+      <version>0.1</version>
+      <date>2026-03-25</date>
+      <initials>dwd</initials>
+      <remark>Got to start somewhere</remark>
+    </revision>
+  </header>
+  <section1 topic="Introduction">
+    <p>In the beginning was IRC. And we saw IRC, and made GC. And then MUC. And we looked upon them, and saw they were not good. But we used MUC for 25 years, so it must be pretty good for all that.</p>
+    <p>We also made MIX, but MIX has not seen adoption.</p>
+    <p>This is an attempt at addressing some of the shortcomings of XEP-0045 (herein "MUC1"), but it is phrased as extensions to MUC1 rather than a whole new protocol. Compared to other attempts, then it has a stronger focus on interoperability with existing MUC1 implementations, and with an eye to incremental deployment. It is offered as a discussion point - the start of the discussion and not the end - though a discussion point that's intended to be implementable.</p>
+  </section1>
+  <section1 topic="Requirements">
+    <p>MUC1 has a number of issues, and the intent of any redesign is of course to address these. But it also has a number of useful behaviours, and the approach taken by this specification is to avoid losing these in the process of creating a new design. Agreeing these requirements is a first step.</p>
+    <ol>
+      <li>Joining a MUC1 room is trivial - from a developer standpoint this is very useful.</li>
+      <li>MUC1 occupant addressing is also the nickname - this is bad, because when the nickname changes so does the JID, and it also restricts the form of nicknames in unexpected ways.</li>
+      <li>Sending arbitrary messaging through a MUC1 is trivial - again, we should absolutely keep this.</li>
+      <li>Presence-based joining "cleans up" automatically - for clients wishing to join a room ephemerally, this is very useful.</li>
+      <li>Presence-based joining is not (comfortably) compatible with "sparsely online" clients such as mobile; when not online a client is not an occupant - long-term engagement with a chatroom is complicated as a result, so we should fix this.</li>
+      <li>Chatrooms exist solely on one server, no mirroring exists - this has both advantages (in terms of controls and data sovereignty) and disadvantages (in terms of availability and resilience).</li>
+      <li>MUC1 rooms enforce identical message ordering for all occupants - this is vital in many areas, and maintaining this somewhat enforces a central point.</li>
+      <li>Occupants cannot send &lt;iq/> stanzas directly to each other without complicated hacks; partly this is due to anonymity, and partly this is due to MUC1s supporting multiple clients per occupant JID.</li>
+      <li>The same room JID and state should be usable by both MUC1 and MUC2.</li>
+      <li>MUC1 presence is very noisy; MUC2 should provide a way to reduce or elide presence entirely.</li>
+    </ol>
+  </section1>
+  <section1 topic="The Occupant">
+    <section2 topic="Occupancy Sessions">
+      <p>Whenever a client joins a room, they start an "occupancy session". There can also be an occupancy session for their bare JID, which is independent of any client session. If at least one occupancy session exists, the room will contain an occupant JID, and the user will be considered an occupant of the room for all purposes.</p>
+    </section2>
+    <section2 topic="Addressing">
+      <p>In MUC2, occupants are addressed by a JID consisting of the room's bare JID (see XEP-0045) and the occupant-id as resource. This requires that in MUC2, servers MUST provide an occupant-id, and also that servers MUST use an occupant-id generation algorithm that results in a valid resource. In addition, MUC1 nicknames MUST NOT be allowed to clash with occupant-ids, and as such, servers SHOULD prefix the occupant-id in the resource with some prefix, such as "-", to enforce this.</p>
+      <p>A client joining via MUC1's presence-based joins will not see these addresses, but instead sees the nickname-based addressing.</p>
+      <p>MUC2 rooms MUST include the nickname within presence as a nickname element qualified by the urn:xmpp:muc:0 namespace within the usual &X;.</p>
+      <example><![CDATA[
+<presence to='bastanio@shakespeare.example/wimsy-192837' from='court@venice.example/-deadbeefcafe'>
+  <x xmlns='http://jabber.org/protocol/muc#user'>
+    <item affiliation='admin' role='moderator'/>
+    <nickname xmlns='urn:xmpp:muc:0'>Bastanio</nickname>
+  </x>
+</presence>
+      ]]></example>
+    </section2>
+    <section2 topic="Joining via Presence">
+      <p>Joining a MUC1 room can be done with (relatively) simple presence. MUC2, as well, can be done this way, though this will not automatically create a bare JID occupancy session. To do so, the same joining presence stanza is used, but the &X; element includes a muc2 element qualified by the &NSMUC2; namespace, and the presence is sent to the bare JID. This will indicate to the room that MUC2 is expected, and will cause the occupancy session to be a MUC2 session.</p>
+      <p>While rooms can be configured as "anonymous", "semi-anonymous", and so on, users MAY express their preference as well via the &lt;visibility/> element. If a user requests anonymity, the room MUST either honour that request or reject the join. Note that if the user has an existing occupancy session joined non-anonymously, this conflict MUST also reject the join. Typically, rooms will accept a non-anonymous join to a room that defaults to anonymous, but they MAY reject that.</p>
+      <example><![CDATA[
+<presence from='bastanio@shakespeare.example/wimsy-192837' to='court@venice.example'>
+  <x xmlns='http://jabber.org/protocol/muc'>
+    <muc2 xmlns='urn:xmpp:muc:0'/>
+      <nickname>Bastanio</nickname>
+      <presence level='full'/>
+      <visibility type='anonymous'/>
+    </muc2>
+  </x>
+</presence>
+      ]]></example>
+      <p>The sequence of joining either type of room is broadly identical. The differences are listed in the following sections:</p>
+      <section3 topic="Presence Broadcast">
+        <p>Presence can be controlled by including a presence element, qualified by the &NSMUC2; namespace, with a single attribute of "level", within the muc2 element inside &X;. This attribute can be "none", in which case no presence, including the initial presence of other occupants, is sent to the client. A presence level of "full" indicates all presence is wanted by the client - this is the default. Finally, a level of "join" shows only online/offline changes. In this last case, the presence broadcast is sent as normal, but the changes relayed will only be changes from available to unavailable (or the reverse).</p>
+        <p>Note that it is intended that child elements might refine this further, with the element here unchanged and acting as a default.</p>
+        <ol>
+          <li>Existing Occupant Presence to a MUC1 client MUST include all occupants, addressed by nickname, including those bare JID occupants that are not online. These latter MUST be normal (available) presence, and SHOULD be annotated with a XEP-0310 annotation to indicate they are not online. Servers MAY also override a &lt;show/> to 'xa', to indicate their absence.</li>
+          <li>Existing Occupant Presence to a MUC2 client also includes all occupants, but this time addressed by occupant-id, and shows bare JID occupants that are not online as offline presence.</li>
+          <li>Servers MAY include a delay tag in presence for either join to indicate when the presence state last changed.</li>
+        </ol>
+      </section3>
+      <section3 topic="Room History">
+        <p>Many MUC2 clients will not want this feature - but it can be trivially turned off in the usual manner. MUC2 rooms MUST implement MAM.</p>
+      </section3>
+      <section3 topic="Room Subject">
+        <p>If a MUC1 client is joining, this will be as normal. For MUC2 clients, this will also include an additional element giving the MAM summary of the room.</p>
+      </section3>
+    </section2>
+    <section2 topic="Bare JID occupancy sessions">
+      <p>In order to handle the offline case, an iq-based joining protocol is also included. Clients joining the room in this way essentially request to be visible as an occupant (subject to the room's configuration), and also to receive messages to their bare JIDs. Groupchat messages sent to bare JIDs do not, by default, get sent to clients, and, by default, are bounced with a &lt;service-unavailable/> error. Therefore clients MUST first establish if their server has MUC2-PAM support; if it does not, they MUST avoid this mechanism and use presence-based joins instead.</p>
+      <p>Bare JIDs join the room with an &IQ; request to the room's bare JID of type "set", containing a join element within the namespace &NSMUC2;, containing a nickname element. The room processes this, sending the room's current subject in the same way as a join - containing the MAM summary - and respond with an &IQ; of type result which reflects the join element within &NSMUC2; also containing the nickname element. This allows the room to assign a different nickname as needed.</p>
+      <p>To trigger this, a client performs an iq-set request to their own bare JID, with a join element, this time with a "room" attribute containing the bare JID of the room, and containing a &lt;nickname/>. The client will receive a response containing the same join element with the nickname element, once the join is complete.</p>
+      <section3 topic="MUC2-PAM">
+        <p>Servers support MUC2-PAM by:</p>
+        <ol>
+          <li>Including urn:xmpp:muc:pam:0 in their service discovery features.</li>
+          <li>Not bouncing groupchat messages.</li>
+          <li>Responding to a &IQ; request to join the room by sending one of their own.</li>
+        </ol>
+        <p>This is (deliberately) a minimalist base, but given this base, other features can be added.</p>
+      </section3>
+    </section2>
+  </section1>
+</xep>
