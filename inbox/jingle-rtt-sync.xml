@@ -1,0 +1,472 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>Jingle Synchronized Real-Time Text</title>
+    <abstract>This specification defines a Jingle application extension for negotiating real-time text as part of the same conversational session as audio and video.</abstract>
+    &LEGALNOTICE;
+    <number>xxxx</number>
+    <status>ProtoXEP</status>
+    <type>Standards Track</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XEP-0166</spec>
+      <spec>XEP-0167</spec>
+      <spec>XEP-0176</spec>
+      <spec>XEP-0301</spec>
+      <spec>RFC 4103</spec>
+      <spec>RFC 8865</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>jingle-rtt-sync</shortname>
+    <tags>
+      <tag>jingle</tag>
+      <tag>rtt</tag>
+      <tag>accessibility</tag>
+      <tag>webrtc</tag>
+    </tags>
+    <author>
+      <firstname>Edward</firstname>
+      <surname>Tie</surname>
+      <email>info@tiedragon.com</email>
+    </author>
+    <revision>
+      <version>0.0.1</version>
+      <date>2026-05-30</date>
+      <initials>et</initials>
+      <remark><p>Initial ProtoXEP submission.</p></remark>
+    </revision>
+  </header>
+
+  <section1 topic='Introduction' anchor='intro'>
+    <p>Real-time text is already defined for XMPP by &xep0301;. Jingle is already used to negotiate real-time audio and video sessions, most commonly using &xep0167; and &xep0176;. However, when a client establishes a Jingle audio-video call and sends real-time text as ordinary XMPP messages outside the Jingle session, the user experience can look like one conversation while the protocol state is split into two unrelated paths.</p>
+    <p>This specification defines a way to negotiate real-time text as a Jingle content in the same session as audio and video. The text content can be human typed RTT, captions, ASR output, interpreter text, translation text or transcript text. The goal is Total Conversation: audio, video and text presented as one conversational unit.</p>
+    <p>The motivating implementation problem is simple: a call can exist, text can exist, and yet the text might not be part of the negotiated Jingle session. In that case the receiver cannot reliably treat the text as synchronized conversational media.</p>
+  </section1>
+
+  <section1 topic='Requirements' anchor='reqs'>
+    <p>This specification is designed to meet the following requirements.</p>
+    <ol>
+      <li>Enable a Jingle initiator to offer real-time text in the same session as audio and video.</li>
+      <li>Enable a responder to accept or reject real-time text independently from audio and video.</li>
+      <li>Define a first-class Jingle content for text, for example with content name <tt>text</tt> or <tt>rtt</tt>.</li>
+      <li>Allow endpoints to identify the text purpose, source and language.</li>
+      <li>Allow endpoints to indicate whether the text is synchronized to a media clock, a session clock, the call session only, or not synchronized.</li>
+      <li>Allow fallback to &xep0301; when synchronized Jingle text is not supported.</li>
+      <li>Prevent clients from silently presenting fallback RTT as synchronized text.</li>
+    </ol>
+    <section2 topic='Implementation levels' anchor='levels'>
+      <p>Implementations can support different levels without falsely claiming full synchronization.</p>
+      <table caption='Implementation levels'>
+        <tr>
+          <th>Level</th>
+          <th>Name</th>
+          <th>Minimum capability</th>
+          <th>User-visible promise</th>
+        </tr>
+        <tr>
+          <td>0</td>
+          <td>XEP-0301 fallback</td>
+          <td>Ordinary in-band RTT outside Jingle</td>
+          <td>Live text, not media synchronized</td>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>Jingle co-session text</td>
+          <td>Text is negotiated by the same Jingle session but does not share a media clock</td>
+          <td>Belongs to the call, limited synchronization</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Session-clock text</td>
+          <td>Text has timestamps relative to a shared call or session clock</td>
+          <td>Call-synchronized text</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Media-clock text</td>
+          <td>RTP/T.140 or equivalent media-clock timing with audio/video correlation</td>
+          <td>Strict synchronized Total Conversation</td>
+        </tr>
+      </table>
+      <p>An implementation MUST NOT advertise a higher level than it can actually deliver. In particular, a WebRTC data channel that is merely opened during a call is Level 1 unless it can demonstrate a shared session clock or media clock.</p>
+    </section2>
+  </section1>
+
+  <section1 topic='Glossary' anchor='glossary'>
+    <dl>
+      <di>
+        <dt>RTT</dt>
+        <dd>Real-Time Text, transmitted while it is being typed or created.</dd>
+      </di>
+      <di>
+        <dt>Total Conversation</dt>
+        <dd>A conversation containing simultaneous audio, video and real-time text.</dd>
+      </di>
+      <di>
+        <dt>Jingle content</dt>
+        <dd>A named component inside a Jingle session, such as audio, video or text.</dd>
+      </di>
+      <di>
+        <dt>Conversation group</dt>
+        <dd>A set of Jingle contents intended to be presented as one synchronized conversational unit.</dd>
+      </di>
+    </dl>
+  </section1>
+
+  <section1 topic='Use Cases' anchor='usecases'>
+    <section2 topic='Offering Total Conversation' anchor='uc-total-conversation'>
+      <p>An initiator offers audio, video and text contents in one Jingle session. The receiver accepts all three contents and presents them as a single Total Conversation.</p>
+      <example caption='Total Conversation session overview'><![CDATA[
+Jingle session sid = abc123
+  content audio -> RTP audio
+  content video -> RTP video or signing
+  content text  -> RTP T.140 or WebRTC datachannel T.140
+]]></example>
+    </section2>
+    <section2 topic='Adding text during a call' anchor='uc-content-add'>
+      <p>A participant starts an audio-video call and later adds captions, ASR or typed text by sending a Jingle <tt>content-add</tt> action for the text content.</p>
+    </section2>
+    <section2 topic='Fallback to XEP-0301' anchor='uc-fallback'>
+      <p>If the peer does not support this specification, a client can fall back to &xep0301;. The fallback MUST be visible to the user when synchronized text is required.</p>
+    </section2>
+  </section1>
+
+  <section1 topic='Protocol Overview' anchor='overview'>
+    <p>A Total Conversation call SHOULD contain three Jingle contents:</p>
+    <example caption='Jingle contents for Total Conversation'><![CDATA[
+<content name='audio'> ... </content>
+<content name='video'> ... </content>
+<content name='text'>  ... </content>
+]]></example>
+    <p>The <tt>text</tt> content is not an ordinary XMPP message stream. It is part of the Jingle session and is described by this extension.</p>
+    <p>The binding key is the Jingle <tt>sid</tt> plus the content name and the <tt>sync-group</tt>. A client MUST NOT infer synchronization only from the peer JID, because a user can have multiple simultaneous sessions, devices or fallback chat streams with the same peer.</p>
+  </section1>
+
+  <section1 topic='Discovery' anchor='disco'>
+    <p>An entity supporting this specification MUST advertise the following feature:</p>
+    <example caption='Primary discovery feature'><![CDATA[
+<feature var='urn:xmpp:jingle:apps:rtt-sync:0'/>
+]]></example>
+    <p>If the entity supports RTP/T.140, it SHOULD advertise:</p>
+    <example caption='RTP/T.140 discovery feature'><![CDATA[
+<feature var='urn:xmpp:jingle:apps:rtt-sync:rtp-t140:0'/>
+]]></example>
+    <p>If the entity supports WebRTC datachannel T.140, it SHOULD advertise:</p>
+    <example caption='Datachannel/T.140 discovery feature'><![CDATA[
+<feature var='urn:xmpp:jingle:apps:rtt-sync:dc-t140:0'/>
+]]></example>
+    <p>If the entity supports fallback to &xep0301;, it SHOULD also advertise the normal XEP-0301 feature.</p>
+  </section1>
+
+  <section1 topic='Application Format' anchor='format'>
+    <p>This specification defines an <tt>rtt-sync</tt> element qualified by the <tt>urn:xmpp:jingle:apps:rtt-sync:0</tt> namespace.</p>
+    <table caption='Attributes of the rtt-sync element'>
+      <tr>
+        <th>Attribute</th>
+        <th>Required</th>
+        <th>Values</th>
+        <th>Meaning</th>
+      </tr>
+      <tr>
+        <td>role</td>
+        <td>yes</td>
+        <td>conversation, caption, transcript, translation, interpreter</td>
+        <td>Purpose of the text stream</td>
+      </tr>
+      <tr>
+        <td>source</td>
+        <td>no</td>
+        <td>human, asr, captioner, interpreter, translation, system</td>
+        <td>Origin of the text</td>
+      </tr>
+      <tr>
+        <td>lang</td>
+        <td>no</td>
+        <td>BCP 47 language tag</td>
+        <td>Language of the text</td>
+      </tr>
+      <tr>
+        <td>sync-group</td>
+        <td>yes</td>
+        <td>token</td>
+        <td>Group shared by audio, video and text contents</td>
+      </tr>
+      <tr>
+        <td>sync-reference</td>
+        <td>no</td>
+        <td>content name</td>
+        <td>Content this text is synchronized with, usually audio</td>
+      </tr>
+      <tr>
+        <td>sync-mode</td>
+        <td>yes</td>
+        <td>media-clock, session-clock, co-session, none</td>
+        <td>Synchronization model</td>
+      </tr>
+      <tr>
+        <td>max-skew</td>
+        <td>no</td>
+        <td>milliseconds</td>
+        <td>Maximum target presentation difference</td>
+      </tr>
+      <tr>
+        <td>finality</td>
+        <td>no</td>
+        <td>partial, final, mixed</td>
+        <td>Whether text can change</td>
+      </tr>
+    </table>
+    <example caption='RTT synchronization element'><![CDATA[
+<rtt-sync xmlns='urn:xmpp:jingle:apps:rtt-sync:0'
+          role='caption'
+          source='asr'
+          lang='nl-NL'
+          sync-group='tc1'
+          sync-reference='audio'
+          sync-mode='media-clock'
+          max-skew='500'
+          finality='partial'/>
+]]></example>
+  </section1>
+
+  <section1 topic='RTP/T.140 Profile' anchor='rtp-t140'>
+    <p>The RTP/T.140 profile is the preferred profile when strict synchronization with audio and video is required. The initiator offers a Jingle RTP content with <tt>media='text'</tt> and payload types for <tt>t140</tt> and optionally <tt>red</tt>.</p>
+    <example caption='Session initiation with text media'><![CDATA[
+<iq from='romeo@example.org/desktop'
+    to='juliet@example.org/mobile'
+    id='j1'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-initiate'
+          initiator='romeo@example.org/desktop'
+          sid='abc123'>
+    <content creator='initiator' name='audio'>
+      <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'>
+        <payload-type id='111' name='opus' clockrate='48000' channels='2'/>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:ice-udp:1'/>
+    </content>
+    <content creator='initiator' name='video'>
+      <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='video'>
+        <payload-type id='96' name='VP8' clockrate='90000'/>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:ice-udp:1'/>
+    </content>
+    <content creator='initiator' name='text'>
+      <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='text'>
+        <payload-type id='98' name='t140' clockrate='1000'/>
+        <payload-type id='100' name='red' clockrate='1000'>
+          <parameter name='fmtp' value='98/98/98'/>
+        </payload-type>
+        <rtt-sync xmlns='urn:xmpp:jingle:apps:rtt-sync:0'
+                  role='conversation'
+                  source='human'
+                  lang='nl-NL'
+                  sync-group='tc1'
+                  sync-reference='audio'
+                  sync-mode='media-clock'
+                  max-skew='500'
+                  finality='mixed'/>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:ice-udp:1'/>
+    </content>
+  </jingle>
+</iq>
+]]></example>
+    <p>When <tt>sync-mode='media-clock'</tt> is negotiated, endpoints SHOULD use the same RTCP CNAME for audio, video and text RTP streams belonging to the same endpoint. Receivers SHOULD use RTP/RTCP timing to align text with audio or video where possible. If timing information is unavailable, the receiver MAY fall back to session arrival time and SHOULD indicate reduced synchronization quality.</p>
+  </section1>
+
+  <section1 topic='WebRTC Datachannel/T.140 Profile' anchor='dc-t140'>
+    <p>The datachannel profile supports browser/WebRTC deployments using T.140 over a reliable, ordered data channel. This profile is useful when a WebRTC implementation naturally uses data channels for RTT. However, data channels do not automatically share the RTP media clock, so the synchronization mode MUST be declared carefully.</p>
+    <ul>
+      <li>Use <tt>sync-mode='co-session'</tt> when the text is part of the same call but not strictly media-clock synchronized.</li>
+      <li>Use <tt>sync-mode='session-clock'</tt> when the implementation provides a common session clock.</li>
+      <li>Use <tt>sync-mode='media-clock'</tt> only if the implementation can provide reliable media-clock alignment.</li>
+    </ul>
+    <example caption='Illustrative datachannel text content'><![CDATA[
+<content creator='initiator' name='text'>
+  <description xmlns='urn:xmpp:jingle:apps:rtt-sync:0'
+               profile='dc-t140'>
+    <datachannel subprotocol='t140'
+                 reliability='reliable'
+                 order='in-order'
+                 label='rtt'/>
+    <rtt-sync role='conversation'
+              source='human'
+              lang='nl-NL'
+              sync-group='tc1'
+              sync-reference='audio'
+              sync-mode='co-session'
+              max-skew='700'/>
+  </description>
+  <transport xmlns='urn:xmpp:jingle:transports:dtls-sctp:1'/>
+</content>
+]]></example>
+    <p>The exact Jingle mapping for WebRTC data channel negotiation should be aligned with the relevant Jingle data channel signalling specification. This document does not attempt to replace that signalling.</p>
+  </section1>
+
+  <section1 topic='Fallback to XEP-0301' anchor='fallback'>
+    <p>If the responder does not support <tt>urn:xmpp:jingle:apps:rtt-sync:0</tt>, the initiator MAY fall back to &xep0301;. Fallback MUST be explicit in the user interface when synchronization is required.</p>
+    <example caption='Informing the peer about fallback'><![CDATA[
+<message from='romeo@example.org/desktop'
+         to='juliet@example.org/mobile'
+         type='chat'>
+  <rtt-fallback xmlns='urn:xmpp:jingle:apps:rtt-sync:0'
+                sid='abc123'
+                method='xep-0301'
+                sync-mode='none'
+                reason='peer-unsupported'/>
+</message>
+]]></example>
+    <p>Fallback is a state transition, not just a transport choice. If a Jingle text content is rejected but audio and video are accepted, the call MAY continue without synchronized text. If fallback RTT is started for the same conversation, it SHOULD be bound to the Jingle <tt>sid</tt> and shown as fallback rather than synchronized captions.</p>
+  </section1>
+
+  <section1 topic='Business Rules' anchor='rules'>
+    <section2 topic='Sender rules' anchor='sender-rules'>
+      <ol>
+        <li>A sender that offers synchronized RTT MUST include an <tt>rtt-sync</tt> element.</li>
+        <li>A sender MUST identify whether the stream is conversation text, caption text, transcript text, interpreter text or translation text.</li>
+        <li>A sender SHOULD include a language tag when known.</li>
+        <li>A sender MUST NOT label ASR text as human captioning.</li>
+        <li>A sender MUST route Jingle text for the negotiated content through the negotiated Jingle transport, not through an unrelated ordinary chat message path.</li>
+      </ol>
+    </section2>
+    <section2 topic='Receiver rules' anchor='receiver-rules'>
+      <ol>
+        <li>A receiver MUST treat a Jingle synchronized RTT content as part of the call, not as normal chat.</li>
+        <li>A receiver SHOULD use the negotiated <tt>sync-mode</tt> to determine presentation.</li>
+        <li>A receiver MUST bind incoming synchronized text to the Jingle <tt>sid</tt> and content name before presenting it as part of a call.</li>
+        <li>A receiver SHOULD detect duplicate text received through both Jingle text and XEP-0301 fallback and avoid showing it twice.</li>
+        <li>A receiver SHOULD expose diagnostics when RTT is present in chat but absent from the Jingle session.</li>
+      </ol>
+    </section2>
+  </section1>
+
+  <section1 topic='User Interface Guidance' anchor='ui'>
+    <p>A user interface SHOULD distinguish at least these cases: live text, live captions, AI captions, human captions, translation and unsynchronized fallback.</p>
+    <p>During call setup, a client SHOULD expose whether synchronized text was negotiated, whether live text fallback is active or whether text is unavailable in the call.</p>
+    <example caption='Example user-visible states'><![CDATA[
+Synchronized text: negotiated
+Live text fallback: active
+Text in call: unavailable
+]]></example>
+  </section1>
+
+  <section1 topic='Accessibility Considerations' anchor='access'>
+    <p>This specification is specifically motivated by accessibility and Total Conversation use cases. A deaf or hard-of-hearing user MUST be able to distinguish between typed text, human captions, AI or ASR captions and translated text where this information is known.</p>
+    <p>A client SHOULD visibly indicate late captions, uncertain ASR captions or unsynchronized fallback text. A client SHOULD allow users to prefer synchronized captions over lowest-latency captions, or lowest-latency captions over strict synchronization.</p>
+  </section1>
+
+  <section1 topic='Internationalization Considerations' anchor='i18n'>
+    <p>Text content MUST support Unicode. Language tags SHOULD use BCP 47. Clients SHOULD support multiple simultaneous text streams where translation or interpreter text is provided in addition to original captions.</p>
+  </section1>
+
+  <section1 topic='Security Considerations' anchor='security'>
+    <p>Synchronized RTT and captions can contain highly sensitive conversation content. Implementations SHOULD use end-to-end encrypted signalling and encrypted media where available.</p>
+    <p>For RTP/T.140, implementations SHOULD use SRTP or an equivalent encrypted RTP transport, authenticate the sender of the text stream and protect against injection of false captions. Implementations SHOULD prevent downgrade attacks from synchronized RTT to unsynchronized fallback without user indication.</p>
+    <p>Clients SHOULD avoid misrepresenting AI captions as human or verified text.</p>
+  </section1>
+
+  <section1 topic='Privacy Considerations' anchor='privacy'>
+    <p>Real-time text can reveal text before the sender considers it final. Captions can reveal speech content to captioning, relay or ASR services. A client SHOULD obtain user consent before sending typed RTT and before sending audio to ASR or captioning services.</p>
+    <p>A client SHOULD not store partial captions or partial RTT as a final transcript unless enabled. A client SHOULD indicate when a third-party captioning, ASR, relay or interpreting service is active.</p>
+  </section1>
+
+  <section1 topic='IANA Considerations' anchor='iana'>
+    <p>This document makes no direct IANA request unless future revisions define new SDP attributes or new media types. The RTP/T.140 profile uses existing <tt>text/t140</tt> and <tt>text/red</tt> media formats.</p>
+  </section1>
+
+  <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <p>This specification requests registration of the following namespace:</p>
+    <code>urn:xmpp:jingle:apps:rtt-sync:0</code>
+    <p>The following service discovery features are requested:</p>
+    <code>urn:xmpp:jingle:apps:rtt-sync:0
+urn:xmpp:jingle:apps:rtt-sync:rtp-t140:0
+urn:xmpp:jingle:apps:rtt-sync:dc-t140:0</code>
+  </section1>
+
+  <section1 topic='Design Considerations' anchor='design'>
+    <p>This document does not replace &xep0301;. XEP-0301 remains appropriate for chat-oriented real-time text and as a fallback. The distinction is that this specification binds text to a Jingle session when an implementation needs Total Conversation semantics.</p>
+    <p>RTP/T.140 is the preferred strict synchronization profile. WebRTC datachannel T.140 is useful for browser deployments, but MUST NOT be described as media-clock synchronized unless the implementation can provide the required timing relationship.</p>
+  </section1>
+
+  <section1 topic='XML Schema' anchor='schema'>
+    <p>The following schema is an initial sketch.</p>
+    <code><![CDATA[
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:jingle:apps:rtt-sync:0'
+    xmlns='urn:xmpp:jingle:apps:rtt-sync:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='rtt-sync'>
+    <xs:complexType>
+      <xs:attribute name='role' use='required'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='conversation'/>
+            <xs:enumeration value='caption'/>
+            <xs:enumeration value='transcript'/>
+            <xs:enumeration value='translation'/>
+            <xs:enumeration value='interpreter'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name='source' use='optional'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='human'/>
+            <xs:enumeration value='asr'/>
+            <xs:enumeration value='captioner'/>
+            <xs:enumeration value='interpreter'/>
+            <xs:enumeration value='translation'/>
+            <xs:enumeration value='system'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name='lang' type='xs:language' use='optional'/>
+      <xs:attribute name='sync-group' type='xs:NCName' use='required'/>
+      <xs:attribute name='sync-reference' type='xs:NCName' use='optional'/>
+      <xs:attribute name='sync-mode' use='required'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='media-clock'/>
+            <xs:enumeration value='session-clock'/>
+            <xs:enumeration value='co-session'/>
+            <xs:enumeration value='none'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name='max-skew' type='xs:nonNegativeInteger' use='optional'/>
+      <xs:attribute name='finality' use='optional'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='partial'/>
+            <xs:enumeration value='final'/>
+            <xs:enumeration value='mixed'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+]]></code>
+  </section1>
+
+  <section1 topic='Open Issues' anchor='open-issues'>
+    <ol>
+      <li>Should this be a new Jingle application format or an extension to &xep0167;?</li>
+      <li>Should RTP/T.140 be mandatory-to-implement for strict synchronization?</li>
+      <li>Which existing Jingle datachannel signalling elements should be used for the WebRTC datachannel profile?</li>
+      <li>Should emergency-service profiles have stricter requirements?</li>
+      <li>Should multiparty RTT support be included here or deferred to a separate specification?</li>
+    </ol>
+  </section1>
+</xep>
