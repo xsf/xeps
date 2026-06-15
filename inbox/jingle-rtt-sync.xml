@@ -19,7 +19,10 @@
       <spec>XEP-0167</spec>
       <spec>XEP-0176</spec>
       <spec>XEP-0301</spec>
+      <spec>XEP-0338</spec>
       <spec>RFC 4103</spec>
+      <spec>RFC 8373</spec>
+      <spec>RFC 8864</spec>
       <spec>RFC 8865</spec>
     </dependencies>
     <supersedes/>
@@ -36,6 +39,12 @@
       <surname>Tie</surname>
       <email>info@tiedragon.com</email>
     </author>
+    <revision>
+      <version>0.0.3</version>
+      <date>2026-06-15</date>
+      <initials>et</initials>
+      <remark><p>Clarify relationship to XEP-0167 RTP/T.140, use XEP-0338 for content grouping, and document open RFC 8864/RFC 8373 mapping issues.</p></remark>
+    </revision>
     <revision>
       <version>0.0.2</version>
       <date>2026-05-30</date>
@@ -54,6 +63,7 @@
     <p>Real-time text is already defined for XMPP by &xep0301;. Jingle is already used to negotiate real-time audio and video sessions, most commonly using &xep0167; and &xep0176;. However, when a client establishes a Jingle audio-video call and sends real-time text as ordinary XMPP messages outside the Jingle session, the user experience can look like one conversation while the protocol state is split into two unrelated paths.</p>
     <p>This specification defines a way to negotiate real-time text as a Jingle content in the same session as audio and video. The text content can be human typed RTT, captions, ASR output, interpreter text, translation text or transcript text. The goal is Total Conversation: audio, video and text presented as one conversational unit.</p>
     <p>The motivating implementation problem is simple: a call can exist, text can exist, and yet the text might not be part of the negotiated Jingle session. In that case the receiver cannot reliably treat the text as synchronized conversational media.</p>
+    <p>This document does not define RTP/T.140 support itself. &xep0167; already supports RTP media descriptions, and implementations can use RTP/T.140 as specified by RFC 4103 without the <tt>rtt-sync</tt> element. The <tt>rtt-sync</tt> element is additional metadata for implementations that need to label the text stream as conversation text, captions, transcripts, translation or interpreter text and expose its synchronization quality to the user.</p>
   </section1>
 
   <section1 topic='Requirements' anchor='reqs'>
@@ -62,8 +72,9 @@
       <li>Enable a Jingle initiator to offer real-time text in the same session as audio and video.</li>
       <li>Enable a responder to accept or reject real-time text independently from audio and video.</li>
       <li>Define a first-class Jingle content for text, for example with content name <tt>text</tt> or <tt>rtt</tt>.</li>
-      <li>Allow endpoints to identify the text purpose, source and language.</li>
+      <li>Allow endpoints to identify the text purpose and source.</li>
       <li>Allow endpoints to indicate whether the text is synchronized to a media clock, a session clock, the call session only, or not synchronized.</li>
+      <li>Use the existing &xep0338; grouping framework to bind audio, video and text contents together.</li>
       <li>Allow fallback to &xep0301; when synchronized Jingle text is not supported.</li>
       <li>Prevent clients from silently presenting fallback RTT as synchronized text.</li>
     </ol>
@@ -152,7 +163,7 @@ Jingle session sid = abc123
 <content name='text'>  ... </content>
 ]]></example>
     <p>The <tt>text</tt> content is not an ordinary XMPP message stream. It is part of the Jingle session and is described by this extension.</p>
-    <p>The binding key is the Jingle <tt>sid</tt> plus the content name and the <tt>sync-group</tt>. A client MUST NOT infer synchronization only from the peer JID, because a user can have multiple simultaneous sessions, devices or fallback chat streams with the same peer.</p>
+    <p>The binding key is the Jingle <tt>sid</tt> plus the content name. When audio, video and text contents need to be presented as one conversation, the sender SHOULD group those contents using &xep0338;. A client MUST NOT infer synchronization only from the peer JID, because a user can have multiple simultaneous sessions, devices or fallback chat streams with the same peer.</p>
   </section1>
 
   <section1 topic='Discovery' anchor='disco'>
@@ -193,24 +204,6 @@ Jingle session sid = abc123
         <td>Origin of the text</td>
       </tr>
       <tr>
-        <td>lang</td>
-        <td>no</td>
-        <td>BCP 47 language tag</td>
-        <td>Language of the text</td>
-      </tr>
-      <tr>
-        <td>sync-group</td>
-        <td>yes</td>
-        <td>token</td>
-        <td>Group shared by audio, video and text contents</td>
-      </tr>
-      <tr>
-        <td>sync-reference</td>
-        <td>no</td>
-        <td>content name</td>
-        <td>Content this text is synchronized with, usually audio</td>
-      </tr>
-      <tr>
         <td>sync-mode</td>
         <td>yes</td>
         <td>media-clock, session-clock, co-session, none</td>
@@ -233,17 +226,15 @@ Jingle session sid = abc123
 <rtt-sync xmlns='urn:xmpp:jingle:apps:rtt-sync:0'
           role='caption'
           source='asr'
-          lang='nl-NL'
-          sync-group='tc1'
-          sync-reference='audio'
           sync-mode='media-clock'
           max-skew='500'
           finality='partial'/>
 ]]></example>
+    <p>Language negotiation is intentionally not defined as an <tt>rtt-sync</tt> attribute. A future Jingle mapping for RFC 8373 could carry language information for text and other media contents consistently.</p>
   </section1>
 
   <section1 topic='RTP/T.140 Profile' anchor='rtp-t140'>
-    <p>The RTP/T.140 profile is the preferred profile when strict synchronization with audio and video is required. The initiator offers a Jingle RTP content with <tt>media='text'</tt> and payload types for <tt>t140</tt> and optionally <tt>red</tt>.</p>
+    <p>The RTP/T.140 profile is the preferred profile when strict synchronization with audio and video is required. The initiator offers a Jingle RTP content with <tt>media='text'</tt> and payload types for <tt>t140</tt> and optionally <tt>red</tt>. Implementations that only need RTP/T.140 interoperability MAY use &xep0167; without the <tt>rtt-sync</tt> metadata element.</p>
     <example caption='Session initiation with text media'><![CDATA[
 <iq from='romeo@example.org/desktop'
     to='juliet@example.org/mobile'
@@ -253,6 +244,11 @@ Jingle session sid = abc123
           action='session-initiate'
           initiator='romeo@example.org/desktop'
           sid='abc123'>
+    <group xmlns='urn:xmpp:jingle:apps:grouping:0' semantics='LS'>
+      <content name='audio'/>
+      <content name='video'/>
+      <content name='text'/>
+    </group>
     <content creator='initiator' name='audio'>
       <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='audio'>
         <payload-type id='111' name='opus' clockrate='48000' channels='2'/>
@@ -274,9 +270,6 @@ Jingle session sid = abc123
         <rtt-sync xmlns='urn:xmpp:jingle:apps:rtt-sync:0'
                   role='conversation'
                   source='human'
-                  lang='nl-NL'
-                  sync-group='tc1'
-                  sync-reference='audio'
                   sync-mode='media-clock'
                   max-skew='500'
                   finality='mixed'/>
@@ -291,6 +284,7 @@ Jingle session sid = abc123
 
   <section1 topic='WebRTC Datachannel/T.140 Profile' anchor='dc-t140'>
     <p>The datachannel profile supports browser/WebRTC deployments using T.140 over a reliable, ordered data channel. This profile is useful when a WebRTC implementation naturally uses data channels for RTT. However, data channels do not automatically share the RTP media clock, so the synchronization mode MUST be declared carefully.</p>
+    <p>RFC 8865 relies on the SDP <tt>dcmap</tt> and <tt>dcsa</tt> attributes from RFC 8864. This document does not currently define a complete Jingle mapping for RFC 8864. A future mapping for RFC 8864 should be defined before this document normatively depends on RFC 8865 data channel negotiation in the same way that &xep0167; already maps RTP/T.140.</p>
     <ul>
       <li>Use <tt>sync-mode='co-session'</tt> when the text is part of the same call but not strictly media-clock synchronized.</li>
       <li>Use <tt>sync-mode='session-clock'</tt> when the implementation provides a common session clock.</li>
@@ -306,9 +300,6 @@ Jingle session sid = abc123
                  label='rtt'/>
     <rtt-sync role='conversation'
               source='human'
-              lang='nl-NL'
-              sync-group='tc1'
-              sync-reference='audio'
               sync-mode='co-session'
               max-skew='700'/>
   </description>
@@ -316,6 +307,30 @@ Jingle session sid = abc123
 </content>
 ]]></example>
     <p>The exact Jingle mapping for WebRTC data channel negotiation should be aligned with the relevant Jingle data channel signalling specification. This document does not attempt to replace that signalling.</p>
+  </section1>
+
+  <section1 topic='SIP and SDP Interworking' anchor='sip-sdp'>
+    <p>For SIP gateways and other SDP-based systems, the most useful comparison point is the SDP that the gateway would exchange with the SIP side. The following example is illustrative and intended to guide further review with implementers experienced in RTT over SIP.</p>
+    <example caption='Illustrative SDP for RTP/T.140'><![CDATA[
+v=0
+o=alice 2890844526 2890844526 IN IP4 192.0.2.10
+s=Total Conversation
+c=IN IP4 192.0.2.10
+t=0 0
+a=group:LS audio video text
+m=audio 49170 RTP/AVP 111
+a=mid:audio
+a=rtpmap:111 opus/48000/2
+m=video 51372 RTP/AVP 96
+a=mid:video
+a=rtpmap:96 VP8/90000
+m=text 54111 RTP/AVP 98 100
+a=mid:text
+a=rtpmap:98 t140/1000
+a=rtpmap:100 red/1000
+a=fmtp:100 98/98/98
+]]></example>
+    <p>The <tt>a=group</tt> line maps naturally to &xep0338;. The <tt>m=text</tt>, <tt>rtpmap:t140</tt>, <tt>rtpmap:red</tt> and <tt>fmtp</tt> lines map through the existing Jingle RTP model. If common SIP deployments use additional registered SDP attributes for RTT language, source, purpose or synchronization semantics, those attributes should be mapped directly rather than replaced by XMPP-only attributes.</p>
   </section1>
 
   <section1 topic='Fallback to XEP-0301' anchor='fallback'>
@@ -339,7 +354,7 @@ Jingle session sid = abc123
       <ol>
         <li>A sender that offers synchronized RTT MUST include an <tt>rtt-sync</tt> element.</li>
         <li>A sender MUST identify whether the stream is conversation text, caption text, transcript text, interpreter text or translation text.</li>
-        <li>A sender SHOULD include a language tag when known.</li>
+        <li>A sender SHOULD include language metadata when a standardized Jingle mapping for the relevant SDP language attributes is available.</li>
         <li>A sender MUST NOT label ASR text as human captioning.</li>
         <li>A sender MUST route Jingle text for the negotiated content through the negotiated Jingle transport, not through an unrelated ordinary chat message path.</li>
       </ol>
@@ -371,7 +386,8 @@ Text in call: unavailable
   </section1>
 
   <section1 topic='Internationalization Considerations' anchor='i18n'>
-    <p>Text content MUST support Unicode. Language tags SHOULD use BCP 47. Clients SHOULD support multiple simultaneous text streams where translation or interpreter text is provided in addition to original captions.</p>
+    <p>Text content MUST support Unicode. Language tags SHOULD use BCP 47 when they are available through an applicable media or signalling mapping. Clients SHOULD support multiple simultaneous text streams where translation or interpreter text is provided in addition to original captions.</p>
+    <p>RFC 8373 defines SDP language negotiation for real-time media. A future Jingle mapping of RFC 8373 would be useful for real-time text and for other media.</p>
   </section1>
 
   <section1 topic='Security Considerations' anchor='security'>
@@ -401,6 +417,7 @@ urn:xmpp:jingle:apps:rtt-sync:dc-t140:0</code>
   <section1 topic='Design Considerations' anchor='design'>
     <p>This document does not replace &xep0301;. XEP-0301 remains appropriate for chat-oriented real-time text and as a fallback. The distinction is that this specification binds text to a Jingle session when an implementation needs Total Conversation semantics.</p>
     <p>RTP/T.140 is the preferred strict synchronization profile. WebRTC datachannel T.140 is useful for browser deployments, but MUST NOT be described as media-clock synchronized unless the implementation can provide the required timing relationship.</p>
+    <p>This document also does not replace &xep0338;. Grouping of audio, video and text contents SHOULD use the existing Jingle grouping framework instead of inventing RTT-specific grouping attributes.</p>
   </section1>
 
   <section1 topic='Implementation Experience' anchor='implementation-experience'>
@@ -442,9 +459,6 @@ urn:xmpp:jingle:apps:rtt-sync:dc-t140:0</code>
           </xs:restriction>
         </xs:simpleType>
       </xs:attribute>
-      <xs:attribute name='lang' type='xs:language' use='optional'/>
-      <xs:attribute name='sync-group' type='xs:NCName' use='required'/>
-      <xs:attribute name='sync-reference' type='xs:NCName' use='optional'/>
       <xs:attribute name='sync-mode' use='required'>
         <xs:simpleType>
           <xs:restriction base='xs:NCName'>
@@ -475,9 +489,11 @@ urn:xmpp:jingle:apps:rtt-sync:dc-t140:0</code>
     <ol>
       <li>Should this be a new Jingle application format or an extension to &xep0167;?</li>
       <li>Should RTP/T.140 be mandatory-to-implement for strict synchronization?</li>
-      <li>Which existing Jingle datachannel signalling elements should be used for the WebRTC datachannel profile?</li>
+      <li>Should an RFC 8864 Jingle mapping be defined separately before this document normatively specifies RFC 8865 datachannel usage?</li>
+      <li>Should an RFC 8373 Jingle mapping carry language negotiation for RTT and other media?</li>
       <li>Should emergency-service profiles have stricter requirements?</li>
       <li>Should multiparty RTT support be included here or deferred to a separate specification?</li>
+      <li>Which SIP/SDP RTT examples should be treated as implementation targets?</li>
     </ol>
   </section1>
 </xep>
