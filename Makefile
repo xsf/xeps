@@ -76,8 +76,11 @@ inbox-xml: $(OUTDIR)/inbox $(proto_xep_xmls)
 .PHONY: pdf
 pdf: $(xep_pdfs)
 
+$(REFSDIR)/LICENSE: refs-LICENSE
+	cp $< $@
+
 .PHONY: refs
-refs: $(xep_refs)
+refs: $(xep_refs) $(REFSDIR)/LICENSE
 
 .PHONY: examples
 examples: $(xep_examples)
