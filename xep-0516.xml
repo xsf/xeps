@@ -1,0 +1,364 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>XMPP Decentralized ID (XID)</title>
+  <abstract>XMPP Decentralized ID (XID) is a DNS independent XMPP entity identifier. This specification describes how to generate, use, and handle them.</abstract>
+  &LEGALNOTICE;
+  <number>0516</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0082</spec>
+    <spec>XEP-0163</spec>
+    <spec>XEP-0280</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>xid</shortname>
+  <tags>
+    <tag>XID</tag>
+  </tags>
+  &goffi;
+  <revision>
+    <version>0.1.0</version>
+    <date>2026-06-30</date>
+    <initials>XEP Editor (dg)</initials>
+    <remark>Accepted as Experimental by council vote</remark>
+  </revision>
+  <revision>
+    <version>0.0.1</version>
+    <date>2026-06-01</date>
+    <initials>jp</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>Identification on XMPP is done with the Jabber ID (JID), which is an email-like, human-friendly identifier. While handy, JID is usually tied to a Domain Name Server, which makes it difficult to change server (while &xep0283; helps, it needs the server to be available and cooperating), and which is not usable in a serverless environment.</p>
+  <p>XMPP Decentralized ID (XID) uses a simple mechanism based on cryptographic signature to have an entity identity independent of any central organization or component. It is designed to be simple to implement and use, and to stay compatible with normal JID.</p>
+  <p>XID can be used to implement the "cryptographic verification" mentioned in &xep0283; with the benefit that the old server doesn't need to be online or cooperating (thus it will work if the server is down or actively blocking migrations). It can also be used in a serverless environment. XID allows keeping track of entities, so if a user's contacts change server, or communicate in a serverless configuration, a client can use it to verify who it is talking to, and to keep all existing cached data (message history, vcard, avatars, etc.). XID could also be used to sign any external data to associate it with the XMPP entity, like a document or an image, or metadata (e.g., to associate a resource like a website with an XMPP entity).</p>
+</section1>
+
+<section1 topic="Requirements" anchor="reqs">
+  <p>The design goals of this XEP are:</p>
+  <ul>
+    <li>Be independent of any central authority or component.</li>
+    <li>Be as simple as possible to implement, re-using existing components when possible.</li>
+    <li>Be usable in serverless configurations.</li>
+    <li>Be future proof by allowing to change cryptographic algorithms.</li>
+  </ul>
+</section1>
+
+<section1 topic='Overview' anchor='overview'>
+  <p>A XID is derived from a cryptographic signature. It currently uses <link url="https://en.wikipedia.org/wiki/EdDSA#Ed25519">Ed25519</link> (which is already used for &xep0384; so most clients have an implementation already). The private key is shared between devices of the entity, and the public key is used to generate the ID (printed as a hex string in lowercase, with a prefix byte). The ID can then be used as a JID in the "&lt;ID&gt;@id.internal" form (this is this form that we call a "XID").</p>
+  <p>The XID is published on a well-known PEP node ('urn:xmpp:xid'), and private key synchronization is done automatically via end-to-end encrypted messages (via &xep0384; or &xep0374;) or another means. XID can also be revoked via a PEP node.</p>
+</section1>
+
+<section1 topic='XID Generation and JID Mapping' anchor='generation'>
+  <p>To generate a XID, an entity must generate a public key and a private key. The former will be used to generate the ID, and the latter must be shared between devices of the entity, and kept secret otherwise (see below for <link url="#sync">private key synchronization</link>).</p>
+  <p>The private key can be used to sign any kind of file or document, even outside of XMPP, and the corresponding public key can be used to verify those signatures. This allows an entity to associate external data with its XID identity independently of any XMPP communication.</p>
+  <p>To generate the ID, the public key is converted to a hex string (which MUST be lowercase), then the prefix byte "00" is prepended to indicate that Ed25519 is used. A JID is built by using this ID as node part, and "id.internal" as domain part.</p>
+  <section2 topic='Example'>
+    <p>Juliet's client generates her XID. To do so, it first generates a pair of private and public keys. It gets those values, converted to hex strings:</p>
+    <ul>
+      <li>Private key (hex):  <tt>000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f</tt></li>
+      <li>Public key (hex):   <tt>03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8</tt></li>
+    </ul>
+    <p>The public key is used for the ID. As the key has been generated with Ed25519, the "00" byte is prepended to it, so it becomes <tt>0003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8</tt>. Finally, the "@id.internal" domain is used to generate the corresponding JID, which is <tt>0003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@id.internal</tt>. The final JID is called Juliet's XID.</p>
+  </section2>
+</section1>
+
+<section1 topic="Publishing and Revoking XID" anchor="publishing-revoking">
+  <section2 topic="Publishing" anchor="publishing" >
+    <p>A XID can be published on an entity's &xep0163; to the well-known node 'urn:xmpp:xid'. By default, and according to XEP-0163, the access model MUST be "presence", but a user MAY choose to use another access model (e.g., "open") if they want to have their XID more or less accessible.</p>
+    <p>The item payload consists of a &lt;xid/&gt; element qualified by the 'urn:xmpp:xid:0' namespace which MUST have a 'created' attribute with a <link url="https://xmpp.org/extensions/xep-0082.html#sect-idm45778538308032">DateTime</link> value as specified in &xep0082; to indicate when the XID has been generated. The &lt;xid/&gt; element content MUST be the generated JID as explained in <link url="#generation">XID Generation and JID Mapping</link>.</p>
+    <p>The main XID MUST be published to an item with an itemID of "current" as explained in <link url="https://xmpp.org/extensions/xep-0060.html#impl-singleton">XEP-0060 §12.21 Singleton Nodes</link>. Other XIDs can be added as backups with other IDs.</p>
+    <p>Entities SHOULD subscribe to the 'urn:xmpp:xid' PEP node with the <link url="https://xmpp.org/extensions/xep-0060.html#subscribe">+notify</link> option to be informed of changes published by other devices. Before publishing a new XID, an entity SHOULD retrieve the items from the 'urn:xmpp:xid' PEP node to obtain the current state and check whether a XID is already published. If a XID with itemID "current" already exists, the entity SHOULD NOT overwrite it with a different XID.</p>
+
+    <example caption="Juliet publishes her XID"><![CDATA[
+<iq type='set'
+    from='juliet@capulet.lit/balcony'
+    to='juliet@capulet.lit'
+    id='xidpub1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:xid'>
+      <item id='current'>
+        <xid xmlns='urn:xmpp:xid:0'
+             created='2026-05-27T14:30:00Z'>
+          0003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@id.internal
+        </xid>
+      </item>
+    </publish>
+  </pubsub>
+</iq>]]></example>
+  </section2>
+  <section2 topic="Revoking" anchor="revoking" >
+    <p>To revoke a XID (because it has been compromised, for rotation, or any other reason), it first MUST be removed from the 'urn:xmpp:xid' PEP node. Then a &lt;revoked/&gt; element MUST be published on the 'urn:xmpp:xid:revoked' well-known PEP node of the entity.</p>
+    <p>The item payload consists of a &lt;revoked/&gt; element qualified by the 'urn:xmpp:xid:0' namespace which MUST have 'created' and 'revoked' attributes with <link url="https://xmpp.org/extensions/xep-0082.html#sect-idm45778538308032">DateTime</link> values as specified in &xep0082;; the 'created' attribute indicates the XID creation datetime (the same as in <link url="#publishing">publishing</link>), while the 'revoked' attribute indicates the datetime of the revocation. The &lt;revoked/&gt; element content MUST be the generated JID of the revoked XID as explained in <link url="#generation">XID Generation and JID Mapping</link>.</p>
+    <p>The &lt;revoked/&gt; element MAY have a &lt;reason/&gt; child element whose content is the human-readable reason for the revocation.</p>
+    <p>If the main XID (the one with the "current" ID in 'urn:xmpp:xid' PEP node) is revoked, the revoking client MUST publish another XID with this ID, either by republishing an existing one with this ID (and removing the element with the old ID), or by generating a new one.</p>
+
+    <section3 topic="Revoking Example" anchor="revoking-example">
+      <p>Juliet wants to revoke her old XID because she suspects it may have been compromised. She first removes it from the active node, then publishes the revocation on the revoked node.</p>
+
+      <example caption="Juliet removes her old XID from the active node"><![CDATA[
+<iq type='set'
+    from='juliet@capulet.lit/balcony'
+    to='juliet@capulet.lit'
+    id='xidrev1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <retract node='urn:xmpp:xid'>
+      <item id='current'/>
+    </retract>
+  </pubsub>
+</iq>]]></example>
+
+      <example caption="Juliet publishes the revocation on the revoked node"><![CDATA[
+<iq type='set'
+    from='juliet@capulet.lit/balcony'
+    to='juliet@capulet.lit'
+    id='xidrev2'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <publish node='urn:xmpp:xid:revoked'>
+      <item id='0003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8'>
+        <revoked xmlns='urn:xmpp:xid:0'
+                 created='2026-05-27T14:30:00Z'
+                 revoked='2026-05-30T09:15:00Z'>
+          0003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@id.internal
+        </revoked>
+      </item>
+    </publish>
+  </pubsub>
+</iq>]]></example>
+    </section3>
+  </section2>
+</section1>
+
+<section1 topic='Identity Challenge' anchor='challenge'>
+  <p>To verify that an entity is allowed to use the XID, an XMPP entity can send a &MESSAGE; stanza with the default type ("chat") to the bare JID of the entity to verify. This stanza MUST have a &lt;challenge/&gt; element qualified by the 'urn:xmpp:xid:0' namespace. The &lt;challenge/&gt; MUST have a 'xid' attribute with the XID to verify, a 'timestamp' attribute with a DateTime value as specified in &xep0082; indicating when the challenge was issued, and MUST have a <link url="https://en.wikipedia.org/wiki/Cryptographic_nonce">nonce</link> for its content (i.e., a cryptographically strong random number used only once). The nonce MUST be encoded as a hex string (lowercase).</p>
+  <p>When the &lt;challenge/&gt; element is received by any of the devices having the private key corresponding to this XID, it MUST sign the requested nonce and send a message to the entity requesting the challenge with a &lt;response/&gt; element qualified by the 'urn:xmpp:xid:0' namespace. The &lt;response/&gt; element MUST have a 'xid' attribute with the XID being verified, a 'timestamp' attribute matching the 'timestamp' from the &lt;challenge/&gt; element, and MUST use the hex-encoded signature of the nonce as content. The entity verifier MUST then check that the signature is correct for this nonce and that the public key corresponds to the XID (i.e., the localpart of the JID from which the algorithm prefix byte has been stripped).</p>
+  <p><strong>Notes:</strong></p>
+  <ol>
+    <li>&MESSAGE; is used here instead of &IQ; because it lets request the bare entity and it can be replied asynchronously if no device is connected at the moment of the challenge.</li>
+    <li>Because &MESSAGE; is used, several devices may receive the challenge thanks to &xep0280;. If a device sees that the &lt;response/&gt; element has already been sent by another device, it SHOULD NOT send this element itself. However, the verifying entity MUST expect to receive several &lt;response/&gt; elements. Only the first one received MUST be verified, following ones MUST be ignored.</li>
+  </ol>
+
+  <section2 topic="Verification Example" anchor="verification-example">
+    <p>Romeo wants to verify that Juliet is the legitimate owner of her XID. He sends a challenge with a random nonce, and Juliet's device signs it and returns the response.</p>
+
+    <example caption="Romeo verifies Juliet's XID"><![CDATA[
+<message type='chat'
+         from='romeo@montague.lit/orchard'
+         to='juliet@capulet.lit'>
+  <challenge xmlns='urn:xmpp:xid:0'
+             xid='0003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@id.internal'
+             timestamp='2026-05-30T10:15:30Z'>
+    a3f2c8b1e9d74560
+  </challenge>
+</message>]]></example>
+
+    <example caption="Juliet responds to the challenge"><![CDATA[
+<message type='chat'
+         from='juliet@capulet.lit/balcony'
+         to='romeo@montague.lit/orchard'>
+  <response xmlns='urn:xmpp:xid:0'
+            xid='0003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@id.internal'
+            timestamp='2026-05-30T10:15:30Z'>
+    7f2be0038e2f62b4ab6688440e07cd5939549feb810fc2514a26282d35056d3aea60c8c102dd3dbce678b520ca3622fbdb53b402cf7ca7f97d75ec23c29bc00d
+  </response>
+</message>]]></example>
+  </section2>
+</section1>
+
+<section1 topic='Private Key Synchronization' anchor='sync'>
+  <p>Devices may use several ways to share private keys. Two methods are described below: QR Code exchange and automatic synchronization.</p>
+
+  <section2 topic='QR Code Exchange' anchor='sync-qrcode'>
+    <p>The private key can be encoded in an <link url="https://xmpp.org/rfcs/rfc5122.html">xmpp: URI</link> as follows:</p>
+    <code><![CDATA[xmpp:<public_key>@id.internal?;xid-private=<private_key>;xid-created=<timestamp>]]></code>
+    <p>Both keys are hex-encoded as specified in <link url="#generation">XID Generation</link>. The 'xid-private' query parameter contains the private key corresponding to the XID. The 'xid-created' query parameter matches the 'created' attribute of the published XID item and uses a <link url="https://xmpp.org/extensions/xep-0082.html#sect-idm45778538308032">DateTime</link> value as specified in &xep0082;. Before importing the private key, the scanning device MUST verify that the public key in the URI matches one of the XIDs published on its own entity's PEP node, and MUST verify that the public key derived from the private key matches the public key in the URI.</p>
+
+    <example caption="QR Code URI for Juliet's XID private key">xmpp:0003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@id.internal?;xid-private=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f;xid-created=2026-05-27T14:30:00Z</example>
+  </section2>
+
+  <section2 topic='Automatic Synchronization' anchor='sync-auto'>
+    <p>This method provides an automatic private key synchronization between known devices, and works asynchronously (devices don't need to be connected at the same time, or in the same location). It uses &xep0384; with &xep0420;.</p>
+    <p>When a device discovers a XID linked to its own identity (e.g., by checking its own 'urn:xmpp:xid' PEP node as explained in <link url="#publishing-revoking">Publishing and Revoking XID</link>) and it doesn't know the private key, it can request it by sending a &MESSAGE; stanza with the &lt;private-key-request/&gt; element qualified by the 'urn:xmpp:xid:0' namespace. This element MUST have a 'xid' attribute set to the XID it wants the private key for, and MUST be sent to its own bare JID. The request MUST use &xep0384; encryption and the element MUST be encrypted with &xep0420; as explained in <link url="https://xmpp.org/extensions/xep-0384.html#encrypt">XEP-0384 §5.5 Sending a Message</link>. This message will then be copied to all entity devices thanks to &xep0280;.</p>
+    <p>When a &lt;private-key-request/&gt; is received by a device, it MUST:</p>
+    <ul>
+      <li>Check that the sender is from its own entity (i.e. same bare JID, and a different resource than itself).</li>
+      <li>Check that the message has been correctly end-to-end encrypted as explained above.</li>
+      <li>Check that the 'xid' attribute corresponds to a XID associated with this entity.</li>
+      <li>Check that it knows the private key of this XID.</li>
+      <li>Check that no other device has already replied to this request.</li>
+    </ul>
+    <p>If all these conditions are respected, the entity SHOULD send a &MESSAGE; stanza with a &lt;private-key/&gt; element qualified by the 'urn:xmpp:xid:0' namespace. This element MUST have a 'xid' attribute with the XID corresponding to this private key. The content of the element MUST be the private key encoded as a hex string (lowercase). The message MUST be end-to-end encrypted with &xep0384; with &xep0420; as explained in <link url="https://xmpp.org/extensions/xep-0384.html#encrypt">XEP-0384 §5.5 Sending a Message</link>, and this message MUST be encrypted only for known devices of this entity.</p>
+    <p><strong>Note:</strong> A SHOULD is used here and not a MUST because this feature is optional.</p>
+
+    <section3 topic="Synchronization Example" anchor="sync-example">
+      <p>Juliet connects a new device (her tablet) and it discovers her XID but doesn't have the private key. It sends a request to her own bare JID, and her phone responds with the key.</p>
+
+      <example caption="Juliet's new device requests the XID private key"><![CDATA[
+<message type='chat'
+         from='juliet@capulet.lit/tablet'
+         to='juliet@capulet.lit'>
+  <encrypted xmlns='urn:xmpp:omemo:2'>
+    <header sid='12345'>
+      <keys jid='juliet@capulet.lit'>
+        <key rid='67890'><!-- base64 key --></key>
+        <key rid='09876'><!-- base64 key --></key>
+      </keys>
+    </header>
+    <payload>
+      <!-- The payload is normally encrypted and unreadable;
+        we show it here in plaintext to illustrate the protocol -->
+      <envelope xmlns='urn:xmpp:sce:1'>
+        <content>
+          <private-key-request xmlns='urn:xmpp:xid:0'
+                               xid='0003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@id.internal'/>
+        </content>
+        <rpad>...</rpad>
+        <from jid='juliet@capulet.lit/tablet'/>
+      </envelope>
+    </payload>
+  </encrypted>
+</message>]]></example>
+
+      <example caption="Juliet's phone responds with the private key"><![CDATA[
+<message type='chat'
+         from='juliet@capulet.lit/phone'
+         to='juliet@capulet.lit'>
+  <encrypted xmlns='urn:xmpp:omemo:2'>
+    <header sid='67890'>
+      <keys jid='juliet@capulet.lit'>
+        <key rid='12345'><!-- base64 key --></key>
+        <key rid='09876'><!-- base64 key --></key>
+      </keys>
+    </header>
+    <payload>
+      <!-- The payload is normally encrypted and unreadable;
+        we show it here in plaintext to illustrate the protocol -->
+      <envelope xmlns='urn:xmpp:sce:1'>
+        <content>
+          <private-key xmlns='urn:xmpp:xid:0'
+                       xid='0003a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8@id.internal'>
+            000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+          </private-key>
+        </content>
+        <rpad>...</rpad>
+        <from jid='juliet@capulet.lit/phone'/>
+      </envelope>
+    </payload>
+  </encrypted>
+</message>]]></example>
+    </section3>
+  </section2>
+</section1>
+
+<section1 topic='Server Mapping' anchor='server_mapping'>
+  <p>A server MAY support XID to and from JID mapping: if it has proven the identity and association between a JID and a XID (e.g., via the <link url="#challenge">Identity Challenge</link> mechanism), and an entity is using a XID in its 'from' attribute, it MUST convert any incoming stanza where the XID is used in the 'from' attribute to the corresponding JID, and it MUST convert any stanza sent to the corresponding entity by replacing the JID used in the 'to' attribute with the corresponding XID. A server that supports this feature MUST advertise it by including the 'urn:xmpp:xid:server-mapping:0' discovery feature in response to a &xep0030; information request.</p>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>In a serverless environment, if there is no mechanism to handle PEP service without a server available, the XID should be published by any other practical means available in the configuration. How this is done is dependent of the set-up and beyond the scope of this specification.</li>
+    <li>The same XID can be associated with one or more DNS-based JIDs. This happens naturally when the same XID is published on the 'urn:xmpp:xid' PEP node of multiple accounts; for example after a server move, or to explicitly link several accounts belonging to the same entity (e.g., work and personal, or several personal accounts on different servers). How a client manages sharing a single XID across multiple accounts is beyond the scope of this specification and is left to client-specific implementation or other XEPs (e.g., &xep0283;).</li>
+    <li>If Private Key Synchronization is used, the XMPP client SHOULD show a notification indicating that the XID private key has been shared, and SHOULD show which devices it has been shared with (if possible, including information such as the device type (e.g., "phone", "web") and the client used on each device). This allows users to identify which device it is, and detect more easily if it is one of their own, or a suspicious one.</li>
+    <li>If &xep0395; is supported by the PEP service, it SHOULD be used to prevent accidental overwriting of the current XID in case of a race condition.</li>
+    <li>XID MAY be used in place of DNS-based JIDs to identify users (e.g., for the <link url="https://xmpp.org/extensions/xep-0060.html#publisher-publish-success-publisher">publisher attribute</link> in &xep0060;). That way, if the user changes server (including the pubsub service in this case), the items stay valid.</li>
+  </ul>
+</section1>
+
+<section1 topic='Discovering Support' anchor='disco'>
+  <p>If a client supports XID, it MUST advertise it by including the 'urn:xmpp:xid:0' discovery feature in response to a &xep0030; information request:</p>
+
+  <example caption="Service Discovery information request"><![CDATA[
+<iq type='get'
+    from='juliet@capulet.lit/balcony'
+    to='romeo@montague.lit/orchard'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'/>
+</iq>]]></example>
+  <example caption="Service Discovery information response"><![CDATA[
+<iq type='result'
+    from='romeo@montague.lit/orchard'
+    to='juliet@capulet.lit/balcony'
+    id='disco1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:xid:0'/>
+    ...
+  </query>
+</iq>]]></example>
+
+  <p>A server that supports XID to and from JID mapping (see <link url="#server_mapping">Server Mapping</link>) MUST advertise the 'urn:xmpp:xid:server-mapping:0' discovery feature:</p>
+
+  <example caption="Service Discovery information response from a server with XID mapping support"><![CDATA[
+<iq type='result'
+    from='capulet.lit'
+    to='juliet@capulet.lit/balcony'
+    id='disco2'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    ...
+    <feature var='urn:xmpp:xid:server-mapping:0'/>
+    ...
+  </query>
+</iq>]]></example>
+</section1>
+
+<section1 topic='Accessibility Considerations' anchor='access'>
+  <p>This specification does not define any user interface elements and therefore has no accessibility considerations.</p>
+</section1>
+
+<section1 topic='Privacy Considerations' anchor='privacy'>
+  <p>XID is designed to be independent of DNS-based identifiers, which can help reduce correlation by third parties. However, the XID itself is a stable identifier that can be used to track entities across different JIDs and servers. Entities should be aware that publishing their XID (especially with an "open" access model) makes this association publicly discoverable, and could be used for any kind of undesired tracking (advertisement, profiling, etc.).</p>
+</section1>
+
+<section1 topic="Security Considerations" anchor="security">
+  <p>Many OMEMO implementations use <link url="https://en.wikipedia.org/wiki/Trust_on_first_use">TOFU</link> authentication scheme by default, or similar ones. If user devices have not been manually and correctly verified out of band, there is a risk that a malicious entity has set a compromised key (e.g., if the server is compromised). Among the problems involved (end-to-end encryption compromised), that would mean that <link url="#sync">Private Key Synchronization</link> would potentially leak the private key to compromised devices. This is a problem of balance between <link url="https://en.wikipedia.org/wiki/User_experience">UX</link> and security.</p>
+  <p>Challenge/response pairs are protected against replay by the nonce mechanism. A verifying entity MUST NOT accept a response to the same nonce more than once.</p>
+</section1>
+
+<section1 topic="IANA Considerations" anchor="iana">
+  <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA).</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <p>The namespaces 'urn:xmpp:xid:0' and 'urn:xmpp:xid:server-mapping:0' should be
+      included in the registry of protocol namespaces (see &NAMESPACES;).</p>
+    <p>The well-known PEP nodes 'urn:xmpp:xid' and 'urn:xmpp:xid:revoked' should be
+      included in the registry of nodes for service discovery and publish-subscribe
+      (see &NODES;).</p>
+
+    <section2 topic='URI Query Types' anchor='registrar-querytypes'>
+      <p>As authorized by &xep0147;, the XMPP Registrar maintains a registry of queries and key-value pairs for use in XMPP URIs (see &QUERYTYPES;).</p>
+      <p>As described below, the registered querytypes for XID private key synchronization are "xid-private" and "xid-created".</p>
+
+      <section3 topic='xid-private' anchor='registrar-querytypes-xid-private'>
+        <p>The registered querytype "xid-private" contains the private key corresponding to the XID, encoded as a hex string (lowercase).</p>
+      </section3>
+
+      <section3 topic='xid-created' anchor='registrar-querytypes-xid-created'>
+        <p>The registered querytype "xid-created" contains the creation datetime of the XID, using a DateTime value as specified in &xep0082;.</p>
+      </section3>
+    </section2>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='acks'>
+  <p>This work has been done for the <link url='https://nlnet.nl/project/ServerlessXMPP/'>Serverless and Metadata Reduction for XMPP</link> project. Many thanks to NLNet foundation and NGI Zero Core for funding the work on this specification.</p>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <p>TODO</p>
+</section1>
+
+</xep>
