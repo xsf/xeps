@@ -19,6 +19,7 @@
   <dependencies>
     <spec>XMPP Core</spec>
     <spec>XMPP IM</spec>
+    <spec>XEP-0128</spec>
     <spec>XEP-0245</spec>
     <spec>XEP-0313</spec>
     <spec>XEP-0359</spec>
@@ -30,6 +31,21 @@
   <shortname>message-retract</shortname>
   &lance;
   &jcbrand;
+  <revision>
+    <version>0.5.0</version>
+    <date>2026-07-03</date>
+    <initials>jcb</initials>
+    <remark>
+      <ul>
+        <li>Clarify that messages whose user-visible content lies outside the &lt;body/&gt; element (e.g. XEP-0447 Stateless File Sharing, where the body is only a fallback) have a messaging payload and may be retracted.</li>
+        <li>Fix leftover reference to "origin ID" in the Use Case section (now: message ID).</li>
+        <li>State that a retraction message's fallback body SHOULD carry a XEP-0428 fallback indication, and that supporting clients MUST NOT render the body of a retraction message, including when no message matching the retraction 'id' is found.</li>
+        <li>Add security considerations regarding sender-controlled fallback bodies.</li>
+        <li>Add the ability to advertise a retraction time limit via a XEP-0128 'max-age' field.</li>
+        <li>Upgrade the XEP-0334 &lt;store/&gt; hint from MAY to SHOULD, to ensure retractions are archived also by services that are unaware of this specification.</li>
+      </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.4.2</version>
     <date>2025-01-18</date>
@@ -145,6 +161,27 @@
 ...
   </query>
 </iq>]]></example>
+
+  <p>A client, server or other service (for example a &xep0045; service) MAY enforce a time limit on message retractions, meaning that it will only honour a retraction request that it receives within a certain amount of time after the original message was sent. An entity which enforces such a limit SHOULD advertise it in its service discovery information response, by including a &xep0128; data form with a FORM_TYPE of 'urn:xmpp:message-retract:1' and a 'max-age' field, the value of which MUST be the limit in seconds.</p>
+    <example caption='A groupchat service advertises a retraction time limit of 30 minutes'><![CDATA[
+<iq type='result'
+    to='romeo@montague.example/orchard'
+    from='muc.capulet.example'
+    id='info2'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+...
+    <feature var='urn:xmpp:message-retract:1'/>
+...
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:message-retract:1</value>
+      </field>
+      <field var='max-age'>
+        <value>1800</value>
+      </field>
+    </x>
+  </query>
+</iq>]]></example>
 </section1>
 <section1 topic='Use Case' anchor='usecase'>
   <p>Consider a situation where a user sends a message to the wrong recipient: </p>
@@ -155,7 +192,7 @@
 
   <p>The author notices that the message was sent to the wrong recipient and indicates to their client that it should be retracted.</p>
   <p>The client sends out a retraction message and uses the 'id' attribute of the &lt;message&gt; element in the original message to indicate that it should be removed.</p>
-  <p>In the case of a group chat message, for example &xep0045;, instead of the origin ID, the XEP-0359 stanza ID that was assigned by the group chat SHOULD be used.</p>
+  <p>In the case of a group chat message, for example &xep0045;, instead of the message ID, the XEP-0359 stanza ID that was assigned by the group chat SHOULD be used.</p>
 
   <example caption="The client sends out a retraction"><![CDATA[
 <message type='chat' to='lord@capulet.example' id='retract-message-1'>
@@ -165,7 +202,7 @@
   <store xmlns="urn:xmpp:hints"/>
 </message>]]></example>
 
-<p>It's RECOMMENDED that you include a &xep0428; tag with fallback text in the &lt;body/&gt;, so that servers will archive the retraction and non-supporting clients can still indicate that there was an intent to retract. Additionally, you MAY include a &xep0334; &lt;store/&gt; hint, to indicate that the stanza needs to be archived.</p>
+<p>It's RECOMMENDED that you include fallback text in the &lt;body/&gt;, so that servers will archive the retraction and non-supporting clients can still indicate that there was an intent to retract. When a &lt;body/&gt; is included, it SHOULD be marked with a &xep0428; &lt;fallback/&gt; element with a 'for' attribute set to 'urn:xmpp:message-retract:1', to indicate that it merely serves as a fallback. The fallback text is intentionally generic and SHOULD NOT identify or repeat the contents of the retracted message, since doing so would undermine the purpose of the retraction. Additionally, you SHOULD include a &xep0334; &lt;store/&gt; hint, to ensure that the retraction is archived even by services that are unaware of this specification.</p>
 
 </section1>
 
@@ -221,9 +258,16 @@
   <p>Some clients may have been offline while the retraction was issued. The archiving service therefore MUST store the retraction message, regardless of whether the original message is deleted or replaced with a tombstone. These clients will then become aware of the retraction as soon as they catch up with the archive.</p>
   <p>A client MAY inform the user that a no-longer displayed message did previously exist and has been removed.</p>
   <p>Supporting clients MUST set a unique 'id' on the &lt;message&gt; element in outgoing stanzas (as per &xep0359;), to make them suitable for retraction.</p>
-  <p>The Sender MUST NOT send a retraction request for a message with non-messaging payloads. For example, a sender MUST NOT send a retraction for a roster item exchange request or a file transfer part.</p>
+  <p>The Sender MUST NOT send a retraction request for a message with non-messaging payloads, in other words, for a message that serves as a transport for protocol signalling and is not displayed as a message to the user. For example, a sender MUST NOT send a retraction for a roster item exchange request (&xep0144;) or a file transfer part. Conversely, a message that conveys user-visible content is considered to have a messaging payload even when that content is not contained in the &lt;body/&gt; element itself. For example, a &xep0447; message, in which the &lt;body/&gt; merely serves as a fallback, MAY be retracted.</p>
+  <p>A retraction message's &lt;body/&gt; serves only as a fallback for clients that don't support this specification, and its contents are entirely under the sender's control. A sender which includes a &lt;body/&gt; SHOULD mark it with a &xep0428; &lt;fallback/&gt; element with a 'for' attribute set to 'urn:xmpp:message-retract:1' (see the <link url='#usecase'>Use Case</link> section).</p>
+  <p>A client that supports this specification MUST NOT display the &lt;body/&gt; of a message containing a &lt;retract/&gt; element, whether or not the &lt;body/&gt; is marked with a XEP-0428 fallback indication. This also applies when no message matching the 'id' of the &lt;retract/&gt; element can be found: instead of rendering the sender-supplied fallback text, the client MAY indicate that the sender attempted to retract an unknown message.</p>
   <p>A retraction (that's not part of a &xep0425; operation) MUST only be processed when both the original message and the retraction request are received from the same bare-JID (in a one-on-one conversation) or full-JID (in a non-anonymous MUC from &xep0045;).</p>
   <p>When used in a semi-anonymous MUC, the recipient client MUST check that a message retraction was sent by the author of the retracted message by checking the occupant id from &xep0421;.</p>
+
+  <section2 topic='Time limits' anchor='business-limits'>
+    <p>Before sending a retraction request, a client SHOULD determine whether any involved entity (for example the group chat service in a group chat, or the chat partner's client in a one-on-one chat) advertises a retraction time limit, as described in <link url='#disco'>Discovering support</link>, and SHOULD NOT offer retraction of a message older than the smallest advertised limit.</p>
+    <p>An entity which receives a retraction request for a message older than its advertised limit MAY ignore the request. An entity which doesn't enforce and advertise such a limit SHOULD honour retraction requests regardless of the age of the retracted message, in order to provide behaviour that's consistent across implementations.</p>
+  </section2>
 
   <section2 topic='Using the correct ID' anchor='business-id'>
     <p>
@@ -247,6 +291,14 @@
    If message retraction results in the complete removal of any record of the original message's body, for example to be replaced by a tombstone, then this could be used to hide messages that moderators might want to be notified of.
   </p>
   <p>To prevent message spoofing, it's very important that the sender's JID or XEP-0421 occupant id of message retractions are checked (as explained in the <link url='#rules'>Business Rules</link> section).</p>
+  <section2 topic='Sender-controlled fallback content' anchor='security-fallback'>
+  <p>
+  The fallback &lt;body/&gt; of a retraction message is entirely under the sender's control, and a sender could deliberately place content in it that's unrelated to the retraction. Clients that support this specification won't display it, while non-supporting clients will display it verbatim, meaning that different recipients may see very different content for the same message. While this divergence is inherent to &xep0428; fallbacks in general, message retraction makes it easy to trigger deliberately: combined with a &lt;retract/&gt; element that refers to a nonexistent message, it could be used to send content which is only visible to some recipients, or which disappears without a trace on others.
+  </p>
+  <p>
+  For this reason, clients that support this specification MUST NOT render the &lt;body/&gt; of a retraction message, also when the referenced message can't be found (see the <link url='#rules'>Business Rules</link> section), and senders MUST set fallback text that describes the retraction, as shown in the <link url='#usecase'>Use Case</link> section.
+  </p>
+  </section2>
   <section2 topic='Uniqueness of message IDs' anchor='message-id-uniqueness'>
   <p>
   Clients that don't support &xep0359; (and therefore don't support &xep0424;), are not guaranteed to have a unique 'id' attribute on their &lt;message&gt; elements.
@@ -269,6 +321,18 @@
     <ul>
       <li>urn:xmpp:message-retract:1</li>
     </ul>
+  </section2>
+  <section2 topic='Field Standardization' anchor='registrar-formtypes'>
+    <p>&xep0068; defines a process for standardizing the fields used within Data Forms qualified by a particular namespace. The following field is registered for use within Service Discovery extension elements:</p>
+    <code><![CDATA[
+<form_type>
+  <name>urn:xmpp:message-retract:1</name>
+  <doc>XEP-0424</doc>
+  <desc>Service discovery extension fields for advertising message retraction limits</desc>
+  <field var='max-age'
+         type='text-single'
+         label='Maximum age in seconds of a message for which a retraction request will be honoured'/>
+</form_type>]]></code>
   </section2>
   <section2 topic='Protocol Versioning' anchor='registrar-versioning'>
     &NSVER;
