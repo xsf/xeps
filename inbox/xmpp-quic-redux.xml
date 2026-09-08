@@ -1,0 +1,134 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Multistream XMPP</title>
+  <abstract>Multistream protocols such as QUIC and WebTransport offer significant performance improvements to XMPP, particularly over constrained or degraded networks. This specification defines a binding for the XMLStream onto multistream transports, including both QUIC and WebTransport.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>Experimental</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>NOT_YET_ASSIGNED</shortname>
+  &dcridland;
+  <revision>
+    <version>0.0.1</version>
+    <date>2026-09-08</date>
+    <initials>dwd</initials>
+    <remark><p>Initial submission.</p></remark>
+  </revision>
+</header>
+<section1 topic='Introduction' anchor='intro'>
+  <p>Baseline XMPP, as defined in &xmppcore;, operates using a TCP binding. This is changed slightly by &xep0368; to avoid the use of the STARTTLS model, but is otherwise unchanged. TCP provides a single bidirectional stream, or virtual circuit, and the XMLStream underlying XMPP is directly mapped to this TCP stream.</p>
+  <p>More advanced protocols, such as QUIC (&rfc9000;) and WebTransport, provide multiple independent streams. These streams can degrade independently to some degree, such that packet loss affecting one stream does not automatically affect the delivery of data on others. This specification provides a binding for XMPP to take advantage of these capabilities.</p>
+  <p>QUIC provides other benefits, including lower round-trip count for connection, and allows the client connection to migrate as the client switches network layer.</p>
+  <p>Note that this specification broadly discusses QUIC, but the general approach also maps to WebTransport. Particular differences are noted in the "QUIC vs WebTransport" section.</p>
+  <section2 topic="Nomenclature">
+    <p>This specification refers to "streams" quite a lot. XMPP has an XMLStream - this specification uses that term exclusively to mean the logical XMLStream of an "XMPP session". QUIC has a connection, which is referred to as a "QUIC connection", which in turn contains one or more "QUIC streams".</p>
+    <p>This has the result that WebTransport's subsidiary streams are also, in this specification, referred to as QUIC streams (which they behave broadly identically to).</p>
+    <p>Also, the term "Bare JID Pair" is introduced. This is the tuple of (from-bare-jid, to-bare-jid), where from-bare-jid is the bare JID of the stanza's from JID, and to-bare-jid is the bare JID of the stanza's to JID.</p>
+  </section2>
+</section1>
+<section1 topic='Requirements' anchor='reqs'>
+    <p>The requirements for this protocol are simple - it should preserve the existing XMPP semantics visible to the user whether the XMPP connection (or another connection on the route, for example an S2S connection) is negotiated over TCP or QUIC.</p>
+</section1>
+  <section1 topic="Overview">
+    <p>In the degenerate case, where only one QUIC stream is used, using QUIC follows the same pattern as the TCP binding. The client opens a connection, negotiating TLS (which is inherently part of QUIC), and sends &lt;stream:stream>, &lt;authenticate/> (from &xep0388;) and so on. The &lt;starttls/> negotiation is inapplicable to QUIC, but otherwise the same data will be on a QUIC stream as is on a TCP stream, excepting the initial "QUIC stream header".</p>
+    <p>However, under QUIC, both peers MAY at any time open additional QUIC streams. Each QUIC stream has a type associated with it, provided by this specification, and also an ID provided by the baseline QUIC specification.</p>
+    <p>Both bidirectional and unidirectional QUIC streams are used within this specification, and additionally QUIC datagrams - also sent on the QUIC connection - can be used.</p>
+  </section1>
+  <section1 topic="QUIC Stream Types">
+    <p>Each QUIC stream opened, including the first such QUIC stream, has a type associated with it. This type is sent as a QUIC varint (see &rfc9000; section 16), as the first octet or octets on the QUIC stream. Further data may also be sent as the initial octets; these combined with the type are known as the "QUIC stream header".</p>
+    <section2 topic="XMPP QUIC Streams">
+      <p>There are two stream types that, collectively, map to a single logical XMLStream.</p>
+      <p>It is possible to open multiple Primary QUIC Streams, leading to multiple independent logical XMLStreams which share only the transport context (including TLS) - though this is not possible on WebTransport.</p>
+      <section3 topic="Primary QUIC Stream">
+        <p>The type of a Primary QUIC stream is 0.</p>
+        <p>The header for this type consists of the type value alone.</p>
+        <p>A Primary QUIC stream MUST be bidirectional, and consists of the normal XMLStream data. A Primary QUIC stream will usually be opened by the initiating entity as the first QUIC stream opened, though other Primary QUIC Streams MAY be opened at any time.</p>
+        <p>After stream opening, each top-level element from the Primary QUIC stream is processed by parsing a complete element at a time and inserting it into the logical XMLStream.</p>
+      </section3>
+      <section3 topic="Ancillary QUIC Streams">
+        <p>The type of an Ancillary QUIC stream is 1.</p>
+        <p>The header for this type consists of the type value, followed immediately by the "Session ID", which for QUIC is the QUIC stream ID of the parent Primary QUIC stream.</p>
+        <p>An Ancillary QUIC stream can be unidirectional or bidirectional, and is processed by parsing a complete stanza at a time and inserting it into the logical XMLStream. Receivers SHOULD defer processing of stanzas until the parent Primary QUIC stream has been fully authenticated and (for C2S) bound.</p>
+        <p>Senders MUST only send stanzas; no other top-level elements may be sent on an Ancillary QUIC stream. No stream open or stream close need be sent either. The octets of each stanza are simply logically inserted into the parent. XML namespaces and other context from the XMLStream are processed within that context.</p>
+        <p>If a sender opens a bidirectional Ancillary QUIC stream, the receiver MAY use it as an Ancillary QUIC stream.</p>
+      </section3>
+      <section3 topic="State">
+        <p>All XMLStream state affects all XMPP QUIC streams making up the logical XMLStream.</p>
+        <p>Authentication in particular is the concern of the Primary QUIC Stream, and an Ancillary QUIC Stream carries the same authentication state as its parent.</p>
+      </section3>
+      <section3 topic="Ordering">
+        <p>Receivers MUST process each stanza from any XMPP QUIC stream in the order it was sent on that stream, but there are no ordering requirements for stanzas sent on different XMPP QUIC streams. Senders MUST NOT assume that merely "sending first" on one QUIC stream will cause the receiving entity to process that stanza before others sent later on different QUIC streams.</p>
+        <p>As an example, if a sender sends stanza A1 on the Primary, and then B1, followed by B2, on the same Ancillary, the receiver MUST process B1 before B2, but MAY process A1 before B1, or after B2, or between the two. "Processing", in this case, also includes forwarding onto other XMPP entities (clients or servers).</p>
+        <p>Senders MAY send any stanza on any XMPP QUIC stream, but MUST NOT allow this to alter any implied ordering between stanzas sent with the same source bare JID and the same destination bare JID.</p>
+        <p>Thus an XMPP server forwarding two stanzas from and to the same bare JIDs (i.e., the same Bare JID Pair) received over the same XMPP QUIC stream or the same TCP-bound XMLStream MUST maintain their order by retransmitting on a single XMPP QUIC stream; but if they were received over different XMPP QUIC streams or TCP connections there is no such constraint.</p>
+      </section3>
+    </section2>
+    <p>Open Question: Other stream types? Media over QUIC, file uploads, blob transport? Or leave those to another spec?</p>
+  </section1>
+  <section1 topic="Stream Management">
+    <p>Because of multiple streams, the state of the XMLStream cannot be captured with a simple counter. This means that &xep0198; cannot apply to QUIC connections, and thus &xep0198; MUST NOT be advertised or negotiated.</p>
+    <p>Luckily, QUIC provides its own mechanism equivalent to resumption. QUIC connections can remain dormant for as long as the peers agree to, and be recovered later from the same or a different client-side IP address. For stanza-level acknowledgements, however, there is no equivalent immediately available.</p>
+    <p>On QUIC, QUIC's own packet-level acknowledgement can be used by senders to achieve a similar "single-tick" effect to that of &xep0198;, though implementers are advised that this only conveys the data being received, not processed. For browser-based WebTransport clients, this is typically not available.</p>
+    <p>Open Question: What about WebTransport in the browser, then? We probably need an application-level ack, like &xep0198; but without the counter? Might be useful for simpler/less-efficient implementations on QUIC too.</p>
+  </section1>
+  <section1 topic="Discovery">
+    <p>For QUIC itself, clients discover QUIC endpoints using SRV, with a label of _xmpp-client._quic. Servers, similarly, use a label of _xmpp-server._quic.</p>
+    <p>Open Question: No WebTransport here, and we should probably use SVCB instead.</p>
+  </section1>
+  <section1 topic="Default Ports and ALPN">
+    <p>No default port is defined by this specification. Implementations are free to run all services on the same port, or use different ports for each.</p>
+    <p>Which protocol is used MUST be negotiated via ALPN, using the ALPN labels as defined by &xep0368; or the relevant HTTP specifications for WebTransport.</p>
+  </section1>
+  <section1 topic="QUIC vs WebTransport">
+    <p>WebTransport is essentially a mechanism for offering, within an HTTP/2 or HTTP/3 connection, the same facilities of multiple subordinate streams and datagrams as QUIC offers. Overhead, relative to QUIC, is a short HTTP exchange to negotiate the WebTransport session, and some additional "stream header" data.</p>
+    <p>It is reasonably simple to support alongside QUIC, but is best suited to operating from within a web browser.</p>
+    <p>While all facilities of QUIC from a structural point of view are available within WebTransport, the lower levels are not exposed to the browser sandbox, and therefore some capabilities are more limited.</p>
+    <p>But in general terms, wherever this specification refers to a "QUIC stream", it can also refer to a "WebTransport stream".</p>
+    <section2 topic="WebTransport differences">
+      <p>Stanza-level acknowledgements cannot be inferred by the browser's WebTransport API.</p>
+      <p>Some kind of path is needed. If the HTTP/3 endpoint is a minimalist shim over a QUIC transport, it can be ignored.</p>
+      <p>WebTransport does not expose the QUIC stream ids to the sandbox, and therefore cannot be used to open multiple Primary QUIC Streams. Instead, it is possible to simply open multiple WebTransport sessions to achieve the same effect.</p>
+      <p>Due to the above, the WebTransport "Session ID" is always the octet 0.</p>
+    </section2>
+  </section1>
+  <section1 topic="Implementation Notes" anchor="impl">
+    <section2 topic="Ordering">
+      <p>The ordering rules defined in this specification are relatively permissive. A server might, for example, send "bulk" traffic like a MAM response over a different XMPP QUIC stream to that used for "live" traffic, and similarly for other types of traffic. Because &xmppcore; hands control of ordering to the originator, this specification arguably doesn't change the ordering rules at all in a practical sense - however, the implications of the ordering rules are made substantially more complex.</p>
+      <p>The biggest change is the introduction of the Bare JID Pair relative ordering. Servers are forbidden, in this specification, from splitting out the MAM traffic of remote servers (for example, XEP-0045 rooms' archives) from a single stream into multiple streams - this may in practice be safe, but requires further experimentation.</p>
+      <p>By far the simplest algorithm to remain compliant with this specification is to map each Bare JID Pair to a single XMPP QUIC stream outbound. Multiple Bare JID Pairs can be mapped to a single XMPP QUIC stream. This design results in each direction of a conversation being solely on a single stream (and often, on their own stream), ensuring that message ordering remains stable.</p>
+    </section2>
+    <section2 topic="Responses">
+      <p>There is no expectation that a stanza sent over a particular XMPP QUIC stream will be responded to (such as errors or IQ results) over the same XMPP QUIC stream.</p>
+    </section2>
+    <section2 topic="QUIC packet-level acknowledgements">
+      <p>This specification relies on the implementation having access to QUIC's own packet-level acknowledgements. This has proven possible, and broadly takes the place of &xep0198; itself, but is only possible outside of the browser case. The browser does have access to total bytes acknowledged, but not at a per-stream level.</p>
+      <p>However, when using a native QUIC stack, the application can track whether individual stanzas have been received by the peer, and can use this information for "single-tick" or similar, without any overhead at the application level. In low-bandwidth and/or high-loss cases, this is highly beneficial.</p>
+    </section2>
+  </section1>
+  <section1 topic="Acknowledgements">
+    <p>This specification is different to, and incompatible with, &xep0467;, but obviously depends on the path forged by Travis Burtrum's early explorations of XMPP/QUIC. The author would also like to thank the many people who tried the early implementations and provided valuable feedback - fortune certainly does favour the bold.</p>
+  </section1>
+<section1 topic='Security Considerations' anchor='security'>
+    <p>Implementers are advised to note the Security Considerations of &rfc9000; and, when using WebTransport, also the Security Considerations for WebTransport and the HTTP version used. When using QUIC itself, or WebTransport over HTTP/3, TLS is mandatory; but HTTP/2 does not itself require TLS. TLS usage, including whether mandatory, is not changed by this specification.</p>
+</section1>
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with IANA.</p>
+</section1>
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <p>This document requires no interaction with the &REGISTRAR;.</p>
+  <p>Open Question: Should it create a registry for stream types, though?</p>
+</section1>
+</xep>
