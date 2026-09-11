@@ -1,0 +1,184 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM "xep.ent">
+  %ents;
+  ]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>SASL2 Terms of Service Acceptance Task</title>
+    <abstract>This specification defines a SASL2 task, per the extensibility mechanism of XEP-0388, that lets a server require a user to accept the current terms of service before authentication completes.</abstract>
+    &LEGALNOTICE;
+    <number>xxxx</number>
+    <status>ProtoXEP</status>
+    <type>Standards Track</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XMPP Core</spec>
+      <spec>XEP-0388</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>NOT_YET_ASSIGNED</shortname>
+    &gdk;
+    <revision>
+      <version>0.1.0</version>
+      <date>2026-09-11</date>
+      <initials>gdk</initials>
+      <remark><p>First draft.</p></remark>
+    </revision>
+  </header>
+
+  <section1 topic='Introduction' anchor='intro'>
+    <p>Operators of XMPP services are sometimes required, for legal or policy reasons, to obtain a user's explicit acceptance of a terms-of-service document before letting that user access the service, and to be able to demonstrate that the currently-applicable version of that document was the one accepted.</p>
+    <p>Today this is typically handled outside of the XMPP authentication exchange itself, for example through an out-of-band web flow, or by nagging the user post-login with no guarantee they ever comply. Neither gives the server a reliable way to withhold a session from an account that has not accepted the current terms.</p>
+    <p>&xep0388; defines a generic mechanism, the SASL2 "task" flow, by which a server can insert one or more additional steps between the completion of a SASL exchange and the completion of the SASL2 negotiation, using the <tt>&lt;continue/&gt;</tt>, <tt>&lt;next/&gt;</tt> and <tt>&lt;task-data/&gt;</tt> elements it defines. Nothing that marks a session as authenticated may occur until every such task has completed. This specification defines one concrete task, built on that mechanism, for the purpose of requiring acceptance of a versioned terms-of-service document.</p>
+    <p>This document defines only the task itself: its namespace, its elements, and the rules governing when it applies and how its outcome is determined. How a task is offered, selected, and driven to completion or failure in general is defined by &xep0388;.</p>
+  </section1>
+
+  <section1 topic='Requirements' anchor='reqs'>
+    <ol>
+      <li>A server MUST be able to prevent an account from completing authentication until the current version of its terms of service has been accepted by that account.</li>
+      <li>A server SHOULD be able to determine, per account, whether the currently-applicable version has already been accepted, so that a user who has already accepted is not asked again.</li>
+      <li>A client that does not implement this specification MUST be able to determine, on abort, that its inability to proceed is due to a terms-of-service requirement, rather than an unrelated authentication failure, so that it can inform its user rather than simply reporting a failed login.</li>
+    </ol>
+  </section1>
+
+  <section1 topic='Protocol' anchor='protocol'>
+    <p>This specification defines the <tt>urn:xmpp:tos:0</tt> namespace, used to qualify the elements defined below, and one SASL2 task, identified in <tt>&lt;task/&gt;</tt> and <tt>&lt;next/&gt;</tt> elements by the token <tt>TOS-ACCEPT</tt>.</p>
+
+    <section2 topic='Determining Applicability' anchor='applicability'>
+      <p>Once the SASL exchange has succeeded, the server determines whether this task applies to the authenticating account, per the following rules (see also <link url='#business'>Business Rules</link>):</p>
+      <ol>
+        <li>There is no account against which an anonymous authentication's acceptance can be reliably recorded. A server that requires this task for anonymous authentication MUST therefore offer it on every anonymous authentication attempt, rather than only the first.</li>
+        <li>The task does not apply if it has already completed earlier in this same negotiation. This matters because eligibility is re-evaluated after every task completes, not just once, so a task that already ran is not offered again merely because a later round is reached.</li>
+        <li>Otherwise, the task applies if the account has not previously accepted the version that is currently applicable.</li>
+      </ol>
+      <p>When the task applies, the server offers it as it would any SASL2 task, in a <tt>&lt;continue/&gt;</tt> element. It SHOULD include human-readable <tt>&lt;text/&gt;</tt> explaining why authentication has not yet completed, since a client that does not implement this task can present that text to its user before aborting.</p>
+      <example caption='Server offers the terms task'><![CDATA[
+<continue xmlns='urn:xmpp:sasl:2'>
+  <tasks>
+    <task>TOS-ACCEPT</task>
+  </tasks>
+  <text>The terms of service have changed and must be accepted before you can sign in.</text>
+</continue>
+]]></example>
+    </section2>
+
+    <section2 topic='Selecting the Task' anchor='selecting'>
+      <example caption='Client selects the terms task'><![CDATA[
+<next xmlns='urn:xmpp:sasl:2' task='TOS-ACCEPT'/>
+]]></example>
+    </section2>
+
+    <section2 topic='Presenting the Terms' anchor='presenting'>
+      <p>On selection, the server sends the current terms in a <tt>&lt;task-data/&gt;</tt> element, carrying a <tt>&lt;terms/&gt;</tt> element. Its content is the URL at which the terms can be read, and its <tt>version</tt> attribute identifies the version being offered for acceptance.</p>
+      <example caption='Server presents the current terms'><![CDATA[
+<task-data xmlns='urn:xmpp:sasl:2'>
+  <terms xmlns='urn:xmpp:tos:0' version='2026-01'>https://example.org/terms</terms>
+</task-data>
+]]></example>
+    </section2>
+
+    <section2 topic='Responding to the Terms' anchor='responding'>
+      <p>The client responds with a <tt>&lt;task-data/&gt;</tt> element of its own. To accept, it includes an <tt>&lt;accept/&gt;</tt> element whose <tt>version</tt> attribute repeats the version it was offered.</p>
+      <example caption='Client accepts the current terms'><![CDATA[
+<task-data xmlns='urn:xmpp:sasl:2'>
+  <accept xmlns='urn:xmpp:tos:0' version='2026-01'/>
+</task-data>
+]]></example>
+      <p>A peer that does not wish to accept, or that does not implement this task at all, has no way to decline while continuing the negotiation: per &xep0388;, it can only abort, which fails the entire SASL2 negotiation and leaves the session unauthenticated.</p>
+      <example caption='Client aborts rather than accept'><![CDATA[
+<abort xmlns='urn:xmpp:sasl:2'/>
+]]></example>
+    </section2>
+
+    <section2 topic='Outcome' anchor='outcome'>
+      <p>On receiving the client's response, the server determines the outcome per the following rules:</p>
+      <ol>
+        <li>If the response contains no <tt>&lt;accept/&gt;</tt> element, the server MUST fail the SASL2 negotiation with a <tt>&lt;not-authorized/&gt;</tt> condition.</li>
+        <li>If the response contains an <tt>&lt;accept/&gt;</tt> element whose <tt>version</tt> attribute does not match the version that was offered in this round, the server MUST fail the SASL2 negotiation with a <tt>&lt;malformed-request/&gt;</tt> condition (rejecting, for example, a value cached from an earlier attempt).</li>
+        <li>Otherwise, the task completes for this negotiation. The server SHOULD persist the acceptance against the account, so that it is not asked again on a future connection. If the account is authenticating anonymously, or the acceptance cannot be persisted (for example due to a transient failure of the server's own backing store), no durable record results; the task still completes, but the server SHOULD offer it again on the account's next authentication attempt, since there is nothing on record to rely on next time.</li>
+      </ol>
+      <p>Once every eligible task, including this one, has completed, the SASL2 negotiation concludes as usual with <tt>&lt;success/&gt;</tt>.</p>
+    </section2>
+  </section1>
+
+  <section1 topic='Business Rules' anchor='business'>
+    <ol>
+      <li>A server MUST NOT complete SASL2 authentication for an account for which this task applies (see <link url='#applicability'>Determining Applicability</link>) unless the task has completed successfully during the same negotiation.</li>
+      <li>A server MUST offer this task on every anonymous authentication attempt for which it applies (see <link url='#applicability'>Determining Applicability</link>), since acceptance cannot be reliably recorded against an account that does not exist.</li>
+      <li>A server SHOULD treat "currently accepted version" as a per-account fact rather than a per-session one: once durably recorded, the same account is not asked again on a later connection unless the applicable version changes or no durable record was actually made (see <link url='#outcome'>Outcome</link>).</li>
+      <li>A server SHOULD treat the <tt>version</tt> identifiers it issues as opaque and SHOULD compare them for exact equality, both when checking whether a previously-recorded acceptance is still current and when validating a peer's <tt>&lt;accept/&gt;</tt> against the version it was offered in the same round.</li>
+    </ol>
+  </section1>
+
+  <section1 topic='Security Considerations' anchor='security'>
+    <p>This task is a policy and record-keeping mechanism, not an authentication factor. It MUST NOT be treated as contributing to the strength of the authentication that preceded it, and does not protect against an attacker who already holds valid credentials: by the time this task runs, the SASL exchange has already succeeded.</p>
+    <p>This task, like any SASL2 task, is only evaluated as part of a SASL2 negotiation. If a server also offers an authentication path that bypasses SASL2 entirely, for example the legacy SASL profile of RFC 6120, an account can authenticate through that path without this, or any other, SASL2 task ever being evaluated. A server that needs to guarantee acceptance before granting access MUST NOT offer such a path to accounts this task applies to, or MUST enforce the same requirement by some other means there. This limitation applies equally to any mandatory SASL2 task, not just this one.</p>
+    <p>A server that cannot durably persist an acceptance, for example due to a transient failure of its own backing store, MAY still let the negotiation continue rather than fail it outright (see <link url='#outcome'>Outcome</link>): the peer did explicitly accept during this negotiation, which is what the task exists to establish. Since no durable record exists in that case, the server SHOULD offer the task again on the account's next authentication attempt, so that a persistence failure results in the user being asked again rather than the requirement being silently and permanently bypassed.</p>
+    <p>Because completion of this task changes an account's compliance record, a server SHOULD only offer, and only accept a response to, this task over a channel that satisfies its usual requirements for authenticated sessions, per whatever channel-binding or TLS policy already governs the SASL2 negotiation in which it is offered; this specification does not introduce a separate requirement.</p>
+    <p>The terms URL communicated in the <tt>&lt;terms/&gt;</tt> element is typically dereferenced by a human outside of the XMPP session (for example by opening it in a browser). Server operators should serve it over a secure and integrity-protected transport, but validating that is outside the scope of this specification.</p>
+  </section1>
+
+  <section1 topic='IANA Considerations' anchor='iana'>
+    <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA).</p>
+  </section1>
+
+  <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <p>This specification defines the following XML namespace, which the XMPP Registrar shall add to its registry of protocol namespaces (&xep0053;):</p>
+    <ul>
+      <li>urn:xmpp:tos:0</li>
+    </ul>
+    <p>This specification also defines the SASL2 task token <tt>TOS-ACCEPT</tt>. &xep0388; defines no central registry of task tokens; as with the <tt>UPGR-*</tt> tokens defined by &xep0480;, uniqueness is expected to follow from the token being sufficiently distinctive, checked against existing task-defining specifications during the XSF's normal review process.</p>
+  </section1>
+
+  <section1 topic='XML Schema' anchor='schema'>
+    <code><![CDATA[
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:tos:0'
+    xmlns='urn:xmpp:tos:0'
+    elementFormDefault='qualified'>
+
+  <xs:annotation>
+    <xs:documentation>
+      The protocol documented by this schema is defined in
+      XEP-xxxx: http://www.xmpp.org/extensions/xep-xxxx.html
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name='terms'>
+    <xs:annotation>
+      <xs:documentation>
+        Identifies the current terms of service. Sent by the server, as the
+        content of a <task-data/> element, after this task has been selected.
+      </xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base='xs:anyURI'>
+          <xs:attribute name='version' type='xs:string' use='required'/>
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='accept'>
+    <xs:annotation>
+      <xs:documentation>
+        Sent by the client, as the content of a <task-data/> element, to accept
+        the identified version of the terms of service.
+      </xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:attribute name='version' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>
+]]></code>
+  </section1>
+
+</xep>
