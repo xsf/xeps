@@ -17,19 +17,30 @@
   <dependencies>
     <spec>XMPP Core</spec>
     <spec>XEP-0001</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0050</spec>
     <spec>XEP-0166</spec>
     <spec>XEP-0167</spec>
-    <spec>XEP-0298</spec>
+    <spec>XEP-0338</spec>
   </dependencies>
   <supersedes/>
   <supersededby/>
   <shortname>av-conferences</shortname>
-  <author>
-    <firstname>Jérôme</firstname>
-    <surname>Poisson</surname>
-    <email>goffi@goffi.org</email>
-    <jid>goffi@jabber.fr</jid>
-  </author>
+  &goffi;
+  <revision>
+    <version>0.0.2</version>
+    <date>2026-10-13</date>
+    <initials>jp</initials>
+    <remark>
+      <ul>
+        <li>hold a conference within a single Jingle session per participant, instead of one Jingle session per stream</li>
+        <li>add an &lt;origin&gt; element to identify the origin of a forwarded stream</li>
+        <li>use BUNDLE groups (XEP-0338) for the contents of streams</li>
+        <li>allow a participant to add an additional stream (e.g. for screen sharing)</li>
+        <li>remove the duplicated Overview section</li>
+      </ul>
+    </remark>
+  </revision>
   <revision>
     <version>0.0.1</version>
     <date>2024-07-29</date>
@@ -43,10 +54,10 @@
   <ul>
     <li><p>A mesh network where each peer contacts each other peer: this is straightforward to implement and doesn't require any extra service, but it is heavy on network bandwidth and doesn't scale.</p></li>
     <li><p>An MCU (Multipoint Conferencing Unit) which uses a central service that generally mixes the contents of participants: this is lighter on network bandwidth but heavy on computing resources and hard to scale.</p></li>
-    <li><p>A SFU (Selective Forwarding Unit) which uses a service that redistributes streams of participants as efficiently as possible: this is lighter on computing resources, acceptable in terms of network bandwidth, and can scale.</p></li>
+    <li><p>An SFU (Selective Forwarding Unit) which uses a service that redistributes streams of participants as efficiently as possible: this is lighter on computing resources, acceptable in terms of network bandwidth, and can scale.</p></li>
   </ul>
   <p>The mesh strategy is covered by &xep0272;. There have been attempts to specify MCU and SFU strategies, notably with &xep0340;, but it is unmaintained and unused.</p>
-  <p>This specification proposes a simple way to implement a SFU strategy with a service called in a similar way to one-to-one calls.</p>
+  <p>This specification proposes a simple way to implement an SFU strategy with a service called in a similar way to one-to-one calls.</p>
 </section1>
 <section1 topic='Requirements' anchor='reqs'>
   <p>The design goals of this XEP are:</p>
@@ -62,34 +73,66 @@
   <ul>
     <li><strong>A/V</strong>: Audio/visual.</li>
     <li><strong>SFU</strong>: Selective Forwarding Unit, a service that redistributes streams of participants as efficiently as possible.</li>
-    <li><strong>SFU service</strong>: An XMPP entity that services A/V conferences with a SFU.</li>
+    <li><strong>SFU service</strong>: An XMPP entity that services A/V conferences with an SFU.</li>
     <li><strong>Room</strong>: A JID of an SFU service associated with a specific multiparty call.</li>
     <li><strong>Joining entity</strong>: An XMPP entity that participates in an A/V conference room.</li>
+    <li><strong>Stream</strong>: A media (e.g. audio or video) exchanged in a conference, carried by a single content.</li>
     <li><strong>Simulcast</strong>: Serving multiple versions of the same media content at different quality levels simultaneously, allowing the receiving end to select the most suitable version.</li>
   </ul>
 </section1>
 
 <section1 topic='Overview' anchor='overview'>
-  <p>A/V conferences works using a Jingle session per stream: all sessions use unidirectional streams. An A/V conference is joined by calling the JID of an conference entity, and by sending our own stream. The conference service then call us for each stream it wants to send us.</p>
-  <p>&xep0298; is used to associate stream with the originating entity.</p>
+  <p>A/V conferences work by using a single Jingle session per participant. To join a conference, a client calls the JID of a conference room and sends its own streams. The conference service then delivers the streams of the other participants by adding and removing the corresponding contents of the session.</p>
+  <p>An &lt;origin&gt; element is used to associate a forwarded stream with the originating entity (see <link url="#origin">Origin of Forwarded Streams</link>).</p>
   <p>&xep0050; is used with a well-known node to configure the room.</p>
 </section1>
-<section1 topic='Overview' anchor='overview'>
-  <p>A/V conferences work by using a Jingle session per stream: all sessions use unidirectional streams. To join an A/V conference, a client calls the JID of a conference entity and sends its own stream. The conference service then contacts the client for each stream it wants to send.</p>
-  <p>&xep0298; is used to associate a stream with the originating entity.</p>
-  <p>&xep0050; is used with a well-known node to configure the room.</p>
-</section1>
-
 
 <section1 topic='Joining a Conference' anchor='joining'>
-  <p>To join a conference, a user calls the conference room JID using &xep0167; as for a one-to-one call. The calling entity sends its audio/video streams (typically webcam and microphone) in an unidirectional way. It MUST have its content 'senders' attribute set to "initiator" as explained in &xep0166; <link url="https://xmpp.org/extensions/xep-0166.html#def-content">§ 7.3</link>.</p>
+  <p>To join a conference, a user calls the conference room JID using &xep0167; as for a one-to-one call. The calling entity sends its audio/video streams (typically from its microphone and its webcam) in an unidirectional way. It MUST have its content 'senders' attribute set to "initiator" as explained in &xep0166; <link url="https://xmpp.org/extensions/xep-0166.html#def-content">§ 7.3</link>.</p>
   <p>A joining entity MAY send the same audio or video stream with different quality for simulcast purposes. It is up to the SFU service to then select which one to forward.</p>
-  <p>A SFU service MUST use &xep0298; and notably it MUST set the 'isfocus' attribute of the &lt;conference-info&gt; element to "true".</p>
+  <p>A participant leaves the conference by terminating the session.</p>
 </section1>
 
 <section1 topic='Receiving Streams' anchor='receiving'>
-  <p>The SFU service MAY call the joining entity as many times as necessary using &xep0167; Jingle sessions from the joined room. The joining entity SHOULD accept each session coming from a joined room. Each session MUST be unidirectional (stream sent from SFU service to joining entity) and MUST have its content 'senders' attribute set to "initiator" as explained in &xep0166; <link url="https://xmpp.org/extensions/xep-0166.html#def-content">§ 7.3</link>. Those streams are the streams of other participants as selected by the SFU.</p>
-  <p>To identify the streams' origin, the SFU service must specify it using &xep0298;, in particular by specifying the &lt;user&gt; element and its 'entity' attribute.</p>
+  <p>The SFU service selects and delivers the streams of other participants by sending a <strong>content-add</strong> action on the participant's session, including one content per stream (e.g. one audio and one video content). The added contents MUST have their 'senders' attribute set to "responder". The action MUST include an &lt;origin&gt; element identifying the entity the streams originate from (see <link url="#origin">Origin of Forwarded Streams</link>).</p>
+  <p>The contents of the streams of the same origin MUST share a single transport, declared with a BUNDLE group, as defined in &xep0338;. The service MAY use one BUNDLE group for the streams of an origin, or a single BUNDLE group for all the streams of the session.</p>
+  <p>The service MAY send <strong>content-add</strong> actions while the session is still in the PENDING state (as allowed by &xep0166;), so that it can start delivering the streams of already joined participants right away.</p>
+  <p>The joining entity SHOULD <strong>content-accept</strong> each added content. If it does not want to receive the corresponding stream, it MAY <strong>content-reject</strong> it.</p>
+  <p>When a stream has to stop being delivered to a participant (e.g. because its origin left the conference, or because the service changed its selection), the service MUST remove the corresponding contents with a <strong>content-remove</strong> action.</p>
+</section1>
+
+<section1 topic='Adding a Stream' anchor='adding'>
+  <p>A participant MAY add additional streams of its own to the session, e.g. to share its screen, by sending a <strong>content-add</strong> action with the corresponding contents (one content per stream, their 'senders' attribute set to "initiator"), as for its initial streams (see <link url="#joining">Joining a Conference</link>). The participant MAY use a new BUNDLE group for the added streams, or add them to an existing BUNDLE group (see <link url="#receiving">Receiving Streams</link>). The service MAY then deliver the added streams to the other participants, with the participant as origin.</p>
+  <p>An entity MAY have several concurrent streams in a conference (e.g. streams from its camera and from its screen). Each stream is carried by a single content. How the streams of an entity are rendered (e.g. one tile per source, or combined) is up to the implementation.</p>
+</section1>
+
+<section1 topic='Origin of Forwarded Streams' anchor='origin'>
+  <p>Each <strong>content-add</strong> action carrying streams forwarded by the SFU service MUST include an &lt;origin&gt; element, qualified by the 'urn:xmpp:jingle:av-conferences:0' namespace, as a child of the &lt;jingle&gt; element (i.e. a sibling of the &lt;content&gt; elements), as shown below. Its 'entity' attribute identifies the entity the streams originate from, as a URI (typically an "xmpp:" URL, in the form "xmpp:user@domain" or "xmpp:user@domain/resource").</p>
+  <p>A <strong>content-add</strong> action carries the streams of a single origin, so a single &lt;origin&gt; element identifies the origin of all the contents of the action.</p>
+  <example caption="Content-add action of forwarded streams with their origin"><![CDATA[
+<jingle action="content-add" ...>
+  <group xmlns="urn:xmpp:jingle:apps:grouping:0" semantics="BUNDLE">
+    <content name="0"/>
+    <content name="1"/>
+  </group>
+  <content creator="responder" name="0" senders="responder">
+    <description xmlns="urn:xmpp:jingle:apps:rtp:1" media="audio">
+      <!-- audio stream description -->
+    </description>
+    <transport xmlns="urn:xmpp:jingle:transports:ice-udp:1"
+      ufrag="ufrag_2"
+      pwd="ice_pwd_2">
+      <!-- transport child elements -->
+    </transport>
+  </content>
+  <content creator="responder" name="1" senders="responder">
+    <!-- video content -->
+  </content>
+  <origin xmlns="urn:xmpp:jingle:av-conferences:0"
+    entity="xmpp:romeo@montague.lit"/>
+</jingle>
+]]></example>
+  <p>A stream MAY originate from a non-XMPP entity (e.g. using the SFU's own user interface or with a gateway to another protocol). In that case, the 'entity' attribute MAY use another URI scheme.</p>
 </section1>
 
 <section1 topic='Examples'>
@@ -140,8 +183,8 @@
     action="session-accept"
     responder="ball@conferences.shakespeare.lit">
     <group xmlns="urn:xmpp:jingle:apps:grouping:0" semantics="BUNDLE">
-      <content name="audio1"/>
       <content name="video0"/>
+      <content name="audio1"/>
     </group>
     <content creator="initiator" name="video0">
       <description xmlns="urn:xmpp:jingle:apps:rtp:1" media="video">
@@ -155,54 +198,87 @@
       </description>
       <!-- transport element -->
     </content>
-    <conference-info xmlns='urn:xmpp:coin:1' isfocus='true'/>
   </jingle>
 </iq>
   ]]></example>
   </section2>
 
   <section2 topic='Romeo Joins the Conference'>
-    <example caption="Conference room initiates a session with Juliet to send Romeo's stream"><![CDATA[
-    <iq id="room_iq_2" type="set" from="ball@conferences.shakespeare.lit" to="juliet@capulet.lit/balcony">
-      <jingle xmlns="urn:xmpp:jingle:1"
-        sid="av_jingle_session_2"
-        action="session-initiate"
-        initiator="ball@conferences.shakespeare.lit">
-      <group xmlns="urn:xmpp:jingle:apps:grouping:0" semantics="BUNDLE">
-        <content name="0"/>
-        <content name="1"/>
-      </group>
-      <content creator="initiator" name="0" senders="initiator">
-        <description xmlns="urn:xmpp:jingle:apps:rtp:1" media="audio">
-          <!-- audio stream description -->
-        </description>
-        <transport xmlns="urn:xmpp:jingle:transports:ice-udp:1"
-          ufrag="ufrag_2"
-          pwd="ice_pwd_2">
+    <example caption="Conference room adds Romeo's streams to Juliet's session"><![CDATA[
+<iq id="room_iq_2" type="set" from="ball@conferences.shakespeare.lit" to="juliet@capulet.lit/balcony">
+  <jingle xmlns="urn:xmpp:jingle:1"
+    sid="av_jingle_session_1"
+    action="content-add">
+    <group xmlns="urn:xmpp:jingle:apps:grouping:0" semantics="BUNDLE">
+      <content name="0"/>
+      <content name="1"/>
+    </group>
+    <content creator="responder" name="0" senders="responder">
+      <description xmlns="urn:xmpp:jingle:apps:rtp:1" media="audio">
+        <!-- audio stream description -->
+      </description>
+      <transport xmlns="urn:xmpp:jingle:transports:ice-udp:1"
+        ufrag="ufrag_2"
+        pwd="ice_pwd_2">
         <fingerprint xmlns="urn:xmpp:jingle:apps:dtls:0" hash="sha-256" setup="actpass">
           <!-- some fingerprint -->
         </fingerprint>
       </transport>
     </content>
-    <content creator="initiator" name="1" senders="initiator">
+    <content creator="responder" name="1" senders="responder">
       <description xmlns="urn:xmpp:jingle:apps:rtp:1" media="video">
         <!-- video stream description -->
       </description>
       <transport xmlns="urn:xmpp:jingle:transports:ice-udp:1"
-          ufrag="ufrag_2"
-          pwd="ice_pwd_2">
+        ufrag="ufrag_2"
+        pwd="ice_pwd_2">
         <fingerprint xmlns="urn:xmpp:jingle:apps:dtls:0" hash="sha-256" setup="actpass">
           <!-- some fingerprint -->
         </fingerprint>
-    </transport>
-  </content>
-  <conference-info xmlns='urn:xmpp:coin:1' isfocus='true'>
-    <users>
-      <user entity='xmpp:romeo@montague.lit' />
-    </users>
-  </conference-info>
-</jingle>
+      </transport>
+    </content>
+    <origin xmlns="urn:xmpp:jingle:av-conferences:0" entity="xmpp:romeo@montague.lit"/>
+  </jingle>
 </iq>
+
+<iq to="ball@conferences.shakespeare.lit" from="juliet@capulet.lit/balcony" id="room_iq_2" type="result"/>
+  ]]></example>
+    <example caption="Juliet accepts the added contents"><![CDATA[
+<iq id="av_iq_2" type="set" from="juliet@capulet.lit/balcony" to="ball@conferences.shakespeare.lit">
+  <jingle xmlns="urn:xmpp:jingle:1"
+    sid="av_jingle_session_1"
+    action="content-accept">
+    <content creator="responder" name="0">
+      <description xmlns="urn:xmpp:jingle:apps:rtp:1" media="audio">
+        <!-- audio stream description -->
+      </description>
+      <!-- transport element -->
+    </content>
+    <content creator="responder" name="1">
+      <description xmlns="urn:xmpp:jingle:apps:rtp:1" media="video">
+        <!-- video stream description -->
+      </description>
+      <!-- transport element -->
+    </content>
+  </jingle>
+</iq>
+
+<iq to="juliet@capulet.lit/balcony" from="ball@conferences.shakespeare.lit" id="av_iq_2" type="result"/>
+  ]]></example>
+  </section2>
+
+  <section2 topic='Romeo Leaves the Conference'>
+    <example caption="Conference room removes Romeo's streams from Juliet's session"><![CDATA[
+<iq id="room_iq_3" type="set" from="ball@conferences.shakespeare.lit" to="juliet@capulet.lit/balcony">
+  <jingle xmlns="urn:xmpp:jingle:1"
+    sid="av_jingle_session_1"
+    action="content-remove">
+    <content creator="responder" name="0"/>
+    <content creator="responder" name="1"/>
+  </jingle>
+</iq>
+
+<iq to="ball@conferences.shakespeare.lit" from="juliet@capulet.lit/balcony" id="room_iq_3" type="result"/>
   ]]></example>
   </section2>
 </section1>
@@ -212,12 +288,13 @@
 </section1>
 
 <section1 topic='Business Rules' anchor='rules'>
-  <p>Only other peers' streams are sent to a joining entity. A SFU service MUST NOT send back a stream to the entity that initially sent it.</p>
-  <p>A stream MAY originate from a non-XMPP entity (e.g., using SFU's own user interface or with a gateway to another protocol). That means that the &lt;user&gt; 'entity' attribute may be something else than an "xmpp:" URL.</p>
+  <p>Only other peers' streams are sent to a joining entity. An SFU service MUST NOT send back a stream to the entity that initially sent it.</p>
+  <p>An SFU service MUST NOT initiate independent Jingle sessions to deliver streams to a joined entity: the streams are only delivered as contents of the entity's session, via <strong>content-add</strong> actions.</p>
+  <p>An SFU service MUST ensure that the names of the contents it adds do not collide with the existing contents of the session, as a BUNDLE group identifies its contents by name only.</p>
 </section1>
 
 <section1 topic='Discovering Support' anchor='disco'>
-  <p>If a client or a service supports the protocol specified in this XEP, it MUST advertise it by including the "urn:xmpp:jingle:av-conferences:0" discovery feature in response to a &xep0030; information request.</p>
+  <p>If a client or a service supports the protocol specified in this XEP, it MUST advertise it by including the 'urn:xmpp:jingle:av-conferences:0' discovery feature in response to a &xep0030; information request.</p>
 
   <example caption="Service Discovery information request"><![CDATA[
 <iq type='get'
@@ -238,7 +315,7 @@
   </query>
 </iq>]]></example>
 
-<p>If an entity is a A/V conferences service as specified by this XEP, it MUST have an identity with a category of "conference" and a value of "audio-video" in a response to a &xep0030; information request.</p>
+<p>If an entity is an A/V conferences service as specified by this XEP, it MUST have an identity with a category of "conference" and a value of "audio-video" in a response to a &xep0030; information request.</p>
 
   <example caption="Service Discovery information request"><![CDATA[
 <iq type='get'
@@ -266,6 +343,7 @@
 <section1 topic="Security Considerations" anchor="security">
   <p>Streams are sent to the SFU service for redistribution. Although it is technically possible to have the stream encrypted end-to-end, this specification assumes that streams are decoded at the SFU level and are therefore not end-to-end encrypted, unlike one-to-one calls. Future specifications may outline a method for maintaining end-to-end encryption, but this is beyond the scope of this XEP; developers and end-users MUST assume that streams are decrypted at the SFU service level.</p>
   <p>The general security considerations for one-to-one calls apply, with the added risk that more parties are participating in the call. However, the IP address of a device sending a stream is only known by the SFU service, not by other peers, unlike in one-to-one or &xep0272; calls.</p>
+  <p>The &lt;origin&gt; element is not authenticated: it is provided by the SFU service, which is responsible for having established the identity of the entities that sent the streams (e.g. via the JID of their Jingle sessions). The service could however alter an &lt;origin&gt; or a stream, either intentionally or through a bug.</p>
 </section1>
 
 <section1 topic='IANA Considerations' anchor='iana'>
