@@ -1,0 +1,424 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>Jingle Session History</title>
+    <abstract>This specification defines an archiveable message event for representing Jingle call history, including missed calls, completed calls, Total Conversation calls, and optional recording or transcript metadata.</abstract>
+    &LEGALNOTICE;
+    <number>xxxx</number>
+    <status>ProtoXEP</status>
+    <type>Standards Track</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XMPP Core</spec>
+      <spec>XEP-0030</spec>
+      <spec>XEP-0166</spec>
+      <spec>XEP-0167</spec>
+      <spec>XEP-0301</spec>
+      <spec>XEP-0313</spec>
+      <spec>XEP-0334</spec>
+      <spec>XEP-0353</spec>
+      <spec>XEP-0447</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>jingle-session-history</shortname>
+    <tags>
+      <tag>jingle</tag>
+      <tag>history</tag>
+      <tag>calls</tag>
+      <tag>mam</tag>
+      <tag>accessibility</tag>
+    </tags>
+    <author>
+      <firstname>Edward</firstname>
+      <surname>Tie</surname>
+      <email>info@tiedragon.com</email>
+    </author>
+    <revision>
+      <version>0.0.1</version>
+      <date>2026-06-15</date>
+      <initials>et</initials>
+      <remark><p>Initial ProtoXEP submission.</p></remark>
+    </revision>
+  </header>
+
+  <section1 topic='Introduction' anchor='intro'>
+    <p>&xep0166; defines Jingle session signalling, and &xep0353; defines message-based Jingle initiation. These protocols describe how a call is proposed and negotiated, but they do not define a compact, archiveable call-history entry for the user-visible conversation timeline.</p>
+    <p>Many messaging clients show entries such as "missed video call", "voice call, 3:12", or "Total Conversation call, 12:44". Such entries need to synchronize across devices and may be archived by &xep0313;, but raw media streams do not belong in MAM.</p>
+    <p>This specification defines a <tt>jingle-history</tt> element carried inside an ordinary XMPP message stanza. The element describes the outcome and metadata of a Jingle session. It does not store media streams, recordings, RTP packets, WebRTC data channel contents, or location history.</p>
+  </section1>
+
+  <section1 topic='Requirements' anchor='reqs'>
+    <p>This specification is designed to meet the following requirements.</p>
+    <ol>
+      <li>Represent missed, declined, cancelled, failed, busy, timeout and completed Jingle calls as normal message events.</li>
+      <li>Represent audio, video, real-time text, captions, screen sharing, file and location media types in call summaries.</li>
+      <li>Allow Total Conversation calls to be shown as one timeline event without storing audio or video in MAM.</li>
+      <li>Support local-only call history for privacy-sensitive clients.</li>
+      <li>Support MAM-synchronized call history by using ordinary messages with fallback body text.</li>
+      <li>Represent optional recording and transcript availability as metadata only.</li>
+      <li>Support group calls and emergency-call profiles without requiring servers to understand Jingle media.</li>
+      <li>Remain compatible with clients that ignore the extension by requiring a readable message body.</li>
+    </ol>
+  </section1>
+
+  <section1 topic='Glossary' anchor='glossary'>
+    <dl>
+      <di>
+        <dt>Call-history event</dt>
+        <dd>An ordinary message stanza containing a <tt>jingle-history</tt> element.</dd>
+      </di>
+      <di>
+        <dt>Recording metadata</dt>
+        <dd>Information that a recording may exist elsewhere. The recording itself is not carried by this specification.</dd>
+      </di>
+      <di>
+        <dt>Total Conversation call</dt>
+        <dd>A call containing audio, video and real-time text as one conversational unit.</dd>
+      </di>
+      <di>
+        <dt>Local-only history</dt>
+        <dd>A call log stored only by a client and not sent as an XMPP message.</dd>
+      </di>
+    </dl>
+  </section1>
+
+  <section1 topic='Use Cases' anchor='usecases'>
+    <section2 topic='Missed video call' anchor='uc-missed'>
+      <p>A user receives a video call but does not answer before the call times out. The caller or callee stores a message event that can be shown as "Missed video call".</p>
+    </section2>
+    <section2 topic='Completed Total Conversation call' anchor='uc-total-conversation'>
+      <p>Two users complete a call containing audio, video and real-time text. The client stores one summary event with the Jingle session ID, media list, duration and transcript availability.</p>
+    </section2>
+    <section2 topic='Recording available separately' anchor='uc-recording'>
+      <p>A service deployment records calls only after explicit consent or policy-based rules. The call-history message records that a recording is available in cloud storage, while the file itself is described using a file-sharing protocol such as &xep0447;.</p>
+    </section2>
+    <section2 topic='Local privacy mode' anchor='uc-local'>
+      <p>A client may maintain a private local call log for failed or temporary calls. In that mode the client MUST NOT send the <tt>jingle-history</tt> message and MUST NOT rely on MAM to store the event.</p>
+    </section2>
+  </section1>
+
+  <section1 topic='Protocol Overview' anchor='overview'>
+    <p>The primary element is <tt>jingle-history</tt> qualified by the namespace <tt>urn:xmpp:jingle-history:0</tt>. It is carried as a child of a normal XMPP <tt>message</tt> stanza.</p>
+    <example caption='Missed video call'><![CDATA[
+<message from='romeo@example.net'
+         to='juliet@example.com'
+         type='chat'
+         id='msg-call-001'>
+  <body>Missed video call</body>
+  <jingle-history xmlns='urn:xmpp:jingle-history:0'
+                  sid='a73sjjvkla37jfea'
+                  direction='incoming'
+                  disposition='missed'
+                  media='audio video'
+                  profile='video'
+                  started='2026-06-15T14:03:10Z'
+                  ended='2026-06-15T14:03:42Z'
+                  duration='32'
+                  recording='none'
+                  transcript='none'/>
+  <store xmlns='urn:xmpp:hints'/>
+</message>
+]]></example>
+    <p>A client that does not understand this extension will still display the message body. A server that supports &xep0313; can archive the message as ordinary message history.</p>
+  </section1>
+
+  <section1 topic='Discovery' anchor='disco'>
+    <p>An entity supporting this specification MUST advertise the following discovery feature using &xep0030;:</p>
+    <example caption='Primary discovery feature'><![CDATA[
+<feature var='urn:xmpp:jingle-history:0'/>
+]]></example>
+    <p>Entities MAY advertise the following additional features when they implement the corresponding metadata profile:</p>
+    <example caption='Optional discovery features'><![CDATA[
+<feature var='urn:xmpp:jingle-history:recording:0'/>
+<feature var='urn:xmpp:jingle-history:transcript:0'/>
+<feature var='urn:xmpp:jingle-history:emergency:0'/>
+]]></example>
+  </section1>
+
+  <section1 topic='Application Format' anchor='format'>
+    <p>The <tt>jingle-history</tt> element has the following attributes.</p>
+    <table caption='Attributes of jingle-history'>
+      <tr>
+        <th>Attribute</th>
+        <th>Required</th>
+        <th>Values</th>
+        <th>Meaning</th>
+      </tr>
+      <tr>
+        <td>sid</td>
+        <td>yes</td>
+        <td>Jingle session ID</td>
+        <td>The session ID from the related Jingle session.</td>
+      </tr>
+      <tr>
+        <td>direction</td>
+        <td>yes</td>
+        <td>incoming, outgoing</td>
+        <td>Direction from the perspective of the archiving client.</td>
+      </tr>
+      <tr>
+        <td>disposition</td>
+        <td>yes</td>
+        <td>completed, missed, declined, cancelled, failed, busy, timeout, replaced, emergency</td>
+        <td>User-visible outcome of the session.</td>
+      </tr>
+      <tr>
+        <td>media</td>
+        <td>yes</td>
+        <td>Space-separated tokens: audio, video, rtt, captions, screen, file, location</td>
+        <td>Media or contextual modalities associated with the session.</td>
+      </tr>
+      <tr>
+        <td>profile</td>
+        <td>no</td>
+        <td>audio, video, total-conversation, group-call, emergency, screen-share, custom</td>
+        <td>High-level call profile.</td>
+      </tr>
+      <tr>
+        <td>started</td>
+        <td>no</td>
+        <td>ISO 8601 timestamp</td>
+        <td>When the relevant call attempt or session started.</td>
+      </tr>
+      <tr>
+        <td>ended</td>
+        <td>no</td>
+        <td>ISO 8601 timestamp</td>
+        <td>When the call attempt or session ended.</td>
+      </tr>
+      <tr>
+        <td>duration</td>
+        <td>no</td>
+        <td>Non-negative integer seconds</td>
+        <td>Call duration in seconds.</td>
+      </tr>
+      <tr>
+        <td>recording</td>
+        <td>no</td>
+        <td>none, local, cloud, external, policy-based</td>
+        <td>Whether a recording exists and where it is expected to be stored.</td>
+      </tr>
+      <tr>
+        <td>transcript</td>
+        <td>no</td>
+        <td>none, local, cloud, external, policy-based</td>
+        <td>Whether a transcript exists and where it is expected to be stored.</td>
+      </tr>
+      <tr>
+        <td>encrypted</td>
+        <td>no</td>
+        <td>true, false</td>
+        <td>Whether referenced recording or transcript material is known to be encrypted.</td>
+      </tr>
+      <tr>
+        <td>consent</td>
+        <td>no</td>
+        <td>none, initiator, all-participants, policy-based</td>
+        <td>Consent state for recording or transcript storage.</td>
+      </tr>
+      <tr>
+        <td>retention</td>
+        <td>no</td>
+        <td>Token such as 30d, 1y or policy</td>
+        <td>Known retention period or policy label.</td>
+      </tr>
+    </table>
+    <p>Unknown attributes and child elements MUST be ignored by receivers. Implementations SHOULD preserve unknown attributes and child elements when rewriting or exporting history, where practical.</p>
+  </section1>
+
+  <section1 topic='Recording and Transcript Metadata' anchor='metadata'>
+    <p>The <tt>recording</tt> and <tt>transcript</tt> attributes are intentionally summary fields. They do not contain the recording, transcript or file bytes.</p>
+    <p>A sender MAY include more detailed metadata using child elements in optional namespaces.</p>
+    <example caption='Detailed metadata'><![CDATA[
+<jingle-history xmlns='urn:xmpp:jingle-history:0'
+                sid='tc-777'
+                direction='incoming'
+                disposition='completed'
+                media='audio video rtt'
+                profile='total-conversation'
+                recording='cloud'
+                transcript='cloud'>
+  <recording xmlns='urn:xmpp:jingle-history:recording:0'
+             encrypted='true'
+             retention='30d'
+             consent='all-participants'
+             storage='cloud'/>
+  <transcript xmlns='urn:xmpp:jingle-history:transcript:0'
+              available='true'
+              storage='cloud'
+              encrypted='true'
+              language='nl'
+              source='rtt captions'/>
+</jingle-history>
+]]></example>
+    <p>If a recording or transcript file is shared with the user, the file metadata SHOULD be expressed using an existing file-sharing specification such as &xep0447; elsewhere in the same message or in a related message. This specification does not define a new file-transfer mechanism.</p>
+  </section1>
+
+  <section1 topic='MAM and Local Storage' anchor='mam'>
+    <p>In synchronized mode, the sender builds an ordinary message with a fallback body and a <tt>jingle-history</tt> element. The sender SHOULD include &xep0334; <tt>store</tt> when it wants the event to be archiveable.</p>
+    <p>In local-only mode, a client MUST NOT send the call-history message. The event is stored only by that client and is outside the scope of &xep0313;.</p>
+    <p>MAM stores event metadata only. It MUST NOT be used as a container for raw audio, raw video, RTP packets, WebRTC streams or full call recordings.</p>
+  </section1>
+
+  <section1 topic='Rendering Guidance' anchor='rendering'>
+    <p>Clients SHOULD render concise timeline summaries. Examples include:</p>
+    <ul>
+      <li>Missed video call</li>
+      <li>Audio call, 03:12</li>
+      <li>Video call, 12:44</li>
+      <li>Total Conversation call, 08:22</li>
+      <li>Emergency Total Conversation call</li>
+      <li>Call failed</li>
+      <li>Recording available</li>
+      <li>Transcript available</li>
+    </ul>
+    <p>Clients SHOULD show recording, transcript, encryption, consent and retention indicators when they are known.</p>
+  </section1>
+
+  <section1 topic='Group Calls' anchor='group'>
+    <p>For group calls, the <tt>jingle-history</tt> element MAY be sent in a <tt>groupchat</tt> message to the room. For this version, group-call support is limited to the room JID implied by the message route, <tt>sid</tt>, <tt>disposition</tt>, <tt>media</tt>, <tt>profile</tt> and <tt>duration</tt>.</p>
+    <example caption='Group call history'><![CDATA[
+<message from='room@conference.example.org/romeo'
+         to='room@conference.example.org'
+         type='groupchat'
+         id='group-call-001'>
+  <body>Group video call ended, 22:00</body>
+  <jingle-history xmlns='urn:xmpp:jingle-history:0'
+                  sid='group-abc'
+                  direction='outgoing'
+                  disposition='completed'
+                  media='audio video'
+                  profile='group-call'
+                  duration='1320'/>
+</message>
+]]></example>
+  </section1>
+
+  <section1 topic='Emergency Profile' anchor='emergency'>
+    <p>Emergency call history MAY be represented with <tt>profile='emergency'</tt> or <tt>disposition='emergency'</tt>. This specification is not an emergency-services routing or legal compliance protocol.</p>
+    <example caption='Emergency Total Conversation call'><![CDATA[
+<message type='chat' id='emergency-call-001'>
+  <body>Emergency Total Conversation call started</body>
+  <jingle-history xmlns='urn:xmpp:jingle-history:0'
+                  sid='em-112-001'
+                  direction='outgoing'
+                  disposition='emergency'
+                  media='audio video rtt captions location'
+                  profile='emergency'
+                  started='2026-06-15T17:10:00Z'
+                  recording='policy-based'
+                  transcript='policy-based'/>
+</message>
+]]></example>
+    <p>Precise location MUST NOT be placed directly in <tt>jingle-history</tt>. If location is needed, it should be represented using a secure location protocol or a separate call-scoped location event.</p>
+  </section1>
+
+  <section1 topic='Business Rules' anchor='rules'>
+    <ol>
+      <li>A fallback message body is REQUIRED.</li>
+      <li>Receivers MUST ignore malformed or unknown optional values instead of failing the whole message.</li>
+      <li>Clients MUST NOT automatically record calls because this extension is present.</li>
+      <li>Clients MUST NOT automatically upload transcripts because this extension is present.</li>
+      <li>Clients SHOULD use stable message IDs when possible so related reactions, corrections or display markers can refer to call-history events.</li>
+    </ol>
+  </section1>
+
+  <section1 topic='Accessibility Considerations' anchor='access'>
+    <p>This specification is motivated by accessibility and Total Conversation use cases. Clients SHOULD expose the media list and profile to assistive technologies, including whether real-time text or captions were part of the call.</p>
+    <p>Clients SHOULD avoid using color alone to represent missed, failed, emergency, recorded or transcript-available states.</p>
+  </section1>
+
+  <section1 topic='Security Considerations' anchor='security'>
+    <p>Remote <tt>jingle-history</tt> elements are untrusted input. Clients MUST validate required attributes, ignore invalid enum values and avoid allocating excessive memory for unusually large attributes.</p>
+    <p>Recording URLs and transcript URLs, if any, are outside this specification. Clients MUST treat any related file references as untrusted until verified by the file-sharing and encryption layer.</p>
+    <p>This specification does not provide end-to-end encryption. Deployments SHOULD use encrypted transport and end-to-end encryption where available.</p>
+  </section1>
+
+  <section1 topic='Privacy Considerations' anchor='privacy'>
+    <p>Call history can reveal sensitive social patterns, accessibility needs, emergency use, contact availability and communication habits. Clients SHOULD offer a local-only mode and retention controls.</p>
+    <p>Default behavior SHOULD store call-log metadata only. Audio or video recording requires explicit consent unless a clearly visible legal, emergency or service policy applies.</p>
+    <p>For group calls, implementations SHOULD support all-participant consent before recording or cloud transcript storage.</p>
+  </section1>
+
+  <section1 topic='IANA Considerations' anchor='iana'>
+    <p>This document requires no interaction with the Internet Assigned Numbers Authority.</p>
+  </section1>
+
+  <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <p>This specification requests registration of the following namespaces.</p>
+    <ul>
+      <li><tt>urn:xmpp:jingle-history:0</tt></li>
+      <li><tt>urn:xmpp:jingle-history:recording:0</tt></li>
+      <li><tt>urn:xmpp:jingle-history:transcript:0</tt></li>
+    </ul>
+    <p>This specification requests registration of the following service discovery features.</p>
+    <ul>
+      <li><tt>urn:xmpp:jingle-history:0</tt></li>
+      <li><tt>urn:xmpp:jingle-history:recording:0</tt></li>
+      <li><tt>urn:xmpp:jingle-history:transcript:0</tt></li>
+      <li><tt>urn:xmpp:jingle-history:emergency:0</tt></li>
+    </ul>
+  </section1>
+
+  <section1 topic='XML Schema' anchor='schema'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:jingle-history:0'
+    xmlns='urn:xmpp:jingle-history:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='jingle-history'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any namespace='##other' minOccurs='0' maxOccurs='unbounded' processContents='lax'/>
+      </xs:sequence>
+      <xs:attribute name='sid' type='xs:string' use='required'/>
+      <xs:attribute name='direction' use='required'>
+        <xs:simpleType>
+          <xs:restriction base='xs:string'>
+            <xs:enumeration value='incoming'/>
+            <xs:enumeration value='outgoing'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name='disposition' use='required'>
+        <xs:simpleType>
+          <xs:restriction base='xs:string'>
+            <xs:enumeration value='completed'/>
+            <xs:enumeration value='missed'/>
+            <xs:enumeration value='declined'/>
+            <xs:enumeration value='cancelled'/>
+            <xs:enumeration value='failed'/>
+            <xs:enumeration value='busy'/>
+            <xs:enumeration value='timeout'/>
+            <xs:enumeration value='replaced'/>
+            <xs:enumeration value='emergency'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name='media' type='xs:string' use='required'/>
+      <xs:attribute name='profile' type='xs:string' use='optional'/>
+      <xs:attribute name='started' type='xs:dateTime' use='optional'/>
+      <xs:attribute name='ended' type='xs:dateTime' use='optional'/>
+      <xs:attribute name='duration' type='xs:nonNegativeInteger' use='optional'/>
+      <xs:attribute name='recording' type='xs:string' use='optional'/>
+      <xs:attribute name='transcript' type='xs:string' use='optional'/>
+      <xs:attribute name='encrypted' type='xs:boolean' use='optional'/>
+      <xs:attribute name='consent' type='xs:string' use='optional'/>
+      <xs:attribute name='retention' type='xs:string' use='optional'/>
+      <xs:anyAttribute namespace='##other' processContents='lax'/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+]]></code>
+  </section1>
+</xep>
