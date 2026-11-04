@@ -826,9 +826,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
-    <xsl:variable name='num'>
-      <xsl:number level='multiple' count='section1'/><xsl:text>.</xsl:text>
-    </xsl:variable>
     <xsl:variable name='sect2.count' select='count(section2)'/>
     <li>
       <a href='#{$anchor}'>
@@ -836,9 +833,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
       </a>
       <xsl:if test='$sect2.count &gt; 0'>
         <ol>
-          <xsl:apply-templates select='section2' mode='toc'>
-            <xsl:with-param name='prevnum' select='$num'/>
-          </xsl:apply-templates>
+          <xsl:apply-templates select='section2' mode='toc'/>
         </ol>
       </xsl:if>
     </li>
@@ -864,7 +859,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   </xsl:template>
 
   <xsl:template match='section2' mode='toc'>
-    <xsl:param name='prevnum' select='""'/>
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
@@ -874,9 +868,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
-    <xsl:variable name='num'>
-      <xsl:value-of select='$prevnum'/><xsl:number level='multiple' count='section2'/><xsl:text>.</xsl:text>
-    </xsl:variable>
     <xsl:variable name='sect3.count' select='count(section3)'/>
     <li>
       <a href='#{$anchor}'>
@@ -884,9 +875,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
       </a>
       <xsl:if test='$sect3.count &gt; 0'>
         <ol>
-          <xsl:apply-templates select='section3' mode='toc'>
-            <xsl:with-param name='prevnum' select='$num'/>
-          </xsl:apply-templates>
+          <xsl:apply-templates select='section3' mode='toc'/>
         </ol>
       </xsl:if>
     </li>
@@ -914,7 +903,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   </xsl:template>
 
   <xsl:template match='section3' mode='toc'>
-    <xsl:param name='prevnum' select='""'/>
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
@@ -924,9 +912,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
-    <xsl:variable name='num'>
-      <xsl:value-of select='$prevnum'/><xsl:number level='multiple' count='section3'/><xsl:text>.</xsl:text>
-    </xsl:variable>
     <xsl:variable name='sect4.count' select='count(section4)'/>
     <li>
       <a href='#{$anchor}'>
@@ -934,9 +919,7 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
       </a>
       <xsl:if test='$sect4.count &gt; 0'>
         <ol>
-          <xsl:apply-templates select='section4' mode='toc'>
-            <xsl:with-param name='prevnum' select='$num'/>
-          </xsl:apply-templates>
+          <xsl:apply-templates select='section4' mode='toc'/>
         </ol>
       </xsl:if>
     </li>
@@ -964,7 +947,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   </xsl:template>
 
   <xsl:template match='section4' mode='toc'>
-    <xsl:param name='prevnum' select='""'/>
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
@@ -973,9 +955,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <xsl:when test='@anchor != ""'><xsl:value-of select='@anchor'/></xsl:when>
         <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
       </xsl:choose>
-    </xsl:variable>
-    <xsl:variable name='num'>
-      <xsl:value-of select='$prevnum'/><xsl:number level='multiple' count='section4'/><xsl:text>.</xsl:text>
     </xsl:variable>
     <li>
       <a href='#{$anchor}'>
