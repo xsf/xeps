@@ -1125,11 +1125,13 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   </xsl:template>
 
   <xsl:template match='img'>
-    <img>
-      <xsl:attribute name='alt'><xsl:value-of select='@alt'/></xsl:attribute>
-      <xsl:attribute name='height'><xsl:value-of select='@height'/></xsl:attribute>
-      <xsl:attribute name='src'><xsl:value-of select='@src'/></xsl:attribute>
-      <xsl:attribute name='width'><xsl:value-of select='@width'/></xsl:attribute>
+    <img alt='{@alt}' src='{@src}'>
+      <xsl:if test='@height'>
+        <xsl:attribute name='height'><xsl:value-of select='@height'/></xsl:attribute>
+      </xsl:if>
+      <xsl:if test='@width'>
+        <xsl:attribute name='width'><xsl:value-of select='@width'/></xsl:attribute>
+      </xsl:if>
     </img>
   </xsl:template>
 
