@@ -174,7 +174,7 @@ OR OTHER DEALINGS IN THE SOFTWARE.
       <xsl:choose>
         <!-- XEPs after a certain number have an immutable version to which we preferably link -->
         <!-- TODO: We currently have no versioned link for the latest version of a XEP,
-             hence the logic below is disabled for all XEPs, by testing for XEP version number > 99999 -->
+             hence the logic below is disabled for all XEPs, by testing for XEP version number > 999999 -->
         <xsl:when test='/xep/header/number &gt; 999999'>
           <xsl:text>https://xmpp.org/extensions/attic/xep-</xsl:text>
           <xsl:value-of select='/xep/header/number'/>
@@ -345,7 +345,9 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
           <!-- Extract the copyright years from the dates via
                substring(). If we ever use XSL 2.0, then we could use
                year-from-date(xs:date()) -->
-          <dd>&#169; <xsl:value-of select='substring(/xep/header/revision[position()=last()]/date,1,4)'/> &#x2013; <xsl:value-of select='substring(/xep/header/revision[position()=1]/date,1,4)'/> XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</dd>
+          <xsl:variable name='first-year' select='substring(/xep/header/revision[position()=last()]/date,1,4)'/>
+          <xsl:variable name='last-year' select='substring(/xep/header/revision[position()=1]/date,1,4)'/>
+          <dd>&#169; <xsl:value-of select='$first-year'/><xsl:if test='$last-year != $first-year'> &#x2013; <xsl:value-of select='$last-year'/></xsl:if> XMPP Standards Foundation. <a href='#appendix-legal'>SEE LEGAL NOTICES</a>.</dd>
           <dt>Status</dt>
           <dd>
             <p><xsl:choose>
@@ -422,7 +424,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
             <xsl:choose>
               <xsl:when test='string(/xep/header/status) = "Draft"'>Stable</xsl:when>
               <xsl:otherwise><xsl:value-of select='/xep/header/status'/></xsl:otherwise>
-              <xsl:value-of select='/xep/header/status'/>
             </xsl:choose>
           </a></dd>
           <dt>Type</dt>
@@ -542,7 +543,6 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
         <!-- DISCUSSION VENUE -->
         <h3 id='appendix-discuss'>Appendix E: Discussion Venue<xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='"appendix-discuss"'/></xsl:call-template></h3>
         <xsl:variable name='discuss.count' select='count(/xep/header/discuss)'/>
-        <xsl:variable name='discuss.venue' select='count(/xep/header/discuss)'/>
         <xsl:if test='$discuss.count=1'>
           <xsl:variable name='discussWeb'>
             <xsl:text>https://mail.jabber.org/mailman/listinfo/</xsl:text>
@@ -822,34 +822,20 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
-    <xsl:variable name='anch'>
-      <xsl:value-of select='@anchor'/>
-    </xsl:variable>
-    <xsl:variable name='num'>
-      <xsl:number level='multiple' count='section1'/><xsl:text>.</xsl:text>
+    <xsl:variable name='anchor'>
+      <xsl:choose>
+        <xsl:when test='@anchor != ""'><xsl:value-of select='@anchor'/></xsl:when>
+        <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
+      </xsl:choose>
     </xsl:variable>
     <xsl:variable name='sect2.count' select='count(section2)'/>
     <li>
-      <a>
-        <xsl:attribute name='href'>
-          <xsl:text>#</xsl:text>
-          <xsl:choose>
-            <xsl:when test='$anch != ""'>
-              <xsl:value-of select='@anchor'/>
-            </xsl:when>
-            <xsl:otherwise>
-              <xsl:text>sect-</xsl:text>
-              <xsl:value-of select='$oid'/>
-            </xsl:otherwise>
-          </xsl:choose>
-        </xsl:attribute>
+      <a href='#{$anchor}'>
         <xsl:value-of select='@topic' />
       </a>
       <xsl:if test='$sect2.count &gt; 0'>
         <ol>
-          <xsl:apply-templates select='section2' mode='toc'>
-            <xsl:with-param name='prevnum' select='$num'/>
-          </xsl:apply-templates>
+          <xsl:apply-templates select='section2' mode='toc'/>
         </ol>
       </xsl:if>
     </li>
@@ -859,21 +845,13 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
-    <xsl:variable name='anch'>
-      <xsl:value-of select='@anchor'/>
+    <xsl:variable name='anchor'>
+      <xsl:choose>
+        <xsl:when test='@anchor != ""'><xsl:value-of select='@anchor'/></xsl:when>
+        <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
+      </xsl:choose>
     </xsl:variable>
-    <h2>
-      <xsl:variable name='anchor'>
-        <xsl:choose>
-          <xsl:when test='$anch != ""'>
-            <xsl:value-of select='@anchor'/>
-          </xsl:when>
-          <xsl:otherwise>
-            <xsl:text>sect-</xsl:text><xsl:value-of select='$oid'/>
-          </xsl:otherwise>
-        </xsl:choose>
-      </xsl:variable>
-      <xsl:attribute name='id'><xsl:value-of select='$anchor'/></xsl:attribute>
+    <h2 id='{$anchor}'>
       <xsl:number level='single' count='section1'/>.
       <xsl:text> </xsl:text>
       <xsl:value-of select='@topic' />
@@ -883,37 +861,23 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   </xsl:template>
 
   <xsl:template match='section2' mode='toc'>
-    <xsl:param name='prevnum' select='""'/>
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
-    <xsl:variable name='anch'>
-      <xsl:value-of select='@anchor'/>
-    </xsl:variable>
-    <xsl:variable name='num'>
-      <xsl:value-of select='$prevnum'/><xsl:number level='multiple' count='section2'/><xsl:text>.</xsl:text>
+    <xsl:variable name='anchor'>
+      <xsl:choose>
+        <xsl:when test='@anchor != ""'><xsl:value-of select='@anchor'/></xsl:when>
+        <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
+      </xsl:choose>
     </xsl:variable>
     <xsl:variable name='sect3.count' select='count(section3)'/>
     <li>
-      <a>
-        <xsl:attribute name='href'>
-          <xsl:text>#</xsl:text>
-          <xsl:choose>
-            <xsl:when test='$anch != ""'>
-              <xsl:value-of select='@anchor'/>
-            </xsl:when>
-            <xsl:otherwise>
-              <xsl:text>sect-</xsl:text><xsl:value-of select='$oid'/>
-            </xsl:otherwise>
-          </xsl:choose>
-        </xsl:attribute>
+      <a href='#{$anchor}'>
         <xsl:value-of select='@topic' />
       </a>
       <xsl:if test='$sect3.count &gt; 0'>
         <ol>
-          <xsl:apply-templates select='section3' mode='toc'>
-            <xsl:with-param name='prevnum' select='$num'/>
-          </xsl:apply-templates>
+          <xsl:apply-templates select='section3' mode='toc'/>
         </ol>
       </xsl:if>
     </li>
@@ -923,22 +887,14 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
-    <xsl:variable name='anch'>
-      <xsl:value-of select='@anchor'/>
+    <xsl:variable name='anchor'>
+      <xsl:choose>
+        <xsl:when test='@anchor != ""'><xsl:value-of select='@anchor'/></xsl:when>
+        <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
+      </xsl:choose>
     </xsl:variable>
     <div class='indent'>
-    <h3>
-      <xsl:variable name='anchor'>
-        <xsl:choose>
-          <xsl:when test='$anch != ""'>
-            <xsl:value-of select='@anchor'/>
-          </xsl:when>
-          <xsl:otherwise>
-              <xsl:text>sect-</xsl:text><xsl:value-of select='$oid'/>
-          </xsl:otherwise>
-        </xsl:choose>
-      </xsl:variable>
-      <xsl:attribute name='id'><xsl:value-of select='$anchor'/></xsl:attribute>
+    <h3 id='{$anchor}'>
       <xsl:number level='single' count='section1'/>.<xsl:number level='single' count='section2'/>
       <xsl:text> </xsl:text>
       <xsl:value-of select='@topic' />
@@ -949,37 +905,23 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   </xsl:template>
 
   <xsl:template match='section3' mode='toc'>
-    <xsl:param name='prevnum' select='""'/>
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
-    <xsl:variable name='anch'>
-      <xsl:value-of select='@anchor'/>
-    </xsl:variable>
-    <xsl:variable name='num'>
-      <xsl:value-of select='$prevnum'/><xsl:number level='multiple' count='section3'/><xsl:text>.</xsl:text>
+    <xsl:variable name='anchor'>
+      <xsl:choose>
+        <xsl:when test='@anchor != ""'><xsl:value-of select='@anchor'/></xsl:when>
+        <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
+      </xsl:choose>
     </xsl:variable>
     <xsl:variable name='sect4.count' select='count(section4)'/>
     <li>
-      <a>
-        <xsl:attribute name='href'>
-          <xsl:text>#</xsl:text>
-          <xsl:choose>
-            <xsl:when test='$anch != ""'>
-              <xsl:value-of select='@anchor'/>
-            </xsl:when>
-            <xsl:otherwise>
-              <xsl:text>sect-</xsl:text><xsl:value-of select='$oid'/>
-            </xsl:otherwise>
-          </xsl:choose>
-        </xsl:attribute>
+      <a href='#{$anchor}'>
         <xsl:value-of select='@topic' />
       </a>
       <xsl:if test='$sect4.count &gt; 0'>
         <ol>
-          <xsl:apply-templates select='section4' mode='toc'>
-            <xsl:with-param name='prevnum' select='$num'/>
-          </xsl:apply-templates>
+          <xsl:apply-templates select='section4' mode='toc'/>
         </ol>
       </xsl:if>
     </li>
@@ -989,22 +931,14 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
-    <xsl:variable name='anch'>
-      <xsl:value-of select='@anchor'/>
+    <xsl:variable name='anchor'>
+      <xsl:choose>
+        <xsl:when test='@anchor != ""'><xsl:value-of select='@anchor'/></xsl:when>
+        <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
+      </xsl:choose>
     </xsl:variable>
     <div class='indent'>
-    <h4>
-      <xsl:variable name='anchor'>
-        <xsl:choose>
-          <xsl:when test='$anch != ""'>
-            <xsl:value-of select='@anchor'/>
-          </xsl:when>
-          <xsl:otherwise>
-            <xsl:text>sect-</xsl:text><xsl:value-of select='$oid'/>
-          </xsl:otherwise>
-        </xsl:choose>
-      </xsl:variable>
-      <xsl:attribute name='id'><xsl:value-of select='$anchor'/></xsl:attribute>
+    <h4 id='{$anchor}'>
       <xsl:number level='single' count='section1'/>.<xsl:number level='single' count='section2'/>.<xsl:number level='single' count='section3'/>
       <xsl:text> </xsl:text>
       <xsl:value-of select='@topic' />
@@ -1015,29 +949,17 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   </xsl:template>
 
   <xsl:template match='section4' mode='toc'>
-    <xsl:param name='prevnum' select='""'/>
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
-    <xsl:variable name='anch'>
-      <xsl:value-of select='@anchor'/>
-    </xsl:variable>
-    <xsl:variable name='num'>
-      <xsl:value-of select='$prevnum'/><xsl:number level='multiple' count='section4'/><xsl:text>.</xsl:text>
+    <xsl:variable name='anchor'>
+      <xsl:choose>
+        <xsl:when test='@anchor != ""'><xsl:value-of select='@anchor'/></xsl:when>
+        <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
+      </xsl:choose>
     </xsl:variable>
     <li>
-      <a>
-        <xsl:attribute name='href'>
-          <xsl:text>#</xsl:text>
-          <xsl:choose>
-            <xsl:when test='$anch != ""'>
-              <xsl:value-of select='@anchor'/>
-            </xsl:when>
-            <xsl:otherwise>
-              <xsl:text>sect-</xsl:text><xsl:value-of select='$oid'/>
-            </xsl:otherwise>
-          </xsl:choose>
-        </xsl:attribute>
+      <a href='#{$anchor}'>
         <xsl:value-of select='@topic' />
       </a>
     </li>
@@ -1047,24 +969,18 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
-    <xsl:variable name='anch'>
-      <xsl:value-of select='@anchor'/>
+    <xsl:variable name='anchor'>
+      <xsl:choose>
+        <xsl:when test='@anchor != ""'><xsl:value-of select='@anchor'/></xsl:when>
+        <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
+      </xsl:choose>
     </xsl:variable>
     <div class='indent'>
-    <h5>
-      <xsl:attribute name='id'>
-        <xsl:choose>
-          <xsl:when test='$anch != ""'>
-            <xsl:value-of select='@anchor'/>
-          </xsl:when>
-          <xsl:otherwise>
-            <xsl:text>sect-</xsl:text><xsl:value-of select='$oid'/>
-          </xsl:otherwise>
-        </xsl:choose>
-      </xsl:attribute>
+    <h5 id='{$anchor}'>
       <xsl:number level='single' count='section1'/>.<xsl:number level='single' count='section2'/>.<xsl:number level='single' count='section3'/>.<xsl:number level='single' count='section4'/>
       <xsl:text> </xsl:text>
       <xsl:value-of select='@topic' />
+      <xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='$anchor'/></xsl:call-template>
     </h5>
     <xsl:apply-templates/>
     </div>
@@ -1074,24 +990,18 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
     <xsl:variable name='oid'>
       <xsl:call-template name='object.id'/>
     </xsl:variable>
-    <xsl:variable name='anch'>
-      <xsl:value-of select='@anchor'/>
+    <xsl:variable name='anchor'>
+      <xsl:choose>
+        <xsl:when test='@anchor != ""'><xsl:value-of select='@anchor'/></xsl:when>
+        <xsl:otherwise>sect-<xsl:value-of select='$oid'/></xsl:otherwise>
+      </xsl:choose>
     </xsl:variable>
     <div class='indent'>
-    <h6>
-      <xsl:attribute name='id'>
-        <xsl:choose>
-          <xsl:when test='$anch != ""'>
-            <xsl:value-of select='@anchor'/>
-          </xsl:when>
-          <xsl:otherwise>
-            <xsl:text>sect-</xsl:text><xsl:value-of select='$oid'/>
-          </xsl:otherwise>
-        </xsl:choose>
-      </xsl:attribute>
+    <h6 id='{$anchor}'>
       <xsl:number level='single' count='section1'/>.<xsl:number level='single' count='section2'/>.<xsl:number level='single' count='section3'/>.<xsl:number level='single' count='section4'/>.<xsl:number level='single' count='section5'/>
       <xsl:text> </xsl:text>
       <xsl:value-of select='@topic' />
+      <xsl:call-template name='anchor-link'><xsl:with-param name='anchor' select='$anchor'/></xsl:call-template>
     </h6>
     <xsl:apply-templates/>
     </div>
@@ -1217,11 +1127,13 @@ content: "XEP-<xsl:value-of select='/xep/header/number'/>";
   </xsl:template>
 
   <xsl:template match='img'>
-    <img>
-      <xsl:attribute name='alt'><xsl:value-of select='@alt'/></xsl:attribute>
-      <xsl:attribute name='height'><xsl:value-of select='@height'/></xsl:attribute>
-      <xsl:attribute name='src'><xsl:value-of select='@src'/></xsl:attribute>
-      <xsl:attribute name='width'><xsl:value-of select='@width'/></xsl:attribute>
+    <img alt='{@alt}' src='{@src}'>
+      <xsl:if test='@height'>
+        <xsl:attribute name='height'><xsl:value-of select='@height'/></xsl:attribute>
+      </xsl:if>
+      <xsl:if test='@width'>
+        <xsl:attribute name='width'><xsl:value-of select='@width'/></xsl:attribute>
+      </xsl:if>
     </img>
   </xsl:template>
 
