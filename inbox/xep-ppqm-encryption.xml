@@ -1,0 +1,879 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+        <!ENTITY envelope "&lt;envelope/&gt;">
+        <!ENTITY payload "&lt;payload/&gt;">
+        <!ENTITY % ents SYSTEM "xep.ent">
+        <!ENTITY ns "urn:xmpp:ppqm:1">
+        <!ENTITY nsdevices "urn:xmpp:ppqm:1:devices">
+        <!ENTITY nsbundles "urn:xmpp:ppqm:1:bundles">
+        <!ENTITY pqxdh "<span class='ref'><link url='https://signal.org/docs/specifications/pqxdh/'>Post-Quantum Extended Diffie-Hellman (PQXDH)</link></span> <note>PQXDH: THe PQXDH Key Agreement Protocol &lt;<link url='https://signal.org/docs/specifications/pqxdh/'>https://signal.org/docs/specifications/pqxdh/</link>&gt;.</note>">
+        <!ENTITY mlkem "<span class='ref'><link url='https://csrc.nist.gov/pubs/fips/203/final'>ML-KEM (FIPS 203)</link></span> <note>ML-KEM: Module-Lattice-Based Key Encapsulation Mechanism &lt;<link url='https://csrc.nist.gov/pubs/fips/203/final'>https://csrc.nist.gov/pubs/fips/203/final</link>&gt;.</note>">
+        <!ENTITY aes "<span class='ref'><link url='https://csrc.nist.gov/pubs/fips/197/final'>AES (FIPS 197)</link></span> <note>AES: Advanced Encryption Standard &lt;<link url='https://csrc.nist.gov/pubs/fips/197/final'>https://csrc.nist.gov/pubs/fips/197/final</link>&gt;.</note>">
+        <!ENTITY shor "<span class='ref'><link url='https://doi.org/10.1109/sfcs.1994.365700'>Shor's Algorithm</link></span> <note>Algorithms for quantum computation: discrete logarithms and factoring &lt;<link url='https://doi.org/10.1109/sfcs.1994.365700'>https://doi.org/10.1109/sfcs.1994.365700</link>&gt;.</note>">
+        %ents;
+        ]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+  <header>
+    <title>PPQM Encryption</title>
+    <abstract>
+      This specification defines a protocol for post-quantum secure end-to-end encryption in one-to-one chats, as well as
+      group chats where each participant may have multiple clients per account.
+    </abstract>
+    &LEGALNOTICE;
+    <number>XXXX</number>
+    <status>ProtoXEP</status>
+    <type>Standards Track</type>
+    <sig>Standards</sig>
+    <approver>Council</approver>
+    <dependencies>
+      <spec>XMPP Core</spec>
+      <spec>XEP-0060</spec>
+      <spec>XEP-0163</spec>
+      <spec>XEP-0420</spec>
+    </dependencies>
+    <supersedes/>
+    <supersededby/>
+    <shortname>PPQM</shortname>
+    <author>
+      <firstname>Jamieson</firstname>
+      <surname>O'Reilly</surname>
+      <email>jamieson@privt.com</email>
+    </author>
+    <author>
+      <firstname>Ron Lauren</firstname>
+      <surname>Hombre</surname>
+      <email>ronlauren@privt.com</email>
+    </author>
+    <author>
+      <firstname>Hiren</firstname>
+      <surname>Vavadiya</surname>
+      <email>hiren@privt.com</email>
+    </author>
+    <revision>
+      <version>0.1.0</version>
+      <date>2024-08-27</date>
+      <initials>jor</initials>
+      <remark>
+        <p>
+          Initial version based on &xep0384; with updates for post-quantum security using Module-Lattice-Based Key
+          Encapsulation Mechanism (ML-KEM).
+        </p>
+      </remark>
+    </revision>
+  </header>
+
+  <section1 topic='Introduction' anchor='intro'>
+    <section2 topic='Motivation' anchor='intro-motivation'>
+      <p>
+        The advancement of quantum computing poses a significant threat to classical encryption schemes currently in use.
+        While protocols like &xep0364; messaging and &xep0027; have provided encryption in the past, they are not
+        equipped to withstand the power of quantum computers. The quantum algorithm &shor; can efficiently
+        break the classical encryption algorithms in use today which necessitates a transition to post-quantum
+        cryptographic algorithms.
+      </p>
+      <p>
+        <strong>PPQM Encryption</strong> (<em>Privt. Post-Quantum Multi-End Message and Object Encryption</em>) is
+        designed to address these emerging threats by incorporating the post-quantum secure algorithm
+        &mlkem;(<em>historically CRYSTALS-Kyber v3.02</em>) to ensure that communication remains secure and private even
+        in the face of inevitable future quantum computing advancements.
+      </p>
+    </section2>
+    <section2 topic='Overview' anchor='intro-overview'>
+      <p>
+        PPQM builds upon the strengths of Signal's &pqxdh; and the openness of XMPP's
+        &xep0384;(<em>based upon &x3dh;</em>). Specifically, PPQM utilizes ML-KEM to generate shared secret keys that will
+        remain secure under an active quantum adversarial threat. It is then fed into the X3DH Protocol as another layer
+        of security. It is correct to say that this is a hybrid as the classical &xeddsa; is used alongside the
+        post-quantum ML-KEM.
+      </p>
+      <p>
+        Like OMEMO, PPQM supports multi-end message and object encryption, allowing secure message synchronization across
+        multiple devices. An ephemeral key is used to encrypt each message, and headers containing the necessary
+        parts of the ephemeral keys are individually encrypted for each recipient device. These headers and the encrypted
+        payload are transmitted in a <tt>&lt;message&gt;</tt> stanza.
+      </p>
+      <p>
+        PPQM maintains compatibility with existing XMPP standards by using &xep0060; and &xep0163; to manage and
+        distribute key material securely.
+      </p>
+    </section2>
+  </section1>
+
+  <section1 topic='Requirements' anchor='reqs'>
+    <p>
+      As a result of XMPP's federated nature, messages may pass through multiple servers. It is crucial to secure
+      communications from any intermediate hosts, especially in a post-quantum world. PPQM aims to provide robust
+      end-to-end encryption that remains secure even against quantum-capable adversaries.</p>
+    <p>
+      PPQM provides the following guarantees under the threat model described in the next section:
+    </p>
+    <ul>
+      <li>
+        Confidentiality: Only the sender and receiver can read the content of a message, secured by post-quantum
+        ML-KEM which is believed to be resistant against quantum computers.
+      </li>
+      <li>
+        Forward Secrecy: Compromised key material does not compromise previous message exchanges, ensured by the X3DH
+        algorithm.
+      </li>
+      <li>
+        Break-in Recovery: A session compromised due to key material leakage will recover after a few communication
+        rounds as a property of X3DH.
+      </li>
+      <li>
+        Authentication: Each peer can authenticate the sender or receiver of a message, leveraging Ed25519 for signatures.
+      </li>
+      <li>
+        Integrity: Each peer can ensure that a message has not been altered by any intermediate node due to the
+        AES-256-GCM symmetric encryption applied to the <tt>&lt;message&gt;</tt> stanza.
+      </li>
+      <li>
+        Deniability: PPQM aims to provide deniability in a similar fashion to &xep0384;, though post-quantum deniability
+        is an area of active research.
+      </li>
+      <li>
+        Asynchronicity: The protocol does not rely on the online status of any participant, ensuring usability in
+        asynchronous messaging scenarios.`
+      </li>
+    </ul>
+    <p>PPQM is not intended to protect against the following scenarios:</p>
+    <ul>
+      <li>
+        An attacker with permanent access to your device. In this case, the attacker could extract decrypted messages from
+        the device.
+      </li>
+      <li>
+        Loss of a device where an attacker can read messages on the notification screen.
+      </li>
+      <li>
+        Denial-of-service attacks of any kind.
+      </li>
+    </ul>
+    <p>
+      Trust management remains a challenging topic, and is considered out of scope for this document.
+    </p>
+    <section2 topic='Threat Model' anchor='reqs-threat-model'>
+      <p>
+        The use case for PPQM is to protect the content of conversations against quantum-capable adversaries, including
+        scenarios where servers cannot be trusted to maintain the confidentiality of the message content. This includes
+        scenarios such as sharing sensitive corporate information or exchanging intimate messages that must remain
+        confidential even from the server administrators.
+      </p>
+      <p>
+        PPQM protects against passive and active attackers who can read, modify, replay, delay, and delete messages.
+        However, PPQM does not protect against attacks based on metadata or traffic analysis.
+      </p>
+    </section2>
+  </section1>
+
+  <section1 topic='Glossary' anchor='glossary'>
+    <dl>
+      <di>
+        <dt>AES-256-GCM</dt>
+        <dd>
+          A Galois/Counter Mode variant of the Advanced Encryption Standard with key size of 256 bits.
+        </dd>
+      </di>
+      <di>
+        <dt>HMAC-SHA-256</dt>
+        <dd>
+          Hash-based Message Authentication Code using SHA2-256 as the hashing function.
+        </dd>
+      </di>
+      <di>
+        <dt>HKDF-SHA-256</dt>
+        <dd>
+          An HMAC-based Key Derivation Function using SHA2-256 as the hashing function.
+        </dd>
+      </di>
+      <di>
+        <dt>ML-KEM</dt>
+        <dd>
+          <em>Module-Lattice-Based Key Encapsulation Mechanism</em> which is based upon CRYSTALS-Kyber V3.02 and
+          standardized as NIST FIPS 203. The security of this algorithm hangs upon the computation difficulty of the
+          <em>Module Learning with Errors</em> problem for both classical and quantum computers. This is used as the
+          KEMPreKey in this protocol.
+        </dd>
+      </di>
+      <di>
+        <dt>ML-KEM-1024</dt>
+        <dd>
+          An ML-KEM parameter set with claimed security category of 5. According to the FIPS 203 paper, this has a
+          Random Bit Generator strength of 256.
+        </dd>
+      </di>
+      <di>
+        <dt>Device</dt>
+        <dd>
+          A communication endpoint, i.e., a specific client instance with a working PPQM implementation.
+        </dd>
+      </di>
+      <di>
+        <dt>PPQM element</dt>
+        <dd>
+          An <tt>&lt;encrypted&gt;</tt> element in the <tt>&ns;</tt> namespace.
+        </dd>
+      </di>
+      <di>
+        <dt>Bundle</dt>
+        <dd>
+          A collection of publicly accessible data used in the post-quantum extended triple diffie-hellman protocol,
+          including the public IdentityKey, a list of single-use Curve25519 PreKeys, and a list of single-use KEMPreKeys
+          with their corresponding signatures.
+        </dd>
+      </di>
+      <di>
+        <dt>rid</dt>
+        <dd>
+          The device id of the intended recipient of the containing <tt>&lt;key&gt;</tt>.
+        </dd>
+      </di>
+      <di>
+        <dt>sid</dt>
+        <dd>
+          The device id of the sender of the containing PPQM element.
+        </dd>
+      </di>
+    </dl>
+  </section1>
+
+  <section1 topic='Protocol Definition' anchor='protocol'>
+    <section2 topic='Overview' anchor='protocol-overview'>
+      <p>
+        This protocol utilizes the Double Ratchet encryption scheme alongside a post-quantum KEM in the Triple
+        Diffie-Hellman algorithm. The following sections provide the technical details necessary to build an
+        implementation of the PPQM protocol.
+      </p>
+    </section2>
+    <section2 topic='Key Exchange' anchor='protocol-key_exchange'>
+      <p>
+        The key exchange in PPQM is based on a modified version of the X3DH key agreement protocol, updated to incorporate
+        post-quantum secure components:
+      </p>
+      <dl>
+        <di>
+          <dt>kem</dt>
+          <dd>ML-KEM-1024</dd>
+        </di>
+        <di>
+          <dt>hash function</dt>
+          <dd>SHA-256 also known as SHA2-256</dd>
+        </di>
+        <di>
+          <dt>info string</dt>
+          <dd>&quot;PPQM X3DH&quot;</dd>
+        </di>
+        <di>
+          <dt>signed PreKey rotation period</dt>
+          <dd>
+            Signed PreKeys SHOULD be rotated periodically, from once a week to once a month.
+          </dd>
+        </di>
+        <di>
+          <dt>time to retain the private key of the old signed PreKey after a round of rotation</dt>
+          <dd>
+            The private key SHOULD be retained for an additional rotation period to accommodate delayed messages still
+            using the old signed PreKey.
+          </dd>
+        </di>
+        <di>
+          <dt>number of PreKeys to include in the bundle</dt>
+          <dd>
+            The bundle SHOULD always contain around 100 PreKeys.
+          </dd>
+        </di>
+        <di>
+          <dt>minimum number of PreKeys to include in the bundle</dt>
+          <dd>
+            The bundle MUST contain at least 25 PreKeys.
+          </dd>
+        </di>
+        <di>
+          <dt>number of KEMPreKeys to include in the bundle</dt>
+          <dd>
+            The bundle SHOULD always contain around 100 KEMPreKeys. This number MUST equal the number of PreKeys in the
+            bundle in order to reduce the number of collisions for both.
+          </dd>
+        </di>
+        <di>
+          <dt>minimum number of KEMPreKeys to include in the bundle</dt>
+          <dd>
+            The bundle MUST contain at least 25 KEMPreKeys.
+          </dd>
+        </di>
+        <di>
+          <dt>usage of PreKeys and KEMPreKeys</dt>
+          <dd>
+            All key exchanges MUST use a PreKey and a KEMPreKey. Any key exchanges that do not use a PreKey and a
+            KEMPreKey MUST be rejected. This is a basic requirement of PPQM.
+          </dd>
+        </di>
+        <di>
+          <dt>associated data</dt>
+          <dd>
+            The Associated Data (AD) is created by concatenating the IdentityKeys of Alice and Bob:
+            <tt>AD = Encode(IK_ALICE) || Encode(IK_BOB)</tt>. In this order, <tt>Alice</tt> <em>initiated</em> the key
+            exchange while <tt>Bob</tt> <em>accepted</em> the key exchange.
+          </dd>
+        </di>
+        <di>
+          <dt>XEdDSA</dt>
+          <dd>PPQM does not mandate the usage of &xeddsa; with &x3dh; for the IdentityKey. Instead, there are three simple
+            rules that implementations MUST follow:
+            <ol>
+              <li>
+                Implementations must use the birational map between the curves Curve25519 and Ed25519 to convert the public
+                part of the IdentityKey whenever required, as defined in &rfc7748; (on page 5).
+              </li>
+              <li>
+                Implementations must be able to perform X25519 (ECDH on Curve25519) using the IdentityKey.
+              </li>
+              <li>
+                Implementations must be able to create EdDSA-compatible signatures on the curve Ed25519 using the
+                IdentityKey.
+              </li>
+            </ol>
+            There are essentially two ways in which libraries can fulfill these requirements:
+            <ol>
+              <li>
+                Libraries can use a Curve25519 key pair as their internal IdentityKey. In this case, the IdentityKey can be
+                used for X25519 directly, and XEdDSA has to be used to produce EdDSA-compatible signatures. Note that
+                libsignal by default does <strong>NOT</strong> use XEdDSA. libsignal <em>includes</em> XEdDSA though and has
+                to be modified to use that to be compatible with OMEMO.
+              </li>
+              <li>
+                Libraries can use an Ed25519 key pair as their internal IdentityKey. In this case, the IdentityKey can
+                create EdDSA-compatible signatures directly, and has to be converted first to perform X25519.
+              </li>
+            </ol>
+            Note that this decision is purely local to each client and PPQM library. The public key is ALWAYS transferred
+            in its Ed25519 form and only valid EdDSA signatures are transferred. The choice between Curve25519 and Ed25519
+            affects the definition of the <tt>Sig(PK, M)</tt> and <tt>DH(PK1, PK2)</tt> functions as defined below.
+          </dd>
+        </di>
+        <di>
+          <dt>DH(PK1, PK2)</dt>
+          <dd>
+            The original definition of <tt>DH(PK1, PK2)</tt> found in the X3DH specification applies with one exception:
+            if the IdentityKey pair is chosen to be an Ed25519 key pair and either <tt>PK1</tt> or <tt>PK2</tt>
+            corresponds to the IdentityKey, the respective key first has to be converted into its Curve25519 equivalent
+            (see above). This conversion is implemented for example by <tt>libsodium</tt>, which exports the conversion as
+            <tt>crypto_sign_ed25519_sk_to_curve25519</tt> and <tt>crypto_sign_ed25519_pk_to_curve25519</tt> for the
+            private and public key, respectively (documented on <link url="https://download.libsodium.org/doc/advanced/ed25519-curve25519">libsodium.org</link>).
+          </dd>
+        </di>
+        <di>
+          <dt>Encode(PK)</dt>
+          <dd>The public part of the IdentityKey pair is encoded as defined in &rfc8032;. Note that the IdentityKey is
+            always transferred in its Ed25519 form. When using a Curve25519 key pair internally, the public key has to be
+            converted to Ed25519 first. Curve25519 public keys are encoded using the little-endian encoding of the
+            u-coordinate as specified in &rfc7748;.
+          </dd>
+        </di>
+      </dl>
+      <p>
+        The key exchange is performed just-in-time when sending the first message to a device, ensuring that each key
+        exchange message also contains encrypted content as produced by the post-quantum Double Ratchet encryption scheme
+        described below.
+      </p>
+      <p>
+        In essence, PPQM is extremely similar to OMEMO except for the added KEMPreKey in the X3DH Protocol.
+      </p>
+    </section2>
+    <section2 topic='Double Ratchet' anchor='protocol-double_ratchet'>
+      <p>
+        NOTE: <tt>PPQMMessage.proto</tt>, <tt>PPQMAuthenticatedMessage.proto</tt> and <tt>PPQMKeyExchange.proto</tt> refer
+        to the protobuf structures as defined in the <link url="#protobuf-schema">Protobuf Schemas</link>.
+      </p>
+      <p>
+        The &doubleratchet; encryption scheme is adapted to use post-quantum key material. PPQM uses this protocol with
+        the following parameters/settings:
+      </p>
+      <dl>
+        <di>
+          <dt>ratchet initialization</dt>
+          <dd>
+            The Double Ratchet is initialized using the shared secret, associated data, and public keys as yielded by the
+            X3DH Protocol, as explained in the Double Ratchet specification. The ephemeral key pair used by the key
+            agreement protocol is stored with the session.
+          </dd>
+        </di>
+        <di>
+          <dt>MAX_SKIP</dt>
+          <dd>
+            As with OMEMO, storing skipped message keys can introduce potential DoS attacks. It is RECOMMENDED to limit
+            the storage to 1000 skipped message keys per session. Secondly, a maximum number of skipped message keys has
+            to be limited, or else, a malicious actor could make the receiving device calculate the integer limit of
+            skipped message keys.
+          </dd>
+        </di>
+        <di>
+          <dt>deletion policy for skipped message keys</dt>
+          <dd>
+            PPQM follows the same guidelines as OMEMO, with skipped message keys being discarded on a FIFO basis when the
+            limit is reached. All implementations MUST NOT keep message keys around forever and discard them based on
+            deterministic events except time.
+          </dd>
+        </di>
+        <di>
+          <dt>authentication tag truncation</dt>
+          <dd>
+            Authentication tags are truncated to 16 bytes/128 bits.
+          </dd>
+        </di>
+        <di>
+          <dt>CONCAT(ad, header)</dt>
+          <dd>
+            <tt>CONCAT(ad, header) = ad || PPQMMessage.proto(header)</tt>
+          </dd>
+        </di>
+        <di>
+          <dt>KDF_RK(rk, dh_out)</dt>
+          <dd>
+            HKDF-SHA-256 using the root key (rk) as HKDF salt, the output of a Diffie-Hellman (dh_out) as HKDF input
+            material, and &quot;PPQM Root Chain&quot; as HKDF info.
+          </dd>
+        </di>
+        <di>
+          <dt>KDF_CK(ck)</dt>
+          <dd>
+            HMAC-SHA-256 using a chain key (ck) as the HMAC key, with specified constants for message key and chain key
+            derivation.
+          </dd>
+        </di>
+        <di>
+          <dt>ENCRYPT(mk, plaintext, associated_data)</dt>
+          <dd>
+            The encryption step uses authenticated encryption consisting of AES-256-GCM with HMAC-SHA-256.
+            <ol>
+              <li>
+                Use HKDF-SHA-256 to generate 80 bytes of output from the message key by providing mk as HKDF input, 256
+                zero-bits as HKDF salt and &quot;OMEMO Message Key Material&quot; as HKDF info.
+              </li>
+              <li>
+                Divide the HKDF output into a 32-byte encryption key, a 32-byte authentication key and a 16 byte IV.
+              </li>
+              <li>
+                Encrypt the plaintext (which consists of a 32 bytes key and 16 bytes HMAC as specified in the section
+                about <link url="#protocol-message_encryption">Message Encryption</link>) using AES-256-GCM with no
+                padding, using the encryption key and IV derived in the previous step.
+              </li>
+              <li>
+                Split the associated data as returned by <tt>CONCAT</tt> into the original ad and the
+                <tt>PPQMMessage.proto</tt> structure.
+              </li>
+              <li>
+                Add the ciphertext to the <tt>PPQMMessage.proto</tt> structure.
+              </li>
+              <li>
+                Serialize the <tt>PPQMMessage.proto</tt> structure into a parseable byte array. To avoid potential
+                problems regarding non-uniqueness of the serialization, make sure to only serialize <em>once</em> and to
+                use that exact byte sequence in the following steps.
+              </li>
+              <li>
+                Concatenate the ad and the <tt>PPQMMessage.proto</tt> structure into a parseable byte array. The result
+                builds the HMAC input material for the next step.
+              </li>
+              <li>
+                Calculate the HMAC-SHA-256 using the authentication key and the input material as derived in the steps
+                above. Truncate the output of the HMAC to 16 bytes/128 bits.
+              </li>
+              <li>
+                Put the serialized <tt>PPQMMessage.proto</tt> structure and the HMAC into a new
+                <tt>PPQMAuthenticatedMessage.proto</tt> structure.
+              </li>
+            </ol>
+          </dd>
+        </di>
+      </dl>
+      <p>
+        Further information on these functions can be found in the &doubleratchet; specification.
+      </p>
+      <p>
+        If the message requires a key exchange, the key exchange data is placed into a new <tt>PPQMKeyExchange.proto</tt>
+        structure together with the <tt>PPQMAuthenticatedMessage.proto</tt> structure.
+      </p>
+      <p>
+        To account for lost and out-of-order messages, <tt>PPQMKeyExchange.proto</tt> structures are sent until a response
+        by the recipient confirms successful key exchange. Subsequent messages use the stored header until confirmation is
+        received.
+      </p>
+    </section2>
+    <section2 topic='Message Encryption' anchor='protocol-message_encryption'>
+      <p>
+        The contents are encrypted and authenticated using a combination of AES-256-GCM and HMAC-SHA-256.
+      </p>
+      <ol>
+        <li>
+          Generate 32 bytes using a CSPRNG, effectively called <tt>key</tt> for the rest of the specification.
+        </li>
+        <li>
+          Use HKDF-SHA-256 to generate 80 bytes of output from the <tt>key</tt> by providing the key as HKDF input, 256
+          zero-bits as HKDF salt and &quot;PPQM Payload&quot; as HKDF info.
+        </li>
+        <li>
+          Divide the HKDF output into a 32-byte encryption key, a 32-byte authentication key and a 16 byte IV.
+        </li>
+        <li>
+          Encrypt the plaintext using AES-256-GCM with no padding, using the encryption key and IV derived in the previous
+          step.
+        </li>
+        <li>
+          Calculate the HMAC-SHA-256 using the authentication key and the ciphertext from the previous steps. Truncate the
+          output of the HMAC to 16 bytes/128 bits by cutting off excess bytes from the end.
+        </li>
+        <li>
+          Concatenate the <tt>key</tt> and the HMAC, encrypt them using the Double Ratchet as specified above, once for
+          each intended recipient. This yields one <tt>PPQMKeyExchange</tt> or <tt>PPQMAuthenticatedMessage</tt> per
+          recipient device.
+        </li>
+      </ol>
+    </section2>
+    <section2 topic='Message Decryption' anchor='protocol-message_decryption'>
+      <p>
+        The contents are decrypted by reversing the encryption steps.
+      </p>
+      <ol>
+        <li>
+          Decrypt the key and HMAC from the <tt>PPQMKeyExchange</tt> or <tt>PPQMAuthenticatedMessage</tt>, encrypted using
+          the Double Ratchet belonging to this device.
+        </li>
+        <li>
+          Use HKDF-SHA-256 to generate 80 bytes of output from the <tt>key</tt> by providing the <tt>key</tt> as HKDF
+          input, 256 zero-bits as HKDF salt and &quot;PPQM Payload&quot; as HKDF info.
+        </li>
+        <li>
+          Divide the HKDF output into a 32-byte encryption key, a 32-byte authentication key and a 16 byte IV.
+        </li>
+        <li>
+          Verify the (truncated) HMAC-SHA-256 using the authentication key derived in the previous step and the
+          ciphertext.
+        </li>
+        <li>
+          Decrypt the ciphertext using AES-256-GCM with no padding, using the encryption key and IV derived in the
+          previous steps.
+        </li>
+      </ol>
+    </section2>
+  </section1>
+
+  <section1 topic='Use Cases' anchor='usecases'>
+    <section2 topic='Setup' anchor='usecases-setup'>
+      <p>
+        To participate in PPQM Encrypted chats, clients need to set up a PPQM library and generate a device id, which is a
+        randomly generated integer between 1 and 2^31 - 1. This device id MUST be unique for the account.
+      </p>
+    </section2>
+    <section2 topic='Discovering peer support' anchor='usecases-discovering'>
+      <p>
+        To determine whether a given contact supports PPQM, the devices node in PEP is consulted. Devices MUST subscribe
+        to <tt>&nsdevices;</tt> via PEP to stay informed of new devices.
+      </p>
+    </section2>
+    <section2 topic='Announcing support' anchor='usecases-announcing'>
+      <section3 topic='Device list' anchor='devices'>
+        <p>
+          A device must announce itself by adding its device id to the devices PEP node. The node’s access model must be set
+          to ‘open’ for this purpose.
+        </p>
+      </section3>
+      <section3 topic='Bundles' anchor='bundles'>
+        <p>
+          A device must publish its IdentityKey, a Signed PreKey, a list of PreKeys, and a list of KEMPreKeys in a bundle.
+          This is stored in the <tt>&nsbundles;</tt> node, which must support multiple items.
+        </p>
+      </section3>
+    </section2>
+    <section2 topic='Building a session' anchor='usecases-building'>
+      <p>
+        To build a session with a device, fetch its bundle information and use a random PreKey and KEMPreKey to establish
+        a PPQM session.
+      </p>
+    </section2>
+    <section2 topic='Sending a message' anchor='usecases-messagesend'>
+      <section3 topic='SCE Profile' anchor='sce'>
+        <p>
+          A PPQM SCE &envelope; element MUST contain an &lt;rpad/&gt; affix element. Other optional elements include
+          &lt;time/&gt; and &lt;from/&gt;.
+        </p>
+      </section3>
+      <section3 topic='Encryption' anchor='encrypt'>
+        <p>
+          The &envelope; element is encrypted as described in the Message Encryption section.
+        </p>
+      </section3>
+      <section3 topic='Message structure description' anchor='message-structure-description'>
+        <p>
+          A PPQM encrypted message includes an &lt;encrypted&gt; element in the <tt>&ns;</tt> namespace. It contains a
+          &lt;header&gt; and a &payload; element.
+        </p>
+        <p>Empty PPQM messages omit the &lt;payload&gt; element, containing only the &lt;header&gt;.</p>
+      </section3>
+    </section2>
+    <section2 topic='Receiving a message' anchor='usecases-receiving'>
+      <p>
+        Upon receiving a PPQM element, check if it contains a &lt;keys&gt; element for your device. If so, proceed with
+        decryption or session establishment as necessary.
+      </p>
+    </section2>
+    <section2 topic='Opt-out' anchor='opt-out'>
+      <p>
+        An account can signal its desire to stop PPQM communication by sending a &lt;opt-out/&gt; element qualified by the
+        <tt>&ns;</tt> namespace.
+      </p>
+    </section2>
+    <section2 topic='Group Chats' anchor='group-chats'>
+      <section3 topic='Retrieving and maintaining members list' anchor='members-list'>
+        <p>Retrieve the members list when joining a group chat to determine recipients of PPQM messages.</p>
+      </section3>
+      <section3 topic='Fetching devices and bundles' anchor='group-fetch'>
+        <p>Fetch device lists and bundles for each member before sending a message.</p>
+      </section3>
+      <section3 topic='Sending a message' anchor='group-send'>
+        <p>PPQM group messages are similar to 1:1 messages but include multiple &lt;keys&gt; elements for each participant.</p>
+      </section3>
+    </section2>
+  </section1>
+
+  <section1 topic='Business Rules' anchor='rules'>
+    <p>
+      Before publishing a new device id, ensure it is unique.
+    </p>
+    <p>
+      When building sessions, the PreKey id and the KEMPreKey id taken by the client MUST be the same in order to
+      guarantee that both PreKey and KEMPreKey are available. This avoids a situation where a PreKey is valid but the
+      KEMPreKey has already been used but the bundle has yet to be updated. To further ensure this, the number of PreKeys
+      and the KEMPreKeys published in the bundle MUST always match.
+    </p>
+    <p>
+      After receiving a PPQMKeyExchange and successfully building a session, respond with an empty PPQM message to notify
+      the sender.
+    </p>
+    <p>
+      Handle decryption failures with care, ignoring repeated messages but notifying users of other failures.
+    </p>
+    <p>
+      Postpone private key deletion until message catch-up is complete. Manually replace broken sessions as needed.
+    </p>
+  </section1>
+
+  <section1 topic='Implementation Notes' anchor='impl'>
+    <section2 topic='Server side requirements' anchor='server-side'>
+      <p>
+        While PPQM uses a Pubsub Service (&xep0060;) on the user’s account it has more requirements than those defined in
+        &xep0163;. The requirements are:
+      </p>
+      <ul>
+        <li>
+          The pubsub service MUST persist node items, i.e., the <link url='https://xmpp.org/extensions/xep-0060.html#features'>feature 'persistent-items'</link>
+          is announced by the service.
+        </li>
+        <li>
+          The pubsub service MUST support publishing options as defined in <link url='https://xmpp.org/extensions/xep-0060.html#publisher-publish-options'><cite>XEP-0060</cite> §7.1.5</link>.
+        </li>
+        <li>
+          The pubsub service MUST support 'max' as a value for the 'pubsub#persist_items' node configuration.
+        </li>
+        <li>
+          The pubsub service MUST support the 'open' access model for node configuration and 'pubsub#access_model' as a
+          publish option.
+        </li>
+      </ul>
+      <p>
+        Furthermore, the server MUST be able to adequately handle the large size of the bundle in a reasonable amount of
+        time. Servers with low bandwidth MUST not declare themselves PPQM-compatible. A conservative 50kbps MUST at least
+        be configured to ensure seamless session building.
+      </p>
+    </section2>
+  </section1>
+
+  <section1 topic='Security Considerations' anchor='security'>
+    <p>
+      Clients must not use a newly built session without user intervention. Trust decisions should involve fingerprint
+      verification. Avoid automatic session creation following decryption errors.
+    </p>
+  </section1>
+
+  <section1 topic='IANA Considerations' anchor='iana'>
+    <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA).</p>
+  </section1>
+
+  <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+    <section2 topic='Protocol Namespaces' anchor='namespaces'>
+      <p>This specification defines the following XMPP namespaces:</p>
+      <ul>
+        <li>&ns;</li>
+      </ul>
+    </section2>
+    <section2 topic='Protocol Versioning' anchor='versioning'>
+      &NSVER;
+    </section2>
+  </section1>
+
+  <section1 topic='XML Schema' anchor='schema'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'
+           targetNamespace=']]>&ns;<![CDATA['
+           xmlns=']]>&ns;<![CDATA['>
+
+    <xs:element name='encrypted'>
+        <xs:complexType>
+            <xs:all>
+                <xs:element ref='header'/>
+                <xs:element ref='payload' minOccurs='0' maxOccurs='1'/>
+            </xs:all>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='payload' type='xs:base64Binary'/>
+
+    <xs:element name='header'>
+        <xs:complexType>
+            <xs:sequence maxOccurs='unbounded'>
+                <xs:element ref='keys'/>
+            </xs:sequence>
+            <xs:attribute name='sid' type='xs:unsignedInt'/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='keys'>
+        <xs:complexType>
+            <xs:sequence maxOccurs='unbounded'>
+                <xs:element ref='key'/>
+            </xs:sequence>
+            <xs:attribute name='jid' type='xs:string' use='required'/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='key'>
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base='xs:base64Binary'>
+                    <xs:attribute name='rid' type='xs:unsignedInt' use='required'/>
+                    <xs:attribute name='kex' type='xs:boolean' default='false'/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='devices'>
+        <xs:complexType>
+            <xs:sequence maxOccurs='unbounded'>
+                <xs:element ref='device'/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='device'>
+        <xs:complexType>
+            <xs:attribute name='id' type='xs:unsignedInt' use='required'/>
+            <xs:attribute name='label' type='xs:string'/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='bundle'>
+        <xs:complexType>
+            <xs:all>
+                <xs:element ref='spk'/>
+                <xs:element ref='spks'/>
+                <xs:element ref='ik'/>
+                <xs:element ref='prekeys'/>
+                <xs:element ref='kemprekeys'/>
+            </xs:all>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='spk'>
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base='xs:base64Binary'>
+                    <xs:attribute name='id' type='xs:unsignedInt' use='required'/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='spks' type='xs:base64Binary'/>
+    <xs:element name='ik' type='xs:base64Binary'/>
+
+    <xs:element name='prekeys'>
+        <xs:complexType>
+            <xs:sequence minOccurs='25' maxOccurs='unbounded'>
+                <xs:element ref='pk'/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='pk'>
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base='xs:base64Binary'>
+                    <xs:attribute name='id' type='xs:unsignedInt' use='required'/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name='kemprekeys'>
+        <xs:complexType>
+            <xs:sequence minOccurs='25' maxOccurs='unbounded'>
+                <xs:element ref='kpk'/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name='kpk'>
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base='xs:base64Binary'>
+                    <xs:attribute name='id' type='xs:unsignedInt' use='required'/>
+                    <xs:attribute name='sig' type='xs:base64Binary' use='required'/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+</xs:schema>
+]]></code>
+    <p>
+      Due to the large size brought by ML-KEM-1024, Base85 is the recommended binary-to-text encoding. However, due to
+      lack of suitable standardizations in this area, Base64 MUST be used for PUBLIC implementations to maintain
+      cross-implementation compatibility. For PRIVATE implementations, it is recommended to use Base85 to save bandwidth
+      as is the case for Privt App. <em>Do note that an additional care for XML compatibility MUST be taken care of for
+      Base85 to safely work.</em>
+    </p>
+  </section1>
+
+  <section1 topic='Protobuf Schema' anchor='protobuf-schema'>
+    <code><![CDATA[
+message PPQMMessage {
+    required uint32 n          = 1;
+    required uint32 pn         = 2;
+    required bytes  dh_pub     = 3;
+    optional bytes  ciphertext = 4;
+}
+
+message PPQMAuthenticatedMessage {
+    required bytes mac     = 1;
+    required bytes message = 2; // Byte-encoding of a PPQMMessage
+}
+
+message PPQMKeyExchange {
+    required uint32 pk_id  = 1;
+    required uint32 spk_id = 2;
+    required bytes  ik     = 3;
+    required bytes  ek     = 4;
+    required PPQMAuthenticatedMessage message = 5;
+}
+]]></code>
+  </section1>
+
+
+  <section1 topic='Acknowledgements' anchor='ack'>
+    <p>
+      Big thanks to Daniel Gultsch for mentoring the original development of OMEMO. Thanks to the PPQM development team
+      for bringing post-quantum security to XMPP, especially for Ron Lauren Hombre's extensive research on the subject.
+      Special thanks to the community for their continued support and feedback.
+    </p>
+  </section1>
+</xep>
