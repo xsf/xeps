@@ -103,6 +103,10 @@
 \defaultfontfeatures{Mapping=tex-text}
 \setromanfont[Ligatures={Common}]{Gentium Basic}
 \setsansfont[Scale=MatchLowercase]{Gentium Basic}
+% Do not apply the TeX mapping (which, among others, turns ` into a left and
+% ' into a right single quotation mark) to the monospaced font that is used
+% for code, as such characters need to be rendered as-is there.
+\defaultfontfeatures{}
 \setmonofont[Scale=MatchLowercase]{Inconsolata}
 
 \setkomafont{descriptionlabel}{\normalfont\bfseries}
@@ -380,7 +384,7 @@
 <xsl:template match="example">
     <env name="lstlisting">
       <opt>caption=<group><TeXML escape="1"><xsl:value-of select="@caption"/></TeXML></group></opt>
-      <TeXML escape="0" emptylines="1">
+      <TeXML escape="0" emptylines="1" ligatures="1">
       <xsl:apply-templates />
       </TeXML>
     </env>
