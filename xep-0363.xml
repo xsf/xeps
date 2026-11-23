@@ -28,6 +28,19 @@
   <shortname>NOT_YET_ASSIGNED</shortname>
   &inputmice;
   <revision>
+    <version>1.3.0</version>
+    <date>2026-11-21</date>
+    <initials>lnj</initials>
+    <remark>
+      <ul>
+        <li>Allow each header only once, as HTTP does not allow multiple values for them, and require multiple cookies to be sent in a single Cookie header.</li>
+        <li>Make header names case-sensitive, as in the schema.</li>
+        <li>Fix XML schema, so that it compiles and matches the examples.</li>
+        <li>Add XML schema for upload purposes.</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>1.2.0</version>
     <date>2025-06-17</date>
     <initials>dg</initials>
@@ -281,7 +294,8 @@
     content-type='image/jpeg' />
 </iq>]]></example>
   <p>The upload service responds with both a PUT and a GET URL wrapped by a &lt;slot&gt; element. The service SHOULD keep the file name and especially the file ending intact. Using the same hostname for PUT and GET is OPTIONAL. The host MUST provide Transport Layer Security (&rfc5246;). Both HTTPS URLs MUST adhere to &rfc3986;. Non ASCII characters MUST be percent-encoded.</p>
-  <p>The &lt;put&gt; element MAY also contain a number of &lt;header&gt; elements which correspond to HTTP header fields. Each &lt;header&gt; element MUST have a name-attribute and a content with the value of the header. Only the following header names are allowed: Authorization, Cookie, Expires. The allowed headers provided in the response MUST be included in the HTTP PUT request. Other header names MUST be ignored by the requesting entity and MUST NOT be included in the HTTP request. The requesting entity MUST strip any newline characters from the header name and value before performing the HTTP request, but MUST preserve the relative order of multiple values for the same header in the request. Each header name MAY be present zero or more times, and are case insensitive (eXpires is the same as Expires).</p>
+  <p>The &lt;put&gt; element MAY also contain a number of &lt;header&gt; elements which correspond to HTTP header fields. Each &lt;header&gt; element MUST have a name-attribute and a content with the value of the header. Only the following header names are allowed: Authorization, Cookie, Expires. The allowed headers provided in the response MUST be included in the HTTP PUT request. Other header names MUST be ignored by the requesting entity and MUST NOT be included in the HTTP request. The requesting entity MUST strip any newline characters from the header name and value before performing the HTTP request. The header names are case-sensitive: a &lt;header&gt; element whose name differs from the allowed names in case (e.g. 'eXpires') is not allowed and MUST be ignored like any other header name.</p>
+  <p>Each header MUST NOT be present more than once: Authorization and Expires are not defined as lists and Section 5.3 of &rfc9110; does not allow sending such header fields multiple times, and &rfc6265; allows only one Cookie header in a request. To set multiple cookies, the upload service MUST put them into a single Cookie header, separated by a semicolon and a space ("; ") as defined in &rfc6265;. If a header is present multiple times nonetheless, the requesting entity MUST use only its first value and ignore the others.</p>
   <example caption='The upload service responds with a slot'><![CDATA[
 <iq from='upload.montague.tld'
     id='step_03'
@@ -487,62 +501,110 @@ Content-Security-Policy: default-src 'none'; frame-ancestors 'none';
   </section2>
 </section1>
 <section1 topic='XML Schema' anchor='schema'>
-  <code><![CDATA[
-<xml version="1.0" encoding="utf8">
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    targetNamespace="urn:xmpp:http:upload:0"
-    xmlns="urn:xmpp:http:upload:0">
-  <xs:element name="request">
-    <xs:complexType>
-      <xs:attribute name="filename" type="xs:string" use="required"/>
-      <xs:attribute name="size" type="xs:positiveInteger" use="required"/>
-      <xs:attribute name="content-type" type="xs:string" use="optional"/>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="slot">
-    <xs:complexType>
-     <xs:sequence>
-       <xs:element name="put" minOccurs="1" maxOccurs="1">
-         <xs:complexType>
-           <xs:attribute name="url" type="xs:string" use="required"/>
-           <xs:sequence>
-             <xs:element name="header" minOccurs="0" maxOccurs="unbounded" type="xs:string">
-               <xs:complexType>
-                 <xs:attribute name="name" use="required">
-                   <xs:simpleType>
-                     <xs:restriction base="xs:string">
-                       <xs:enumeration value="Authorization"/>
-                       <xs:enumeration value="Cookie"/>
-                       <xs:enumeration value="Expires"/>
-                     </xs:restriction>
-                   </xs:simpleType>
-                 </xs:attribute>
-               </xs:complexType>
-             </xs:element>
-           </xs:sequence>
-         </xs:complexType>
-       </xs:element>
-       <xs:element name="get" minOccurs="1" maxOccurs="1">
-         <xs:complexType>
-           <xs:attribute name="url" type="xs:string" use="required"/>
-         </xs:complexType>
-       </xs:element>
-     </xs:sequence>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="file-too-large">
+  <section2 topic='urn:xmpp:http:upload:0' anchor='schema-upload'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:http:upload:0'
+    xmlns='urn:xmpp:http:upload:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='request'>
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="max-file-size" type="xs:positiveInteger" minOccurs="0" maxOccurs="1"/>
+        <xs:any namespace='##other' minOccurs='0' maxOccurs='unbounded' processContents='lax'/>
+      </xs:sequence>
+      <xs:attribute name='filename' type='xs:string' use='required'/>
+      <xs:attribute name='size' type='xs:positiveInteger' use='required'/>
+      <xs:attribute name='content-type' type='xs:string' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='slot'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='put'>
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name='header' minOccurs='0' maxOccurs='unbounded'>
+                <xs:complexType>
+                  <xs:simpleContent>
+                    <xs:extension base='xs:string'>
+                      <xs:attribute name='name' use='required'>
+                        <xs:simpleType>
+                          <xs:restriction base='xs:string'>
+                            <xs:enumeration value='Authorization'/>
+                            <xs:enumeration value='Cookie'/>
+                            <xs:enumeration value='Expires'/>
+                          </xs:restriction>
+                        </xs:simpleType>
+                      </xs:attribute>
+                    </xs:extension>
+                  </xs:simpleContent>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+            <xs:attribute name='url' type='xs:string' use='required'/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name='get'>
+          <xs:complexType>
+            <xs:attribute name='url' type='xs:string' use='required'/>
+          </xs:complexType>
+        </xs:element>
       </xs:sequence>
     </xs:complexType>
   </xs:element>
-  <xs:element name="retry">
+
+  <xs:element name='file-too-large'>
     <xs:complexType>
-      <xs:attribute name="stamp" type="xs:string" use="required"/>
+      <xs:sequence>
+        <xs:element name='max-file-size' type='xs:positiveInteger' minOccurs='0'/>
+      </xs:sequence>
     </xs:complexType>
   </xs:element>
+
+  <xs:element name='retry'>
+    <xs:complexType>
+      <xs:attribute name='stamp' type='xs:dateTime' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
 </xs:schema>
 ]]></code>
+  </section2>
+  <section2 topic='urn:xmpp:http:upload:purpose:0' anchor='schema-purpose'>
+    <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+
+<xs:schema
+    xmlns:xs='http://www.w3.org/2001/XMLSchema'
+    targetNamespace='urn:xmpp:http:upload:purpose:0'
+    xmlns='urn:xmpp:http:upload:purpose:0'
+    elementFormDefault='qualified'>
+
+  <xs:element name='message' type='empty'/>
+
+  <xs:element name='profile' type='empty'/>
+
+  <xs:element name='ephemeral'>
+    <xs:complexType>
+      <xs:attribute name='expire-before' type='xs:dateTime' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='permanent' type='empty'/>
+
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
+]]></code>
+  </section2>
 </section1>
 </xep>
