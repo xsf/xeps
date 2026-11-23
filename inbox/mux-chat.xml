@@ -1,0 +1,1219 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>Multi-User eXchange (MUX)</title>
+  <abstract>This specification defines a group communication service whose rooms hold a persistent membership, ordered roles with permission sets, and several channels. Every text channel is also a Multi-User Chat room, so existing clients take part without change. The document is a framework: it defines the entities, the addressing, discovery, creation, joining, permissions, invitations and the stamps the service puts on messages, and reuses existing extensions for everything else.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XMPP IM</spec>
+    <spec>RFC 5122</spec>
+    <spec>XEP-0004</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0045</spec>
+    <spec>XEP-0050</spec>
+    <spec>XEP-0059</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0068</spec>
+    <spec>XEP-0082</spec>
+    <spec>XEP-0084</spec>
+    <spec>XEP-0115</spec>
+    <spec>XEP-0128</spec>
+    <spec>XEP-0172</spec>
+    <spec>XEP-0313</spec>
+    <spec>XEP-0317</spec>
+    <spec>XEP-0334</spec>
+    <spec>XEP-0359</spec>
+    <spec>XEP-0390</spec>
+    <spec>XEP-0401</spec>
+    <spec>XEP-0402</spec>
+    <spec>XEP-0410</spec>
+    <spec>XEP-0421</spec>
+    <spec>XEP-0424</spec>
+    <spec>XEP-0425</spec>
+    <spec>XEP-0452</spec>
+    <spec>XEP-0463</spec>
+    <spec>XEP-0488</spec>
+    <spec>XEP-0503</spec>
+    <spec>XEP-0513</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>mux-chat</shortname>
+  <author>
+    <firstname>Paavel</firstname>
+    <surname>A.</surname>
+    <email>pd@narayana.im</email>
+    <jid>pd@narayana.im</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2026-11-23</date>
+    <initials>pa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>&xep0045; gives XMPP one room with one list of occupants, where membership and presence are the same thing and a client must be joined to be told anything. &xep0369; separated the two but needed a change on every participant's home server, which few deployed. Meanwhile group communication elsewhere settled on a different shape: a place with a persistent membership and ordered roles, divided into channels, some of them text and some of them voice.</p>
+  <p>MUX (Multi-User eXchange) is that shape on XMPP, without asking anything of the home server. A MUX service hosts <em>rooms</em>. A room has members, who stay members while offline, hats (&xep0317;) that carry permission sets, and <em>channels</em>. A text channel is a complete Multi-User Chat room backed by the room's state, so any client that speaks &xep0045; can read and write in it today. What the room needs beyond that - creation, a join that is not a presence, subscriptions, a paged member list, permissions, invitation tokens - is a small set of IQs in one namespace, defined here. Everything else is an existing extension used as written: &xep0313; for history, &xep0421; for identity, &xep0503; for the channel list, &xep0488; for invitation links, &xep0513; for mentions, &xep0424; and &xep0425; for retraction and moderation.</p>
+  <p>This document is a framework. It defines the entities and the least a client and a service need to share to interoperate, and leaves channel kinds other than text, end-to-end encryption, content filtering and the service's operation to companion documents. It is a successor proposal that adopts the points the XSF's "GC3" discussions agreed on (membership apart from presence, sending without a session, explicit creation, stable occupant identity, tokens for invitations) and the requirements of the "New MUC" proposal; it is a fork of neither. It is unrelated to &xep0451;, which multiplexes connections between servers and holds the shortname <tt>mux</tt>; the registrar names here are therefore <tt>mux-chat</tt>.</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Membership is persistent and independent of presence; a member receives what it asked for at its bare JID while it has no session.</li>
+    <li>A room may hold several channels of several kinds; who sees and does what is decided per channel.</li>
+    <li>Roles are ordered and carry explicit permissions; an actor never acts on a peer or a superior.</li>
+    <li>Every text channel is a XEP-0045 room to a client that knows nothing of this document.</li>
+    <li>Discovery looks like a MUC service's, so room directories and client browsers work unchanged.</li>
+    <li>Rooms are created on purpose, never by a presence; an address is never reused.</li>
+    <li>Invitations are XMPP URIs any client can open.</li>
+    <li>Nothing is required of the participants' home servers.</li>
+  </ul>
+</section1>
+
+<section1 topic='Conventions' anchor='conventions'>
+  <p>The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in &rfc2119; and &rfc8174; when, and only when, they appear in all capitals.</p>
+  <p>"The service" is the entity that implements this document at a domain; "a client" is any entity that talks to it. Where a rule is stated without a keyword it describes what the service does; such statements are normative for the service. Examples use the domain <tt>mux.example.org</tt> and the room <tt>verona</tt>; ids and tokens in examples are illustrative.</p>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di><dt>Service</dt><dd>The entity at a domain that hosts rooms, e.g. <tt>mux.example.org</tt>.</dd></di>
+    <di><dt>Room</dt><dd>A bare JID at the service with members, hats, bans, invitations and channels. The room JID is also its first text channel, the <em>lobby</em>.</dd></di>
+    <di><dt>Channel</dt><dd>A bare JID at the service belonging to one room; it has a <em>kind</em>. This document defines the kind <tt>text</tt>.</dd></di>
+    <di><dt>Member</dt><dd>A bare JID with a row in a room: an affiliation, a nick, hats and subscriptions. Membership ends by leaving, removal or ban, never by going offline.</dd></di>
+    <di><dt>Guest</dt><dd>A session admitted to a room without membership (<link url='#guests'>Guests</link>); it holds less than any member and leaves no row behind.</dd></di>
+    <di><dt>Session</dt><dd>A full JID receiving live traffic from a channel, as a XEP-0045 occupant.</dd></di>
+    <di><dt>Occupant id</dt><dd>The &xep0421; identifier of a member, one per (member, room), the same in every channel of the room.</dd></di>
+    <di><dt>Nick</dt><dd>The member's name in the room, one per member, shared by all its devices and channels.</dd></di>
+    <di><dt>Hat</dt><dd>A &xep0317; hat as the room's role: a URI, a title, a position and a permission set.</dd></di>
+    <di><dt>Permission</dt><dd>A name from the catalogue of <link url='#perm'>Hats and Permissions</link>, either room-wide or per channel.</dd></di>
+    <di><dt>Overwrite</dt><dd>A channel's rule allowing or denying permissions to a hat or a member there.</dd></di>
+    <di><dt>Join model</dt><dd>How a stranger becomes a member: <tt>open</tt>, <tt>knock</tt>, <tt>invite</tt> or <tt>closed</tt>.</dd></di>
+    <di><dt>Token</dt><dd>A &xep0488; invitation token issued by the room.</dd></di>
+  </dl>
+</section1>
+
+<section1 topic='Entities and Addressing' anchor='addressing'>
+  <table caption='Entities'>
+    <tr><th>Entity</th><th>JID</th><th>What it is</th></tr>
+    <tr><td>Service</td><td><tt>mux.example.org</tt></td><td>policy, the public listing, creation</td></tr>
+    <tr><td>Room</td><td><tt>verona@mux.example.org</tt></td><td>members, hats, bans, invitations, the channel list; also the lobby text channel</td></tr>
+    <tr><td>Text channel</td><td><tt>verona.balcony@mux.example.org</tt></td><td>a XEP-0045 room over the room's state</td></tr>
+    <tr><td>Member</td><td><tt>juliet@example.org</tt></td><td>a persistent row in one room</td></tr>
+  </table>
+  <p>An address is a <em>slug</em>: one to N characters of <tt>a-z</tt>, <tt>0-9</tt>, <tt>_</tt> and <tt>-</tt> after lower-casing, N being the service's <tt>slug-max-length</tt> (see <link url='#disco-service'>the policy form</link>). A room's slug is its localpart; a channel's localpart is the room slug, a dot and the channel slug. This is the service's convention. A client MUST NOT derive the room from a channel JID: the channel's disco#info names its room (<link url='#disco-channel'>Discovery</link>). A service MAY give a room an opaque slug when the creator names none.</p>
+  <p>A slug once used MUST NOT be handed out again. A renamed channel's old JID answers every request with <tt>&lt;redirect/&gt;</tt> carrying <tt>xmpp:new@service?join</tt>; a destroyed channel's with <tt>&lt;gone/&gt;</tt> carrying its room's URI; a destroyed room's with an empty <tt>&lt;gone/&gt;</tt>. A presence to a JID with nothing behind it MUST be answered <tt>&lt;item-not-found/&gt;</tt>; it never creates anything.</p>
+</section1>
+
+<section1 topic='Discovery' anchor='disco'>
+  <section2 topic='The service' anchor='disco-service'>
+    <p>The service answers &xep0030; like a MUC service does. Its disco#info MUST carry an identity <tt>conference/text</tt> named after the service, the features <tt>urn:xmpp:mux-chat:0</tt>, <tt>http://jabber.org/protocol/disco#info</tt>, <tt>http://jabber.org/protocol/disco#items</tt> and <tt>http://jabber.org/protocol/commands</tt>, and a &xep0128; form of type <tt>urn:xmpp:mux-chat:policy:0</tt> that says who may create rooms and on what terms. The feature <tt>urn:xmpp:mux-chat:0#create</tt> MUST be present exactly when the requester may create a room now without a token, so a client knows whether to offer it.</p>
+    <example caption='The service&apos;s disco#info, to a requester who may create'><![CDATA[
+<iq type='result' from='mux.example.org' to='romeo@example.org/orchard' id='d1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='conference' type='text' name='Example MUX'/>
+    <feature var='http://jabber.org/protocol/commands'/>
+    <feature var='http://jabber.org/protocol/disco#info'/>
+    <feature var='http://jabber.org/protocol/disco#items'/>
+    <feature var='urn:xmpp:mux-chat:0'/>
+    <feature var='urn:xmpp:mux-chat:0#create'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'><value>urn:xmpp:mux-chat:policy:0</value></field>
+      <field var='create' type='list-multi'><value>admins</value><value>local</value></field>
+      <field var='local-domains' type='text-multi'><value>example.org</value></field>
+      <field var='max-rooms-per-user'><value>10</value></field>
+      <field var='create-challenge' type='list-single'><value>none</value></field>
+      <field var='slug-max-length'><value>32</value></field>
+      <field var='invite-max-lifetime'><value>2592000</value></field>
+      <field var='invite-max-uses'><value>0</value></field>
+      <field var='rules-url'><value>https://example.org/rules</value></field>
+    </x>
+  </query>
+</iq>]]></example>
+    <table caption='The policy form urn:xmpp:mux-chat:policy:0'>
+      <tr><th>Field</th><th>Meaning</th></tr>
+      <tr><td><tt>create</tt></td><td>who may create: <tt>admins</tt> (the service's administrators, always), <tt>local</tt> (users of <tt>local-domains</tt>), <tt>allowlist</tt> (JIDs the service names, not listed), <tt>token</tt> (whoever presents a creation token), <tt>anyone</tt></td></tr>
+      <tr><td><tt>local-domains</tt></td><td>the domains <tt>local</tt> means</td></tr>
+      <tr><td><tt>max-rooms-per-user</tt></td><td>how many rooms one user may have created; 0 is no bound</td></tr>
+      <tr><td><tt>create-challenge</tt></td><td><tt>none</tt>; other values (a &xep0158; challenge at creation) are left to a later document</td></tr>
+      <tr><td><tt>slug-max-length</tt></td><td>the longest address</td></tr>
+      <tr><td><tt>invite-max-lifetime</tt>, <tt>invite-max-uses</tt></td><td>the bounds an invitation's <tt>delay</tt> (seconds) and <tt>counter</tt> are clamped to; 0 uses is no bound</td></tr>
+      <tr><td><tt>rules-url</tt></td><td>rules a creator must accept; absent when there are none</td></tr>
+    </table>
+    <p>disco#items of the service lists every text channel, lobbies included, of every public room, as far as everyone may see it: one item per channel, named "Room · channel", each joinable as a MUC room. The node <tt>urn:xmpp:mux-chat:0#rooms</tt> lists the public rooms. Channels of other kinds and channels not everyone may see MUST NOT be listed.</p>
+  </section2>
+  <section2 topic='A room' anchor='disco-room'>
+    <p>A room's disco#info is the lobby's (<link url='#muc-face'>The XEP-0045 Face</link>) plus the room's own: a second identity <tt>pubsub/service</tt> named after the room, the features <tt>urn:xmpp:mux-chat:0</tt>, <tt>urn:xmpp:spaces:0</tt> and <tt>http://jabber.org/protocol/pubsub</tt>, a form <tt>urn:xmpp:mux-chat:0#room</tt> and a form <tt>urn:xmpp:mux-chat:0#channel</tt> describing the lobby.</p>
+    <example caption='A room&apos;s disco#info (the MUC face&apos;s features and form left out)'><![CDATA[
+<iq type='result' from='verona@mux.example.org' to='juliet@example.org/balcony' id='d2'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='conference' type='text' name='Verona'/>
+    <identity category='pubsub' type='service' name='Verona'/>
+    <feature var='http://jabber.org/protocol/muc'/>
+    <feature var='http://jabber.org/protocol/pubsub'/>
+    <feature var='urn:xmpp:mux-chat:0'/>
+    <feature var='urn:xmpp:spaces:0'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'><value>urn:xmpp:mux-chat:0#room</value></field>
+      <field var='join-model' type='list-single'><value>invite</value></field>
+      <field var='members'><value>12</value></field>
+      <field var='online'><value>3</value></field>
+      <field var='invite-create'><value>members</value></field>
+      <field var='guests' type='boolean'><value>0</value></field>
+      <field var='channels'><value>3</value></field>
+    </x>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'><value>urn:xmpp:mux-chat:0#channel</value></field>
+      <field var='kind' type='list-single'><value>text</value></field>
+      <field var='room' type='jid-single'><value>verona@mux.example.org</value></field>
+      <field var='privacy' type='list-single'><value>inherit</value></field>
+      <field var='position'><value>10</value></field>
+      <field var='category'><value>Text</value></field>
+      <field var='history' type='list-single'><value>shared</value></field>
+      <field var='history-days'><value>0</value></field>
+    </x>
+  </query>
+</iq>]]></example>
+    <p><tt>members</tt> counts the members (guests are not counted), <tt>online</tt> those with a session in any channel, <tt>channels</tt> the channels the requester may see; <tt>invite-create</tt> says who may issue invitations: <tt>admins</tt>, <tt>moderators</tt>, <tt>members</tt> or <tt>hats:URI</tt>; <tt>guests</tt> whether guests may join (<link url='#guests'>Guests</link>). disco#items of a room with no node is empty, as &xep0045; has it; the node <tt>urn:xmpp:spaces:0</tt> is the channel list (<link url='#disco-channels'>below</link>).</p>
+  </section2>
+  <section2 topic='A channel' anchor='disco-channel'>
+    <p>A channel's disco#info carries one identity by its kind (<tt>conference/text</tt> for a text channel) named "Room · channel", the features <tt>urn:xmpp:mux-chat:0</tt> and <tt>urn:xmpp:spaces:0</tt>, a &xep0503; form whose <tt>parent</tt> is the room's channel node, and the form <tt>urn:xmpp:mux-chat:0#channel</tt>. A text channel adds the MUC face's identity, features and <tt>muc#roominfo</tt> form, whose <tt>muc#roomconfig_pubsub</tt> field names the same node.</p>
+    <example caption='A text channel&apos;s own forms (the MUC face&apos;s left out)'><![CDATA[
+<iq type='result' from='verona.balcony@mux.example.org' to='juliet@example.org/balcony' id='d3'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='conference' type='text' name='Verona · balcony'/>
+    <feature var='urn:xmpp:mux-chat:0'/>
+    <feature var='urn:xmpp:spaces:0'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'><value>urn:xmpp:spaces:0</value></field>
+      <field var='parent'><value>xmpp:verona@mux.example.org?;node=urn%3Axmpp%3Aspaces%3A0</value></field>
+    </x>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'><value>urn:xmpp:mux-chat:0#channel</value></field>
+      <field var='kind' type='list-single'><value>text</value></field>
+      <field var='room' type='jid-single'><value>verona@mux.example.org</value></field>
+      <field var='privacy' type='list-single'><value>hats</value></field>
+      <field var='position'><value>20</value></field>
+      <field var='category'><value>Text</value></field>
+      <field var='history' type='list-single'><value>since-join</value></field>
+      <field var='history-days'><value>365</value></field>
+    </x>
+  </query>
+</iq>]]></example>
+    <table caption='The form urn:xmpp:mux-chat:0#channel'>
+      <tr><th>Field</th><th>Meaning</th></tr>
+      <tr><td><tt>kind</tt></td><td><tt>text</tt>; other kinds are defined by other documents</td></tr>
+      <tr><td><tt>room</tt></td><td>the room's JID</td></tr>
+      <tr><td><tt>privacy</tt></td><td><tt>inherit</tt> (whoever sees the room), <tt>hats</tt> (the hats named at creation), <tt>explicit</tt> (nobody but by overwrite)</td></tr>
+      <tr><td><tt>position</tt>, <tt>category</tt></td><td>the sort key and the heading a client groups channels under</td></tr>
+      <tr><td><tt>history</tt></td><td><tt>shared</tt>: every member reads the whole archive; <tt>since-join</tt>: a member reads nothing older than its membership</td></tr>
+      <tr><td><tt>history-days</tt></td><td>how many days the archive keeps a message; 0 is for ever</td></tr>
+      <tr><td><tt>requires</tt></td><td>list-multi of &xep0030; feature vars a client needs to take part (<link url='#requires'>Channel requirements</link>); absent or empty for a channel any client may join</td></tr>
+    </table>
+    <p>A channel the requester may not see, and every channel of a private room to a JID that is not its member, MUST answer <tt>&lt;item-not-found/&gt;</tt>, as a channel that does not exist would.</p>
+  </section2>
+  <section2 topic='The channel list' anchor='disco-channels'>
+    <p>The room JID is a &xep0060; service for one node, <tt>urn:xmpp:spaces:0</tt>, laid out as &xep0503; prescribes: one item per channel the requester may see, its id the channel's JID, its payload a &xep0402; <tt>&lt;conference/&gt;</tt> whose <tt>&lt;extensions/&gt;</tt> carry a <tt>&lt;channel/&gt;</tt> element of this namespace with the channel's <tt>kind</tt>, <tt>position</tt> and <tt>category</tt>, and, for a channel with requirements, a <tt>&lt;requires&gt;</tt> child with one <tt>&lt;feature var='…'/&gt;</tt> per feature var. The lobby's bookmark says <tt>autojoin='true'</tt>.</p>
+    <example caption='A client fetches the channel list'><![CDATA[
+<iq type='get' to='verona@mux.example.org' id='p1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:spaces:0'/>
+  </pubsub>
+</iq>
+
+<iq type='result' from='verona@mux.example.org' to='juliet@example.org/balcony' id='p1'>
+  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    <items node='urn:xmpp:spaces:0'>
+      <item id='verona@mux.example.org'>
+        <conference xmlns='urn:xmpp:bookmarks:1' name='general' autojoin='true'>
+          <extensions>
+            <channel xmlns='urn:xmpp:mux-chat:0' kind='text' position='10' category='Text'/>
+          </extensions>
+        </conference>
+      </item>
+      <item id='verona.balcony@mux.example.org'>
+        <conference xmlns='urn:xmpp:bookmarks:1' name='balcony'>
+          <extensions>
+            <channel xmlns='urn:xmpp:mux-chat:0' kind='text' position='20' category='Text'/>
+          </extensions>
+        </conference>
+      </item>
+      <item id='verona.vault@mux.example.org'>
+        <conference xmlns='urn:xmpp:bookmarks:1' name='vault'>
+          <extensions>
+            <channel xmlns='urn:xmpp:mux-chat:0' kind='text' position='30' category='Text'>
+              <requires><feature var='urn:xmpp:mls:1'/></requires>
+            </channel>
+          </extensions>
+        </conference>
+      </item>
+    </items>
+  </pubsub>
+</iq>]]></example>
+    <p>Members are subscribed to the node by being members; anyone who may see the room MAY subscribe. A channel created, changed or renamed is an item notification, one destroyed or hidden from the recipient a retraction, sent as <tt>type='headline'</tt> messages to the bare JIDs of those who see it. Items are paged by &xep0059; or <tt>max_items</tt>. Publishing by clients is <tt>&lt;forbidden/&gt;</tt> with <tt>&lt;publisher-not-allowed/&gt;</tt>; the node configuration is read-only. A private room's node answers <tt>&lt;not-allowed/&gt;</tt> with <tt>&lt;closed-node/&gt;</tt> to a JID that is not a member.</p>
+  </section2>
+</section1>
+
+<section1 topic='Creating' anchor='create'>
+  <section2 topic='A room' anchor='create-room'>
+    <p>A room is created at the service by an IQ carrying a submitted form of type <tt>urn:xmpp:mux-chat:0#roomconfig</tt>, or by the &xep0050; command <tt>urn:xmpp:mux-chat:0#create</tt> whose first stage offers the same form and whose result is a form of type <tt>urn:xmpp:mux-chat:0#created</tt> with the fields <tt>room</tt> (jid-single) and <tt>channels</tt> (jid-multi). A service MUST support both. Either way the creator becomes the room's owner, with its localpart as nick.</p>
+    <example caption='Romeo creates a room'><![CDATA[
+<iq type='set' to='mux.example.org' id='c1'>
+  <create xmlns='urn:xmpp:mux-chat:0' room='verona'>
+    <x xmlns='jabber:x:data' type='submit'>
+      <field var='FORM_TYPE'><value>urn:xmpp:mux-chat:0#roomconfig</value></field>
+      <field var='name'><value>Verona</value></field>
+      <field var='public'><value>0</value></field>
+      <field var='join-model'><value>invite</value></field>
+      <field var='template'><value>team</value></field>
+    </x>
+  </create>
+</iq>
+
+<iq type='result' from='mux.example.org' to='romeo@example.org/orchard' id='c1'>
+  <created xmlns='urn:xmpp:mux-chat:0' room='verona@mux.example.org'>
+    <channel jid='verona@mux.example.org' kind='text' name='general'/>
+    <channel jid='verona.random@mux.example.org' kind='text' name='random'/>
+    <channel jid='verona.voice@mux.example.org' kind='voice' name='Voice'/>
+  </created>
+</iq>]]></example>
+    <table caption='The form urn:xmpp:mux-chat:0#roomconfig'>
+      <tr><th>Field</th><th>Values</th></tr>
+      <tr><td><tt>slug</tt></td><td>the address; the <tt>room</tt> attribute of <tt>&lt;create/&gt;</tt> wins; empty: the service picks an opaque one</td></tr>
+      <tr><td><tt>name</tt>, <tt>description</tt></td><td>text; the service bounds their length</td></tr>
+      <tr><td><tt>public</tt></td><td>listed in the service's disco#items; default 0</td></tr>
+      <tr><td><tt>join-model</tt></td><td><tt>open</tt>, <tt>knock</tt>, <tt>invite</tt> (default), <tt>closed</tt></td></tr>
+      <tr><td><tt>guests</tt></td><td>whether guests may join (<link url='#guests'>Guests</link>); default 1 for a public room or the <tt>meeting</tt> template, else 0</td></tr>
+      <tr><td><tt>template</tt></td><td>which channels the room starts with: <tt>private-group</tt> (the lobby only, default), <tt>team</tt>, <tt>community</tt>, <tt>meeting</tt> (the lobby and one voice channel, <tt>join-model</tt> <tt>open</tt> and <tt>guests</tt> 1 unless the form says otherwise, and an invitation issued to the creator in the answer); a service MAY offer others and MAY add channels of its own</td></tr>
+      <tr><td><tt>history</tt>, <tt>history-days</tt></td><td>the lobby's archive policy</td></tr>
+      <tr><td><tt>creation-token</tt></td><td>when the policy admits <tt>token</tt></td></tr>
+      <tr><td><tt>rules-accepted</tt></td><td>1, when the policy names <tt>rules-url</tt></td></tr>
+    </table>
+    <p>Errors: <tt>&lt;conflict/&gt;</tt> (the address is or was in use), <tt>&lt;jid-malformed/&gt;</tt> (not a slug), <tt>&lt;bad-request/&gt;</tt> (a value out of range), <tt>&lt;not-allowed/&gt;</tt> (the policy does not admit the requester), <tt>&lt;not-authorized/&gt;</tt> (a wrong creation token), <tt>&lt;resource-constraint/&gt;</tt> (at <tt>max-rooms-per-user</tt>), <tt>&lt;policy-violation/&gt;</tt> (the rules not accepted). A requester without a localpart MUST NOT be allowed to create.</p>
+  </section2>
+  <section2 topic='A channel' anchor='create-channel'>
+    <p>A channel is created at the room JID by a member holding <tt>manage-channels</tt>, with <tt>&lt;create-channel/&gt;</tt> carrying a submitted form of type <tt>urn:xmpp:mux-chat:0#channelconfig</tt>, or by the command <tt>urn:xmpp:mux-chat:0#create-channel</tt>. The fields are <tt>slug</tt> (required), <tt>name</tt>, <tt>kind</tt> (default <tt>text</tt>), <tt>privacy</tt> (default <tt>inherit</tt>), <tt>hats</tt> (the hat URIs <tt>privacy</tt> <tt>hats</tt> opens the channel to), <tt>category</tt>, <tt>position</tt> (default: after the last), <tt>history</tt>, <tt>history-days</tt> and <tt>requires</tt>; a kind defined elsewhere adds its own. The answer is <tt>&lt;created/&gt;</tt> with the one channel.</p>
+    <example caption='A channel for the moderators&apos; hat'><![CDATA[
+<iq type='set' to='verona@mux.example.org' id='c2'>
+  <create-channel xmlns='urn:xmpp:mux-chat:0'>
+    <x xmlns='jabber:x:data' type='submit'>
+      <field var='FORM_TYPE'><value>urn:xmpp:mux-chat:0#channelconfig</value></field>
+      <field var='slug'><value>balcony</value></field>
+      <field var='name'><value>balcony</value></field>
+      <field var='privacy'><value>hats</value></field>
+      <field var='hats'><value>urn:xmpp:mux-chat:hat:moderator</value></field>
+      <field var='history'><value>since-join</value></field>
+    </x>
+  </create-channel>
+</iq>
+
+<iq type='result' from='verona@mux.example.org' to='romeo@example.org/orchard' id='c2'>
+  <created xmlns='urn:xmpp:mux-chat:0' room='verona@mux.example.org'>
+    <channel jid='verona.balcony@mux.example.org' kind='text' name='balcony'/>
+  </created>
+</iq>]]></example>
+    <p>A <tt>requires</tt> value the service cannot enforce is <tt>&lt;bad-request/&gt;</tt>.</p>
+  </section2>
+  <section2 topic='Changing and destroying' anchor='update'>
+    <p><tt>&lt;update/&gt;</tt> with a submitted form changes settings. To the room JID it takes a <tt>#roomconfig</tt> form with the room's settings: <tt>name</tt>, <tt>description</tt>, <tt>public</tt>, <tt>join-model</tt>, <tt>invite-create</tt>, <tt>guests</tt> (<tt>manage-room</tt> needed; setting <tt>guests</tt> to 0 removes the guests present), and the lobby's channel settings. To a channel JID it takes a <tt>#channelconfig</tt> form with the channel's: <tt>channel-name</tt>, <tt>position</tt>, <tt>category</tt>, <tt>privacy</tt> with <tt>hats</tt>, <tt>history</tt>, <tt>history-days</tt>, <tt>requires</tt>, and <tt>slug</tt> for a rename (<tt>manage-channels</tt> needed). A requirement added to a channel ends the sessions that lack it. A form naming nothing is <tt>&lt;bad-request/&gt;</tt>. The command <tt>urn:xmpp:mux-chat:0#update</tt> offers the current values.</p>
+    <p><tt>&lt;destroy/&gt;</tt> with an optional <tt>&lt;reason/&gt;</tt> to a channel removes it (<tt>manage-channels</tt>); to the room JID it destroys the room with every channel (owners only). The command <tt>urn:xmpp:mux-chat:0#delete</tt> asks for confirmation first. Sessions in a destroyed text channel receive the XEP-0045 <tt>&lt;destroy/&gt;</tt> presence.</p>
+    <example caption='Renaming a channel'><![CDATA[
+<iq type='set' to='verona.balcony@mux.example.org' id='u1'>
+  <update xmlns='urn:xmpp:mux-chat:0'>
+    <x xmlns='jabber:x:data' type='submit'>
+      <field var='FORM_TYPE'><value>urn:xmpp:mux-chat:0#channelconfig</value></field>
+      <field var='slug'><value>garden</value></field>
+      <field var='channel-name'><value>garden</value></field>
+    </x>
+  </update>
+</iq>
+
+<iq type='result' from='verona.balcony@mux.example.org' to='romeo@example.org/orchard' id='u1'/>]]></example>
+  </section2>
+</section1>
+
+<section1 topic='Joining' anchor='join'>
+  <section2 topic='Join models' anchor='join-models'>
+    <table caption='Join models'>
+      <tr><th>join-model</th><th>Who becomes a member</th><th>On the XEP-0045 face</th></tr>
+      <tr><td><tt>open</tt></td><td>anyone not banned, on first join</td><td><tt>muc_open</tt>; a join is the room join</td></tr>
+      <tr><td><tt>knock</tt></td><td>whoever asks and is approved</td><td><tt>muc_membersonly</tt>; a join is <tt>&lt;registration-required/&gt;</tt>, the <tt>jabber:iq:register</tt> form is the request</td></tr>
+      <tr><td><tt>invite</tt></td><td>whoever presents a live token</td><td><tt>muc_membersonly</tt></td></tr>
+      <tr><td><tt>closed</tt></td><td>whoever an admin adds</td><td><tt>muc_membersonly</tt></td></tr>
+    </table>
+    <p>A token (<link url='#invites'>Invitations</link>) admits under every model but a ban. A member already is one: its join takes the subscriptions it asks for and uses no token.</p>
+  </section2>
+  <section2 topic='The native join' anchor='join-native'>
+    <p>A client joins the <em>room</em>, not a channel, by an IQ to the room JID. It MAY name a nick (&xep0172;), a token, the channels it wants delivered to its bare JID (<link url='#subscriptions'>Subscriptions</link>) and its entity capabilities (<link url='#requires'>Channel requirements</link>). The result carries the nick the service kept, the occupant id, the member's permissions in the lobby (<link url='#perm-wire'>Hats and Permissions</link>), its subscriptions and, per subscribed channel, the archive's &xep0313; <tt>&lt;metadata/&gt;</tt> so the client knows where to catch up from.</p>
+    <example caption='Juliet joins with a token'><![CDATA[
+<iq type='set' to='verona@mux.example.org' id='j1'>
+  <join xmlns='urn:xmpp:mux-chat:0'>
+    <nick xmlns='http://jabber.org/protocol/nick'>Juliet</nick>
+    <token>Zk3vQm9xT1bR4yW8nA2cEg</token>
+    <subscribe channel='verona.balcony@mux.example.org' level='mentions'/>
+  </join>
+</iq>
+
+<iq type='result' from='verona@mux.example.org' to='juliet@example.org/balcony' id='j1'>
+  <joined xmlns='urn:xmpp:mux-chat:0'>
+    <nick xmlns='http://jabber.org/protocol/nick'>Juliet</nick>
+    <occupant-id xmlns='urn:xmpp:occupant-id:0' id='dd72603dXh3o6qK2pL9sW1Yz'/>
+    <permissions xmlns='urn:xmpp:mux-chat:perm:0' version='p-4' affiliation='member'
+                 allow='attach change-nick invite react read-history send send-polls view'/>
+    <subscriptions>
+      <subscription channel='verona@mux.example.org' level='all'/>
+      <subscription channel='verona.balcony@mux.example.org' level='mentions'/>
+    </subscriptions>
+    <metadata xmlns='urn:xmpp:mam:2' channel='verona@mux.example.org'>
+      <start id='28482-98726-73623' timestamp='2026-11-01T10:00:00Z'/>
+      <end id='09af3-cc343-b409f' timestamp='2026-11-23T09:12:41Z'/>
+    </metadata>
+    <metadata xmlns='urn:xmpp:mam:2' channel='verona.balcony@mux.example.org'/>
+  </joined>
+</iq>]]></example>
+    <p>The service MUST check in this order and answer the first failure: the target (<tt>&lt;item-not-found/&gt;</tt> with <tt>&lt;no-such-room xmlns='urn:xmpp:mux-chat:0'/&gt;</tt>; <tt>&lt;gone/&gt;</tt>; <tt>&lt;redirect/&gt;</tt>; a channel JID is <tt>&lt;bad-request/&gt;</tt>), elements only the service writes (<tt>&lt;not-acceptable/&gt;</tt>, see <link url='#rules'>Business Rules</link>), a ban of the JID or its domain (<tt>&lt;forbidden/&gt;</tt>, before any token), the token (<link url='#invites'>Invitations</link>), then the join model: <tt>open</tt> admits; <tt>knock</tt> files the request and answers <tt>&lt;registration-required/&gt;</tt> with <tt>&lt;approval-required xmlns='urn:xmpp:mux-chat:0'/&gt;</tt>; <tt>invite</tt> and <tt>closed</tt> answer <tt>&lt;not-authorized/&gt;</tt>. A nick another member holds is <tt>&lt;conflict/&gt;</tt>; nicks are compared after Unicode normalization, case folding and white-space folding. Without a nick the service uses the JID's localpart. A nick that is no valid resourcepart is <tt>&lt;not-acceptable/&gt;</tt>. A service SHOULD bound the number of requests waiting per room and answer <tt>&lt;resource-constraint/&gt;</tt> beyond it.</p>
+    <p>A knock waits until a member who may invite decides, by the command <tt>urn:xmpp:mux-chat:0#pending</tt> at the room JID: a form of type <tt>urn:xmpp:mux-chat:0#pending</tt> with the list-multi fields <tt>approve</tt> and <tt>decline</tt>, whose options are the waiting JIDs labelled with the nick and reason asked for. An approved requester becomes a member; it is not told, and its next join is a member's. A XEP-0045 affiliation change to <tt>member</tt> for the JID approves it too.</p>
+    <p>A member who may not invite can still send a XEP-0045 mediated invitation. The service relays it and files a knock that waits for the invitee's own word: its join (native or on the MUC face, answered <tt>&lt;registration-required/&gt;</tt> whatever the join model), its <tt>jabber:iq:register</tt> submission, or <tt>&lt;consent xmlns='urn:xmpp:mux-chat:0'/&gt;</tt> set to the room JID with an optional <tt>&lt;nick/&gt;</tt> and <tt>&lt;reason/&gt;</tt>. Only then do the approvers see it. A service MUST NOT put a JID before the approvers on a third party's word alone.</p>
+    <p>The join is archived in the lobby as a <tt>joined</tt> event (<link url='#messages-events'>Membership events</link>).</p>
+  </section2>
+  <section2 topic='Leaving and subscriptions' anchor='subscriptions'>
+    <p><tt>&lt;leave xmlns='urn:xmpp:mux-chat:0'/&gt;</tt> set to the room JID ends the membership; the room's only owner gets <tt>&lt;not-allowed/&gt;</tt>. The member's row stays as a tombstone (occupant id to last nick) so history keeps its names.</p>
+    <p>A subscription is per member and channel, at one of four levels: <tt>all</tt> (every message, subject change, affiliation change and system event), <tt>mentions</tt> (only messages that mention the member), <tt>none</tt>, and <tt>presence</tt> (as <tt>all</tt>, with occupant presence for a client that wants a live occupant list). The lobby is subscribed <tt>all</tt> by a native join and <tt>none</tt> by a MUC join. <tt>&lt;update-subscription/&gt;</tt> with one or more <tt>&lt;subscribe channel='…' level='…'/&gt;</tt> children changes levels and answers the full <tt>&lt;subscriptions/&gt;</tt>. A channel of another room or one the member cannot see is <tt>&lt;item-not-found/&gt;</tt>. How a subscription is delivered is in <link url='#messages-passive'>Passive delivery</link>.</p>
+  </section2>
+  <section2 topic='Guests' anchor='guests'>
+    <p>A guest is a session admitted without membership, for a room that wants a link anyone can follow: a meeting, a public event. A client asks to be a guest by putting an empty <tt>&lt;guest/&gt;</tt> of this namespace in its <tt>&lt;join/&gt;</tt>. A service MAY also treat sessions it knows to be anonymous logins (SASL ANONYMOUS, &rfc4505;) as guests whatever their join says; how it knows is a deployment matter. A member's <tt>&lt;guest/&gt;</tt> is ignored.</p>
+    <example caption='A visitor joins a meeting as a guest'><![CDATA[
+<iq type='set' to='standup@mux.example.org' id='g1'>
+  <join xmlns='urn:xmpp:mux-chat:0'>
+    <nick xmlns='http://jabber.org/protocol/nick'>Visitor</nick>
+    <token>Zk3vQm9xT1bR4yW8nA2cEg</token>
+    <guest/>
+  </join>
+</iq>
+
+<iq type='result' from='standup@mux.example.org' to='4719283746501928@example.org/web' id='g1'>
+  <joined xmlns='urn:xmpp:mux-chat:0'>
+    <nick xmlns='http://jabber.org/protocol/nick'>Visitor</nick>
+    <occupant-id xmlns='urn:xmpp:occupant-id:0' id='5f1c9a2bXq7m4nZ8pL3sT6Wv'/>
+    <guest/>
+    <permissions xmlns='urn:xmpp:mux-chat:perm:0' version='p-1' affiliation='none'
+                 allow='change-nick react send view'/>
+    <subscriptions>
+      <subscription channel='standup@mux.example.org' level='none'/>
+    </subscriptions>
+  </joined>
+</iq>]]></example>
+    <ul>
+      <li>A guest enters a room whose <tt>guests</tt> setting is 1 (else <tt>&lt;forbidden/&gt;</tt>) with a token, or an <tt>open</tt> room without one; a <tt>knock</tt> room without a token is <tt>&lt;not-allowed/&gt;</tt> (guests do not knock; nothing is filed), <tt>invite</tt> and <tt>closed</tt> are <tt>&lt;not-authorized/&gt;</tt>. The ban, the nick and the token are checked as for anyone; a token's <tt>grant</tt> and hats are not taken.</li>
+      <li>A guest wears the built-in hat <tt>guest</tt> alone, with affiliation <tt>none</tt>; it MUST NOT be given an affiliation, another hat or the right to invite. On the XEP-0045 face it is role <tt>participant</tt> (<tt>visitor</tt> without <tt>send</tt>), affiliation <tt>none</tt>, and absent from the affiliation lists.</li>
+      <li>A guest is never a persistent member: its row goes at its <tt>&lt;leave/&gt;</tt>, at a removal or a ban, and once it is present nowhere in the room; a service SHOULD sweep guests that have been absent for a few minutes. Its subscriptions deliver nothing (its levels are kept at <tt>none</tt>); it reads no archive older than its join, whatever the channel's <tt>history</tt>.</li>
+      <li><tt>&lt;guest/&gt;</tt> marks a guest in <tt>&lt;joined/&gt;</tt>, in its <tt>&lt;participant/&gt;</tt> entry and in its archived events, so clients can show it.</li>
+    </ul>
+    <p>Self-declaration is safe because the guest hat holds less than <tt>everyone</tt> in every scope and the evaluation keeps it so (<link url='#perm-eval'>Evaluation</link>): a user who declares itself a guest only loses rights, and one that does not declare gets what any stranger with an account gets.</p>
+  </section2>
+  <section2 topic='The XEP-0045 face' anchor='muc-face'>
+    <p>Every text channel is a &xep0045; room to any client. The service MUST implement the following of it; the rest of XEP-0045 it MAY implement and SHOULD NOT contradict.</p>
+    <ul>
+      <li>disco#info: identity <tt>conference/text</tt> whose name equals <tt>muc#roomconfig_roomname</tt>; the features <tt>http://jabber.org/protocol/muc</tt>, <tt>http://jabber.org/protocol/muc#stable_id</tt>, <tt>http://jabber.org/protocol/muc#self-ping-optimization</tt>, <tt>urn:xmpp:occupant-id:0</tt>, <tt>urn:xmpp:sid:0</tt>, <tt>urn:xmpp:mam:2</tt>, <tt>urn:xmpp:mam:2#extended</tt>, <tt>urn:xmpp:message-moderate:1</tt>, <tt>urn:xmpp:message-retract:1</tt>, <tt>urn:xmpp:message-retract:1#tombstone</tt>, <tt>urn:xmpp:muc:affiliations:1</tt>, <tt>urn:xmpp:hats:0</tt>, <tt>urn:xmpp:muc-token-invite:0</tt>, <tt>muc_persistent</tt>, <tt>muc_unsecured</tt>, and one of each pair <tt>muc_public</tt>/<tt>muc_hidden</tt>, <tt>muc_open</tt>/<tt>muc_membersonly</tt>, <tt>muc_moderated</tt>/<tt>muc_unmoderated</tt>, <tt>muc_semianonymous</tt>/<tt>muc_nonanonymous</tt> as the <link url='#perm-legacy'>projection</link> says; the <tt>muc#roominfo</tt> form; status code 104 on any change of it. Apart from <tt>muc#roominfo_occupants</tt> the answer MUST be the same for every requester, so caches by &xep0390; hold.</li>
+      <li>Join by presence to <tt>channel/nick</tt>: <tt>&lt;history/&gt;</tt> honoured, then the occupants' presences, the self-presence with status 110 (and 210 when the nick was rewritten to the member's), the history from the archive, the subject message even when empty, then live traffic. The client's presence <tt>id</tt> is echoed on the self-presence and on a join error. Error conditions are XEP-0045's, each with <tt>&lt;x xmlns='http://jabber.org/protocol/muc'/&gt;</tt> and <tt>by</tt> on the error.</li>
+      <li>A join by a non-member of an <tt>open</tt> room is the room join: the JID becomes a member and the <tt>joined</tt> event is archived. A join by a non-member of any other room is <tt>&lt;registration-required/&gt;</tt> in a <tt>knock</tt> room and <tt>&lt;not-authorized/&gt;</tt> otherwise, unless <tt>&lt;password/&gt;</tt> carries a live token, which is redeemed as in the native join (a guest's, as a guest). An <tt>unavailable</tt> presence ends the session, never the membership.</li>
+      <li>In a <tt>knock</tt> room the feature <tt>jabber:iq:register</tt> is advertised: <tt>get</tt> returns the <tt>muc#register</tt> form with <tt>muc#register_roomnick</tt> and <tt>muc#register_faqentry</tt> (the reason), a submission is the knock, <tt>&lt;remove/&gt;</tt> is the leave.</li>
+      <li>Every message, presence and archive result carries the sender's <tt>&lt;occupant-id/&gt;</tt>, every relayed message its <tt>&lt;nick xmlns='http://jabber.org/protocol/nick'/&gt;</tt> and a <tt>&lt;stanza-id by='channel'/&gt;</tt>; the client's <tt>id</tt> is kept.</li>
+      <li><tt>muc#admin</tt> and <tt>muc#owner</tt> read and write the <link url='#perm-legacy'>projection</link>. &xep0410; is answered by the service. Only &xep0199; pings are forwarded to occupants.</li>
+      <li>The channel MUST NOT be created by presence, locked, password-protected as an access model, fully anonymous, publicly logged (status 170/171) or destroyed when empty.</li>
+      <li>A channel with requirements has no XEP-0045 face (<link url='#requires'>below</link>).</li>
+    </ul>
+    <p>The nick is room-wide: a MUC join under another nick is answered with the member's nick, and the self-presence SHOULD carry status 210; a MUC nick change changes the member's nick in every channel. Occupant presence is sent only for members with a session somewhere in the room; a service MAY send a legacy client a subset above a threshold it chooses. Members without a session do not appear as occupants but may post; their messages arrive <tt>from='channel/nick'</tt> with an <tt>&lt;occupant-id/&gt;</tt>, which every MAM-capable client renders already.</p>
+  </section2>
+  <section2 topic='Channel requirements' anchor='requires'>
+    <p>A channel declares what a client needs to take part: <tt>requires</tt>, a list of &xep0030; feature vars, in its <tt>urn:xmpp:mux-chat:0#channel</tt> form, its creation and configuration forms and its item in the channel node. Absent or empty, the channel is a plain XEP-0045 channel any client may join. A channel with requirements has no XEP-0045 face: it MUST be absent from the service's disco#items, and a MUC join presence to it MUST be answered <tt>&lt;not-acceptable/&gt;</tt>. The first use is an end-to-end encrypted channel whose protocol a client must speak; the examples use the placeholder <tt>urn:xmpp:mls:1</tt> for such a feature, which this document does not define.</p>
+    <p>The service reads a session's entity capabilities, &xep0115; or &xep0390;, from the <tt>&lt;c/&gt;</tt> element in the native <tt>&lt;join/&gt;</tt> or in the MUC join presence, resolves the hash by disco#info to the client once and caches the features by hash; a session that sent no <tt>&lt;c/&gt;</tt> is asked by disco#info once. A subscribe to, a message to, or a voice join of a channel the session cannot use MUST be refused <tt>&lt;not-acceptable/&gt;</tt> with a <tt>&lt;requires/&gt;</tt> listing the features it lacks and a text, per session: another device of the same member with the features is admitted. Reading the archive is not gated.</p>
+    <example caption='A session without the feature subscribes to the vault'><![CDATA[
+<iq type='error' from='verona.vault@mux.example.org' to='juliet@example.org/balcony' id='q1'>
+  <subscribe xmlns='urn:xmpp:mucsub:0' nick='Juliet'>
+    <event node='urn:xmpp:mucsub:nodes:messages'/>
+  </subscribe>
+  <error type='cancel' by='verona.vault@mux.example.org'>
+    <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+    <requires xmlns='urn:xmpp:mux-chat:0'>
+      <feature var='urn:xmpp:mls:1'/>
+    </requires>
+    <text xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>This channel needs a client with urn:xmpp:mls:1</text>
+  </error>
+</iq>]]></example>
+  </section2>
+</section1>
+
+<section1 topic='Membership' anchor='members'>
+  <section2 topic='Participants' anchor='participants'>
+    <p><tt>&lt;participants/&gt;</tt> get to the room JID answers members who see the lobby with the member list, versioned and paged by &xep0059;. A page has at most 100 entries when the request names no <tt>&lt;set/&gt;</tt>. Attributes filter: <tt>online='1'</tt>, <tt>hat='URI'</tt>, <tt>query='prefix'</tt> (of the folded nick), <tt>since='version'</tt> (the current version answers an empty list). Entries are ordered by the highest hat position (guests last), then the nick, then the join order. A real JID MUST be given only to a requester holding <tt>view-jids</tt>. Each entry names the hats the member wears by assignment; the hats its affiliation implies are not repeated. A stranger to a public room reads its counts in disco, never who is in it.</p>
+    <example caption='The first page of the member list'><![CDATA[
+<iq type='get' to='verona@mux.example.org' id='m1'>
+  <participants xmlns='urn:xmpp:mux-chat:0' online='1'/>
+</iq>
+
+<iq type='result' from='verona@mux.example.org' to='juliet@example.org/balcony' id='m1'>
+  <participants xmlns='urn:xmpp:mux-chat:0' version='m-17'>
+    <participant occupant-id='a1b2c3d4e5f6a7b8c9d0e1f2' nick='Romeo' affiliation='owner' online='1'/>
+    <participant occupant-id='dd72603dXh3o6qK2pL9sW1Yz' nick='Juliet' affiliation='member' online='1'>
+      <hat xmlns='urn:xmpp:hats:0' uri='https://mux.example.org/hats/3f2a9c1e7b4d8a60' title='Nurse'/>
+    </participant>
+    <set xmlns='http://jabber.org/protocol/rsm'>
+      <first>a1b2c3d4e5f6a7b8c9d0e1f2</first>
+      <last>dd72603dXh3o6qK2pL9sW1Yz</last>
+      <count>2</count>
+    </set>
+  </participants>
+</iq>]]></example>
+  </section2>
+  <section2 topic='Summary' anchor='summary'>
+    <p><tt>&lt;summary/&gt;</tt> get to the room JID answers a member with one <tt>&lt;channel/&gt;</tt> per text channel it may read: <tt>last</tt> is the newest archive id; for a channel the request named with <tt>since</tt> (an archive id), <tt>unread</tt> counts the messages after it not by the member and <tt>mentions</tt> those of them that mention it. One request replaces a MAM query per channel on reconnect. A service MAY cap the counts and the number of channels asked for.</p>
+    <example caption='A summary on reconnect'><![CDATA[
+<iq type='get' to='verona@mux.example.org' id='s1'>
+  <summary xmlns='urn:xmpp:mux-chat:0'>
+    <channel jid='verona@mux.example.org' since='09af3-cc343-b409f'/>
+    <channel jid='verona.balcony@mux.example.org'/>
+  </summary>
+</iq>
+
+<iq type='result' from='verona@mux.example.org' to='juliet@example.org/balcony' id='s1'>
+  <summary xmlns='urn:xmpp:mux-chat:0'>
+    <channel jid='verona@mux.example.org' last='1a2b3-4c5d6-7e8f9' unread='14' mentions='2'/>
+    <channel jid='verona.balcony@mux.example.org' last='e3f1a-0b2c4-d5e6f' unread='0' mentions='0'/>
+  </summary>
+</iq>]]></example>
+  </section2>
+  <section2 topic='The nick' anchor='nick'>
+    <p>A member changes its nick room-wide by setting <tt>&lt;nick xmlns='http://jabber.org/protocol/nick'&gt;</tt> to the room JID: <tt>&lt;forbidden/&gt;</tt> when not a member, <tt>&lt;not-allowed/&gt;</tt> without <tt>change-nick</tt>, <tt>&lt;not-acceptable/&gt;</tt> for a nick the service cannot carry, <tt>&lt;conflict/&gt;</tt> for another member's. The change is a <tt>nick</tt> event in the lobby and a status 303 presence in every channel where the member has a session.</p>
+  </section2>
+</section1>
+
+<section1 topic='Hats and Permissions' anchor='perm'>
+  <section2 topic='Model' anchor='perm-model'>
+    <p>A member's standing is its XEP-0045 affiliation (<tt>owner</tt>, <tt>admin</tt>, <tt>member</tt>, <tt>none</tt>, <tt>outcast</tt>) and the hats it wears. Each affiliation implies a built-in hat and those below it; a hat may also be given by hand. A hat is a &xep0317; hat with a position and a permission set; the room's permissions in a channel are the union of the worn hats' sets, then the channel's overwrites. Permissions never travel in the <tt>&lt;hats/&gt;</tt> element itself, which stays as XEP-0317 defines it.</p>
+    <table caption='Built-in hats'>
+      <tr><th>URI</th><th>Position</th><th>Adds</th><th>Worn by</th></tr>
+      <tr><td><tt>urn:xmpp:mux-chat:hat:everyone</tt></td><td>0</td><td>view read-history send react attach send-polls connect speak video share-screen request-to-speak comment change-nick</td><td>everyone not outcast, guests excepted</td></tr>
+      <tr><td><tt>urn:xmpp:mux-chat:hat:member</tt></td><td>1000</td><td>invite</td><td>members, admins, owners</td></tr>
+      <tr><td><tt>urn:xmpp:mux-chat:hat:moderator</tt></td><td>5000</td><td>manage-messages pin mention-everyone mention-groups change-topic kick timeout mute-members move-members bypass-slow-mode</td><td>admins, owners, and members given it</td></tr>
+      <tr><td><tt>urn:xmpp:mux-chat:hat:admin</tt></td><td>9000</td><td>ban manage-channels manage-hats view-audit-log manage-nicks publish view-jids</td><td>admins, owners</td></tr>
+      <tr><td><tt>urn:xmpp:mux-chat:hat:owner</tt></td><td>10000</td><td>everything</td><td>owners</td></tr>
+      <tr><td><tt>urn:xmpp:mux-chat:hat:guest</tt></td><td>-1</td><td>view connect speak video share-screen send react change-nick (instead of <tt>everyone</tt>'s set)</td><td>guests alone</td></tr>
+    </table>
+    <p>A room keeps its own copy of the built-ins and MAY tune their sets; it MUST NOT destroy them, and of them only <tt>moderator</tt> is given by hand. A custom hat's URI is minted by the service under a prefix it owns unless the creator supplies an absolute URI outside the service's prefix; a URI never changes, so overwrites and mentions survive a rename. The hat's <tt>title</tt> is what XEP-0317 shows.</p>
+    <p>An <em>overwrite</em> belongs to a channel and names a hat or a member JID, a set of allowed and a set of denied permissions, and optionally an expiry (<tt>until</tt>, &xep0082;). A channel's <tt>privacy</tt> is expressed by overwrites: <tt>hats</tt> is a deny of <tt>view</tt> to everyone and an allow to each named hat; <tt>explicit</tt> the deny alone.</p>
+  </section2>
+  <section2 topic='Catalogue' anchor='perm-catalogue'>
+    <table caption='Permissions'>
+      <tr><th>Scope</th><th>Permissions</th></tr>
+      <tr><td>room (never overwritten)</td><td>administrator (bypass), manage-room, manage-channels, manage-hats, kick, ban, timeout, invite, view-audit-log, manage-nicks, change-nick, view-jids</td></tr>
+      <tr><td>every channel kind</td><td>view, read-history</td></tr>
+      <tr><td>text</td><td>send, react, attach, send-polls, pin, mention-everyone, mention-groups, manage-messages, change-topic, send-pm, bypass-slow-mode</td></tr>
+      <tr><td>voice (another document)</td><td>connect, speak, video, share-screen, mute-members, move-members, request-to-speak</td></tr>
+      <tr><td>feed (reserved)</td><td>publish, comment</td></tr>
+    </table>
+    <p>The catalogue is readable on the wire so a client can label a permission it does not know: <tt>&lt;catalogue xmlns='urn:xmpp:mux-chat:perm:0'/&gt;</tt> get to the service, a room or a channel answers one <tt>&lt;permission id='send' scope='channel' kinds='text'&gt;&lt;label xml:lang='en'&gt;Send messages&lt;/label&gt;&lt;/permission&gt;</tt> per permission; <tt>scope</tt> is <tt>room</tt> or <tt>channel</tt>. How a timeout is placed, what <tt>pin</tt>, <tt>send-polls</tt> and <tt>bypass-slow-mode</tt> gate and what <tt>view-audit-log</tt> opens are left to the documents that define those features; the names are reserved here so hats carry them from the start.</p>
+  </section2>
+  <section2 topic='Evaluation' anchor='perm-eval'>
+    <p>For a member in a channel, the service MUST compute the effective set as follows.</p>
+    <ol>
+      <li>An outcast, or a JID under an unexpired ban: nothing. An owner, or a member whose hats give <tt>administrator</tt>: every permission of the scope.</li>
+      <li>The base is the union of the sets of every hat worn.</li>
+      <li>The channel's live overwrites apply in this order: everyone's deny, everyone's allow, the union of the worn hats' denies, the union of their allows, the member's own deny, the member's own allow. For a guest, everyone's allow is skipped. Room-scope permissions are left as they are; unknown names are ignored.</li>
+      <li>An active timeout keeps only <tt>view</tt> and <tt>read-history</tt>.</li>
+      <li>Without <tt>view</tt>, nothing at all in that channel. Without <tt>send</tt>, no <tt>attach</tt>, <tt>send-polls</tt>, <tt>mention-everyone</tt> or <tt>mention-groups</tt>. Without <tt>connect</tt>, none of the voice permissions.</li>
+      <li>The result keeps the room-scope permissions and the channel kind's.</li>
+    </ol>
+    <p>At room scope (no channel) steps 3 and 5's <tt>view</tt> rule do not apply. The order of step 3 means a union of roles, so reordering hats never silently changes rights, and a hat can open a channel that everyone is denied.</p>
+    <p><em>Hierarchy.</em> An actor MUST be allowed to kick, ban, time out, overwrite or give hats only to a member whose highest hat position is strictly lower than its own; equal is refused, so an owner never acts on another owner. It creates, destroys and gives only hats positioned below its own, and grants (in a hat or an overwrite) only permissions it holds itself: room-wide for a hat, in that channel for an overwrite. Nobody but an owner grants itself anything. Only owners and holders of <tt>administrator</tt> pass step 1 untouched: an owner's overwrite binds admins.</p>
+  </section2>
+  <section2 topic='Wire' anchor='perm-wire'>
+    <p><em>Own permissions.</em> <tt>&lt;permissions xmlns='urn:xmpp:mux-chat:perm:0'/&gt;</tt> get to a room or channel the requester sees answers its effective set there, as in <tt>&lt;joined/&gt;</tt>: <tt>version</tt> changes on every hat, overwrite, privacy or affiliation change of the room; <tt>allow</tt> is the space-separated set; <tt>affiliation</tt> the requester's (<tt>none</tt> for a stranger reading a public room, and for a guest); <tt>until</tt> the end of a timeout; each <tt>&lt;hat/&gt;</tt> child a hat worn by assignment. The element is the requester's own standing, which disco#info, identical for everyone, cannot carry.</p>
+    <p><em>Overwrites.</em> <tt>&lt;overwrites/&gt;</tt> get to a channel JID (<tt>manage-channels</tt> or <tt>manage-hats</tt>) lists the channel's overwrites with the room's permission version. A set (<tt>manage-channels</tt>) replaces the entries it names (an entry with empty <tt>allow</tt> and <tt>deny</tt> removes one) and answers the new list. A <tt>version</tt> that is not the current one is <tt>&lt;conflict/&gt;</tt>; an entry naming both or neither of <tt>hat</tt> and <tt>jid</tt>, an unknown permission, or one both allowed and denied is <tt>&lt;bad-request/&gt;</tt>; a target at or above the actor, a permission it lacks in the channel, or an allow for itself is <tt>&lt;forbidden/&gt;</tt>.</p>
+    <example caption='Closing a channel to everyone but one hat and silencing one member for a day'><![CDATA[
+<iq type='set' to='verona.balcony@mux.example.org' id='o1'>
+  <overwrites xmlns='urn:xmpp:mux-chat:perm:0' version='p-7'>
+    <overwrite hat='urn:xmpp:mux-chat:hat:everyone' deny='view'/>
+    <overwrite hat='https://mux.example.org/hats/3f2a9c1e7b4d8a60' allow='view send'/>
+    <overwrite jid='tybalt@example.org' deny='send' until='2026-11-24T00:00:00Z'/>
+  </overwrites>
+</iq>
+
+<iq type='result' from='verona.balcony@mux.example.org' to='romeo@example.org/orchard' id='o1'>
+  <overwrites xmlns='urn:xmpp:mux-chat:perm:0' version='p-8'>
+    <overwrite hat='urn:xmpp:mux-chat:hat:everyone' allow='' deny='view'/>
+    <overwrite hat='https://mux.example.org/hats/3f2a9c1e7b4d8a60' allow='view send' deny=''/>
+    <overwrite jid='tybalt@example.org' allow='' deny='send' until='2026-11-24T00:00:00Z'/>
+  </overwrites>
+</iq>]]></example>
+    <p><em>Hats.</em> The six &xep0317; commands at the room JID (<tt>urn:xmpp:hats:commands:create</tt>, <tt>destroy</tt>, <tt>list</tt>, <tt>assign</tt>, <tt>unassign</tt>, <tt>list-assigned</tt>) manage hats; they need <tt>manage-hats</tt> and the hierarchy. <tt>create</tt> takes, beside XEP-0317's <tt>hats#title</tt>, <tt>hats#uri</tt> and <tt>hats#hue</tt>, the fields <tt>mux#hat_permissions</tt> (list-multi), <tt>mux#hat_position</tt>, <tt>mux#hat_mentionable</tt> and <tt>mux#hat_hoist</tt>; without them a hat has no permissions, position 1, and is neither mentionable nor hoisted. A plain XEP-0317 client works unchanged. <tt>create</tt> completes with a result form whose <tt>hats#uri</tt> is the hat's URI. <tt>list</tt> reports <tt>mux#hat_position</tt> and <tt>mux#hat_permissions</tt> beside XEP-0317's columns. A service MAY put the permission version in the <tt>hats#hash</tt> field of <tt>muc#roominfo</tt>.</p>
+    <example caption='Creating a hat'><![CDATA[
+<iq type='set' to='verona@mux.example.org' id='h1'>
+  <command xmlns='http://jabber.org/protocol/commands' node='urn:xmpp:hats:commands:create' sessionid='h-1'>
+    <x xmlns='jabber:x:data' type='submit'>
+      <field var='FORM_TYPE'><value>urn:xmpp:hats:commands</value></field>
+      <field var='hats#title'><value>Nurse</value></field>
+      <field var='mux#hat_permissions'><value>view</value><value>send</value><value>pin</value></field>
+      <field var='mux#hat_position'><value>2000</value></field>
+      <field var='mux#hat_mentionable'><value>1</value></field>
+    </x>
+  </command>
+</iq>
+
+<iq type='result' from='verona@mux.example.org' to='romeo@example.org/orchard' id='h1'>
+  <command xmlns='http://jabber.org/protocol/commands' node='urn:xmpp:hats:commands:create'
+           sessionid='h-1' status='completed'>
+    <note type='info'>Hat created</note>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'><value>urn:xmpp:hats:commands</value></field>
+      <field var='hats#uri'><value>https://mux.example.org/hats/3f2a9c1e7b4d8a60</value></field>
+    </x>
+  </command>
+</iq>]]></example>
+  </section2>
+  <section2 topic='The XEP-0045 projection' anchor='perm-legacy'>
+    <p>Per channel the service shows a MUC client an affiliation and a role computed from the effective set: an owner is owner/moderator; an admin with <tt>view</tt> is admin/moderator; a member with <tt>manage-messages</tt> or <tt>kick</tt> there has its affiliation and the role moderator; with <tt>send</tt>, participant; with <tt>view</tt> but not <tt>send</tt>, visitor; without <tt>view</tt> it is not an occupant and the channel is hidden from it; an outcast is outcast. The channel's flags follow what everyone holds there: <tt>muc_moderated</tt> when everyone lacks <tt>send</tt>, <tt>muc_membersonly</tt> when everyone lacks <tt>view</tt> or the join model is not <tt>open</tt>, <tt>muc_nonanonymous</tt> when everyone has <tt>view-jids</tt>, <tt>muc#roomconfig_changesubject</tt> when everyone has <tt>change-topic</tt>, <tt>muc#roomconfig_allowpm</tt> from <tt>send-pm</tt>. Real JIDs are shown to holders of <tt>view-jids</tt> alone, never by role: a deviation from XEP-0045, where moderators see them.</p>
+    <p><tt>muc#admin</tt> writes map back: role <tt>none</tt> ends the session in this channel (307); <tt>visitor</tt> and <tt>participant</tt> are a member overwrite denying or allowing <tt>send</tt> here; <tt>moderator</tt> gives the built-in moderator hat; affiliation <tt>outcast</tt> is a room ban, <tt>member</tt> a room membership (approving a knock), <tt>none</tt> a removal from the room; <tt>admin</tt> and <tt>owner</tt> are set by owners. Affiliation reads answer the room's lists; &xep0463; and the member list name JIDs only to <tt>view-jids</tt> holders. The <tt>muc#owner</tt> form exposes the subset with a mapping (<tt>roomname</tt>, <tt>roomdesc</tt>, <tt>publicroom</tt>, <tt>membersonly</tt>, <tt>moderatedroom</tt>, <tt>changesubject</tt>, <tt>allowpm</tt>, <tt>whois</tt>); every change re-sends the affected occupants' presence and bumps the permission version.</p>
+  </section2>
+</section1>
+
+<section1 topic='Invitations' anchor='invites'>
+  <p>Invitations are &xep0488; tokens with an extension element in this namespace. The link is an XMPP URI (&rfc5122;) that every client opens: <tt>xmpp:verona@mux.example.org?join;password=TOKEN</tt>. An invitation MUST be presented as this URI and nothing else; how a platform opens <tt>xmpp:</tt> URIs (a web client registered as the handler, for instance) is outside this document. A legacy client stores the token as a password, which is harmless, since a token admits each JID once.</p>
+  <example caption='Romeo issues an invitation'><![CDATA[
+<iq type='set' to='verona@mux.example.org' id='i1'>
+  <request xmlns='urn:xmpp:muc-token-invite:0' delay='604800' counter='5'>
+    <invite xmlns='urn:xmpp:mux-chat:0' scope='verona.balcony@mux.example.org' grant='member' label='household'>
+      <hat uri='https://mux.example.org/hats/3f2a9c1e7b4d8a60'/>
+    </invite>
+  </request>
+</iq>
+
+<iq type='result' from='verona@mux.example.org' to='romeo@example.org/orchard' id='i1'>
+  <token xmlns='urn:xmpp:muc-token-invite:0' delay='604800' counter='5' creator='romeo@example.org'>Zk3vQm9xT1bR4yW8nA2cEg<invite xmlns='urn:xmpp:mux-chat:0' id='9c1e4b7a2d6f8e03' scope='verona.balcony@mux.example.org' grant='member' uses='0' label='household' expire='2026-11-30T12:00:00Z' uri='xmpp:verona@mux.example.org?join;password=Zk3vQm9xT1bR4yW8nA2cEg'/></token>
+</iq>]]></example>
+  <p>The requester needs <tt>invite</tt> and the room's <tt>invite-create</tt> rule. <tt>scope</tt> names the room or one channel the issuer sees; a channel-scoped token also opens that channel to the new member. <tt>grant</tt> is <tt>member</tt>, or <tt>admin</tt> from an owner. Each <tt>&lt;hat/&gt;</tt> is one the issuer could give (<link url='#perm-eval'>Hierarchy</link>). <tt>delay</tt> and <tt>counter</tt> are clamped to the policy's bounds. The service MUST store only a hash of the token, with its <tt>id</tt>, scope, grant, hats, label, creator, expiry, uses and redeemers; the token text SHOULD be at least 128 bits of randomness (22 characters of base64url) and MUST appear only once, in this result. A service SHOULD bound the live invitations one member holds per room.</p>
+  <p><tt>&lt;tokens xmlns='urn:xmpp:muc-token-invite:0'/&gt;</tt> get lists the requester's live tokens (an admin's: all) without their text, each <tt>&lt;invite/&gt;</tt> with its <tt>id</tt> and <tt>uses</tt>. <tt>&lt;revoke/&gt;</tt> set carries the token text or an <tt>&lt;invite xmlns='urn:xmpp:mux-chat:0' id='…'/&gt;</tt> child, by the creator or an admin. An invitation dies with its creator's standing: when the creator leaves, is removed or banned, or may no longer invite, its tokens MUST be revoked. At redemption the creator's standing is read again; hats it could no longer give are left off and <tt>admin</tt> from a creator no longer owner is <tt>member</tt>.</p>
+  <p>Redemption, inside <tt>&lt;join/&gt;</tt> or a MUC join's <tt>&lt;password/&gt;</tt>: a ban wins; a member's token is ignored and not used up; a known token that is expired, used up, revoked or already used by this JID is <tt>&lt;not-authorized/&gt;</tt> with <tt>&lt;expired-token xmlns='urn:xmpp:muc-token-invite:0'/&gt;</tt>; an unknown one <tt>&lt;not-authorized/&gt;</tt>. Use and redeemer MUST be recorded atomically, once per JID. The <tt>joined</tt> event names the inviter's occupant id in <tt>&lt;invited-by/&gt;</tt>.</p>
+  <p><tt>&lt;preview xmlns='urn:xmpp:mux-chat:0'&gt;&lt;token&gt;…&lt;/token&gt;&lt;/preview&gt;</tt> get to the room JID, by anyone, answers a form of type <tt>urn:xmpp:mux-chat:0#room-info</tt> with <tt>name</tt>, <tt>description</tt>, <tt>avatar</tt> (the &xep0084; hash), <tt>members</tt>, <tt>online</tt>, <tt>guests</tt> (whether guests may join), <tt>inviter</tt> (a nick), <tt>scope</tt> and <tt>expire</tt>, so a client shows the card before joining. The command <tt>urn:xmpp:mux-chat:0#invite</tt> (fields <tt>lifetime</tt>, <tt>uses</tt>, <tt>label</tt>) gives a generic client the same, answering the &xep0401; form <tt>urn:xmpp:invite#invitation</tt> with <tt>uri</tt> and <tt>expire</tt>. Previews and redemptions MUST be rate-limited per JID and per domain (<tt>&lt;resource-constraint/&gt;</tt>).</p>
+</section1>
+
+<section1 topic='Messages' anchor='messages'>
+  <section2 topic='In a text channel' anchor='messages-text'>
+    <p>Messages are <tt>type='groupchat'</tt> to the channel JID and are archived by &xep0313; on the channel JID, with <tt>urn:xmpp:mam:2#extended</tt>. The service rewrites <tt>from</tt> to <tt>channel/nick</tt>, keeps the client's <tt>id</tt>, adds <tt>&lt;stanza-id by='channel'/&gt;</tt> (&xep0359;; a foreign one with the channel's <tt>by</tt> is stripped), <tt>&lt;occupant-id/&gt;</tt> and <tt>&lt;nick/&gt;</tt>, and reflects the message to the sender. A member without a session MAY post. The payload picks the permission: a body needs <tt>send</tt>; a file share <tt>attach</tt>; a bodiless <tt>&lt;reactions/&gt;</tt> <tt>react</tt>; a <tt>&lt;subject/&gt;</tt> <tt>change-topic</tt>; a correction the author's occupant id; chat states and markers need <tt>view</tt> alone.</p>
+    <p>Mentions are &xep0513; markup; the targets are occupant ids, so they resolve in every channel of the room. Mentioning the channel needs <tt>mention-everyone</tt>; mentioning a hat or an affiliation needs <tt>mention-groups</tt>; a mention the author may not make is stripped and the message relayed, since refusing confuses clients that insert markup on their own.</p>
+    <p>Retraction is &xep0424;, by the author's occupant id; moderation is &xep0425; by a holder of <tt>manage-messages</tt> who outranks the author. Both leave a tombstone in the archive with the original's id, as those documents require; the moderation message itself is archived; nothing is deleted. Membership changes are archived events (<link url='#messages-events'>below</link>), so a client rebuilds the room's state from MAM alone.</p>
+  </section2>
+  <section2 topic='Membership events' anchor='messages-events'>
+    <p>A join, a leave and a nick change are archived in the lobby as groupchat messages from <tt>room/nick</tt> carrying <tt>&lt;event xmlns='urn:xmpp:mux-chat:0' type='joined'/&gt;</tt>, <tt>type='left'</tt> or <tt>type='nick'</tt>, with the member's <tt>&lt;nick/&gt;</tt>, <tt>&lt;occupant-id/&gt;</tt>, <tt>&lt;stanza-id/&gt;</tt> and a &xep0334; <tt>&lt;store/&gt;</tt> hint. A <tt>joined</tt> event names the inviter or approver in <tt>&lt;invited-by occupant-id='…'/&gt;</tt>; a <tt>nick</tt> event carries <tt>&lt;previous&gt;</tt> with the old nick; a guest's event carries <tt>&lt;guest/&gt;</tt>. They are delivered to sessions and subscribers as every other message.</p>
+    <example caption='Juliet&apos;s join, as archived'><![CDATA[
+<message type='groupchat' from='verona@mux.example.org/Juliet' id='7c0e5f2a9b1d4e83a6f72c01'>
+  <event xmlns='urn:xmpp:mux-chat:0' type='joined'>
+    <invited-by occupant-id='a1b2c3d4e5f6a7b8c9d0e1f2'/>
+  </event>
+  <nick xmlns='http://jabber.org/protocol/nick'>Juliet</nick>
+  <occupant-id xmlns='urn:xmpp:occupant-id:0' id='dd72603dXh3o6qK2pL9sW1Yz'/>
+  <stanza-id xmlns='urn:xmpp:sid:0' id='7c0e5f2a9b1d4e83a6f72c01' by='verona@mux.example.org'/>
+  <store xmlns='urn:xmpp:hints'/>
+</message>]]></example>
+  </section2>
+  <section2 topic='Passive delivery' anchor='messages-passive'>
+    <p>A member with no session in a channel receives what its subscription level says at its bare JID, as a normal message from the channel that any &rfc6121; server routes, stores offline and pushes. The wire is the MUC subscription protocol of the ejabberd server (<tt>urn:xmpp:mucsub:0</tt>, documented at <link url='https://docs.ejabberd.im/developer/xmpp-clients-bots/extensions/muc-sub/'>docs.ejabberd.im</link>), restated here as far as this document uses it, so that a reader needs nothing else.</p>
+    <ul>
+      <li><tt>&lt;subscribe xmlns='urn:xmpp:mucsub:0' nick='…'/&gt;</tt> set to a channel with one or more <tt>&lt;event node='…'/&gt;</tt> children subscribes; naming the node <tt>urn:xmpp:mucsub:nodes:messages</tt> is the level <tt>all</tt> and is answered with the nodes <tt>…:messages</tt>, <tt>…:subject</tt>, <tt>…:affiliations</tt> and <tt>…:system</tt>; naming none of them is <tt>none</tt>. A non-member is admitted as a MUC join would admit it. <tt>&lt;unsubscribe/&gt;</tt> is the level <tt>none</tt>. <tt>&lt;subscriptions/&gt;</tt> get to the service lists the requester's channels; to a channel, its subscribers, to moderators. The native <tt>&lt;subscribe level/&gt;</tt> sets the same level.</li>
+      <li>At <tt>all</tt> each message arrives wrapped: a <tt>&lt;message/&gt;</tt> from the channel to the bare JID carrying a &xep0060; <tt>&lt;event/&gt;</tt> with <tt>&lt;items node='urn:xmpp:mucsub:nodes:messages'/&gt;</tt> and one <tt>&lt;item/&gt;</tt>, whose id is the stanza id, holding the groupchat message as relayed. A subject change is an item of the <tt>subject</tt> node, an affiliation change a <tt>muc#user</tt> item of the <tt>affiliations</tt> node, an archived event an item of the <tt>system</tt> node.</li>
+      <li>A message that mentions the member arrives instead as a &xep0452; forward (<tt>&lt;mentions xmlns='urn:xmpp:mmn:0'/&gt;</tt>), at <tt>all</tt> and at <tt>mentions</tt> alike, so a push module recognises a mention without room state.</li>
+      <li>Chat states and markers are never delivered passively. Delivery goes to every resource without a session in the channel, not only when the whole account is absent.</li>
+    </ul>
+    <example caption='A message delivered to Juliet&apos;s bare JID at level all'><![CDATA[
+<message from='verona.balcony@mux.example.org' to='juliet@example.org' id='e9d8c7b6'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:xmpp:mucsub:nodes:messages'>
+      <item id='c8e2f4a6-19d3'>
+        <message type='groupchat' from='verona.balcony@mux.example.org/Romeo' id='b4c5d6e7'>
+          <body>The lark sings.</body>
+          <occupant-id xmlns='urn:xmpp:occupant-id:0' id='a1b2c3d4e5f6a7b8c9d0e1f2'/>
+          <nick xmlns='http://jabber.org/protocol/nick'>Romeo</nick>
+          <stanza-id xmlns='urn:xmpp:sid:0' id='c8e2f4a6-19d3' by='verona.balcony@mux.example.org'/>
+        </message>
+      </item>
+    </items>
+  </event>
+</message>]]></example>
+    <example caption='A mention delivered to Juliet&apos;s bare JID'><![CDATA[
+<message from='verona.balcony@mux.example.org' to='juliet@example.org' id='f1a2b3c4'>
+  <mentions xmlns='urn:xmpp:mmn:0'>
+    <forwarded xmlns='urn:xmpp:forward:0'>
+      <delay xmlns='urn:xmpp:delay' stamp='2026-11-23T09:30:00Z'/>
+      <message type='groupchat' from='verona.balcony@mux.example.org/Romeo' id='b4c5d6e7'>
+        <body>@Juliet, the lark sings.</body>
+        <reference xmlns='urn:xmpp:reference:0' begin='0' end='6' type='mention'
+                   uri='xmpp:verona@mux.example.org?occupant-id=dd72603dXh3o6qK2pL9sW1Yz'/>
+        <occupant-id xmlns='urn:xmpp:occupant-id:0' id='a1b2c3d4e5f6a7b8c9d0e1f2'/>
+        <nick xmlns='http://jabber.org/protocol/nick'>Romeo</nick>
+        <stanza-id xmlns='urn:xmpp:sid:0' id='c8e2f4a6-19d3' by='verona.balcony@mux.example.org'/>
+      </message>
+    </forwarded>
+  </mentions>
+</message>]]></example>
+    <p>When the service stops on purpose, every session gets the XEP-0045 shutdown presence (status 110 and 332) and every subscriber at <tt>all</tt> a wrapper on the <tt>system</tt> node carrying <tt>&lt;event xmlns='urn:xmpp:mux-chat:0' type='shutdown'/&gt;</tt>, not archived: the client comes back later; membership and subscriptions stay.</p>
+  </section2>
+</section1>
+
+<section1 topic='Error Conditions' anchor='errors'>
+  <table caption='Conditions this document uses'>
+    <tr><th>Condition</th><th>Type</th><th>When</th></tr>
+    <tr><td><tt>item-not-found</tt></td><td><tt>cancel</tt></td><td>no such room or channel; a channel or private room the requester may not see; with <tt>&lt;no-such-room xmlns='urn:xmpp:mux-chat:0'/&gt;</tt> on a join</td></tr>
+    <tr><td><tt>gone</tt>, <tt>redirect</tt></td><td><tt>cancel</tt>, <tt>modify</tt></td><td>a destroyed or renamed address, the new one in the condition's text</td></tr>
+    <tr><td><tt>registration-required</tt></td><td><tt>auth</tt></td><td>a join that filed a request, with <tt>&lt;approval-required xmlns='urn:xmpp:mux-chat:0'/&gt;</tt></td></tr>
+    <tr><td><tt>not-authorized</tt></td><td><tt>auth</tt></td><td>a join of an <tt>invite</tt> or <tt>closed</tt> room without a live token; an unknown, spent or revoked token (then with <tt>&lt;expired-token xmlns='urn:xmpp:muc-token-invite:0'/&gt;</tt>); a wrong creation token</td></tr>
+    <tr><td><tt>forbidden</tt></td><td><tt>auth</tt></td><td>a banned JID or domain; a permission missing; the hierarchy refusing; a guest where guests are not admitted</td></tr>
+    <tr><td><tt>not-allowed</tt></td><td><tt>cancel</tt></td><td>the policy does not admit the requester; the only owner leaving; a built-in hat destroyed; a nick change without <tt>change-nick</tt>; a guest knocking or given standing</td></tr>
+    <tr><td><tt>conflict</tt></td><td><tt>cancel</tt></td><td>an address in use or used before; a nick another member holds; a stale permission version; a hat that exists</td></tr>
+    <tr><td><tt>not-acceptable</tt></td><td><tt>modify</tt> (<tt>cancel</tt> in the requirements gate and on the XEP-0045 face, as XEP-0045 has it)</td><td>a client-sent element only the service writes; a nick the service cannot carry; a session lacking what a channel requires, with <tt>&lt;requires xmlns='urn:xmpp:mux-chat:0'/&gt;</tt> naming the missing features</td></tr>
+    <tr><td><tt>bad-request</tt></td><td><tt>modify</tt></td><td>a value out of range; a join aimed at a channel JID; a form naming nothing; a requirement the service cannot enforce</td></tr>
+    <tr><td><tt>jid-malformed</tt></td><td><tt>modify</tt></td><td>not a slug</td></tr>
+    <tr><td><tt>policy-violation</tt></td><td><tt>modify</tt></td><td>the rules not accepted</td></tr>
+    <tr><td><tt>resource-constraint</tt></td><td><tt>wait</tt></td><td>at a bound (rooms per user, waiting requests, live invitations, tries per minute); while the service is starting</td></tr>
+    <tr><td><tt>feature-not-implemented</tt></td><td><tt>cancel</tt></td><td>an element of this namespace the service does not know; a MUC join of a channel that is not text</td></tr>
+  </table>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>The sender of every request is the bare JID of its <tt>from</tt>. The service MUST NOT take anything else a client sends as identity and MUST refuse with <tt>&lt;not-acceptable/&gt;</tt>, on both faces, a client-sent <tt>&lt;occupant-id/&gt;</tt>, <tt>&lt;hats/&gt;</tt>, <tt>&lt;stanza-id/&gt;</tt> with the channel's <tt>by</tt>, any element of this document's namespaces it writes itself (<tt>&lt;event/&gt;</tt>, <tt>&lt;invited-by/&gt;</tt>, <tt>&lt;previous/&gt;</tt>, <tt>&lt;permissions/&gt;</tt>), a passive-delivery or XEP-0452 wrapper, a tombstone, a <tt>&lt;moderated/&gt;</tt> element, or a <tt>&lt;subject/&gt;</tt> beside a body. Nothing of a refused message is archived.</li>
+    <li>The occupant id is one per (member, room) and the same in every channel, because the room is the privacy boundary and mentions by occupant id must work across channels. &xep0421; recommends an id per room of a service; this document keeps that and adds that channels of one room share it. Ids MUST be unlinkable across rooms.</li>
+    <li>A room is created only by <tt>&lt;create/&gt;</tt> or the command; a presence to an unknown address MUST answer <tt>&lt;item-not-found/&gt;</tt> and SHOULD say in its text how rooms are created.</li>
+    <li>A private room MUST look like no room to a JID that is not its member: <tt>&lt;item-not-found/&gt;</tt> for every request but a join, a token preview, the registration form and a passive-delivery subscribe, and its commands are not listed to it.</li>
+    <li>Until its state is loaded a service MUST answer every request with a type <tt>wait</tt> error, never <tt>&lt;item-not-found/&gt;</tt>, so clients do not drop bookmarks.</li>
+    <li>The service bounds every text it stores (nick, name, description, category, reason, label, title) and MUST refuse longer values rather than truncate.</li>
+    <li>Membership, hats, overwrites, bans, invitations, subscriptions and the archive MUST be durable; a restart loses sessions only.</li>
+    <li>Entity capabilities are self-declared. The requirements gate keeps a client out of a channel it cannot use; it is a compatibility measure, not a security boundary, and the protocol a channel requires MUST make its own guarantees.</li>
+    <li>A client MUST NOT rely on the structure of JIDs: the room of a channel, the kind of a channel and the channels of a room come from discovery and the channel node.</li>
+  </ul>
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>The reference implementation speaks this wire with the namespaces <tt>https://ns.another.im/mux/0</tt>, <tt>https://ns.another.im/mux/perm/0</tt> and <tt>https://ns.another.im/mux/policy/0</tt> in place of <tt>urn:xmpp:mux-chat:0</tt>, <tt>urn:xmpp:mux-chat:perm:0</tt> and <tt>urn:xmpp:mux-chat:policy:0</tt>, the built-in hats under <tt>https://ns.another.im/mux/hat/</tt> in place of <tt>urn:xmpp:mux-chat:hat:</tt>, and every <tt>#fragment</tt> form type and command node under those, until this document is accepted. The two are the same wire; only the namespace strings differ.</p>
+  <p>A service MAY derive the occupant id as the first 24 characters of <tt>base64url(HMAC-SHA256(key, room-id || 0x00 || bare-jid))</tt> under a key of its own, which gives one id per (member, room) with no table.</p>
+  <p>A service MAY keep a hidden text channel per room as its moderation log, visible to the moderator hat; its format is not part of this document. Features of the catalogue whose wire is defined elsewhere (timeouts, slow mode, pins, polls) are evaluated by the permission algorithm here and placed by their own documents.</p>
+  <p>Clients that cache disco#info by &xep0390; rely on the answer being the same for everyone; the per-requester part of a member's standing is therefore in <tt>&lt;permissions/&gt;</tt>, not in disco.</p>
+</section1>
+
+<section1 topic='Internationalization Considerations' anchor='i18n'>
+  <p>Names, descriptions, categories and hat titles are free text in any script. Nicks are compared after NFC normalization and case folding, and MUST be valid resourceparts under &rfc7622;. Catalogue labels carry <tt>xml:lang</tt>. Slugs are ASCII by definition and are addresses, not names.</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <ul>
+    <li>The service stamps identity; it trusts no client-asserted element (<link url='#rules'>Business Rules</link>). Occupant ids MUST be unlinkable across rooms.</li>
+    <li>Real JIDs reach only holders of <tt>view-jids</tt>, in presence, affiliation lists, the member list and hat listings alike.</li>
+    <li>Tokens are stored hashed and compared in constant time; each admits a JID once; a ban beats a token; previews and redemptions are rate-limited per JID and domain. A token's power is the creator's at redemption, not at issue. The token is the invitation's whole secret and travels only in the <tt>xmpp:</tt> URI: a client SHOULD NOT write the URI into logs or hand it to a third-party service such as a link preview, and the service MUST NOT echo the token text after issuing it.</li>
+    <li>The hierarchy prevents escalation: nobody acts on a peer or a superior, grants what it lacks, or grants itself anything, owners excepted.</li>
+    <li>Guests are self-declared; this is safe only while the guest hat holds a subset of what <tt>everyone</tt> holds in every scope, which a room that tunes its built-in hats MUST keep. A ban of a guest whose JID is an anonymous login lasts for that login only; what keeps such guests out is the room's <tt>guests</tt> setting, its join model and a revoked invitation, and whatever the host server demands before an anonymous session (rate limits, a &xep0158; proof of work).</li>
+    <li>Knocks, invitations, previews, redemptions and nick changes are bounded per JID, per domain and per room; a service MUST answer <tt>&lt;resource-constraint/&gt;</tt> beyond its bounds rather than queue without limit.</li>
+    <li>Nothing a user wrote is deleted by moderation; tombstones keep the id. A service that drops rows after <tt>history-days</tt> does so by the owners' setting, which disco shows.</li>
+    <li>Operators of a host server MUST bind the service to its domain (the component's <tt>hosts</tt>); a component that may claim any domain can impersonate rooms.</li>
+    <li>A member reads in a channel only while it holds <tt>view</tt> there; hidden channels answer <tt>&lt;item-not-found/&gt;</tt> and are absent from the channel node, so their existence does not leak.</li>
+    <li>The requirements gate is not a security boundary (<link url='#rules'>Business Rules</link>): a client that misstates its capabilities is admitted to a channel it cannot use, and the protocol the channel requires must withstand that.</li>
+  </ul>
+</section1>
+
+<section1 topic='Privacy Considerations' anchor='privacy'>
+  <ul>
+    <li>The service sees everything in a text channel: every message, who sent it, when, and who subscribed to what. End-to-end encryption is the business of the protocol a channel requires, not of this document.</li>
+    <li>Passive delivery puts the message, with the channel's and the sender's nick, in a normal message to the member's bare JID: the member's home server sees and stores it as it does any message, and a push service may see what the home server forwards.</li>
+    <li>A member list names members by occupant id and nick; the real JID is shown only to <tt>view-jids</tt> holders, and the lists a MUC client reads follow the same rule. Membership events in the archive name members by occupant id and nick, so a departed member's name stays readable but its JID is not revealed.</li>
+    <li>An occupant id is stable for as long as the membership and its tombstone last, so a member's messages in one room are linkable to each other, by design, and not to the same JID's messages in another room.</li>
+    <li>A token's redeemers are recorded, so the room's administrators learn which JID followed which invitation.</li>
+  </ul>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA).</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol namespaces' anchor='registrar-ns'>
+    <p>This specification defines the following XML namespaces:</p>
+    <ul>
+      <li><tt>urn:xmpp:mux-chat:0</tt></li>
+      <li><tt>urn:xmpp:mux-chat:perm:0</tt></li>
+      <li><tt>urn:xmpp:mux-chat:policy:0</tt></li>
+    </ul>
+    <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespaces to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
+  </section2>
+  <section2 topic='Protocol versioning' anchor='registrar-versioning'>
+    <p>If the listed namespaces are modified in a way that is not backwards-compatible, the version number of each shall be incremented from "0" to "1" (and so on) as described in Section 4 of XEP-0053.</p>
+  </section2>
+  <section2 topic='Service discovery features' anchor='registrar-features'>
+    <p>The Registrar shall include the following features in its registry of service discovery features (see &DISCOFEATURES;):</p>
+    <code><![CDATA[
+<var>
+  <name>urn:xmpp:mux-chat:0</name>
+  <desc>The entity is a MUX service, room or channel.</desc>
+  <doc>XEP-xxxx</doc>
+</var>
+<var>
+  <name>urn:xmpp:mux-chat:0#create</name>
+  <desc>The requesting entity may create a room at this MUX service now, without a token.</desc>
+  <doc>XEP-xxxx</doc>
+</var>]]></code>
+  </section2>
+  <section2 topic='Hat URIs' anchor='registrar-hats'>
+    <p>This specification reserves the built-in hat URIs <tt>urn:xmpp:mux-chat:hat:everyone</tt>, <tt>urn:xmpp:mux-chat:hat:member</tt>, <tt>urn:xmpp:mux-chat:hat:moderator</tt>, <tt>urn:xmpp:mux-chat:hat:admin</tt>, <tt>urn:xmpp:mux-chat:hat:owner</tt> and <tt>urn:xmpp:mux-chat:hat:guest</tt>.</p>
+  </section2>
+  <section2 topic='Ad-hoc command nodes' anchor='registrar-commands'>
+    <p>The commands <tt>urn:xmpp:mux-chat:0#create</tt> (at the service), <tt>urn:xmpp:mux-chat:0#create-channel</tt>, <tt>urn:xmpp:mux-chat:0#update</tt>, <tt>urn:xmpp:mux-chat:0#delete</tt>, <tt>urn:xmpp:mux-chat:0#pending</tt> and <tt>urn:xmpp:mux-chat:0#invite</tt> (at a room or channel).</p>
+  </section2>
+  <section2 topic='Field standardization' anchor='registrar-forms'>
+    <p>&xep0068; defines a process for standardizing the fields used within Data Forms qualified by the <tt>jabber:x:data</tt> namespace. The Registrar shall include the following forms and fields in its registry of field standardization (see &FORMTYPES;).</p>
+    <code><![CDATA[
+<form_type>
+  <name>urn:xmpp:mux-chat:policy:0</name>
+  <doc>XEP-xxxx</doc>
+  <desc>The creation policy of a MUX service, in its disco#info.</desc>
+  <field var='create' type='list-multi' label='Who may create rooms'/>
+  <field var='local-domains' type='text-multi' label='The domains "local" means'/>
+  <field var='max-rooms-per-user' type='text-single' label='Rooms one user may have created (0: no bound)'/>
+  <field var='create-challenge' type='list-single' label='Challenge at creation'/>
+  <field var='slug-max-length' type='text-single' label='Longest address'/>
+  <field var='invite-max-lifetime' type='text-single' label='Longest invitation lifetime, seconds'/>
+  <field var='invite-max-uses' type='text-single' label='Most uses of an invitation (0: no bound)'/>
+  <field var='rules-url' type='text-single' label='Rules a creator must accept'/>
+</form_type>
+
+<form_type>
+  <name>urn:xmpp:mux-chat:0#roomconfig</name>
+  <doc>XEP-xxxx</doc>
+  <desc>Creating a room and changing its settings.</desc>
+  <field var='slug' type='text-single' label='Address'/>
+  <field var='name' type='text-single' label='Name'/>
+  <field var='description' type='text-single' label='Description'/>
+  <field var='public' type='boolean' label='Listed by the service'/>
+  <field var='join-model' type='list-single' label='How strangers become members'/>
+  <field var='invite-create' type='text-single' label='Who may issue invitations'/>
+  <field var='guests' type='boolean' label='Guests may join'/>
+  <field var='template' type='list-single' label='Channels the room starts with'/>
+  <field var='history' type='list-single' label='History policy of the lobby'/>
+  <field var='history-days' type='text-single' label='Days the lobby keeps a message (0: for ever)'/>
+  <field var='creation-token' type='text-single' label='Creation token'/>
+  <field var='rules-accepted' type='boolean' label='The rules are accepted'/>
+</form_type>
+
+<form_type>
+  <name>urn:xmpp:mux-chat:0#channelconfig</name>
+  <doc>XEP-xxxx</doc>
+  <desc>Creating a channel and changing its settings.</desc>
+  <field var='slug' type='text-single' label='Address'/>
+  <field var='name' type='text-single' label='Name, at creation'/>
+  <field var='channel-name' type='text-single' label='Name, at update'/>
+  <field var='kind' type='list-single' label='Kind'/>
+  <field var='privacy' type='list-single' label='Who sees the channel'/>
+  <field var='hats' type='list-multi' label='Hats the channel is open to'/>
+  <field var='category' type='text-single' label='Category'/>
+  <field var='position' type='text-single' label='Position'/>
+  <field var='history' type='list-single' label='History policy'/>
+  <field var='history-days' type='text-single' label='Days the archive keeps a message (0: for ever)'/>
+  <field var='requires' type='list-multi' label='Features a client needs'/>
+</form_type>
+
+<form_type>
+  <name>urn:xmpp:mux-chat:0#created</name>
+  <doc>XEP-xxxx</doc>
+  <desc>The result of the creation command.</desc>
+  <field var='room' type='jid-single' label='The room'/>
+  <field var='channels' type='jid-multi' label='Its channels'/>
+  <field var='invite-link' type='text-single' label='An invitation, when the template issues one'/>
+</form_type>
+
+<form_type>
+  <name>urn:xmpp:mux-chat:0#room</name>
+  <doc>XEP-xxxx</doc>
+  <desc>A room, in its disco#info.</desc>
+  <field var='join-model' type='list-single' label='How strangers become members'/>
+  <field var='members' type='text-single' label='Members'/>
+  <field var='online' type='text-single' label='Members with a session'/>
+  <field var='invite-create' type='text-single' label='Who may issue invitations'/>
+  <field var='guests' type='boolean' label='Guests may join'/>
+  <field var='channels' type='text-single' label='Channels the requester may see'/>
+</form_type>
+
+<form_type>
+  <name>urn:xmpp:mux-chat:0#channel</name>
+  <doc>XEP-xxxx</doc>
+  <desc>A channel, in its disco#info.</desc>
+  <field var='kind' type='list-single' label='Kind'/>
+  <field var='room' type='jid-single' label='The room'/>
+  <field var='privacy' type='list-single' label='Who sees the channel'/>
+  <field var='position' type='text-single' label='Position'/>
+  <field var='category' type='text-single' label='Category'/>
+  <field var='history' type='list-single' label='History policy'/>
+  <field var='history-days' type='text-single' label='Days the archive keeps a message (0: for ever)'/>
+  <field var='requires' type='list-multi' label='Features a client needs'/>
+</form_type>
+
+<form_type>
+  <name>urn:xmpp:mux-chat:0#room-info</name>
+  <doc>XEP-xxxx</doc>
+  <desc>The preview of an invitation.</desc>
+  <field var='name' type='text-single' label='Name'/>
+  <field var='description' type='text-single' label='Description'/>
+  <field var='avatar' type='text-single' label='Avatar hash'/>
+  <field var='members' type='text-single' label='Members'/>
+  <field var='online' type='text-single' label='Members with a session'/>
+  <field var='guests' type='boolean' label='Guests may join'/>
+  <field var='inviter' type='text-single' label='Nick of the inviter'/>
+  <field var='scope' type='jid-single' label='The room or channel the invitation opens'/>
+  <field var='expire' type='text-single' label='When the invitation expires'/>
+</form_type>
+
+<form_type>
+  <name>urn:xmpp:mux-chat:0#pending</name>
+  <doc>XEP-xxxx</doc>
+  <desc>Deciding requests to join.</desc>
+  <field var='approve' type='list-multi' label='Approve'/>
+  <field var='decline' type='list-multi' label='Decline'/>
+</form_type>
+
+<form_type>
+  <name>urn:xmpp:mux-chat:0#invite</name>
+  <doc>XEP-xxxx</doc>
+  <desc>Issuing an invitation by command.</desc>
+  <field var='lifetime' type='text-single' label='Lifetime, seconds'/>
+  <field var='uses' type='text-single' label='Uses (0: no bound)'/>
+  <field var='label' type='text-single' label='Label'/>
+</form_type>]]></code>
+    <p>This specification also adds the following fields to the form type <tt>urn:xmpp:hats:commands</tt> defined by &xep0317;:</p>
+    <code><![CDATA[
+<form_type>
+  <name>urn:xmpp:hats:commands</name>
+  <doc>XEP-xxxx</doc>
+  <field var='mux#hat_permissions' type='list-multi' label='Permissions the hat carries'/>
+  <field var='mux#hat_position' type='text-single' label='Position'/>
+  <field var='mux#hat_mentionable' type='boolean' label='Mentionable'/>
+  <field var='mux#hat_hoist' type='boolean' label='Shown as a group in the member list'/>
+</form_type>]]></code>
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'
+           targetNamespace='urn:xmpp:mux-chat:0' xmlns='urn:xmpp:mux-chat:0'
+           elementFormDefault='qualified'>
+
+  <xs:import namespace='jabber:x:data' schemaLocation='https://xmpp.org/schemas/x-data.xsd'/>
+  <xs:import namespace='http://jabber.org/protocol/nick' schemaLocation='https://xmpp.org/schemas/nick.xsd'/>
+  <xs:import namespace='urn:xmpp:occupant-id:0'/>
+  <xs:import namespace='urn:xmpp:mux-chat:perm:0'/>
+  <xs:import namespace='urn:xmpp:mam:2'/>
+  <xs:import namespace='urn:xmpp:hats:0'/>
+  <xs:import namespace='http://jabber.org/protocol/rsm'/>
+
+  <xs:element name='create'>
+    <xs:complexType>
+      <xs:sequence><xs:element ref='xdata:x' xmlns:xdata='jabber:x:data'/></xs:sequence>
+      <xs:attribute name='room' type='xs:string' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='create-channel' type='formOnly'/>
+  <xs:element name='update' type='formOnly'/>
+  <xs:complexType name='formOnly'>
+    <xs:sequence><xs:element ref='xdata:x' xmlns:xdata='jabber:x:data'/></xs:sequence>
+  </xs:complexType>
+  <xs:element name='created'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='channel' minOccurs='0' maxOccurs='unbounded'>
+          <xs:complexType>
+            <xs:attribute name='jid' type='xs:string' use='required'/>
+            <xs:attribute name='kind' type='xs:NCName' use='required'/>
+            <xs:attribute name='name' type='xs:string' use='required'/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element ref='invite' minOccurs='0'/>
+      </xs:sequence>
+      <xs:attribute name='room' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='destroy'>
+    <xs:complexType>
+      <xs:sequence><xs:element name='reason' type='xs:string' minOccurs='0'/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='join'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='nick:nick' xmlns:nick='http://jabber.org/protocol/nick' minOccurs='0'/>
+        <xs:element name='token' type='xs:string' minOccurs='0'/>
+        <xs:element ref='subscribe' minOccurs='0' maxOccurs='unbounded'/>
+        <xs:element ref='guest' minOccurs='0'/>
+        <xs:any namespace='http://jabber.org/protocol/caps urn:xmpp:caps' processContents='lax' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='joined'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='nick:nick' xmlns:nick='http://jabber.org/protocol/nick'/>
+        <xs:element ref='oid:occupant-id' xmlns:oid='urn:xmpp:occupant-id:0'/>
+        <xs:element ref='guest' minOccurs='0'/>
+        <xs:element ref='perm:permissions' xmlns:perm='urn:xmpp:mux-chat:perm:0'/>
+        <xs:element ref='subscriptions'/>
+        <xs:element ref='mam:metadata' xmlns:mam='urn:xmpp:mam:2' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='guest' type='empty'/>
+  <xs:element name='leave' type='empty'/>
+  <xs:element name='consent'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='nick:nick' xmlns:nick='http://jabber.org/protocol/nick' minOccurs='0'/>
+        <xs:element name='reason' type='xs:string' minOccurs='0'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='subscribe'>
+    <xs:complexType>
+      <xs:attribute name='channel' type='xs:string' use='required'/>
+      <xs:attribute name='level' type='level' use='required'/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='update-subscription'>
+    <xs:complexType>
+      <xs:sequence><xs:element ref='subscribe' maxOccurs='unbounded'/></xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='subscriptions'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='subscription' minOccurs='0' maxOccurs='unbounded'>
+          <xs:complexType>
+            <xs:attribute name='channel' type='xs:string' use='required'/>
+            <xs:attribute name='level' type='level' use='required'/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:simpleType name='level'>
+    <xs:restriction base='xs:NCName'>
+      <xs:enumeration value='all'/>
+      <xs:enumeration value='mentions'/>
+      <xs:enumeration value='none'/>
+      <xs:enumeration value='presence'/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:element name='participants'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='participant' minOccurs='0' maxOccurs='unbounded'>
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element ref='guest' minOccurs='0'/>
+              <xs:element ref='hats:hat' xmlns:hats='urn:xmpp:hats:0' minOccurs='0' maxOccurs='unbounded'/>
+            </xs:sequence>
+            <xs:attribute name='occupant-id' type='xs:string' use='required'/>
+            <xs:attribute name='nick' type='xs:string' use='required'/>
+            <xs:attribute name='affiliation' type='xs:NCName' use='required'/>
+            <xs:attribute name='online' type='xs:boolean' use='required'/>
+            <xs:attribute name='jid' type='xs:string' use='optional'/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element ref='rsm:set' xmlns:rsm='http://jabber.org/protocol/rsm' minOccurs='0'/>
+      </xs:sequence>
+      <xs:attribute name='version' type='xs:string' use='optional'/>
+      <xs:attribute name='online' type='xs:boolean' use='optional'/>
+      <xs:attribute name='hat' type='xs:anyURI' use='optional'/>
+      <xs:attribute name='query' type='xs:string' use='optional'/>
+      <xs:attribute name='since' type='xs:string' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='summary'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='channel' minOccurs='0' maxOccurs='unbounded'>
+          <xs:complexType>
+            <xs:attribute name='jid' type='xs:string' use='required'/>
+            <xs:attribute name='since' type='xs:string' use='optional'/>
+            <xs:attribute name='last' type='xs:string' use='optional'/>
+            <xs:attribute name='unread' type='xs:nonNegativeInteger' use='optional'/>
+            <xs:attribute name='mentions' type='xs:nonNegativeInteger' use='optional'/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='event'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='invited-by' minOccurs='0'>
+          <xs:complexType><xs:attribute name='occupant-id' type='xs:string' use='required'/></xs:complexType>
+        </xs:element>
+        <xs:element name='previous' type='xs:string' minOccurs='0'/>
+        <xs:element ref='guest' minOccurs='0'/>
+      </xs:sequence>
+      <xs:attribute name='type' use='required'>
+        <xs:simpleType>
+          <xs:restriction base='xs:NCName'>
+            <xs:enumeration value='joined'/>
+            <xs:enumeration value='left'/>
+            <xs:enumeration value='nick'/>
+            <xs:enumeration value='shutdown'/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='requires'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='feature' minOccurs='0' maxOccurs='unbounded'>
+          <xs:complexType><xs:attribute name='var' type='xs:string' use='required'/></xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='channel'>
+    <xs:complexType>
+      <xs:sequence><xs:element ref='requires' minOccurs='0'/></xs:sequence>
+      <xs:attribute name='kind' type='xs:NCName' use='required'/>
+      <xs:attribute name='position' type='xs:nonNegativeInteger' use='required'/>
+      <xs:attribute name='category' type='xs:string' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='invite'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='hat' minOccurs='0' maxOccurs='unbounded'>
+          <xs:complexType><xs:attribute name='uri' type='xs:anyURI' use='required'/></xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name='id' type='xs:string' use='optional'/>
+      <xs:attribute name='scope' type='xs:string' use='optional'/>
+      <xs:attribute name='grant' type='xs:NCName' use='optional'/>
+      <xs:attribute name='label' type='xs:string' use='optional'/>
+      <xs:attribute name='uses' type='xs:nonNegativeInteger' use='optional'/>
+      <xs:attribute name='expire' type='xs:dateTime' use='optional'/>
+      <xs:attribute name='uri' type='xs:anyURI' use='optional'/>
+      <xs:attribute name='revoked' type='xs:boolean' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='preview'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='token' type='xs:string' minOccurs='0'/>
+        <xs:element ref='xdata:x' xmlns:xdata='jabber:x:data' minOccurs='0'/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='no-such-room' type='empty'/>
+  <xs:element name='approval-required' type='empty'/>
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>
+]]></code>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'
+           targetNamespace='urn:xmpp:mux-chat:perm:0' xmlns='urn:xmpp:mux-chat:perm:0'
+           elementFormDefault='qualified'>
+
+  <xs:import namespace='urn:xmpp:hats:0'/>
+  <xs:import namespace='http://www.w3.org/XML/1998/namespace' schemaLocation='http://www.w3.org/2001/xml.xsd'/>
+  <xs:simpleType name='permissions'>
+    <xs:list itemType='xs:NCName'/>
+  </xs:simpleType>
+
+  <xs:element name='permissions'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='hats:hat' xmlns:hats='urn:xmpp:hats:0' minOccurs='0' maxOccurs='unbounded'/>
+      </xs:sequence>
+      <xs:attribute name='version' type='xs:string' use='required'/>
+      <xs:attribute name='allow' type='permissions' use='required'/>
+      <xs:attribute name='affiliation' type='xs:NCName' use='required'/>
+      <xs:attribute name='until' type='xs:dateTime' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='overwrites'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='overwrite' minOccurs='0' maxOccurs='unbounded'>
+          <xs:complexType>
+            <xs:attribute name='hat' type='xs:anyURI' use='optional'/>
+            <xs:attribute name='jid' type='xs:string' use='optional'/>
+            <xs:attribute name='allow' type='permissions' use='optional'/>
+            <xs:attribute name='deny' type='permissions' use='optional'/>
+            <xs:attribute name='until' type='xs:dateTime' use='optional'/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name='version' type='xs:string' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='catalogue'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name='permission' minOccurs='0' maxOccurs='unbounded'>
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name='label' maxOccurs='unbounded'>
+                <xs:complexType>
+                  <xs:simpleContent>
+                    <xs:extension base='xs:string'>
+                      <xs:attribute ref='xml:lang' use='optional'/>
+                    </xs:extension>
+                  </xs:simpleContent>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+            <xs:attribute name='id' type='xs:NCName' use='required'/>
+            <xs:attribute name='scope' use='required'>
+              <xs:simpleType>
+                <xs:restriction base='xs:NCName'>
+                  <xs:enumeration value='room'/>
+                  <xs:enumeration value='channel'/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:attribute>
+            <xs:attribute name='kinds' use='required'>
+              <xs:simpleType><xs:list itemType='xs:NCName'/></xs:simpleType>
+            </xs:attribute>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+]]></code>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>The shape of this document owes much to the GC3 discussions of the XSF community, to Jonas Schäfer's draft, Kevin Smith's notes, Dave Cridland's "New MUC", and to the authors of &xep0045;, &xep0317;, &xep0421;, &xep0488; and &xep0503;, whose work it reuses rather than replaces.</p>
+</section1>
+</xep>
