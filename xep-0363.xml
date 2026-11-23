@@ -28,6 +28,16 @@
   <shortname>NOT_YET_ASSIGNED</shortname>
   &inputmice;
   <revision>
+    <version>1.3.0</version>
+    <date>2026-11-23</date>
+    <initials>pa</initials>
+    <remark>
+      <ul>
+        <li>Add destination-scoped upload services (gateways).</li>
+      </ul>
+    </remark>
+  </revision>
+  <revision>
     <version>1.2.0</version>
     <date>2025-06-17</date>
     <initials>dg</initials>
@@ -438,6 +448,40 @@
   <p>In addition to the Content-Length and Content-Type header the client MUST include all allowed headers that came with the slot assignment.</p>
   <p>There is no further XMPP communication required between the upload service and the client. A HTTP status Code of 201 means that the server is now ready to serve the file via the provided GET URL. If the upload fails for whatever reasons the client MAY request a new slot.</p>
 </section1>
+<section1 topic='Destination-scoped upload services' anchor='scoped'>
+  <p>Some entities can accept files only for particular destinations. A typical case is a gateway (&xep0100;) to a network with its own media store: a file put to the gateway can go straight to the remote network as part of the user's message to a remote contact or room, instead of being uploaded to the user's server and fetched from there by the gateway. Such a service is of no use for files addressed to anyone else. This section defines how an entity offers a destination-scoped upload service and how a client uses it, without changing anything for entities and clients that do not implement it.</p>
+  <p>An entity other than the user's server and its general upload services MAY advertise the "urn:xmpp:http:upload:0" feature, and the form with the "max-file-size" field as described in <link url='#disco'>Discovering Support</link>, in its own service discovery information, for example a contact's or a room's JID at a gateway. Such an entity is a destination-scoped upload service: it accepts files only for itself as the destination of a message.</p>
+  <example caption='A contact at a gateway advertises a destination-scoped upload service'><![CDATA[
+<iq from='12345@gateway.montague.tld'
+    id='scoped_01'
+    to='romeo@montague.tld/garden'
+    type='result'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='client' type='pc'/>
+    <feature var='http://jabber.org/protocol/disco#info'/>
+    <feature var='urn:xmpp:http:upload:0'/>
+    <x type='result' xmlns='jabber:x:data'>
+      <field var='FORM_TYPE' type='hidden'>
+        <value>urn:xmpp:http:upload:0</value>
+      </field>
+      <field var='max-file-size'>
+        <value>2097152000</value>
+      </field>
+    </x>
+  </query>
+</iq>]]></example>
+  <p>The following rules apply:</p>
+  <ol>
+    <li>A client sending a file to an entity that advertises the feature in its own service discovery information MAY request the slot from that entity, as described in <link url='#request'>Requesting a slot</link>, instead of from the user's general upload service.</li>
+    <li>A client MUST use a slot obtained from such an entity only for a file it sends to that entity (in a message addressed to it), and MUST NOT share the slot's GET URL with any other recipient, nor use the slot for any purpose other than 'message' (see <link url='#purpose'>Upload purpose</link>). A file sent to several recipients is uploaded to the general upload service.</li>
+    <li>An entity that accepts files only for particular destinations MUST NOT advertise the feature on its own domain JID or on any other JID that the user's server lists in its service discovery items, since a client could take it for the user's general upload service and its files to other recipients would not be delivered. Such an entity MAY still answer slot requests sent to its domain JID, for compatibility with existing deployments.</li>
+    <li>A client that does not implement this section, or a client sending a file to an entity that does not advertise the feature, uses the user's general upload service as before. An entity offering a destination-scoped service MUST continue to accept messages that carry the GET URL of another upload service.</li>
+    <li>The value of "max-file-size" MAY differ per requester, for example when the remote network applies a different limit to each account; the entity then reports the requester's limit. Since the form is part of the &xep0115; verification string, the entity's capabilities hash then differs per requester as well.</li>
+    <li>The entity SHOULD advertise the feature only while it can accept uploads, and SHOULD answer a slot request from a requester it does not serve with a &lt;not-allowed/&gt; error and one over the requester's limit as described in <link url='#errors'>Error conditions</link>.</li>
+  </ol>
+  <p>The PUT URL MAY lead to the remote network's own store; the GET URL SHOULD then still serve the file to anyone who knows it, as the user's own other devices and archives receive the message with it (&xep0280;, &xep0313;).</p>
+  <p class='note'>Implementation note: the Telegram gateway tackygram advertises such a service in the service discovery information of its contacts' and rooms' JIDs, never on its own domain JID; the PUT URL takes the file straight to Telegram's upload, nothing is stored on the XMPP server.</p>
+</section1>
 <section1 topic='Implementation Notes' anchor='impl'>
   <p>The upload service SHOULD choose an appropriate timeout for the validity of the PUT URL. Since there is no reason for a client to wait between requesting the slot and starting the upload, relatively low timeout values of around 300s are RECOMMENDED.</p>
   <p>To make HTTP Upload work in web clients (including those hosted on a different domain) the upload service SHOULD set appropriate <link url="https://www.w3.org/TR/cors/">CORS</link>-Headers. The exact headers and values are out of scope of this document but may include: <em>Access-Control-Allow-Origin</em>, <em>Access-Control-Allow-Methods</em> and <em>Access-Control-Allow-Headers</em>. For HTTP upload services that use custom <em>Authorization</em> or <em>Cookie</em> request header the CORS-Header <em>Access-Control-Allow-Credentials</em> might also be of importance.</p>
@@ -464,6 +508,14 @@ Content-Security-Policy: default-src 'none'; frame-ancestors 'none';
     <ul>
       <li>Requesting entities MUST strip any newline characters from the HTTP header names and values before making the PUT request.</li>
       <li>Requesting entities MUST ensure that only the headers that are explicitly allowed by this XEP (Authorization, Cookie, Expires) are copied from the slot response to the HTTP request.</li>
+    </ul>
+  </section2>
+  <section2 topic="Destination-scoped upload services" anchor="security-scoped">
+    <ul>
+      <li>A destination-scoped upload service adds no new trust: the entity already receives every file the user sends to it, whichever service the file was uploaded to. Uploading to it directly avoids a copy on the user's server and a fetch of that copy by the entity.</li>
+      <li>The GET URL of such a slot is shared only in the chat with that entity (and with the user's own devices and archives); clients MUST NOT reuse it elsewhere, as required in <link url='#scoped'>Destination-scoped upload services</link>.</li>
+      <li>Up- and downloading the file leaks the client's IP address to the HTTP service named by the entity, which may be operated by the remote network. Clients concerned about this MAY use the general upload service instead.</li>
+      <li>Clients MUST NOT treat a service discovered in a contact's or room's service discovery information as an upload service for other recipients; doing so would hand files meant for others to that entity.</li>
     </ul>
   </section2>
   <section2 topic="General" anchor="general">
