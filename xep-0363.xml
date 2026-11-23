@@ -211,6 +211,7 @@
   <p>XMPP protocol extensions already define methods for peer-to-peer file transfer such as &xep0096; or &xep0234; however due to their very nature of being peer-to-peer they don't work very well in scenarios where it is requeried to send a file to multiple recipients or multiple resources of the same recipient at once. They also don’t work alongside offline storage, MUC history and &xep0313;.</p>
   <p>Uploading files manually to an HTTP server and sharing the link has been a workaround for this for a long time now. While users have a variety of services to choose from the downside of this manual approach is that an XMPP client can not automate this process on behalf of the user since these services don’t share a common API. Furthermore using a third party service would probably require the user to enter additional credentials into their XMPP client specifically for the file upload.</p>
   <p>This XEP defines an approach to request permissions from another entity to upload a file to a specific path on an HTTP server and at the same time receive an URL from which that file can later be downloaded again. These tuples consisting of a PUT and a GET-URL are called slots.</p>
+  <p>This XEP also defines an optional mechanism to delete an uploaded file by sending its GET URL to the upload service in an IQ-set request.</p>
 </section1>
 <section1 topic='Requirements' anchor='reqs'>
   <ul>
@@ -221,6 +222,7 @@
 </section1>
 <section1 topic='Discovering Support' anchor='disco'>
   <p>An entity advertises support for this protocol by including the "urn:xmpp:http:upload:0" in its service discovery information features as specified in &xep0030; or section 6.3 of &xep0115;. To avoid unnecessary round trips an entity SHOULD also include the maximum file size as specified in &xep0128; if such a limitation exists. The field name MUST be "max-file-size" and the value MUST be in bytes.</p>
+  <p>Support for file deletion is OPTIONAL. An upload service that supports it MUST advertise "urn:xmpp:http:upload:delete:0" as an additional service discovery feature. Clients SHOULD discover this feature before sending deletion requests.</p>
   <p>A user’s server SHOULD include any known entities that provide such services into its service discovery items.</p>
   <example caption='Client sends service discovery request to server'><![CDATA[
 <iq from='romeo@montague.tld/garden'
@@ -246,7 +248,7 @@
     type='get'>
   <query xmlns='http://jabber.org/protocol/disco#info'/>
 </iq>]]></example>
-  <example caption='Upload service replies to service discovery request and reports a maximum file size of 5MiB'><![CDATA[
+  <example caption='Upload service replies to service discovery request and reports a maximum file size of 5MiB and support for deletion'><![CDATA[
 <iq from='upload.montague.tld'
     id='step_02'
     to='romeo@montague.tld/garden'
@@ -256,6 +258,7 @@
               type='file'
               name='HTTP File Upload' />
     <feature var='urn:xmpp:http:upload:0' />
+    <feature var='urn:xmpp:http:upload:delete:0' />
     <x type='result' xmlns='jabber:x:data'>
       <field var='FORM_TYPE' type='hidden'>
         <value>urn:xmpp:http:upload:0</value>
@@ -438,6 +441,43 @@
   <p>In addition to the Content-Length and Content-Type header the client MUST include all allowed headers that came with the slot assignment.</p>
   <p>There is no further XMPP communication required between the upload service and the client. A HTTP status Code of 201 means that the server is now ready to serve the file via the provided GET URL. If the upload fails for whatever reasons the client MAY request a new slot.</p>
 </section1>
+<section1 topic='Deleting a file' anchor='delete'>
+  <p>To delete a file, the client sends an IQ stanza of type 'set' to the XMPP address of the upload service that issued the slot. The stanza MUST contain a &lt;delete/&gt; element qualified by the 'urn:xmpp:http:upload:delete:0' namespace with a required 'url' attribute. The attribute MUST contain the GET URL exactly as returned in the slot response. Clients SHOULD retain the upload service's XMPP address together with the GET URL for this purpose (the service address cannot in general be inferred from the URL).</p>
+  <example caption='Client requests deletion of an uploaded file'><![CDATA[
+<iq from='romeo@montague.tld/garden'
+    id='delete_01'
+    to='upload.montague.tld'
+    type='set'>
+  <delete xmlns='urn:xmpp:http:upload:delete:0'
+          url='https://download.montague.tld/4a771ac1-f0b2-4a4a-9700-f2a26fa2bb67/tr%C3%A8s%20cool.jpg' />
+</iq>]]></example>
+  <p>The upload service MUST verify that the requester is authorized to delete the file before deleting it. For example, a service can record the bare JID that requested each slot and permit deletion by that bare JID, irrespective of the resource used for the deletion request. Services MAY authorize other entities (e.g. service admins) according to local policy. Possession of the GET URL alone MUST NOT grant permission to delete the file.</p>
+  <p>If the requester is authorized, the service MUST delete the file and return an empty IQ-result only after the file is no longer available from the service via the GET URL. This mechanism applies to files uploaded for any purpose, including 'permanent'.</p>
+  <example caption='Upload service confirms deletion'><![CDATA[
+<iq from='upload.montague.tld'
+    id='delete_01'
+    to='romeo@montague.tld/garden'
+    type='result' />
+]]></example>
+  <p>If the request cannot be completed, the service MUST return an appropriate stanza error as defined in &rfc6120;:</p>
+  <ul>
+    <li>A missing, empty, or malformed URL MUST result in a &lt;bad-request/&gt; error of type 'modify'.</li>
+    <li>A requester who is not authorized to delete the file MUST receive a &lt;forbidden/&gt; error of type 'auth'.</li>
+    <li>An unknown URL, including one belonging to another service or a file that has already been deleted, MUST result in an &lt;item-not-found/&gt; error of type 'cancel'. A service MAY instead return &lt;forbidden/&gt; of type 'auth' to avoid disclosing whether a file exists.</li>
+    <li>If deletion fails temporarily, the service MUST return an appropriate error of type 'wait', such as &lt;internal-server-error/&gt;.</li>
+  </ul>
+  <example caption='Upload service denies an unauthorized deletion request'><![CDATA[
+<iq from='upload.montague.tld'
+    id='delete_01'
+    to='romeo@montague.tld/garden'
+    type='error'>
+  <delete xmlns='urn:xmpp:http:upload:delete:0'
+          url='https://download.montague.tld/4a771ac1-f0b2-4a4a-9700-f2a26fa2bb67/tr%C3%A8s%20cool.jpg' />
+  <error type='auth'>
+    <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas' />
+  </error>
+</iq>]]></example>
+</section1>
 <section1 topic='Implementation Notes' anchor='impl'>
   <p>The upload service SHOULD choose an appropriate timeout for the validity of the PUT URL. Since there is no reason for a client to wait between requesting the slot and starting the upload, relatively low timeout values of around 300s are RECOMMENDED.</p>
   <p>To make HTTP Upload work in web clients (including those hosted on a different domain) the upload service SHOULD set appropriate <link url="https://www.w3.org/TR/cors/">CORS</link>-Headers. The exact headers and values are out of scope of this document but may include: <em>Access-Control-Allow-Origin</em>, <em>Access-Control-Allow-Methods</em> and <em>Access-Control-Allow-Headers</em>. For HTTP upload services that use custom <em>Authorization</em> or <em>Cookie</em> request header the CORS-Header <em>Access-Control-Allow-Credentials</em> might also be of importance.</p>
@@ -450,6 +490,10 @@ Access-Control-Allow-Credentials: true
   <p>Clients SHOULD NOT interpret headers and treat them as opaque.</p>
 </section1>
 <section1 topic='Security Considerations' anchor='security'>
+  <section2 topic='File deletion' anchor='security-delete'>
+    <p>Services MUST base deletion authorization on the authenticated XMPP identity of the requester and their own authorization records. Services MUST resolve the supplied GET URL against their own slot records and MUST NOT fetch the URL or follow redirects to determine which file to delete.</p>
+    <p>Deletion cannot revoke copies held by recipients or independent HTTP caches. Clients SHOULD make this limitation clear when offering file deletion to users.</p>
+  </section2>
   <section2 topic="Server side" anchor="server">
   <p><strong>Note: This section is not normative; it may be updated when general web security recommendations change in the future.</strong></p>
   <p>It is recommended to run the HTTP upload domain used for GET requests in appropriate isolation from other HTTP based services to avoid user-generated, malicious scripts to be executed in the context of said services. Isolation techniques can include, but are not limited to, setting the <em>Content-Security-Policy</em>.</p>
@@ -479,11 +523,12 @@ Content-Security-Policy: default-src 'none'; frame-ancestors 'none';
 </section1>
 <section1 topic='XMPP Registrar Considerations' anchor='registrar'>
   <section2 topic='Protocol Namespaces' anchor='registrar-ns'>
-    <p>This specification defines the following XML namespace:</p>
+    <p>This specification defines the following XML namespaces:</p>
     <ul>
       <li>urn:xmpp:http:upload:0</li>
+      <li>urn:xmpp:http:upload:delete:0</li>
     </ul>
-    <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespace to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
+    <p>Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add the foregoing namespaces to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;.</p>
   </section2>
 </section1>
 <section1 topic='XML Schema' anchor='schema'>
@@ -540,6 +585,20 @@ Content-Security-Policy: default-src 'none'; frame-ancestors 'none';
   <xs:element name="retry">
     <xs:complexType>
       <xs:attribute name="stamp" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+]]></code>
+  <p>The following schema defines the optional file deletion protocol:</p>
+  <code><![CDATA[
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="urn:xmpp:http:upload:delete:0"
+    xmlns="urn:xmpp:http:upload:delete:0"
+    elementFormDefault="qualified">
+  <xs:element name="delete">
+    <xs:complexType>
+      <xs:attribute name="url" type="xs:anyURI" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>
