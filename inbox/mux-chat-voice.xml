@@ -1,0 +1,487 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE xep SYSTEM 'xep.dtd' [
+  <!ENTITY % ents SYSTEM 'xep.ent'>
+%ents;
+]>
+<?xml-stylesheet type='text/xsl' href='xep.xsl'?>
+<xep>
+<header>
+  <title>MUX Voice Channels</title>
+  <abstract>This specification adds voice channels to Multi-User eXchange rooms: standing calls on a conference server outside XMPP that the MUX service admits members to by a URL and a token, whose participants it publishes on a pubsub node, and whose moderation it fronts. The media protocol is out of scope.</abstract>
+  &LEGALNOTICE;
+  <number>xxxx</number>
+  <status>ProtoXEP</status>
+  <type>Standards Track</type>
+  <sig>Standards</sig>
+  <approver>Council</approver>
+  <dependencies>
+    <spec>XMPP Core</spec>
+    <spec>XEP-0004</spec>
+    <spec>XEP-0030</spec>
+    <spec>XEP-0059</spec>
+    <spec>XEP-0060</spec>
+    <spec>XEP-0082</spec>
+    <spec>XEP-0128</spec>
+    <spec>XEP-0421</spec>
+    <spec>XEP-0482</spec>
+    <spec>XEP-xxxx</spec>
+  </dependencies>
+  <supersedes/>
+  <supersededby/>
+  <shortname>mux-chat-voice</shortname>
+  <author>
+    <firstname>Paavel</firstname>
+    <surname>A.</surname>
+    <email>pd@narayana.im</email>
+    <jid>pd@narayana.im</jid>
+  </author>
+  <revision>
+    <version>0.0.1</version>
+    <date>2026-11-23</date>
+    <initials>pa</initials>
+    <remark><p>First draft.</p></remark>
+  </revision>
+</header>
+
+<section1 topic='Introduction' anchor='intro'>
+  <p>A voice channel is a standing call that members of a MUX room drop into: everyone who may see the channel sees who is in it without joining the media, and moderators mute, deafen, move and disconnect there. The MUX service has no media server of its own. A voice channel is one room on a <em>conference server</em> that the client reaches by a URL and a token; the service is the token authority, the occupancy publisher and the moderation front. What the client and the conference server say to each other is not defined here: a service names the transport in discovery, and a client that does not speak it shows the channel as one it cannot enter.</p>
+  <p>This document extends the Multi-User eXchange framework (XEP-xxxx, shortname <tt>mux-chat</tt>, called "the framework" below) with the channel kind <tt>voice</tt>, its form, its options at creation, three IQs and one pubsub node in the namespace <tt>urn:xmpp:mux-chat:voice:0</tt>. The permissions it uses - <tt>connect</tt>, <tt>speak</tt>, <tt>video</tt>, <tt>share-screen</tt>, <tt>mute-members</tt>, <tt>move-members</tt>, <tt>request-to-speak</tt> - are in the framework's catalogue and evaluated by its algorithm.</p>
+</section1>
+
+<section1 topic='Requirements' anchor='reqs'>
+  <ul>
+    <li>Who is in a call is visible to whoever may see the channel, without presence and after a reconnect.</li>
+    <li>The service admits by the room's permissions, and what it admits the conference server enforces.</li>
+    <li>Moderation is persistent: a server mute or a ban holds across leaving, rejoining and restarts.</li>
+    <li>The conference server never learns a JID.</li>
+    <li>The media protocol is replaceable.</li>
+  </ul>
+</section1>
+
+<section1 topic='Conventions' anchor='conventions'>
+  <p>The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in &rfc2119; and &rfc8174; when, and only when, they appear in all capitals.</p>
+  <p>Terms not defined here (service, room, channel, member, guest, occupant id, hat, permission, the hierarchy) are the framework's. Statements without a keyword describe what the service does and are normative for it.</p>
+</section1>
+
+<section1 topic='Glossary' anchor='glossary'>
+  <dl>
+    <di><dt>Conference server</dt><dd>The server that carries media, outside XMPP, reached by a URL.</dd></di>
+    <di><dt>Token</dt><dd>What the conference server accepts for one connection: issued by the service, bound to the member's occupant id and to the grants its permissions give.</dd></di>
+    <di><dt>Participant</dt><dd>A member the conference server lists in the call; one item of the occupancy node.</dd></di>
+    <di><dt>Stage channel</dt><dd>A voice channel where only speakers publish and the audience raises hands.</dd></di>
+  </dl>
+</section1>
+
+<section1 topic='Discovery' anchor='disco'>
+  <p>A voice channel is a channel of kind <tt>voice</tt>: listed in the room's channel node with <tt>&lt;channel kind='voice'/&gt;</tt>, never in disco#items of the service (which lists text channels for MUC clients). Its disco#info MUST carry the identity <tt>conference/audio-video</tt>, the features <tt>urn:xmpp:mux-chat:0</tt>, <tt>urn:xmpp:mux-chat:voice:0</tt>, <tt>urn:xmpp:occupant-id:0</tt> and <tt>urn:xmpp:spaces:0</tt>, the framework's two forms, and a form of type <tt>urn:xmpp:mux-chat:voice:0#info</tt>. It MUST NOT carry a <tt>conference/text</tt> identity or the <tt>http://jabber.org/protocol/muc</tt> feature, so a MUC client does not offer it as a chat; a MUC join presence is answered with <tt>&lt;feature-not-implemented/&gt;</tt> of type <tt>cancel</tt> whose text names this namespace.</p>
+  <example caption='A voice channel&apos;s disco#info (the framework&apos;s forms left out)'><![CDATA[
+<iq type='result' from='verona.lounge@mux.example.org' to='juliet@example.org/balcony' id='d1'>
+  <query xmlns='http://jabber.org/protocol/disco#info'>
+    <identity category='conference' type='audio-video' name='Verona · Lounge'/>
+    <feature var='urn:xmpp:mux-chat:0'/>
+    <feature var='urn:xmpp:mux-chat:voice:0'/>
+    <feature var='urn:xmpp:occupant-id:0'/>
+    <feature var='urn:xmpp:spaces:0'/>
+    <x xmlns='jabber:x:data' type='result'>
+      <field var='FORM_TYPE' type='hidden'><value>urn:xmpp:mux-chat:voice:0#info</value></field>
+      <field var='voice#room' type='jid-single'><value>verona@mux.example.org</value></field>
+      <field var='voice#transport'><value>livekit</value></field>
+      <field var='voice#participants'><value>3</value></field>
+      <field var='voice#max'><value>25</value></field>
+      <field var='voice#video' type='boolean'><value>1</value></field>
+      <field var='voice#screen' type='boolean'><value>1</value></field>
+      <field var='voice#stage' type='boolean'><value>0</value></field>
+      <field var='voice#e2ee'><value>none</value></field>
+    </x>
+  </query>
+</iq>]]></example>
+  <table caption='The form urn:xmpp:mux-chat:voice:0#info'>
+    <tr><th>Field</th><th>Meaning</th></tr>
+    <tr><td><tt>voice#room</tt></td><td>the room the channel belongs to</td></tr>
+    <tr><td><tt>voice#transport</tt></td><td>the media protocol the conference server speaks, by a registered name (<link url='#registrar-transports'>Transports</link>); <tt>none</tt> while the service has no conference server, and a <tt>&lt;join/&gt;</tt> is then refused</td></tr>
+    <tr><td><tt>voice#participants</tt></td><td>how many are in the call now: the occupancy node's items</td></tr>
+    <tr><td><tt>voice#max</tt></td><td>the most participants</td></tr>
+    <tr><td><tt>voice#video</tt>, <tt>voice#screen</tt></td><td>whether cameras and screen sharing are allowed</td></tr>
+    <tr><td><tt>voice#stage</tt></td><td>1: a stage channel</td></tr>
+    <tr><td><tt>voice#e2ee</tt></td><td>the media encryption: <tt>none</tt> in this version, meaning the conference server's operator can hear the call; other values are defined by the documents that define a key exchange, together with the <tt>requires</tt> entry that gates the channel</td></tr>
+  </table>
+  <p>The conference server's URL is not in discovery; it comes with the token.</p>
+  <p>At creation and update a voice channel takes, in the framework's <tt>#channelconfig</tt> form, the fields <tt>voice-max</tt> (1 to 250, default 25), <tt>voice-video</tt>, <tt>voice-screen</tt>, <tt>voice-stage</tt> (booleans, default 1, 1, 0) and <tt>voice-e2ee</tt> (<tt>none</tt>); on a channel of another kind they are <tt>&lt;bad-request/&gt;</tt>. A changed option applies to tokens issued from then on, and the service brings the participants in the call into line.</p>
+</section1>
+
+<section1 topic='Joining' anchor='join'>
+  <p>A member joins the call by an empty <tt>&lt;join/&gt;</tt> to the channel JID. The result gives the conference server's <tt>url</tt>, a <tt>token</tt> for one connection, the member's <tt>identity</tt> there (its occupant id in the room, the same its messages carry), the conference server's <tt>room</tt> name (informative), when the token <tt>expires</tt> for a new connection, and the <tt>e2ee</tt> in force. The client connects to <tt>url</tt> with <tt>token</tt> by the transport named in discovery.</p>
+  <example caption='Juliet joins the lounge'><![CDATA[
+<iq type='set' to='verona.lounge@mux.example.org' id='j1'>
+  <join xmlns='urn:xmpp:mux-chat:voice:0'/>
+</iq>
+
+<iq type='result' from='verona.lounge@mux.example.org' to='juliet@example.org/balcony' id='j1'>
+  <join xmlns='urn:xmpp:mux-chat:voice:0'
+        url='wss://sfu.example.org'
+        token='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZDcyNjAzZCJ9.5Qx3n2vY8sK1pL7aR4eT9uW0zC6bN3mF'
+        identity='dd72603dXh3o6qK2pL9sW1Yz'
+        room='3vU3sYqgX0h3f1yGJm1qH0U3rI7Vb1Hj0N3C0f6dQ5E'
+        expires='2026-11-23T12:10:00Z'
+        e2ee='none'/>
+</iq>]]></example>
+  <p>The service MUST check, in this order, and answer the first failure:</p>
+  <ol>
+    <li>the channel is a live voice channel the requester may see, else <tt>&lt;item-not-found/&gt;</tt>, as discovery says;</li>
+    <li>the session may use the channel (the framework's requirements gate), else <tt>&lt;not-acceptable/&gt;</tt> with <tt>&lt;requires/&gt;</tt>;</li>
+    <li>the requester is a member of the room, else <tt>&lt;forbidden/&gt;</tt> with <tt>&lt;not-member/&gt;</tt>;</li>
+    <li>it holds <tt>connect</tt> there, else <tt>&lt;forbidden/&gt;</tt>;</li>
+    <li>it is not voice-banned in the channel, else <tt>&lt;forbidden/&gt;</tt> with <tt>&lt;banned/&gt;</tt>, whose <tt>until</tt> names the ban's end when it has one;</li>
+    <li>the call is not full: the participants and the tokens issued lately that have not connected, the requester not counted, are fewer than <tt>voice#max</tt>, else <tt>&lt;not-allowed/&gt;</tt> with <tt>&lt;channel-full/&gt;</tt>;</li>
+    <li>the requester is under the service's rate of joins, else <tt>&lt;resource-constraint/&gt;</tt> of type <tt>wait</tt>;</li>
+    <li>the conference server is configured and answers, else <tt>&lt;service-unavailable/&gt;</tt> of type <tt>wait</tt> with <tt>&lt;sfu-down/&gt;</tt>.</li>
+  </ol>
+  <p>The application conditions are in this namespace. A requester that is no member of the room MAY ask to join as a guest by putting the framework's <tt>&lt;guest/&gt;</tt> (and a <tt>&lt;nick/&gt;</tt>) in the <tt>&lt;join/&gt;</tt>: it is admitted to the room as the framework's guest join would admit it, refused as that would refuse it, and then checked as above. The token's grants follow the permissions, not the request: publishing a microphone needs <tt>speak</tt>, a camera <tt>video</tt> and <tt>voice#video</tt>, a screen <tt>share-screen</tt> and <tt>voice#screen</tt>; a server mute takes a source away and a server deafening takes subscribing away.</p>
+  <p><em>One call per room.</em> A member in another voice channel of the same room is removed from it when it joins this one. <em>One connection per member.</em> The identity is the occupant id, so a second device of one member replaces the first; the occupancy node counts members, not devices.</p>
+  <p>To leave, the client disconnects from the conference server and then, as a courtesy, sends an empty <tt>&lt;leave/&gt;</tt> to the channel JID, answered with an empty result. The service verifies with the conference server before it retracts the item; it MUST NOT remove a participant on a <tt>&lt;leave/&gt;</tt> alone, so a late leave from a replaced device does not cut the device that replaced it. A crashed client is caught by the conference server and by the service's reconciliation.</p>
+</section1>
+
+<section1 topic='The Occupancy Node' anchor='occupancy'>
+  <p>The channel JID serves a &xep0060; node <tt>urn:xmpp:mux-chat:voice:0#participants</tt>, published only by the service, with one item per participant whose id is the occupant id.</p>
+  <example caption='A participant item, as notified'><![CDATA[
+<message from='verona.lounge@mux.example.org' to='romeo@example.org' type='headline'>
+  <event xmlns='http://jabber.org/protocol/pubsub#event'>
+    <items node='urn:xmpp:mux-chat:voice:0#participants'>
+      <item id='dd72603dXh3o6qK2pL9sW1Yz'>
+        <participant xmlns='urn:xmpp:mux-chat:voice:0' nick='Juliet' since='2026-11-23T12:00:03Z'>
+          <occupant-id xmlns='urn:xmpp:occupant-id:0' id='dd72603dXh3o6qK2pL9sW1Yz'/>
+          <self-mute/>
+          <server-mute media='camera' by='a1b2c3d4e5f6a7b8c9d0e1f2'/>
+          <camera/>
+          <hand since='2026-11-23T12:04:00Z'/>
+        </participant>
+      </item>
+    </items>
+  </event>
+</message>]]></example>
+  <table caption='A participant&apos;s children'>
+    <tr><th>Child</th><th>Meaning</th><th>Source</th></tr>
+    <tr><td><tt>nick</tt>, <tt>since</tt> (attributes)</td><td>the member's nick in the room; when the conference server saw it join</td><td>the room; the conference server</td></tr>
+    <tr><td><tt>&lt;occupant-id/&gt;</tt></td><td>the identity, as &xep0421; writes it</td><td>the service</td></tr>
+    <tr><td><tt>&lt;guest/&gt;</tt> (the framework's namespace)</td><td>the participant is a guest</td><td>the service</td></tr>
+    <tr><td><tt>&lt;self-mute/&gt;</tt>, <tt>&lt;self-deaf/&gt;</tt></td><td>what the client said of itself</td><td>the client; not enforced</td></tr>
+    <tr><td><tt>&lt;server-mute by='…'/&gt;</tt></td><td>a moderator muted it; <tt>media</tt> absent for the microphone, else <tt>camera</tt> or <tt>screen</tt>; <tt>by</tt> the moderator's occupant id</td><td>the service; enforced</td></tr>
+    <tr><td><tt>&lt;server-deaf by='…'/&gt;</tt></td><td>a moderator deafened it</td><td>the service; enforced</td></tr>
+    <tr><td><tt>&lt;camera/&gt;</tt>, <tt>&lt;screen/&gt;</tt></td><td>it publishes a camera, a screen share</td><td>the conference server</td></tr>
+    <tr><td><tt>&lt;hand since='…'/&gt;</tt></td><td>it asks to speak (stage channels)</td><td>the client</td></tr>
+    <tr><td><tt>&lt;speaker/&gt;</tt></td><td>it may publish on a stage channel</td><td>the service</td></tr>
+  </table>
+  <p>A participant leaving is a retraction of its item. An item MUST NOT carry a real JID. Speaking activity is not published; it is the call's own.</p>
+  <p>Whoever may see the channel retrieves the items, paged by &xep0059;. Every member who sees the channel is subscribed by being a member; anyone else who sees it MAY subscribe. Notifications are <tt>type='headline'</tt> messages to bare JIDs. The node's configuration is readable and never written: <tt>pubsub#type</tt> is this namespace, <tt>pubsub#access_model</tt> <tt>open</tt> when everyone sees the channel and <tt>whitelist</tt> otherwise, <tt>pubsub#publish_model</tt> <tt>publishers</tt>, <tt>pubsub#notify_retract</tt>, <tt>pubsub#deliver_payloads</tt> and <tt>pubsub#persist_items</tt> set, <tt>pubsub#max_items</tt> equal to <tt>voice#max</tt>, <tt>pubsub#notification_type</tt> <tt>headline</tt>, <tt>pubsub#send_last_published_item</tt> <tt>never</tt>. Clients never publish or retract (<tt>&lt;forbidden/&gt;</tt> with <tt>&lt;publisher-not-allowed/&gt;</tt>).</p>
+  <p><em>The subscription gate.</em> A client MUST play only media whose identity is an item of the node. A participant the service did not announce is never heard.</p>
+  <section2 topic='Client-reported state' anchor='state'>
+    <p>A participant reports its own flags by <tt>&lt;state/&gt;</tt> to the channel JID, the whole state each time; an absent child is off. The service answers with an empty result and mirrors the state in the item. It is accepted from a member with an item or a fresh token (else <tt>&lt;not-allowed/&gt;</tt> with <tt>&lt;not-in-call/&gt;</tt>); a state sent before the conference server lists the participant is kept for its item. <tt>&lt;hand/&gt;</tt> is accepted only on a stage channel from a holder of <tt>request-to-speak</tt> (else <tt>&lt;not-allowed/&gt;</tt>); a speaker's hand is dropped. The service MUST bound the rate (<tt>&lt;policy-violation/&gt;</tt> of type <tt>wait</tt>). The state is the client's word: a self-mute is the client's own track mute, and only server mutes are enforced.</p>
+    <example caption='Juliet mutes herself and raises a hand'><![CDATA[
+<iq type='set' to='verona.lounge@mux.example.org' id='s1'>
+  <state xmlns='urn:xmpp:mux-chat:voice:0'><self-mute/><hand/></state>
+</iq>
+
+<iq type='result' from='verona.lounge@mux.example.org' to='juliet@example.org/balcony' id='s1'/>]]></example>
+  </section2>
+  <section2 topic='Stage channels' anchor='stage'>
+    <p>On a channel with <tt>voice#stage</tt> set only speakers publish. A member holding <tt>mute-members</tt> there is always a speaker; others become one by a moderator's <tt>&lt;speaker/&gt;</tt> and stop by <tt>&lt;speaker value='0'/&gt;</tt> or by leaving the call. The audience's tokens carry no publishing grant; <tt>&lt;hand/&gt;</tt> asks a moderator.</p>
+  </section2>
+</section1>
+
+<section1 topic='Moderation' anchor='moderation'>
+  <p>A moderator acts on a participant by <tt>&lt;moderate occupant-id='…'/&gt;</tt> to the channel JID with exactly one action child.</p>
+  <example caption='Romeo mutes Tybalt&apos;s microphone'><![CDATA[
+<iq type='set' to='verona.lounge@mux.example.org' id='m1'>
+  <moderate xmlns='urn:xmpp:mux-chat:voice:0' occupant-id='9f8e7d6c5b4a39281706f5e4'>
+    <server-mute/>
+  </moderate>
+</iq>
+
+<iq type='result' from='verona.lounge@mux.example.org' to='romeo@example.org/orchard' id='m1'/>]]></example>
+  <table caption='Actions'>
+    <tr><th>Action</th><th>Needs</th><th>Effect</th></tr>
+    <tr><td><tt>&lt;server-mute/&gt;</tt>; <tt>media='camera'</tt> or <tt>'screen'</tt> for that source; <tt>value='0'</tt> lifts</td><td><tt>mute-members</tt></td><td>the source is taken out of the participant's grants and its tracks of that source muted; kept until lifted. Lifting gives the source back; the participant unmutes itself</td></tr>
+    <tr><td><tt>&lt;server-deaf/&gt;</tt>; <tt>value='0'</tt> lifts</td><td><tt>mute-members</tt></td><td>subscribing is taken away; kept until lifted</td></tr>
+    <tr><td><tt>&lt;disconnect/&gt;</tt></td><td><tt>move-members</tt></td><td>removed from the call, the item retracted; it may join again</td></tr>
+    <tr><td><tt>&lt;ban/&gt;</tt>, optional <tt>until</tt> (&xep0082;, in the future); <tt>value='0'</tt> lifts</td><td><tt>mute-members</tt> and <tt>move-members</tt></td><td>removed, and refused at <tt>&lt;join/&gt;</tt> while the ban holds</td></tr>
+    <tr><td><tt>&lt;move to='JID'/&gt;</tt></td><td><tt>move-members</tt> here and in the target</td><td><tt>to</tt> is a live voice channel of the same room the member may connect to (else <tt>&lt;bad-request/&gt;</tt>); removed here, and told where to go by a headline message carrying <tt>&lt;moved to='JID' by='occupant-id'/&gt;</tt>; the client joins there</td></tr>
+    <tr><td><tt>&lt;speaker/&gt;</tt>; <tt>value='0'</tt> sends back to the audience</td><td><tt>mute-members</tt></td><td>stage channels only (else <tt>&lt;bad-request/&gt;</tt>); the hand dropped</td></tr>
+  </table>
+  <example caption='Tybalt is moved to the garden'><![CDATA[
+<message from='verona.lounge@mux.example.org' to='tybalt@example.org' type='headline'>
+  <moved xmlns='urn:xmpp:mux-chat:voice:0' to='verona.garden@mux.example.org' by='a1b2c3d4e5f6a7b8c9d0e1f2'/>
+</message>]]></example>
+  <ul>
+    <li><tt>occupant-id</tt> names a member of the room (else <tt>&lt;item-not-found/&gt;</tt>); one's own is <tt>&lt;not-allowed/&gt;</tt>; a member the actor does not outrank, by the framework's hierarchy, is <tt>&lt;forbidden/&gt;</tt>.</li>
+    <li><tt>&lt;disconnect/&gt;</tt>, <tt>&lt;move/&gt;</tt> and <tt>&lt;speaker/&gt;</tt> need the member in the call (else <tt>&lt;item-not-found/&gt;</tt> with <tt>&lt;not-in-call/&gt;</tt>); mutes, deafening and bans apply ahead of a join too.</li>
+    <li>A missing or unknown action, a bad <tt>media</tt>, <tt>value</tt> or <tt>until</tt> is <tt>&lt;bad-request/&gt;</tt>.</li>
+    <li>The result comes once the conference server has applied the change; when it does not answer, the reply is <tt>&lt;service-unavailable/&gt;</tt> with <tt>&lt;sfu-down/&gt;</tt>, and what the service keeps (a mute, a ban) stays and MUST be enforced at the next reconciliation.</li>
+    <li>Every enforced change is mirrored in the item.</li>
+  </ul>
+  <p>A server mute (per source), a server deafening and a voice ban MUST be kept per occupant id and channel and survive leaving, rejoining and restarts: the next token already lacks the source. Stage speakers are not kept; they are the call's state.</p>
+</section1>
+
+<section1 topic='Inviting to a Call' anchor='invite'>
+  <p>A "come to voice" is a &xep0482; invitation with a child of this namespace naming the channel. In a text channel it passes as any groupchat message and does not ring; as a direct message it is a personal call invitation and the answers are XEP-0482's. The receiving client SHOULD check by disco#info that <tt>channel</tt> is a voice channel before it offers to join.</p>
+  <example caption='Come to the lounge'><![CDATA[
+<message to='verona@mux.example.org' type='groupchat' id='inv1'>
+  <invite xmlns='urn:xmpp:call-invites:0'>
+    <voice xmlns='urn:xmpp:mux-chat:voice:0' channel='verona.lounge@mux.example.org'/>
+  </invite>
+  <body>Come to the Lounge</body>
+</message>]]></example>
+</section1>
+
+<section1 topic='Error Conditions' anchor='errors'>
+  <table caption='Conditions this document uses'>
+    <tr><th>Condition</th><th>Type</th><th>When</th></tr>
+    <tr><td><tt>item-not-found</tt></td><td><tt>cancel</tt></td><td>no such channel, or one the requester may not see; a member not in the call (with <tt>&lt;not-in-call/&gt;</tt>) or not of the room, on a moderation</td></tr>
+    <tr><td><tt>not-acceptable</tt></td><td><tt>cancel</tt></td><td>the session lacks what the channel requires, with the framework's <tt>&lt;requires/&gt;</tt></td></tr>
+    <tr><td><tt>forbidden</tt></td><td><tt>auth</tt></td><td>not a member (with <tt>&lt;not-member/&gt;</tt>); no <tt>connect</tt>; voice-banned (with <tt>&lt;banned/&gt;</tt>); the hierarchy refusing a moderation</td></tr>
+    <tr><td><tt>not-allowed</tt></td><td><tt>cancel</tt></td><td>the call is full (with <tt>&lt;channel-full/&gt;</tt>); a state from a member not in the call (with <tt>&lt;not-in-call/&gt;</tt>); a hand without <tt>request-to-speak</tt> or off a stage; a moderation of oneself</td></tr>
+    <tr><td><tt>bad-request</tt></td><td><tt>modify</tt></td><td>a voice option on a channel of another kind or out of range; a bad action, <tt>media</tt>, <tt>value</tt>, <tt>until</tt> or <tt>to</tt>; a stage action off a stage</td></tr>
+    <tr><td><tt>policy-violation</tt></td><td><tt>wait</tt></td><td>states or leaves sent faster than the service allows</td></tr>
+    <tr><td><tt>resource-constraint</tt></td><td><tt>wait</tt></td><td>joins faster than the service allows</td></tr>
+    <tr><td><tt>service-unavailable</tt></td><td><tt>wait</tt></td><td>the conference server is not configured or does not answer (with <tt>&lt;sfu-down/&gt;</tt>)</td></tr>
+    <tr><td><tt>feature-not-implemented</tt></td><td><tt>cancel</tt></td><td>a MUC join presence to a voice channel</td></tr>
+  </table>
+</section1>
+
+<section1 topic='Business Rules' anchor='rules'>
+  <ul>
+    <li>The service MUST reconcile its view with the conference server: while a call is live it asks the server who is in, after a join, after a leave and after each moderation, and publishes an item for each participant that is a member of the room holding <tt>connect</tt> there and not voice-banned; removes from the server a participant that is none of that, including an identity that names no member; brings each participant's grants into line with what its token would say now; and retracts the items of participants the server no longer lists. A destroyed channel or room has its conference room deleted.</li>
+    <li>Exactly one authority talks to the conference server for a channel at a time; when that authority changes (a failover), media keep flowing and the new one rebuilds the occupancy node from the server's answer.</li>
+    <li>A client MUST treat <tt>voice#e2ee</tt> <tt>none</tt> as a call the conference server's operator can hear and MUST say so in its user interface.</li>
+    <li>A voice channel has no text side; no "joined the call" lines are written to a text channel.</li>
+    <li>A service with no conference server configured answers <tt>voice#transport</tt> <tt>none</tt>, keeps the channel listed and refuses joins, so a client shows the channel as unavailable rather than missing.</li>
+  </ul>
+</section1>
+
+<section1 topic='Implementation Notes' anchor='impl'>
+  <p>The reference implementation uses the namespace <tt>https://ns.another.im/mux/voice/0</tt> in place of <tt>urn:xmpp:mux-chat:voice:0</tt>, the node and the form type under it, until this document is accepted; the two are the same wire.</p>
+  <p>With the <tt>livekit</tt> transport the conference room's name is a hash of the namespace, the service's domain and the channel's internal id, so a renamed channel keeps its call and the server sees no JID; tokens are valid for ten minutes for a new connection; reconciliation asks the server every 20 seconds while a call is live.</p>
+  <p>Media encryption is left to a later version: the intended design carries each participant's frame key as an application message of the channel's end-to-end encrypted group, and a client that cannot encrypt frames is then refused rather than joined in clear.</p>
+</section1>
+
+<section1 topic='Security Considerations' anchor='security'>
+  <ul>
+    <li>The service holds the conference server's credentials; clients receive a token for one connection with the least grants and never call the server's administrative interface. The token is a bearer secret: it MUST be carried only over an encrypted stream and SHOULD NOT be logged; a service MUST give it a short life for a new connection, so that a token at rest in a client's memory is worth little.</li>
+    <li>Because the identity is the occupant id, a second connection with a valid token replaces the first: a token that leaks within its life lets its holder displace the member's own device for as long as the member does not reconnect. The short life and the rate of joins bound this.</li>
+    <li>The conference server sees occupant ids, nicks, timing, packet sizes and audio levels; never JIDs or channel names.</li>
+    <li>A participant's own flags are its word; enforcement is the server's grants, set by the service.</li>
+    <li>Reconciliation removes every participant the room does not admit, so a leaked token stops working within one reconciliation interval of its holder losing standing, and the subscription gate keeps an unannounced participant silent meanwhile. A client that does not apply the gate may play media from a participant the room never admitted.</li>
+    <li>Guests join calls by the framework's rules and hold the guest hat's voice permissions only; a room that does not want guests in its calls closes the channel to the guest hat by an overwrite or sets <tt>guests</tt> to 0.</li>
+    <li>Joins, states and leaves are rate-limited per member and channel; a service MUST refuse beyond its bounds rather than relay them to the conference server.</li>
+    <li>Moderation actions are audited by the service as any other, naming the target by occupant id and nick.</li>
+  </ul>
+</section1>
+
+<section1 topic='Privacy Considerations' anchor='privacy'>
+  <ul>
+    <li>Who is in a call, since when, and with what flags is published to everyone who may see the channel, member or not in the call; that is the point of the occupancy node, and a member who does not want it joins no call.</li>
+    <li>The conference server is a third party to XMPP: it learns the occupant ids and nicks of the participants and the media metadata of a call, and, while <tt>voice#e2ee</tt> is <tt>none</tt>, the media themselves. Its operator may differ from the service's.</li>
+    <li>The service learns when each member joins and leaves a call; nothing of the media.</li>
+  </ul>
+</section1>
+
+<section1 topic='IANA Considerations' anchor='iana'>
+  <p>This document requires no interaction with the Internet Assigned Numbers Authority (IANA).</p>
+</section1>
+
+<section1 topic='XMPP Registrar Considerations' anchor='registrar'>
+  <section2 topic='Protocol namespaces' anchor='registrar-ns'>
+    <p>This specification defines the XML namespace <tt>urn:xmpp:mux-chat:voice:0</tt>. Upon advancement of this specification from a status of Experimental to a status of Draft, the &REGISTRAR; shall add it to the registry located at &NAMESPACES;, as described in Section 4 of &xep0053;. If the namespace is modified in a way that is not backwards-compatible, its version number shall be incremented from "0" to "1" (and so on).</p>
+  </section2>
+  <section2 topic='Service discovery features' anchor='registrar-features'>
+    <code><![CDATA[
+<var>
+  <name>urn:xmpp:mux-chat:voice:0</name>
+  <desc>The entity is a MUX voice channel.</desc>
+  <doc>XEP-xxxx</doc>
+</var>]]></code>
+  </section2>
+  <section2 topic='Channel kinds' anchor='registrar-kinds'>
+    <p>This specification defines the channel kind <tt>voice</tt> of the framework's <tt>kind</tt> field.</p>
+  </section2>
+  <section2 topic='Field standardization' anchor='registrar-forms'>
+    <p>&xep0068; defines a process for standardizing the fields used within Data Forms. The Registrar shall include the following form and fields in its registry (see &FORMTYPES;):</p>
+    <code><![CDATA[
+<form_type>
+  <name>urn:xmpp:mux-chat:voice:0#info</name>
+  <doc>XEP-xxxx</doc>
+  <desc>A voice channel, in its disco#info.</desc>
+  <field var='voice#room' type='jid-single' label='The room'/>
+  <field var='voice#transport' type='text-single' label='The media transport'/>
+  <field var='voice#participants' type='text-single' label='Participants now'/>
+  <field var='voice#max' type='text-single' label='Most participants'/>
+  <field var='voice#video' type='boolean' label='Cameras allowed'/>
+  <field var='voice#screen' type='boolean' label='Screen sharing allowed'/>
+  <field var='voice#stage' type='boolean' label='Stage channel'/>
+  <field var='voice#e2ee' type='text-single' label='Media encryption'/>
+</form_type>
+
+<form_type>
+  <name>urn:xmpp:mux-chat:0#channelconfig</name>
+  <doc>XEP-xxxx</doc>
+  <field var='voice-max' type='text-single' label='Most participants'/>
+  <field var='voice-video' type='boolean' label='Cameras allowed'/>
+  <field var='voice-screen' type='boolean' label='Screen sharing allowed'/>
+  <field var='voice-stage' type='boolean' label='Stage channel'/>
+  <field var='voice-e2ee' type='text-single' label='Media encryption'/>
+</form_type>]]></code>
+  </section2>
+  <section2 topic='Transports' anchor='registrar-transports'>
+    <p>The Registrar shall maintain a registry of values of the <tt>voice#transport</tt> field. Each entry names the protocol a client speaks to the conference server, what the <tt>url</tt> of a <tt>&lt;join/&gt;</tt> result is, and what the <tt>token</tt> is. The registration template:</p>
+    <code><![CDATA[
+<transport>
+  <name>the value of voice#transport</name>
+  <desc>the client protocol, the meaning of url and the form of token</desc>
+  <doc>the document that defines them</doc>
+</transport>]]></code>
+    <p>The initial entries:</p>
+    <code><![CDATA[
+<transport>
+  <name>none</name>
+  <desc>No conference server is configured; a join is refused.</desc>
+  <doc>XEP-xxxx</doc>
+</transport>
+<transport>
+  <name>livekit</name>
+  <desc>The conference server speaks the LiveKit client protocol (https://docs.livekit.io/). url is
+  the signalling WebSocket URL; token is a LiveKit access token whose identity is the member's
+  occupant id, whose display name is the member's nick and whose grants are exactly those the
+  Joining section derives from the member's permissions: room join, subscribing unless
+  server-deafened, and the publishable sources (microphone, camera, screen share) it may use;
+  no administrative, recording, room-creation or listing grant, no hidden participation and no
+  metadata updates. The conference room name is opaque to the client.</desc>
+  <doc>XEP-xxxx</doc>
+</transport>]]></code>
+  </section2>
+</section1>
+
+<section1 topic='XML Schema' anchor='schema'>
+  <code><![CDATA[
+<?xml version='1.0' encoding='UTF-8'?>
+<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'
+           targetNamespace='urn:xmpp:mux-chat:voice:0' xmlns='urn:xmpp:mux-chat:voice:0'
+           elementFormDefault='qualified'>
+
+  <xs:import namespace='urn:xmpp:occupant-id:0'/>
+  <xs:import namespace='urn:xmpp:mux-chat:0'/>
+  <xs:import namespace='http://jabber.org/protocol/nick'/>
+
+  <xs:element name='join'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='nick:nick' xmlns:nick='http://jabber.org/protocol/nick' minOccurs='0'/>
+        <xs:element ref='mux:guest' xmlns:mux='urn:xmpp:mux-chat:0' minOccurs='0'/>
+      </xs:sequence>
+      <xs:attribute name='url' type='xs:anyURI' use='optional'/>
+      <xs:attribute name='token' type='xs:string' use='optional'/>
+      <xs:attribute name='identity' type='xs:string' use='optional'/>
+      <xs:attribute name='room' type='xs:string' use='optional'/>
+      <xs:attribute name='expires' type='xs:dateTime' use='optional'/>
+      <xs:attribute name='e2ee' type='xs:NCName' use='optional'/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name='leave' type='empty'/>
+
+  <xs:element name='state'>
+    <xs:complexType>
+      <xs:all>
+        <xs:element name='self-mute' type='empty' minOccurs='0'/>
+        <xs:element name='self-deaf' type='empty' minOccurs='0'/>
+        <xs:element name='hand' type='empty' minOccurs='0'/>
+      </xs:all>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='participant'>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref='oid:occupant-id' xmlns:oid='urn:xmpp:occupant-id:0'/>
+        <xs:element ref='mux:guest' xmlns:mux='urn:xmpp:mux-chat:0' minOccurs='0'/>
+        <xs:element name='self-mute' type='empty' minOccurs='0'/>
+        <xs:element name='self-deaf' type='empty' minOccurs='0'/>
+        <xs:element name='server-mute' type='byMedia' minOccurs='0' maxOccurs='3'/>
+        <xs:element name='server-deaf' type='by' minOccurs='0'/>
+        <xs:element name='camera' type='empty' minOccurs='0'/>
+        <xs:element name='screen' type='empty' minOccurs='0'/>
+        <xs:element name='hand' minOccurs='0'>
+          <xs:complexType><xs:attribute name='since' type='xs:dateTime' use='required'/></xs:complexType>
+        </xs:element>
+        <xs:element name='speaker' type='empty' minOccurs='0'/>
+      </xs:sequence>
+      <xs:attribute name='nick' type='xs:string' use='required'/>
+      <xs:attribute name='since' type='xs:dateTime' use='required'/>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name='by'>
+    <xs:attribute name='by' type='xs:string' use='required'/>
+  </xs:complexType>
+  <xs:complexType name='byMedia'>
+    <xs:attribute name='by' type='xs:string' use='required'/>
+    <xs:attribute name='media' type='media' use='optional'/>
+  </xs:complexType>
+  <xs:simpleType name='media'>
+    <xs:restriction base='xs:NCName'>
+      <xs:enumeration value='camera'/>
+      <xs:enumeration value='screen'/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:element name='moderate'>
+    <xs:complexType>
+      <xs:choice>
+        <xs:element name='server-mute' type='action'/>
+        <xs:element name='server-deaf' type='action'/>
+        <xs:element name='disconnect' type='empty'/>
+        <xs:element name='ban'>
+          <xs:complexType>
+            <xs:attribute name='value' type='xs:boolean' use='optional'/>
+            <xs:attribute name='until' type='xs:dateTime' use='optional'/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name='move'>
+          <xs:complexType><xs:attribute name='to' type='xs:string' use='required'/></xs:complexType>
+        </xs:element>
+        <xs:element name='speaker' type='action'/>
+      </xs:choice>
+      <xs:attribute name='occupant-id' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name='action'>
+    <xs:attribute name='value' type='xs:boolean' use='optional'/>
+    <xs:attribute name='media' type='media' use='optional'/>
+  </xs:complexType>
+  <xs:element name='moved'>
+    <xs:complexType>
+      <xs:attribute name='to' type='xs:string' use='required'/>
+      <xs:attribute name='by' type='xs:string' use='required'/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name='voice'>
+    <xs:complexType><xs:attribute name='channel' type='xs:string' use='required'/></xs:complexType>
+  </xs:element>
+
+  <xs:element name='not-member' type='empty'/>
+  <xs:element name='banned'>
+    <xs:complexType><xs:attribute name='until' type='xs:dateTime' use='optional'/></xs:complexType>
+  </xs:element>
+  <xs:element name='channel-full' type='empty'/>
+  <xs:element name='not-in-call' type='empty'/>
+  <xs:element name='sfu-down' type='empty'/>
+  <xs:simpleType name='empty'>
+    <xs:restriction base='xs:string'>
+      <xs:enumeration value=''/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>
+]]></code>
+</section1>
+
+<section1 topic='Acknowledgements' anchor='ack'>
+  <p>The occupancy node and the token-authority role follow what MatrixRTC does with a conference server; the stage mode and the sticky server mute follow what users of voice channels elsewhere expect.</p>
+</section1>
+</xep>
